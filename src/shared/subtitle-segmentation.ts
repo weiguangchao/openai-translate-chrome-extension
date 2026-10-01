@@ -31,6 +31,10 @@ export function needsSubtitleSegmentation(text: string): boolean {
   return subtitleDisplayLength(text) > subtitleDisplayLimit;
 }
 
+export function parseModelJson(response: string): unknown {
+  return JSON.parse(response.trim().replace(/^```(?:json)?\s*\n?([\s\S]*?)\n?```$/i, '$1'));
+}
+
 export function parseSubtitleSegments(
   source: string,
   response: string,
@@ -39,7 +43,7 @@ export function parseSubtitleSegments(
   const invalid = () => new Error('模型未返回完整、有效的语义分段，请重试或更换模型。');
   let value: unknown;
   try {
-    value = JSON.parse(response.trim().replace(/^```(?:json)?\s*\n?([\s\S]*?)\n?```$/i, '$1'));
+    value = parseModelJson(response);
   } catch {
     throw invalid();
   }

@@ -319,10 +319,10 @@ export class CaptionController {
       this.prefetch([]);
     }
     const cues = subtitles.source;
-    const timeline = cues ? captionWindow(cues, video.currentTime, video.playbackRate) : null;
+    const timeline = cues ? captionWindow(cues, video.currentTime) : null;
     const existingText =
       subtitles.mode === 'existing' && subtitles.translation
-        ? captionWindow(subtitles.translation, video.currentTime, video.playbackRate).current
+        ? captionWindow(subtitles.translation, video.currentTime).current
         : '';
     const usesModel =
       this.settings.configured &&

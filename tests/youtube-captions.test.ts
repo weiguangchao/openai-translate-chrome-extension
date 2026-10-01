@@ -144,11 +144,11 @@ it('joins ASR fragments, uses word timestamps within a cue and preserves the fin
     { startTime: 2, endTime: 3, text: 'Are you?' },
     { startTime: 3, endTime: 4, text: 'Let’s go' },
   ]);
-  expect(captionWindow(cues, 1.5, 1)).toEqual({
+  expect(captionWindow(cues, 1.5)).toEqual({
     current: 'We are ready.',
     texts: ['We are ready.', 'Are you?', 'Let’s go'],
   });
-  expect(captionWindow(cues, 2, 2).current).toBe('Are you?');
+  expect(captionWindow(cues, 2).current).toBe('Are you?');
 });
 
 it('keeps a punctuated authored sentence intact across a gap between caption blocks', () => {
@@ -219,8 +219,8 @@ it('uses pauses in unpunctuated word timings and leaves silence between sentence
     { startTime: 2.5, endTime: 3.7, text: 'let’s go' },
     { startTime: 6, endTime: 7, text: 'goodbye' },
   ]);
-  expect(captionWindow(cues, 2, 1).current).toBe('');
-  expect(captionWindow(cues, 3, 1).current).toBe('let’s go');
+  expect(captionWindow(cues, 2).current).toBe('');
+  expect(captionWindow(cues, 3).current).toBe('let’s go');
 });
 
 it('keeps decimals, abbreviations, split words and repeated spoken words intact', () => {
@@ -331,4 +331,14 @@ it('ignores malformed and non-text events while retaining valid captions', () =>
       'asr',
     ),
   ).toEqual([{ startTime: 0, endTime: 1, text: 'Valid.' }]);
+});
+
+it('looks fifteen cues ahead however far apart they are', () => {
+  const cues = Array.from({ length: 20 }, (_, index) => ({
+    startTime: index * 10,
+    endTime: index * 10 + 8,
+    text: `Cue ${index + 1}`,
+  }));
+  expect(captionWindow(cues, 0).texts).toEqual(cues.slice(0, 15).map((cue) => cue.text));
+  expect(captionWindow(cues, 9).texts).toEqual(cues.slice(1, 16).map((cue) => cue.text));
 });

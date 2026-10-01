@@ -1,12 +1,13 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { CaptionController } from '../src/extension/captions';
 import { DEFAULT_SETTINGS, publicSettings, STORAGE_KEY } from '../src/shared/settings';
+import { providerReply, requestedTexts } from './fixtures/provider';
 
 let controller: CaptionController | undefined;
 let video: HTMLVideoElement;
 const saved = { ...DEFAULT_SETTINGS, apiKey: 'test-key', model: 'test-model' };
-const responses = new Map<string, (value: Response) => void>();
-const requested: string[] = [];
+const pending: { texts: string[]; signal: AbortSignal; resolve: (value: Response) => void }[] = [];
+const requested: string[][] = [];
 const cues = [
   { startTime: 2, endTime: 4, text: 'First cue' },
   { startTime: 4, endTime: 6, text: 'Second cue' },
@@ -58,11 +59,10 @@ beforeEach(async () => {
   vi.stubGlobal(
     'fetch',
     vi.fn((_url: string, init: RequestInit) => {
-      const prompt: string = JSON.parse(init.body as string).messages[1].content;
-      const text = prompt.split('字幕：\n')[1];
-      requested.push(text);
+      const texts = requestedTexts(init);
+      requested.push(texts);
       return new Promise<Response>((resolve, reject) => {
-        responses.set(text, resolve);
+        pending.push({ texts, signal: init.signal!, resolve });
         init.signal?.addEventListener('abort', () =>
           reject(new DOMException('Aborted', 'AbortError')),
         );
@@ -110,7 +110,7 @@ it.each([true, false])(
 afterEach(() => {
   controller?.destroy();
   controller = undefined;
-  responses.clear();
+  pending.length = 0;
   requested.length = 0;
   vi.useRealTimers();
   vi.unstubAllGlobals();
@@ -123,8 +123,12 @@ function translated() {
     .querySelector('[data-subline-overlay]')
     ?.shadowRoot?.querySelectorAll<HTMLElement>('.line')[1];
 }
-async function finish(text: string, translation: string) {
-  responses.get(text)!(Response.json({ choices: [{ message: { content: translation } }] }));
+async function finish(translations: Record<string, string>) {
+  const [text] = Object.keys(translations);
+  const request = pending.find((item) => item.texts.includes(text))!;
+  request.resolve(
+    providerReply(request.texts, (source) => translations[source] ?? `${source} 译文`),
+  );
   await vi.advanceTimersByTimeAsync(0);
 }
 async function advance(time: number) {
@@ -133,44 +137,58 @@ async function advance(time: number) {
   await vi.advanceTimersByTimeAsync(150);
 }
 
-it('preloads upcoming cues before the first caption and displays cached translations only at their timestamps', async () => {
+it('preloads upcoming cues in one request before the first caption and displays them only at their timestamps', async () => {
   controller = new CaptionController(publicSettings(saved));
   await vi.advanceTimersByTimeAsync(0);
-  expect(requested).toEqual(['First cue', 'Second cue']);
-  await finish('Second cue', '第二句');
+  expect(requested).toEqual([['First cue', 'Second cue', 'Third cue', 'After seeking']]);
+  await finish({ 'First cue': '第一句', 'Second cue': '第二句', 'Third cue': '第三句' });
   expect(translated()?.hidden).toBe(true);
-  expect(requested).toContain('Third cue');
   await advance(2);
-  expect(translated()?.hidden).toBe(true);
+  expect(translated()?.textContent).toBe('第一句');
+  expect(translated()?.hidden).toBe(false);
   await advance(4);
   expect(translated()?.textContent).toBe('第二句');
-  expect(translated()?.hidden).toBe(false);
-  await finish('First cue', '第一句');
-  expect(translated()?.textContent).toBe('第二句');
-  await finish('Third cue', '第三句');
   await advance(6);
   expect(translated()?.textContent).toBe('第三句');
   await advance(9);
   expect(translated()?.hidden).toBe(true);
-  expect(requested.filter((text) => text === 'Second cue')).toHaveLength(1);
+  expect(requested).toHaveLength(1);
 });
 
-it('cancels obsolete work on seek and immediately prioritizes the new position', async () => {
+it('prefetches the next cues in five-cue requests, cancels them on seek, and immediately prioritizes the new position', async () => {
+  const dense = Array.from({ length: 16 }, (_, index) => ({
+    startTime: 2 + index * 2,
+    endTime: 4 + index * 2,
+    text: `Cue ${index + 1}`,
+  }));
+  Object.defineProperty(video, 'textTracks', {
+    value: [
+      {
+        mode: 'showing',
+        kind: 'subtitles',
+        language: 'en',
+        cues: [...dense, { startTime: 80, endTime: 82, text: 'After seeking' }],
+        activeCues: [],
+      },
+    ],
+  });
   controller = new CaptionController(publicSettings(saved));
   await vi.advanceTimersByTimeAsync(0);
-  expect(requested).toEqual(['First cue', 'Second cue']);
+  const ahead = dense.slice(0, 10).map((cue) => cue.text);
+  expect(requested).toEqual([ahead.slice(0, 5), ahead.slice(5)]);
   Object.defineProperty(video, 'seeking', { configurable: true, value: true });
   video.currentTime = 80;
   video.dispatchEvent(new Event('seeking'));
   await vi.advanceTimersByTimeAsync(0);
   expect(translated()?.hidden).toBe(true);
+  expect(pending.map((request) => request.signal.aborted)).toEqual([true, true]);
   Object.defineProperty(video, 'seeking', { value: false });
   video.dispatchEvent(new Event('seeked'));
   await vi.advanceTimersByTimeAsync(0);
-  expect(requested).toEqual(['First cue', 'Second cue', 'After seeking']);
-  await finish('After seeking', '跳转后的字幕');
+  expect(requested).toEqual([ahead.slice(0, 5), ahead.slice(5), ['After seeking']]);
+  await finish({ 'After seeking': '跳转后的字幕' });
   expect(translated()?.textContent).toBe('跳转后的字幕');
-  await finish('First cue', '迟到的旧字幕');
+  await finish({ 'Cue 1': '迟到的旧字幕' });
   expect(translated()?.textContent).toBe('跳转后的字幕');
 });
 
@@ -185,9 +203,9 @@ it('invalidates the old translation when the same video element loads a differen
   video.currentTime = 0;
   video.dispatchEvent(new Event('loadedmetadata'));
   await vi.advanceTimersByTimeAsync(0);
-  await finish('First cue', '旧视频字幕');
+  await finish({ 'First cue': '旧视频字幕' });
   expect(translated()?.textContent).not.toContain('旧视频字幕');
-  await finish('New video', '新视频字幕');
+  await finish({ 'New video': '新视频字幕' });
   expect(translated()?.textContent).toBe('新视频字幕');
 });
 
@@ -204,7 +222,7 @@ it('distinguishes Chinese scripts and stops model work when the requested subtit
   Object.defineProperty(video, 'textTracks', { value: tracks });
   controller = new CaptionController(publicSettings(saved));
   await advance(2);
-  await finish('First cue', '模型生成的简体字幕');
+  await finish({ 'First cue': '模型生成的简体字幕' });
   expect(translated()?.textContent).toBe('模型生成的简体字幕');
   tracks.push({
     mode: 'disabled',
@@ -214,8 +232,6 @@ it('distinguishes Chinese scripts and stops model work when the requested subtit
   });
   const alreadyRequested = [...requested];
   await advance(3);
-  expect(translated()?.textContent).toBe('现有简体字幕');
-  await finish('Second cue', '迟到的模型译文');
   expect(translated()?.textContent).toBe('现有简体字幕');
   await advance(7);
   expect(requested).toEqual(alreadyRequested);

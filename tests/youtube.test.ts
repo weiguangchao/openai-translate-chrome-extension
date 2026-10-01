@@ -3,7 +3,16 @@ import { CaptionController } from '../src/extension/captions';
 import { DEFAULT_SETTINGS, publicSettings } from '../src/shared/settings';
 import { TranslationQueue } from '../src/extension/queue';
 import { githubCaption, githubCaptionTrack, githubModelResponse } from './fixtures/github-caption';
+import { providerReply, requestedTexts } from './fixtures/provider';
 import type { SubtitleTranslation } from '../src/shared/subtitle-segmentation';
+
+vi.mock('../src/shared/rate-limiter', () => ({
+  RateLimiter: class {
+    acquire() {
+      return Promise.resolve();
+    }
+  },
+}));
 
 let controller: CaptionController | undefined;
 let resourceEntries: (entries: PerformanceEntry[]) => void;
@@ -92,7 +101,7 @@ it('prefetches one semantic translation and follows the current segment when it 
     'fetch',
     vi.fn(async (url: string, init?: RequestInit) => {
       if (url.includes('/api/timedtext')) return Response.json(githubCaptionTrack);
-      requests.push(JSON.parse(init!.body as string).messages[1].content.split('字幕：\n')[1]);
+      requests.push(...requestedTexts(init!));
       return new Promise<Response>((resolve) => {
         finish = resolve;
       });
@@ -705,7 +714,7 @@ it('sends complete English sentences to the Provider and displays its translatio
       },
     }),
   });
-  const requests: { url: string; text: string }[] = [];
+  const requests: { url: string; texts: string[] }[] = [];
   const transcripts: string[] = [];
   vi.stubGlobal(
     'fetch',
@@ -720,21 +729,13 @@ it('sends complete English sentences to the Provider and displays its translatio
           ],
         });
       }
-      const prompt = JSON.parse(init!.body as string).messages[1].content as string;
-      const text = prompt.split('字幕：\n')[1];
-      requests.push({ url, text });
-      return Response.json({
-        choices: [
-          {
-            message: {
-              content:
-                text === 'This field behind me will become a city.'
-                  ? '我身后的这片空地将变成一座城市。'
-                  : '让我们建造它。',
-            },
-          },
-        ],
-      });
+      const texts = requestedTexts(init!);
+      requests.push({ url, texts });
+      return providerReply(texts, (text) =>
+        text === 'This field behind me will become a city.'
+          ? '我身后的这片空地将变成一座城市。'
+          : '让我们建造它。',
+      );
     }),
   );
   const saved = {
@@ -757,9 +758,8 @@ it('sends complete English sentences to the Provider and displays its translatio
   expect(requests).toEqual([
     {
       url: 'https://provider.example/v1/chat/completions',
-      text: 'This field behind me will become a city.',
+      texts: ['This field behind me will become a city.', 'Let’s build it.'],
     },
-    { url: 'https://provider.example/v1/chat/completions', text: 'Let’s build it.' },
   ]);
   expect(transcripts).toEqual(['en']);
   video.currentTime = 1;
@@ -780,7 +780,7 @@ it('sends complete English sentences to the Provider and displays its translatio
     'Let’s build it.',
     '让我们建造它。',
   ]);
-  expect(requests.length).toBe(2);
+  expect(requests.length).toBe(1);
   queue.reset();
 });
 

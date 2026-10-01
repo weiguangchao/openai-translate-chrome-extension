@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import {
   ArrowLeftRight,
   ArrowRight,
@@ -16,7 +16,6 @@ import {
   Layers3,
   LoaderCircle,
   LockKeyhole,
-  MessageSquareText,
   MonitorPlay,
   PlugZap,
   RefreshCw,
@@ -24,12 +23,10 @@ import {
   Settings2,
   ShieldCheck,
   SlidersHorizontal,
-  Sparkles,
   Subtitles,
   X,
 } from 'lucide-react';
 import {
-  DEFAULT_PROMPT,
   DEFAULT_SETTINGS,
   languageName,
   validateSettings,
@@ -53,7 +50,7 @@ import {
   YoutubeMark,
 } from './components';
 
-type Page = 'general' | 'appearance' | 'prompt' | 'guide';
+type Page = 'general' | 'appearance' | 'guide';
 type Notice = { kind: 'success' | 'error'; text: string } | null;
 const PAGES = [
   {
@@ -67,12 +64,6 @@ const PAGES = [
     name: '字幕样式',
     icon: SlidersHorizontal,
     description: '调整两种语言的颜色与大小，找到最舒服的阅读方式。',
-  },
-  {
-    id: 'prompt' as const,
-    name: '翻译提示词',
-    icon: MessageSquareText,
-    description: '告诉模型怎么翻译，让字幕更贴合你的观看习惯。',
   },
   {
     id: 'guide' as const,
@@ -121,7 +112,6 @@ export function App() {
   const [showKey, setShowKey] = useState(false);
   const [connection, setConnection] = useState('');
   const [testResult, setTestResult] = useState('');
-  const promptRef = useRef<HTMLTextAreaElement>(null);
   const dirty = ready && JSON.stringify(settings) !== saved;
   const current = PAGES.find((item) => item.id === page)!;
   const fingerprint = JSON.stringify([
@@ -162,15 +152,7 @@ export function App() {
     setSettings((previous) => ({ ...previous, [key]: value }));
     if (key === 'baseUrl' || key === 'apiKey') setModels([]);
     if (
-      [
-        'baseUrl',
-        'apiKey',
-        'model',
-        'apiFormat',
-        'sourceLanguage',
-        'targetLanguage',
-        'prompt',
-      ].includes(key)
+      ['baseUrl', 'apiKey', 'model', 'apiFormat', 'sourceLanguage', 'targetLanguage'].includes(key)
     )
       setTestResult('');
   }
@@ -247,16 +229,6 @@ export function App() {
     } finally {
       setBusy(null);
     }
-  }
-  function insertVariable(variable: string) {
-    const field = promptRef.current;
-    const start = field?.selectionStart ?? settings.prompt.length,
-      end = field?.selectionEnd ?? start;
-    update('prompt', settings.prompt.slice(0, start) + variable + settings.prompt.slice(end));
-    requestAnimationFrame(() => {
-      field?.focus();
-      field?.setSelectionRange(start + variable.length, start + variable.length);
-    });
   }
 
   return (
@@ -754,67 +726,6 @@ export function App() {
                   </Section>
                 </>
               )}
-              {page === 'prompt' && (
-                <>
-                  <Section
-                    icon={<MessageSquareText size={19} />}
-                    title="翻译提示词"
-                    description="这段提示词会随每条字幕发送给翻译模型。"
-                  >
-                    <div className="prompt-toolbar">
-                      <span className="small-tag">
-                        <Sparkles size={12} /> 影视字幕模板
-                      </span>
-                      <button
-                        className="text-button"
-                        disabled={settings.prompt === DEFAULT_PROMPT}
-                        onClick={() => update('prompt', DEFAULT_PROMPT)}
-                      >
-                        <RotateCcw size={13} /> 恢复默认模板
-                      </button>
-                    </div>
-                    <label className="sr-only" htmlFor="prompt">
-                      翻译提示词模板
-                    </label>
-                    <textarea
-                      ref={promptRef}
-                      id="prompt"
-                      className="prompt-editor"
-                      value={settings.prompt}
-                      maxLength={12000}
-                      onChange={(event) => update('prompt', event.target.value)}
-                      spellCheck={false}
-                    />
-                    <div className="prompt-counter">
-                      <span>保留 {'{{text}}'}，以便插入原字幕。</span>
-                      <span>{settings.prompt.length.toLocaleString()} / 12,000</span>
-                    </div>
-                    <div className="variable-list">
-                      <h3>
-                        可用变量 <span>点击插入</span>
-                      </h3>
-                      {[
-                        { name: '{{source_language}}', description: '学习语言，如 English' },
-                        { name: '{{target_language}}', description: '你的母语，如简体中文' },
-                        { name: '{{text}}', description: '当前需要翻译的原字幕' },
-                      ].map((variable) => (
-                        <div key={variable.name}>
-                          <button onClick={() => insertVariable(variable.name)}>
-                            {variable.name}
-                          </button>
-                          <span>{variable.description}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </Section>
-                  <div className="gentle-note">
-                    <Info size={17} />
-                    <p>
-                      简洁的提示词通常能减少响应时间。可以补充语气或专有名词的翻译习惯，避免要求模型输出字幕以外的内容。
-                    </p>
-                  </div>
-                </>
-              )}
               {page === 'guide' && (
                 <>
                   <Section icon={<BookOpen size={19} />} title="从这里开始">
@@ -850,7 +761,7 @@ export function App() {
                         <div>
                           <h3>选择语言，保存设置</h3>
                           <p>
-                            选择正在学习的原文语言和你的母语。按需调整字幕样式、翻译提示词，然后点击「保存更改」。
+                            选择正在学习的原文语言和你的母语。按需调整字幕样式，然后点击「保存更改」。
                           </p>
                         </div>
                       </li>

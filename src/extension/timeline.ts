@@ -101,7 +101,7 @@ export function selectedTrack(video: HTMLVideoElement, language: string): TextTr
   return languageTrack(tracks, (track) => track.language, language) ?? tracks[0];
 }
 
-export function captionWindow(cues: readonly TimedCue[], time: number, rate: number) {
+export function captionWindow(cues: readonly TimedCue[], time: number) {
   const remaining: TimedCue[] = [];
   for (const cue of cues) {
     if (cue.endTime > time) remaining.push(cue);
@@ -119,9 +119,8 @@ export function captionWindow(cues: readonly TimedCue[], time: number, rate: num
   const boundaries = [...new Set(remaining.flatMap((cue) => [cue.startTime, cue.endTime]))]
     .filter((at) => at > time)
     .sort((a, b) => a - b);
-  const horizon = time + 30 * Math.max(1, rate);
   for (const at of boundaries) {
-    if (texts.length >= 12 || (texts.length >= 7 && at > horizon)) break;
+    if (texts.length >= 15) break;
     const text = textAt(at);
     if (text && !texts.includes(text)) texts.push(text);
   }
