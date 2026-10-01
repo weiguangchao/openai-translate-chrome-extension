@@ -1,0 +1,472 @@
+import type { PublicSettings } from '../shared/settings';
+import {
+  needsSubtitleSegmentation,
+  type SubtitleTranslation,
+} from '../shared/subtitle-segmentation';
+import { ExtensionConnection } from './connection';
+import { translatedCaptionAt } from './segmented-captions';
+import {
+  captionText,
+  captionWindow,
+  NativeTimeline,
+  selectedTrack,
+  YoutubeTimeline,
+  type SubtitleTimeline,
+} from './timeline';
+
+export interface Caption {
+  text: string;
+  element: HTMLElement | null;
+  nativeTrack: boolean;
+}
+const HBO_CAPTIONS =
+  '[data-testid="subtitles"], [data-testid="subtitle-text"], [data-testid="cue"], [class*="SubtitleRenderer"], [class*="CaptionsRenderer"], .shaka-text-container, .vjs-text-track-display';
+function visible(element: HTMLElement): boolean {
+  if (element.hidden || element.closest('[hidden], [aria-hidden="true"]')) return false;
+  for (let node: HTMLElement | null = element; node; node = node.parentElement) {
+    const style = getComputedStyle(node);
+    const replaced = node.matches('.subline-youtube .ytp-caption-window-container');
+    if (
+      style.display === 'none' ||
+      style.visibility === 'hidden' ||
+      (style.opacity === '0' && !replaced)
+    )
+      return false;
+  }
+  return true;
+}
+export function readCaption(
+  player: HTMLElement,
+  video: HTMLVideoElement,
+  sourceLanguage: string,
+): Caption {
+  if (
+    video.closest('.ad-showing') ||
+    player.querySelector('.ytp-subtitles-button')?.getAttribute('aria-pressed') === 'false'
+  )
+    return { text: '', element: null, nativeTrack: false };
+  const youtube = player.querySelector<HTMLElement>('.ytp-caption-window-container');
+  if (youtube && visible(youtube)) {
+    const windows = [...youtube.querySelectorAll<HTMLElement>('.caption-window')].filter(visible);
+    const root = windows[0] ?? youtube;
+    const lines = [...root.querySelectorAll<HTMLElement>('.caption-visual-line')].filter(visible);
+    const text = (
+      lines.length
+        ? lines.map((line) => line.textContent ?? '').join('\n')
+        : [...root.querySelectorAll<HTMLElement>('.ytp-caption-segment')]
+            .filter(visible)
+            .map((node) => node.textContent ?? '')
+            .join(' ')
+    ).trim();
+    if (text) return { text, element: root, nativeTrack: false };
+  }
+  const hbo = [...player.querySelectorAll<HTMLElement>(HBO_CAPTIONS)].find(
+    (element) => visible(element) && element.textContent?.trim(),
+  );
+  if (hbo) return { text: (hbo.textContent ?? '').trim(), element: hbo, nativeTrack: false };
+  const track = selectedTrack(video, sourceLanguage);
+  const text = track?.activeCues ? [...track.activeCues].map(captionText).join('\n').trim() : '';
+  return { text, element: null, nativeTrack: Boolean(text) };
+}
+
+function findPlayer(video: HTMLVideoElement): HTMLElement | null {
+  const fullscreen = document.fullscreenElement;
+  if (fullscreen === video) return null;
+  if (fullscreen instanceof HTMLElement && fullscreen.contains(video)) return fullscreen;
+  const known = video.closest<HTMLElement>(
+    '.html5-video-player, [data-testid="player-container"], [data-testid="video-player"], [data-testid="video-player-container"], .shaka-video-container, .video-js',
+  );
+  if (known) return known;
+  let parent = video.parentElement;
+  for (
+    let depth = 0;
+    parent && parent !== document.body && depth < 6;
+    depth++, parent = parent.parentElement
+  ) {
+    if (parent.querySelector(HBO_CAPTIONS) && parent.querySelectorAll('video').length === 1)
+      return parent;
+  }
+  return video.parentElement;
+}
+
+const STYLE = `
+.subline-player:not(.subline-youtube) [data-subline-caption] { translate: 0 calc(-1 * var(--subline-reserve)) !important; }
+.subline-player:not(.subline-youtube) [data-subline-caption], .subline-player:not(.subline-youtube) [data-subline-caption] * {
+  color: var(--subline-source-color) !important; font-size: var(--subline-source-size) !important;
+}
+video.subline-native::cue { color: transparent !important; background: transparent !important; text-shadow: none !important; }
+.subline-player [data-subline-timeline] { visibility: hidden !important; }
+.subline-player.subline-youtube .ytp-caption-window-container { opacity: 0 !important; pointer-events: none !important; }
+`;
+
+export class CaptionController {
+  private settings: PublicSettings;
+  private connection: ExtensionConnection;
+  private player: HTMLElement | null = null;
+  private video: HTMLVideoElement | null = null;
+  private host: HTMLDivElement | null = null;
+  private stack: HTMLDivElement | null = null;
+  private original: HTMLDivElement | null = null;
+  private translated: HTMLDivElement | null = null;
+  private captionElement: HTMLElement | null = null;
+  private style: HTMLStyleElement;
+  private interval: ReturnType<typeof setInterval>;
+  private currentText = '';
+  private changedAt = 0;
+  private requested = '';
+  private version = 0;
+  private pageUrl = location.href;
+  private positionedPlayer = false;
+  private cache = new Map<string, SubtitleTranslation>();
+  private destroyed = false;
+  private youtube = new YoutubeTimeline(() => this.tick());
+  private native = new NativeTimeline();
+  private translationMode: SubtitleTimeline['mode'] | null = null;
+  private windowKey = '';
+  private prefetchedAt = 0;
+  private source = '';
+  private nativeTrack: TextTrack | undefined;
+  private mediaEvents = [
+    'play',
+    'loadedmetadata',
+    'timeupdate',
+    'seeking',
+    'seeked',
+    'ratechange',
+    'emptied',
+  ];
+  private onMediaChange = () => this.tick();
+
+  constructor(settings: PublicSettings, connection?: ExtensionConnection) {
+    this.settings = settings;
+    this.connection = connection ?? new ExtensionConnection(() => this.destroy());
+    this.style = document.createElement('style');
+    this.style.textContent = STYLE;
+    document.documentElement.append(this.style);
+    this.interval = setInterval(() => this.tick(), 150);
+    this.tick();
+  }
+
+  update(settings: PublicSettings): void {
+    if (this.destroyed) return;
+    this.settings = settings;
+    this.cache.clear();
+    this.unmount();
+    this.resetSources();
+    this.tick();
+  }
+
+  destroy(): void {
+    if (this.destroyed) return;
+    this.destroyed = true;
+    clearInterval(this.interval);
+    this.unmount();
+    this.resetSources();
+    this.style.remove();
+    this.youtube.destroy();
+    this.cache.clear();
+  }
+
+  private unmount(): void {
+    this.prefetch([], Boolean(this.video));
+    this.translationMode = null;
+    for (const event of this.mediaEvents)
+      this.video?.removeEventListener(event, this.onMediaChange);
+    this.captionElement?.removeAttribute('data-subline-timeline');
+    this.source = '';
+    this.nativeTrack = undefined;
+    this.version++;
+    this.currentText = '';
+    this.requested = '';
+    this.captionElement?.removeAttribute('data-subline-caption');
+    this.captionElement = null;
+    this.video?.classList.remove('subline-native');
+    if (this.player) {
+      this.player.classList.remove('subline-player', 'subline-youtube');
+      for (const name of ['--subline-source-color', '--subline-source-size', '--subline-reserve'])
+        this.player.style.removeProperty(name);
+      if (this.positionedPlayer && this.player.style.position === 'relative')
+        this.player.style.removeProperty('position');
+    }
+    this.host?.remove();
+    this.player = null;
+    this.video = null;
+    this.host = null;
+    this.stack = null;
+    this.original = null;
+    this.translated = null;
+    this.positionedPlayer = false;
+  }
+
+  private resetSources(): void {
+    this.youtube.reset();
+    this.native.reset();
+  }
+
+  private mount(video: HTMLVideoElement, player: HTMLElement): void {
+    this.unmount();
+    this.player = player;
+    this.video = video;
+    for (const event of this.mediaEvents) video.addEventListener(event, this.onMediaChange);
+    this.positionedPlayer = getComputedStyle(player).position === 'static';
+    if (this.positionedPlayer) player.style.position = 'relative';
+    player.classList.add('subline-player');
+    player.classList.toggle('subline-youtube', Boolean(video.closest('.html5-video-player')));
+    player.style.setProperty('--subline-source-color', this.settings.original.color);
+    player.style.setProperty('--subline-source-size', `${this.settings.original.size}px`);
+    player.style.setProperty(
+      '--subline-reserve',
+      `${this.settings.translation.size * 1.4 + this.settings.subtitleGap}px`,
+    );
+    this.host = document.createElement('div');
+    this.host.dataset.sublineOverlay = '';
+    this.host.style.cssText =
+      'position:absolute;inset:0;z-index:2147483646;pointer-events:none;overflow:hidden;';
+    const shadow = this.host.attachShadow({ mode: 'open' });
+    const css = document.createElement('style');
+    css.textContent =
+      ':host{all:initial}.stack{position:absolute;left:4%;width:92%;text-align:center;font-family:Arial,"PingFang SC",sans-serif;line-height:1.4;pointer-events:none}.line{width:fit-content;max-width:100%;margin-inline:auto;padding:1px 8px;border-radius:3px;white-space:pre-line;overflow-wrap:anywhere;text-shadow:0 1px 3px #000;box-sizing:border-box}.error{font-size:13px!important;color:#ffe3b0!important}';
+    this.stack = document.createElement('div');
+    this.stack.className = 'stack';
+    this.original = document.createElement('div');
+    this.original.className = 'line original';
+    this.translated = document.createElement('div');
+    this.translated.className = 'line translation';
+    this.translated.setAttribute('dir', 'auto');
+    this.original.setAttribute('dir', 'auto');
+    for (const [node, style] of [
+      [this.original, this.settings.original],
+      [this.translated, this.settings.translation],
+    ] as const) {
+      node.style.color = style.color;
+      node.style.fontSize = `${style.size}px`;
+      node.style.backgroundColor = `rgba(0,0,0,${this.settings.backgroundOpacity / 100})`;
+      node.hidden = true;
+    }
+    this.translated.style.marginTop = `${this.settings.subtitleGap}px`;
+    this.stack.append(this.original, this.translated);
+    shadow.append(css, this.stack);
+    player.append(this.host);
+  }
+
+  private tick(): void {
+    if (this.destroyed) return;
+    if (!this.connection.active) {
+      this.destroy();
+      return;
+    }
+    const allowed = location.hostname.endsWith('youtube.com')
+      ? this.settings.youtube
+      : this.settings.hbo;
+    if (!this.settings.enabled || !allowed) {
+      if (this.host) this.unmount();
+      this.resetSources();
+      return;
+    }
+    if (location.href !== this.pageUrl) {
+      this.pageUrl = location.href;
+      this.cache.clear();
+      this.unmount();
+      this.resetSources();
+    }
+    const video = [...document.querySelectorAll('video')].find((v) => visible(v) && !v.ended);
+    if (!video) {
+      if (this.host) this.unmount();
+      this.resetSources();
+      return;
+    }
+    const player = findPlayer(video);
+    if (!player) {
+      if (this.host) this.unmount();
+      this.resetSources();
+      return;
+    }
+    const youtubeTimeline = this.youtube.read(
+      video,
+      this.settings.sourceLanguage,
+      this.settings.targetLanguage,
+    );
+    if (youtubeTimeline) this.native.reset();
+    const subtitles =
+      youtubeTimeline ??
+      this.native.read(video, this.settings.sourceLanguage, this.settings.targetLanguage);
+    if (!this.settings.configured && subtitles.mode !== 'existing') {
+      if (this.host) this.unmount();
+      return;
+    }
+    if (this.video !== video || this.player !== player || !this.host?.isConnected)
+      this.mount(video, player);
+    if (!this.player || !this.stack || !this.original || !this.translated) return;
+    if (subtitles.mode !== this.translationMode) {
+      this.prefetch([], Boolean(this.requested));
+      this.clearCaption();
+      this.cache.clear();
+      this.translationMode = subtitles.mode;
+    }
+    if (video.seeking) {
+      this.prefetch([], Boolean(this.currentText));
+      this.clearCaption();
+      return;
+    }
+    const track = selectedTrack(video, this.settings.sourceLanguage);
+    const source = video.currentSrc;
+    if (source !== this.source || track !== this.nativeTrack) {
+      this.source = source;
+      this.nativeTrack = track;
+      this.version++;
+      this.clearCaption();
+      this.cache.clear();
+      this.prefetch([]);
+    }
+    const cues = subtitles.source;
+    const timeline = cues ? captionWindow(cues, video.currentTime, video.playbackRate) : null;
+    const existingText =
+      subtitles.mode === 'existing' && subtitles.translation
+        ? captionWindow(subtitles.translation, video.currentTime, video.playbackRate).current
+        : '';
+    const usesModel =
+      this.settings.configured &&
+      subtitles.mode === 'model' &&
+      (!youtubeTimeline || Boolean(timeline));
+    const youtube = this.player.classList.contains('subline-youtube');
+    const siteElement = timeline
+      ? this.player.querySelector<HTMLElement>(`.ytp-caption-window-container, ${HBO_CAPTIONS}`)
+      : null;
+    const caption: Caption = timeline
+      ? { text: timeline.current, element: siteElement, nativeTrack: true }
+      : youtubeTimeline
+        ? { text: '', element: null, nativeTrack: true }
+        : readCaption(this.player, video, this.settings.sourceLanguage);
+    this.prefetch(usesModel ? (timeline?.texts ?? []) : [], false, Boolean(timeline));
+    if (caption.element !== this.captionElement) {
+      this.captionElement?.removeAttribute('data-subline-caption');
+      this.captionElement?.removeAttribute('data-subline-timeline');
+      this.captionElement = caption.element;
+      this.captionElement?.setAttribute('data-subline-caption', '');
+    }
+    this.captionElement?.toggleAttribute('data-subline-timeline', Boolean(timeline) && !youtube);
+    video.classList.toggle('subline-native', caption.nativeTrack);
+    const customOriginal = youtube || caption.nativeTrack;
+    const timedCaption = cues?.find(
+      (cue) =>
+        cue.startTime <= video.currentTime &&
+        video.currentTime < cue.endTime &&
+        cue.text === caption.text,
+    );
+    const segment = Boolean(usesModel && timedCaption && needsSubtitleSegmentation(caption.text));
+    const cacheKey = JSON.stringify([caption.text, segment]);
+    this.original.hidden = !customOriginal || !caption.text || segment;
+    this.original.textContent = customOriginal && !segment ? caption.text : '';
+    if (!caption.text && !existingText) {
+      this.clearCaption();
+      return;
+    }
+    if (caption.element && !timeline && !youtube) {
+      const rect = caption.element.getBoundingClientRect();
+      const parent = this.player.getBoundingClientRect();
+      this.stack.style.bottom = 'auto';
+      this.stack.style.top = `${Math.max(0, Math.min(parent.height - this.stack.offsetHeight - 8, rect.bottom - parent.top))}px`;
+    } else {
+      this.stack.style.top = 'auto';
+      this.stack.style.bottom = '9%';
+    }
+    if (!usesModel) {
+      if (this.currentText) this.version++;
+      this.currentText = '';
+      this.requested = '';
+      this.translated.classList.remove('error');
+      this.translated.textContent = existingText;
+      this.translated.hidden = !existingText;
+      return;
+    }
+    if (caption.text !== this.currentText) {
+      this.version++;
+      this.currentText = caption.text;
+      this.changedAt = Date.now();
+      this.requested = '';
+      this.translated.hidden = true;
+      this.translated.textContent = '';
+      this.translated.classList.remove('error');
+    }
+    const cached = this.cache.get(cacheKey);
+    if (cached !== undefined) {
+      const display =
+        typeof cached === 'string'
+          ? { text: caption.text, translation: cached }
+          : translatedCaptionAt(timedCaption!, cached, video.currentTime);
+      this.original.textContent = customOriginal ? (display?.text ?? '') : '';
+      this.original.hidden = !customOriginal || !display?.text;
+      this.translated.classList.remove('error');
+      this.translated.textContent = display?.translation ?? '';
+      this.translated.hidden = !display?.translation;
+      this.requested = caption.text;
+      return;
+    }
+    if (this.requested === this.currentText || Date.now() - this.changedAt < (timeline ? 0 : 300))
+      return;
+    const text = this.currentText,
+      version = this.version;
+    this.requested = text;
+    void this.connection
+      .sendMessage<SubtitleTranslation>({
+        type: 'translate',
+        text,
+        ...(segment ? { segment: true } : {}),
+      })
+      .then((response) => {
+        this.tick();
+        if (this.destroyed || this.version !== version || !this.translated) return;
+        if (
+          !response?.ok ||
+          (segment
+            ? !response.data ||
+              typeof response.data === 'string' ||
+              !Array.isArray(response.data.segments)
+            : typeof response.data !== 'string')
+        )
+          throw new Error(response?.error ?? '翻译未完成，请检查扩展配置。');
+        this.cache.set(cacheKey, response.data!);
+        if (this.cache.size > 100) this.cache.delete(this.cache.keys().next().value!);
+        this.tick();
+      })
+      .catch((error) => {
+        this.tick();
+        if (this.destroyed || this.version !== version || !this.translated) return;
+        this.translated.textContent = `Subline：${error instanceof Error ? error.message : '翻译失败，请检查配置。'}`;
+        this.translated.classList.add('error');
+        this.translated.hidden = false;
+        this.requested = '';
+        this.changedAt = Date.now() + 15000;
+      });
+  }
+
+  private prefetch(texts: string[], force = false, allowSegmentation = false): void {
+    const segment = allowSegmentation && texts.some(needsSubtitleSegmentation);
+    const key = JSON.stringify([texts, segment]);
+    if (
+      !force &&
+      ((!this.windowKey && !texts.length) ||
+        (key === this.windowKey && (!texts.length || Date.now() - this.prefetchedAt < 15000)))
+    )
+      return;
+    this.windowKey = key;
+    this.prefetchedAt = Date.now();
+    void this.connection
+      .sendMessage({ type: 'prefetch', texts, ...(segment ? { segment: true } : {}) })
+      .catch(() => {});
+  }
+
+  private clearCaption(): void {
+    if (this.currentText) this.version++;
+    this.currentText = '';
+    this.requested = '';
+    if (this.translated) {
+      this.translated.hidden = true;
+      this.translated.textContent = '';
+    }
+    if (this.original) {
+      this.original.hidden = true;
+      this.original.textContent = '';
+    }
+  }
+}

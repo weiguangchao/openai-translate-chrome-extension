@@ -1,0 +1,830 @@
+import { afterEach, expect, it, vi } from 'vitest';
+import { CaptionController } from '../src/extension/captions';
+import { DEFAULT_SETTINGS, publicSettings } from '../src/shared/settings';
+import { TranslationQueue } from '../src/extension/queue';
+import { githubCaption, githubCaptionTrack, githubModelResponse } from './fixtures/github-caption';
+import type { SubtitleTranslation } from '../src/shared/subtitle-segmentation';
+
+let controller: CaptionController | undefined;
+let resourceEntries: (entries: PerformanceEntry[]) => void;
+afterEach(() => {
+  controller?.destroy();
+  window.dispatchEvent(new Event('pagehide'));
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+  document.body.innerHTML = '';
+  Reflect.deleteProperty(document, 'fullscreenElement');
+});
+
+function setup() {
+  vi.useFakeTimers();
+  vi.stubGlobal(
+    'PerformanceObserver',
+    class {
+      constructor(callback: PerformanceObserverCallback) {
+        resourceEntries = (entries) =>
+          callback({ getEntries: () => entries } as PerformanceObserverEntryList, this as never);
+      }
+      observe() {}
+    },
+  );
+  document.body.innerHTML =
+    '<div class="html5-video-player"><video></video><button class="ytp-subtitles-button" aria-pressed="true"></button><div class="ytp-caption-window-container"></div></div>';
+  const video = document.querySelector('video')!;
+  Object.defineProperty(video, 'textTracks', { configurable: true, value: [] });
+  history.replaceState(null, '', '/watch?v=video-1');
+  const player = document.querySelector('.html5-video-player')!;
+  vi.spyOn(window, 'postMessage').mockImplementation((data) => {
+    const message = structuredClone(data);
+    queueMicrotask(() =>
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: message,
+          source: window,
+          origin: location.origin,
+        }),
+      ),
+    );
+  });
+  const sendMessage = vi.fn(
+    (message: {
+      type: string;
+      text?: string;
+      texts?: string[];
+      segment?: boolean;
+    }): Promise<{ ok: boolean; data?: SubtitleTranslation }> =>
+      Promise.resolve(
+        message.type === 'translate' ? { ok: true, data: `译文：${message.text}` } : { ok: true },
+      ),
+  );
+  vi.stubGlobal('chrome', { runtime: { id: 'extension-id', sendMessage } });
+  const lines = () =>
+    document
+      .querySelector('[data-subline-overlay]')!
+      .shadowRoot!.querySelectorAll<HTMLElement>('.line');
+  return { video, player, sendMessage, lines };
+}
+
+it('prefetches one semantic translation and follows the current segment when it arrives after a seek', async () => {
+  const { video, player, sendMessage, lines } = setup();
+  Object.assign(player, {
+    getOption: () => ({ vssId: 'a.en' }),
+    getPlayerResponse: () => ({
+      videoDetails: { videoId: 'video-1' },
+      captions: {
+        playerCaptionsTracklistRenderer: {
+          captionTracks: [
+            {
+              languageCode: 'en',
+              kind: 'asr',
+              vssId: 'a.en',
+              baseUrl: 'https://www.youtube.com/api/timedtext?v=video-1&lang=en',
+            },
+          ],
+        },
+      },
+    }),
+  });
+  let finish!: (value: Response) => void;
+  const requests: string[] = [];
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.includes('/api/timedtext')) return Response.json(githubCaptionTrack);
+      requests.push(JSON.parse(init!.body as string).messages[1].content.split('字幕：\n')[1]);
+      return new Promise<Response>((resolve) => {
+        finish = resolve;
+      });
+    }),
+  );
+  const saved = { ...DEFAULT_SETTINGS, apiKey: 'key', model: 'model' };
+  const queue = new TranslationQueue();
+  sendMessage.mockImplementation(async (message) => {
+    if (message.type === 'translate')
+      return {
+        ok: true,
+        data: await queue.request('video', saved, message.text!, message.segment),
+      };
+    if (message.type === 'prefetch')
+      queue.prefetch('video', saved, message.texts!, message.segment);
+    return { ok: true };
+  });
+  await import('../src/extension/youtube-page');
+  controller = new CaptionController(publicSettings(saved));
+  await vi.advanceTimersByTimeAsync(0);
+  expect([...lines()].map((line) => line.hidden)).toEqual([true, true]);
+  video.currentTime = 6.75;
+  video.dispatchEvent(new Event('seeked'));
+  finish(
+    Response.json({ choices: [{ message: { content: JSON.stringify(githubModelResponse) } }] }),
+  );
+  await vi.advanceTimersByTimeAsync(0);
+  expect([...lines()].map((line) => line.textContent)).toEqual([
+    "now that they're randomly reverting merges",
+    '因为他们会莫名其妙地撤销合并',
+  ]);
+  const snapshots: string[][] = [];
+  for (const time of [0, 3, 8.25, 2]) {
+    video.currentTime = time;
+    video.dispatchEvent(new Event('timeupdate'));
+    await vi.advanceTimersByTimeAsync(0);
+    snapshots.push([...lines()].map((line) => line.textContent ?? ''));
+  }
+  expect(snapshots).toEqual([
+    [
+      'Myself, Mitchell the creator of Ghostie, and many other people are realizing',
+      '我、Ghostie 的创作者米切尔，还有许多人都开始意识到',
+    ],
+    [
+      'that GitHub might not be the safest place for us to be leaving our code',
+      'GitHub 可能已经不是存放我们代码最安全的地方了',
+    ],
+    [
+      'and having downtime that is measured in days instead of minutes.',
+      '停机时间更是按天计算，而不是按分钟。',
+    ],
+    [
+      'Myself, Mitchell the creator of Ghostie, and many other people are realizing',
+      '我、Ghostie 的创作者米切尔，还有许多人都开始意识到',
+    ],
+  ]);
+  expect(requests).toEqual([githubCaption]);
+  video.currentTime = 11;
+  video.dispatchEvent(new Event('timeupdate'));
+  expect([...lines()].map((line) => line.hidden)).toEqual([true, true]);
+  queue.reset();
+});
+
+it('translates and displays complete ASR sentences across rolling events', async () => {
+  const { video, player, sendMessage, lines } = setup();
+  Object.assign(player, {
+    getOption: () => ({ vssId: 'a.en' }),
+    getPlayerResponse: () => ({
+      videoDetails: { videoId: 'video-1' },
+      captions: {
+        playerCaptionsTracklistRenderer: {
+          captionTracks: [
+            {
+              languageCode: 'en',
+              kind: 'asr',
+              vssId: 'a.en',
+              baseUrl: 'https://www.youtube.com/api/timedtext?v=video-1&lang=en',
+            },
+          ],
+        },
+      },
+    }),
+  });
+  vi.stubGlobal(
+    'fetch',
+    vi.fn().mockResolvedValue(
+      Response.json({
+        events: [
+          { tStartMs: 1000, dDurationMs: 4000, segs: [{ utf8: 'This field behind me' }] },
+          { tStartMs: 2500, dDurationMs: 4000, segs: [{ utf8: 'will become a city.' }] },
+          { tStartMs: 4500, dDurationMs: 3000, segs: [{ utf8: 'Let’s build it.' }] },
+        ],
+      }),
+    ),
+  );
+  document.querySelector('.ytp-caption-window-container')!.innerHTML =
+    '<span class="ytp-caption-segment">This field behind me</span>';
+  await import('../src/extension/youtube-page');
+  controller = new CaptionController(
+    publicSettings({ ...DEFAULT_SETTINGS, apiKey: 'key', model: 'model' }),
+  );
+  await vi.advanceTimersByTimeAsync(0);
+  expect(sendMessage).toHaveBeenCalledWith({
+    type: 'prefetch',
+    texts: ['This field behind me will become a city.', 'Let’s build it.'],
+  });
+  video.currentTime = 1.2;
+  video.dispatchEvent(new Event('timeupdate'));
+  await vi.advanceTimersByTimeAsync(0);
+  expect([...lines()].map((line) => line.textContent)).toEqual([
+    'This field behind me will become a city.',
+    '译文：This field behind me will become a city.',
+  ]);
+  video.currentTime = 3;
+  video.dispatchEvent(new Event('timeupdate'));
+  await vi.advanceTimersByTimeAsync(0);
+  expect(lines()[0].textContent).toBe('This field behind me will become a city.');
+  expect(
+    sendMessage.mock.calls
+      .filter(([message]) => message.type === 'translate')
+      .map(([message]) => message.text),
+  ).toEqual(['This field behind me will become a city.']);
+  expect(getComputedStyle(document.querySelector('.ytp-caption-window-container')!).opacity).toBe(
+    '0',
+  );
+  video.currentTime = 4.5;
+  video.dispatchEvent(new Event('timeupdate'));
+  await vi.advanceTimersByTimeAsync(0);
+  expect([...lines()].map((line) => line.textContent)).toEqual([
+    'Let’s build it.',
+    '译文：Let’s build it.',
+  ]);
+  controller.update({ ...publicSettings(DEFAULT_SETTINGS), enabled: false });
+  expect(
+    getComputedStyle(document.querySelector('.ytp-caption-window-container')!).opacity,
+  ).not.toBe('0');
+});
+
+it('loads the selected YouTube track before playback, aligns rolling captions, and drops a late track response after navigation', async () => {
+  const { video, player, sendMessage, lines } = setup();
+  let videoId = 'video-1';
+  let languageCode = 'en';
+  Object.assign(player, {
+    getOption: () => ({ languageCode, vssId: `.${languageCode}` }),
+    getPlayerResponse: () => ({
+      videoDetails: { videoId },
+      captions: {
+        playerCaptionsTracklistRenderer: {
+          captionTracks: ['en', 'es'].map((language) => ({
+            languageCode: language,
+            kind: 'asr',
+            vssId: `.${language}`,
+            baseUrl: `https://www.youtube.com/api/timedtext?v=${videoId}&lang=${language}`,
+          })),
+        },
+      },
+    }),
+  });
+  let oldTrack!: (response: Response) => void;
+  const fetch = vi.fn((url: string) => {
+    if (url.includes('lang=es'))
+      return new Promise<Response>((resolve) => {
+        oldTrack = resolve;
+      });
+    return Promise.resolve(
+      Response.json({
+        events: [
+          {
+            tStartMs: 2000,
+            dDurationMs: 4000,
+            segs: [{ utf8: videoId === 'video-1' ? 'First phrase.' : 'New video.' }],
+          },
+          { tStartMs: 4000, dDurationMs: 2000, segs: [{ utf8: 'Second phrase.' }] },
+        ],
+      }),
+    );
+  });
+  fetch.mockResolvedValueOnce(new Response('', { status: 503 }));
+  vi.stubGlobal('fetch', fetch);
+  await import('../src/extension/youtube-page');
+  controller = new CaptionController(
+    publicSettings({ ...DEFAULT_SETTINGS, apiKey: 'key', model: 'model' }),
+  );
+  await vi.advanceTimersByTimeAsync(0);
+  expect(fetch.mock.calls[0][0]).toContain('fmt=json3');
+  expect(sendMessage).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'translate' }));
+  await vi.advanceTimersByTimeAsync(16000);
+  expect(sendMessage).toHaveBeenCalledWith({
+    type: 'prefetch',
+    texts: ['First phrase.', 'Second phrase.'],
+  });
+  expect(lines()[1].hidden).toBe(true);
+  video.currentTime = 4;
+  video.dispatchEvent(new Event('timeupdate'));
+  await vi.advanceTimersByTimeAsync(0);
+  expect(lines()[0].textContent).toBe('Second phrase.');
+  expect(lines()[1].textContent).toBe('译文：Second phrase.');
+  languageCode = 'es';
+  controller.update(
+    publicSettings({ ...DEFAULT_SETTINGS, apiKey: 'key', model: 'model', sourceLanguage: 'es' }),
+  );
+  await vi.advanceTimersByTimeAsync(1100);
+  expect(oldTrack).toBeTypeOf('function');
+  expect(lines()[1].hidden).toBe(true);
+  videoId = 'video-2';
+  languageCode = 'en';
+  controller.update(publicSettings({ ...DEFAULT_SETTINGS, apiKey: 'key', model: 'model' }));
+  history.replaceState(null, '', '/watch?v=video-2');
+  video.currentTime = 2;
+  video.dispatchEvent(new Event('loadedmetadata'));
+  await vi.advanceTimersByTimeAsync(0);
+  expect(lines()[1].textContent).toBe('译文：New video.');
+  oldTrack(
+    Response.json({
+      events: [{ tStartMs: 0, dDurationMs: 10000, segs: [{ utf8: 'Stale track' }] }],
+    }),
+  );
+  await vi.advanceTimersByTimeAsync(0);
+  expect(lines()[1].textContent).toBe('译文：New video.');
+  document.querySelector('button')!.setAttribute('aria-pressed', 'false');
+  await vi.advanceTimersByTimeAsync(150);
+  expect(lines()[1].hidden).toBe(true);
+  expect(document.querySelector('[data-subline-timeline]')).toBeNull();
+});
+
+it('uses the current video session to load source subtitles and removes duplicate drawing layers', async () => {
+  const { video, player, sendMessage, lines } = setup();
+  let videoId = 'video-1';
+  let session = 'session-1';
+  let token = 'expired';
+  Object.assign(player, {
+    getOption: () => ({ languageCode: 'en', vssId: '.en' }),
+    getPlayerResponse: () => ({
+      videoDetails: { videoId },
+      captions: {
+        playerCaptionsTracklistRenderer: {
+          captionTracks: ['en', 'zh-Hans'].map((language) => ({
+            languageCode: language,
+            vssId: `.${language}`,
+            baseUrl: `https://www.youtube.com/api/timedtext?v=${videoId}&ei=${session}&lang=${language}&signature=signed-${language}`,
+          })),
+        },
+      },
+    }),
+  });
+  const request = (id: string, ei: string, pot: string, startedAt: number) =>
+    resourceEntries([
+      {
+        name: `https://www.youtube.com/api/timedtext?v=${id}&ei=${ei}&lang=en&signature=signed-en&pot=${pot}&potc=1&c=WEB&cver=2&fmt=json3`,
+        startTime: startedAt,
+      } as PerformanceResourceTiming,
+    ]);
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (value: string) => {
+      const url = new URL(value);
+      const language = url.searchParams.get('lang');
+      if (
+        url.searchParams.get('pot') !== token ||
+        token === 'expired' ||
+        url.searchParams.get('potc') !== '1' ||
+        url.searchParams.get('c') !== 'WEB' ||
+        url.searchParams.get('cver') !== '2' ||
+        url.searchParams.get('signature') !== `signed-${language}`
+      )
+        return new Response('', { status: 200, headers: { 'content-type': 'text/html' } });
+      const text = language === 'en' ? 'This field behind me' : '我身后的这片空地';
+      return Response.json({
+        events: [
+          { tStartMs: 0, dDurationMs: 2000, segs: [{ utf8: `\u200b ${text} \u200b`, pPenId: 3 }] },
+          { tStartMs: 0, dDurationMs: 2000, segs: [{ utf8: `\u200b ${text} \u200b`, pPenId: 4 }] },
+          ...(language === 'zh-Hans'
+            ? [{ tStartMs: 500, dDurationMs: 1000, segs: [{ utf8: '即将变成一座城市' }] }]
+            : []),
+        ],
+      });
+    }),
+  );
+  await import('../src/extension/youtube-page');
+  video.currentTime = 1;
+  controller = new CaptionController(
+    publicSettings({ ...DEFAULT_SETTINGS, apiKey: 'key', model: 'model' }),
+  );
+  await vi.advanceTimersByTimeAsync(1100);
+  expect(lines()[1].hidden).toBe(true);
+  request(videoId, session, token, 1);
+  await vi.advanceTimersByTimeAsync(1100);
+  expect(lines()[1].hidden).toBe(true);
+
+  token = 'ready';
+  request(videoId, session, token, 3);
+  request(videoId, session, 'expired', 2);
+  await vi.advanceTimersByTimeAsync(1100);
+  expect(lines()[0].textContent).toBe('This field behind me');
+  expect(lines()[1].textContent).toBe('译文：This field behind me');
+  expect(lines()[1].hidden).toBe(false);
+
+  session = 'session-2';
+  await vi.advanceTimersByTimeAsync(1100);
+  expect(lines()[1].hidden).toBe(true);
+  request(videoId, session, token, 4);
+  await vi.advanceTimersByTimeAsync(1100);
+  expect(lines()[1].textContent).toBe('译文：This field behind me');
+
+  videoId = 'video-2';
+  history.replaceState(null, '', '/watch?v=video-2');
+  await vi.advanceTimersByTimeAsync(1100);
+  expect(lines()[1].hidden).toBe(true);
+  request(videoId, session, token, 5);
+  await vi.advanceTimersByTimeAsync(1100);
+  expect(lines()[0].textContent).toBe('This field behind me');
+  expect(lines()[1].textContent).toBe('译文：This field behind me');
+  expect(sendMessage).toHaveBeenCalledWith({ type: 'translate', text: 'This field behind me' });
+});
+
+it('translates authored English sentences even when authored, automatic and browser target tracks exist', async () => {
+  const { video, player, sendMessage, lines } = setup();
+  const tracks = [
+    { languageCode: 'zh-Hans', vssId: '.zh-Hans' },
+    { languageCode: 'zh-Hans', vssId: 'a.zh-Hans', kind: 'asr' },
+    { languageCode: 'en', vssId: 'a.en', kind: 'asr' },
+    { languageCode: 'en', vssId: '.en' },
+  ].map((track) => ({
+    ...track,
+    baseUrl: `https://www.youtube.com/api/timedtext?v=video-1&lang=${track.languageCode}&track=${track.vssId}`,
+  }));
+  Object.assign(player, {
+    getOption: () => ({ languageCode: 'zh-Hans', vssId: '.zh-Hans' }),
+    getPlayerResponse: () => ({
+      videoDetails: { videoId: 'video-1' },
+      captions: {
+        playerCaptionsTracklistRenderer: { captionTracks: tracks },
+      },
+    }),
+  });
+  const targetTrack = {
+    mode: 'showing',
+    kind: 'subtitles',
+    language: 'zh-Hans',
+    cues: [{ startTime: 0, endTime: 100, text: '浏览器已有译文' }],
+    activeCues: [],
+  };
+  Object.defineProperty(video, 'textTracks', { configurable: true, value: [targetTrack] });
+  document.querySelector('.ytp-caption-window-container')!.innerHTML =
+    '<span class="ytp-caption-segment">网站已有中文字幕</span>';
+  const fetch = vi.fn(async (url: string) =>
+    Response.json({
+      events: url.includes('track=.en')
+        ? [
+            { tStartMs: 1000, dDurationMs: 1500, segs: [{ utf8: 'This field behind me' }] },
+            { tStartMs: 2500, dDurationMs: 2000, segs: [{ utf8: 'will become a city.' }] },
+            { tStartMs: 4500, dDurationMs: 7000, segs: [{ utf8: 'Go. Go.' }] },
+          ]
+        : [{ tStartMs: 0, dDurationMs: 100000, segs: [{ utf8: '错误的字幕轨道' }] }],
+    }),
+  );
+  vi.stubGlobal('fetch', fetch);
+  await import('../src/extension/youtube-page');
+  const settings = publicSettings({ ...DEFAULT_SETTINGS, apiKey: 'key', model: 'model' });
+  controller = new CaptionController({ ...settings, configured: false });
+  await vi.advanceTimersByTimeAsync(1100);
+  expect(document.querySelector('[data-subline-overlay]')).toBeNull();
+  expect(sendMessage.mock.calls).toEqual([]);
+  controller.update(settings);
+  video.currentTime = 1.2;
+  video.dispatchEvent(new Event('timeupdate'));
+  await vi.advanceTimersByTimeAsync(0);
+  expect([...lines()].map((line) => line.textContent)).toEqual([
+    'This field behind me will become a city.',
+    '译文：This field behind me will become a city.',
+  ]);
+  expect(sendMessage).toHaveBeenCalledWith({
+    type: 'prefetch',
+    texts: ['This field behind me will become a city.', 'Go.'],
+  });
+  expect(fetch.mock.calls.map(([url]) => new URL(url).searchParams.get('track'))).toEqual(['.en']);
+  expect(targetTrack.mode).toBe('showing');
+  expect(getComputedStyle(document.querySelector('.ytp-caption-window-container')!).opacity).toBe(
+    '0',
+  );
+  video.currentTime = 3;
+  video.dispatchEvent(new Event('timeupdate'));
+  await vi.advanceTimersByTimeAsync(0);
+  expect(lines()[0].textContent).toBe('This field behind me will become a city.');
+  expect(
+    sendMessage.mock.calls
+      .filter(([message]) => message.type === 'translate')
+      .map(([message]) => message.text),
+  ).toEqual(['This field behind me will become a city.']);
+  video.currentTime = 4.5;
+  video.dispatchEvent(new Event('timeupdate'));
+  await vi.advanceTimersByTimeAsync(0);
+  expect([...lines()].map((line) => line.textContent)).toEqual(['Go.', '译文：Go.']);
+  video.currentTime = 12;
+  video.dispatchEvent(new Event('timeupdate'));
+  expect([...lines()].map((line) => line.hidden)).toEqual([true, true]);
+  controller.destroy();
+  expect(
+    getComputedStyle(document.querySelector('.ytp-caption-window-container')!).opacity,
+  ).not.toBe('0');
+});
+
+it('downloads the source language and calls the Provider when website auto-translation is selected', async () => {
+  const { video, player, sendMessage, lines } = setup();
+  Object.assign(player, {
+    getOption: () => ({
+      languageCode: 'en',
+      vssId: '.en',
+      translationLanguage: { languageCode: 'zh-CN' },
+    }),
+    getPlayerResponse: () => ({
+      videoDetails: { videoId: 'video-1' },
+      captions: {
+        playerCaptionsTracklistRenderer: {
+          captionTracks: [
+            {
+              languageCode: 'en',
+              vssId: '.en',
+              baseUrl: 'https://www.youtube.com/api/timedtext?v=video-1&lang=en&tlang=zh-CN',
+            },
+          ],
+        },
+      },
+    }),
+  });
+  vi.stubGlobal(
+    'fetch',
+    vi.fn((url: string) =>
+      Promise.resolve(
+        Response.json({
+          events: [
+            {
+              tStartMs: 2000,
+              dDurationMs: 2000,
+              segs: [{ utf8: url.includes('tlang=zh-CN') ? '网站已提供的译文' : 'Source phrase' }],
+            },
+          ],
+        }),
+      ),
+    ),
+  );
+  await import('../src/extension/youtube-page');
+  video.currentTime = 2;
+  controller = new CaptionController(
+    publicSettings({ ...DEFAULT_SETTINGS, apiKey: 'key', model: 'model' }),
+  );
+  await vi.advanceTimersByTimeAsync(1500);
+  expect(lines()[0].textContent).toBe('Source phrase');
+  expect(lines()[1].textContent).toBe('译文：Source phrase');
+  expect(sendMessage).toHaveBeenCalledWith({ type: 'translate', text: 'Source phrase' });
+});
+
+it.each([
+  { kind: 'asr', availableUrl: true },
+  { kind: 'asr', availableUrl: false },
+  { kind: 'authored', availableUrl: true },
+])(
+  'waits for the complete $kind source track before translating, URL=$availableUrl',
+  async ({ kind, availableUrl }) => {
+    const { video, player, sendMessage, lines } = setup();
+    let recovered = false;
+    Object.assign(player, {
+      getOption: () => ({ vssId: kind === 'asr' ? 'a.en' : '.en' }),
+      getPlayerResponse: () => ({
+        videoDetails: { videoId: 'video-1' },
+        captions: {
+          playerCaptionsTracklistRenderer: {
+            captionTracks: [
+              {
+                languageCode: 'en',
+                kind,
+                vssId: kind === 'asr' ? 'a.en' : '.en',
+                baseUrl:
+                  availableUrl || recovered
+                    ? 'https://www.youtube.com/api/timedtext?v=video-1&lang=en'
+                    : undefined,
+              },
+            ],
+          },
+        },
+      }),
+    });
+    document.querySelector('.ytp-caption-window-container')!.innerHTML =
+      '<div class="caption-window"><span class="ytp-caption-segment">We are</span></div>';
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        recovered
+          ? Response.json({
+              events: [
+                { tStartMs: 0, dDurationMs: 1500, segs: [{ utf8: 'We are' }] },
+                { tStartMs: 1500, dDurationMs: 1500, segs: [{ utf8: 'ready.' }] },
+              ],
+            })
+          : new Response('', { status: 503 }),
+      ),
+    );
+    await import('../src/extension/youtube-page');
+    const settings = publicSettings({ ...DEFAULT_SETTINGS, apiKey: 'key', model: 'model' });
+    controller = new CaptionController(settings);
+    video.currentTime = 1;
+    await vi.advanceTimersByTimeAsync(1500);
+    expect(lines()[0].textContent).toBe('');
+    expect(lines()[0].hidden).toBe(true);
+    expect(lines()[1].textContent).toBe('');
+    expect(
+      sendMessage.mock.calls
+        .filter(([message]) => message.type === 'translate')
+        .map(([message]) => message.text),
+    ).toEqual([]);
+    const root = document.querySelector<HTMLElement>('.ytp-caption-window-container')!;
+    expect(getComputedStyle(root).opacity).toBe('0');
+    root.innerHTML =
+      '<div class="caption-window"><span class="ytp-caption-segment">We are ready.</span></div>';
+    await vi.advanceTimersByTimeAsync(450);
+    expect(lines()[0].textContent).toBe('');
+    expect(lines()[1].textContent).toBe('');
+    document.querySelector('button')!.setAttribute('aria-pressed', 'false');
+    await vi.advanceTimersByTimeAsync(150);
+    expect([...lines()].map((line) => line.hidden)).toEqual([true, true]);
+    document.querySelector('button')!.setAttribute('aria-pressed', 'true');
+    await vi.advanceTimersByTimeAsync(1500);
+    expect(lines()[0].textContent).toBe('');
+    recovered = true;
+    await vi.advanceTimersByTimeAsync(16000);
+    expect([...lines()].map((line) => line.textContent)).toEqual([
+      'We are ready.',
+      '译文：We are ready.',
+    ]);
+    expect(sendMessage).toHaveBeenCalledWith({ type: 'translate', text: 'We are ready.' });
+    controller.destroy();
+    expect(getComputedStyle(root).opacity).not.toBe('0');
+    expect(root.textContent).toBe('We are ready.');
+  },
+);
+
+it('keeps custom captions in a fullscreen ancestor and restores the website layers on exit', async () => {
+  const { video, player, lines } = setup();
+  const fullscreen = document.createElement('div');
+  player.replaceWith(fullscreen);
+  fullscreen.append(player);
+  document.querySelector('.ytp-caption-window-container')!.innerHTML =
+    '<div class="caption-window"><span class="ytp-caption-segment">Visible source.</span></div>';
+  Object.assign(player, {
+    getPlayerResponse: () => ({
+      videoDetails: { videoId: 'video-1' },
+      captions: {
+        playerCaptionsTracklistRenderer: {
+          captionTracks: [
+            {
+              languageCode: 'en',
+              vssId: '.en',
+              baseUrl: 'https://www.youtube.com/api/timedtext?v=video-1&lang=en',
+            },
+          ],
+        },
+      },
+    }),
+  });
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () =>
+      Response.json({
+        events: [{ tStartMs: 0, dDurationMs: 4000, segs: [{ utf8: 'Visible source.' }] }],
+      }),
+    ),
+  );
+  await import('../src/extension/youtube-page');
+  controller = new CaptionController(
+    publicSettings({ ...DEFAULT_SETTINGS, apiKey: 'key', model: 'model' }),
+  );
+  await vi.advanceTimersByTimeAsync(1500);
+  expect([...lines()].map((line) => line.textContent)).toEqual([
+    'Visible source.',
+    '译文：Visible source.',
+  ]);
+  Object.defineProperty(document, 'fullscreenElement', { configurable: true, value: fullscreen });
+  video.dispatchEvent(new Event('timeupdate'));
+  await vi.advanceTimersByTimeAsync(450);
+  expect(
+    fullscreen
+      .querySelector(':scope > [data-subline-overlay]')
+      ?.shadowRoot?.querySelector('.original')?.textContent,
+  ).toBe('Visible source.');
+  expect(getComputedStyle(document.querySelector('.ytp-caption-window-container')!).opacity).toBe(
+    '0',
+  );
+  Object.defineProperty(document, 'fullscreenElement', { configurable: true, value: video });
+  video.dispatchEvent(new Event('timeupdate'));
+  expect(document.querySelector('[data-subline-overlay]')).toBeNull();
+  expect(
+    getComputedStyle(document.querySelector('.ytp-caption-window-container')!).opacity,
+  ).not.toBe('0');
+});
+
+it('sends complete English sentences to the Provider and displays its translations below the source', async () => {
+  const { video, player, sendMessage, lines } = setup();
+  Object.assign(player, {
+    getOption: () => ({ vssId: '.en' }),
+    getPlayerResponse: () => ({
+      videoDetails: { videoId: 'video-1' },
+      captions: {
+        playerCaptionsTracklistRenderer: {
+          captionTracks: ['en', 'zh-Hans'].map((languageCode) => ({
+            languageCode,
+            vssId: `.${languageCode}`,
+            baseUrl: `https://www.youtube.com/api/timedtext?v=video-1&lang=${languageCode}`,
+          })),
+        },
+      },
+    }),
+  });
+  const requests: { url: string; text: string }[] = [];
+  const transcripts: string[] = [];
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.includes('/api/timedtext')) {
+        transcripts.push(new URL(url).searchParams.get('lang')!);
+        return Response.json({
+          events: [
+            { tStartMs: 1000, dDurationMs: 1000, segs: [{ utf8: 'This field behind me' }] },
+            { tStartMs: 2000, dDurationMs: 1000, segs: [{ utf8: 'will become a city.' }] },
+            { tStartMs: 3000, dDurationMs: 2000, segs: [{ utf8: 'Let’s build it.' }] },
+          ],
+        });
+      }
+      const prompt = JSON.parse(init!.body as string).messages[1].content as string;
+      const text = prompt.split('字幕：\n')[1];
+      requests.push({ url, text });
+      return Response.json({
+        choices: [
+          {
+            message: {
+              content:
+                text === 'This field behind me will become a city.'
+                  ? '我身后的这片空地将变成一座城市。'
+                  : '让我们建造它。',
+            },
+          },
+        ],
+      });
+    }),
+  );
+  const saved = {
+    ...DEFAULT_SETTINGS,
+    baseUrl: 'https://provider.example/v1',
+    apiKey: 'fixture-key',
+    model: 'fixture-model',
+  };
+  const queue = new TranslationQueue();
+  sendMessage.mockImplementation(async (message) => {
+    if (message.type === 'translate')
+      return { ok: true, data: await queue.request('video', saved, message.text!) };
+    if (message.type === 'prefetch')
+      queue.prefetch('video', saved, (message as unknown as { texts: string[] }).texts);
+    return { ok: true };
+  });
+  await import('../src/extension/youtube-page');
+  controller = new CaptionController(publicSettings(saved));
+  await vi.advanceTimersByTimeAsync(0);
+  expect(requests).toEqual([
+    {
+      url: 'https://provider.example/v1/chat/completions',
+      text: 'This field behind me will become a city.',
+    },
+    { url: 'https://provider.example/v1/chat/completions', text: 'Let’s build it.' },
+  ]);
+  expect(transcripts).toEqual(['en']);
+  video.currentTime = 1;
+  video.dispatchEvent(new Event('timeupdate'));
+  await vi.advanceTimersByTimeAsync(0);
+  expect([...lines()].map((line) => line.textContent)).toEqual([
+    'This field behind me will become a city.',
+    '我身后的这片空地将变成一座城市。',
+  ]);
+  video.currentTime = 2.5;
+  video.dispatchEvent(new Event('timeupdate'));
+  await vi.advanceTimersByTimeAsync(0);
+  expect(lines()[1].textContent).toBe('我身后的这片空地将变成一座城市。');
+  video.currentTime = 3;
+  video.dispatchEvent(new Event('timeupdate'));
+  await vi.advanceTimersByTimeAsync(0);
+  expect([...lines()].map((line) => line.textContent)).toEqual([
+    'Let’s build it.',
+    '让我们建造它。',
+  ]);
+  expect(requests.length).toBe(2);
+  queue.reset();
+});
+
+it('waits for the configured source language instead of translating the website target-language DOM', async () => {
+  const { video, player, sendMessage, lines } = setup();
+  let englishAvailable = false;
+  Object.assign(player, {
+    getOption: () => ({ languageCode: 'zh-Hans', vssId: '.zh-Hans' }),
+    getPlayerResponse: () => ({
+      videoDetails: { videoId: 'video-1' },
+      captions: {
+        playerCaptionsTracklistRenderer: {
+          captionTracks: (englishAvailable ? ['zh-Hans', 'en'] : ['zh-Hans']).map(
+            (languageCode) => ({
+              languageCode,
+              vssId: `.${languageCode}`,
+              baseUrl: `https://www.youtube.com/api/timedtext?v=video-1&lang=${languageCode}`,
+            }),
+          ),
+        },
+      },
+    }),
+  });
+  document.querySelector('.ytp-caption-window-container')!.innerHTML =
+    '<span class="ytp-caption-segment">现有中文字幕。</span>';
+  const fetch = vi.fn(async () =>
+    Response.json({
+      events: [{ tStartMs: 0, dDurationMs: 3000, segs: [{ utf8: 'English source.' }] }],
+    }),
+  );
+  vi.stubGlobal('fetch', fetch);
+  await import('../src/extension/youtube-page');
+  controller = new CaptionController(
+    publicSettings({ ...DEFAULT_SETTINGS, apiKey: 'key', model: 'model' }),
+  );
+  await vi.advanceTimersByTimeAsync(1500);
+  expect([...lines()].map((line) => line.hidden)).toEqual([true, true]);
+  expect(sendMessage.mock.calls).toEqual([]);
+  englishAvailable = true;
+  video.currentTime = 1;
+  await vi.advanceTimersByTimeAsync(1500);
+  expect([...lines()].map((line) => line.textContent)).toEqual([
+    'English source.',
+    '译文：English source.',
+  ]);
+  expect(sendMessage).toHaveBeenCalledWith({ type: 'translate', text: 'English source.' });
+});

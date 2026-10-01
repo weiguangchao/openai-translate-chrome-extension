@@ -1,0 +1,35 @@
+{
+  "name": "subline",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "tsc --noEmit && vite build && node scripts/build-extension.mjs",
+    "test": "vitest run",
+    "lint": "eslint . --max-warnings 0",
+    "check": "npm run lint && tsc --noEmit",
+    "preview": "vite preview --host 0.0.0.0",
+    "format": "prettier --write src tests scripts *.json *.ts *.mjs *.html README.md public/manifest.json",
+    "format:check": "prettier --check src tests scripts *.json *.ts *.mjs *.html README.md public/manifest.json"
+  },
+  "dependencies": {
+    "lucide-react": "^0.468.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.287",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@typescript-eslint/parser": "^8.71.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "esbuild": "^0.25.0",
+    "eslint": "^10.11.0",
+    "jsdom": "^26.0.0",
+    "prettier": "^3.9.9",
+    "typescript": "~5.7.2",
+    "vite": "^6.0.5",
+    "vitest": "^4.1.11"
+  }
+}
