@@ -10,7 +10,7 @@ export interface SegmentedTranslation {
 
 export type SubtitleTranslation = string | SegmentedTranslation;
 
-export const subtitleDisplayLimit = 100;
+export const subtitleDisplayLimit = 90;
 
 export function subtitleDisplayLength(text: string): number {
   return [...text].reduce(

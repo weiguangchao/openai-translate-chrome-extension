@@ -3,7 +3,7 @@ import { parseYoutubeCaptions } from '../src/extension/youtube-captions';
 import { captionWindow } from '../src/extension/timeline';
 import { githubCaption, githubCaptionTrack, githubCommaSegments } from './fixtures/github-caption';
 import { splitSubtitleAtCommas } from '../src/shared/subtitle-segmentation';
-import { translatedCaptionAt } from '../src/extension/segmented-captions';
+import { sourceCaptionAt, translatedCaptionAt } from '../src/extension/segmented-captions';
 
 it.each(['asr', 'authored'] as const)(
   'maps comma segments to the original %s word timestamps',
@@ -31,6 +31,12 @@ it.each(['asr', 'authored'] as const)(
       githubCommaSegments[1],
     ]);
     expect(at(11)).toBeNull();
+    expect([0, 1.49, 1.5, 6.75].map((time) => sourceCaptionAt(cues[0], time))).toEqual([
+      githubCommaSegments[0],
+      githubCommaSegments[0],
+      githubCommaSegments[1],
+      githubCommaSegments[1],
+    ]);
   },
 );
 
@@ -337,16 +343,17 @@ it('ignores malformed and non-text events while retaining valid captions', () =>
   ).toEqual([{ startTime: 0, endTime: 1, text: 'Valid.' }]);
 });
 
-it('covers the rest of the current block of ten cues and the next two blocks, however far apart', () => {
-  const cues = Array.from({ length: 45 }, (_, index) => ({
+it('covers only the rest of the current segment of ten cues, however far apart', () => {
+  const cues = Array.from({ length: 30 }, (_, index) => ({
     startTime: index * 10,
     endTime: index * 10 + 8,
     text: `Cue ${index + 1}`,
   }));
   const texts = (from: number, to: number) => cues.slice(from, to).map((cue) => cue.text);
-  expect(captionWindow(cues, 0).texts).toEqual(texts(0, 30));
-  expect(captionWindow(cues, 95)).toEqual({ current: 'Cue 10', texts: texts(9, 30) });
-  expect(captionWindow(cues, 100).texts).toEqual(texts(10, 40));
-  expect(captionWindow(cues, 205).texts).toEqual(texts(20, 45));
-  expect(captionWindow(cues, 999)).toEqual({ current: '', texts: [] });
+  expect(captionWindow(cues, 0).texts).toEqual(texts(0, 10));
+  expect(captionWindow(cues, 95)).toEqual({ current: 'Cue 10', texts: texts(9, 10) });
+  expect(captionWindow(cues, 105).texts).toEqual(texts(10, 20));
+  expect(captionWindow(cues, 165).texts).toEqual(texts(16, 20));
+  expect(captionWindow(cues, 205).texts).toEqual(texts(20, 30));
+  expect(captionWindow(cues, 9999)).toEqual({ current: '', texts: [] });
 });

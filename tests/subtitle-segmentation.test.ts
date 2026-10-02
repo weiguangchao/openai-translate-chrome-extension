@@ -1,7 +1,11 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { translateSubtitle } from '../src/shared/api';
 import { DEFAULT_SETTINGS } from '../src/shared/settings';
-import { splitSubtitleAtCommas, subtitleDisplayLength } from '../src/shared/subtitle-segmentation';
+import {
+  splitSubtitleAtCommas,
+  subtitleDisplayLength,
+  subtitleDisplayLimit,
+} from '../src/shared/subtitle-segmentation';
 import { githubCaption, githubCommaSegments } from './fixtures/github-caption';
 
 const settings = { ...DEFAULT_SETTINGS, apiKey: 'fixture-key', model: 'fixture-model' };
@@ -14,8 +18,21 @@ it('packs comma-separated clauses into as few segments as the display limit allo
     `${clause}, ${clause},`,
     clause,
   ]);
-  expect(subtitleDisplayLength(`${clause}, ${clause},`)).toBeLessThanOrEqual(100);
-  expect(subtitleDisplayLength(text)).toBeGreaterThan(100);
+  expect(subtitleDisplayLength(`${clause}, ${clause},`)).toBeLessThanOrEqual(subtitleDisplayLimit);
+  expect(subtitleDisplayLength(text)).toBeGreaterThan(subtitleDisplayLimit);
+});
+
+it('cuts a long sentence once when one comma leaves both sides on screen', () => {
+  const text =
+    "I didn't realize how bad things were because I, like most people, thought a bicycle was probably a good idea, but just didn't bother.";
+  expect(splitSubtitleAtCommas(text).map((part) => text.slice(part.from, part.to))).toEqual([
+    "I didn't realize how bad things were because I, like most people,",
+    "thought a bicycle was probably a good idea, but just didn't bother.",
+  ]);
+  for (const part of splitSubtitleAtCommas(text))
+    expect(subtitleDisplayLength(text.slice(part.from, part.to))).toBeLessThanOrEqual(
+      subtitleDisplayLimit,
+    );
 });
 
 it('does not split a caption that already fits', () => {

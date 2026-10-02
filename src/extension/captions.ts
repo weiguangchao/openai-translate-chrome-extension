@@ -4,7 +4,7 @@ import {
   type SubtitleTranslation,
 } from '../shared/subtitle-segmentation';
 import { ExtensionConnection } from './connection';
-import { translatedCaptionAt } from './segmented-captions';
+import { sourceCaptionAt, translatedCaptionAt } from './segmented-captions';
 import {
   captionText,
   captionWindow,
@@ -89,6 +89,11 @@ function findPlayer(video: HTMLVideoElement): HTMLElement | null {
   return video.parentElement;
 }
 
+const SEEK_SETTLE_MS = 400;
+const LOOKAHEAD_DELAY_MS = 1000;
+const SEEK_JUMP_SECONDS = 1;
+const SEEK_JUMP_TOLERANCE = 1e-3;
+const SEEK_PREVIEW_CUES = 4;
 const STYLE = `
 .subline-player:not(.subline-youtube) [data-subline-caption] { translate: 0 calc(-1 * var(--subline-reserve)) !important; }
 .subline-player:not(.subline-youtube) [data-subline-caption], .subline-player:not(.subline-youtube) [data-subline-caption] * {
@@ -98,7 +103,7 @@ video.subline-native::cue { color: transparent !important; background: transpare
 .subline-player [data-subline-timeline] { visibility: hidden !important; }
 .subline-player.subline-youtube .ytp-caption-window-container { opacity: 0 !important; pointer-events: none !important; }
 `;
-const LOADING_TRANSLATION = '加载中';
+const LOADING_TRANSLATION = '翻译中';
 
 export class CaptionController {
   private settings: PublicSettings;
@@ -129,6 +134,12 @@ export class CaptionController {
   private nativeTrack: TextTrack | undefined;
   private scheduleLead = true;
   private leadUntil = 0;
+  private observedTime = Number.NaN;
+  private seekSettlesAt = 0;
+  private lookaheadAt = 0;
+  private seekTimer: ReturnType<typeof setTimeout> | undefined;
+  private lookaheadTimer: ReturnType<typeof setTimeout> | undefined;
+  private playbackHeld = false;
   private mediaEvents = [
     'play',
     'pause',
@@ -140,7 +151,7 @@ export class CaptionController {
     'emptied',
   ];
   private onMediaChange = (event: Event) => {
-    if (event.type === 'seeking' || event.type === 'seeked') this.scheduleLead = true;
+    if (event.type === 'seeking' || event.type === 'seeked') this.holdForSeek();
     this.tick();
   };
 
@@ -204,6 +215,14 @@ export class CaptionController {
     this.translated = null;
     this.positionedPlayer = false;
     this.scheduleLead = true;
+    this.observedTime = Number.NaN;
+    this.seekSettlesAt = 0;
+    this.lookaheadAt = 0;
+    clearTimeout(this.seekTimer);
+    clearTimeout(this.lookaheadTimer);
+    this.seekTimer = undefined;
+    this.lookaheadTimer = undefined;
+    this.playbackHeld = false;
   }
 
   private resetSources(): void {
@@ -312,11 +331,12 @@ export class CaptionController {
       this.translationMode = subtitles.mode;
     }
     if (video.seeking) {
-      this.scheduleLead = true;
-      this.prefetch([], Boolean(this.currentText));
+      this.notePlaybackTime(video.currentTime);
+      this.holdForSeek();
       this.clearCaption();
       return;
     }
+    this.notePlaybackTime(video.currentTime);
     const track = selectedTrack(video, this.settings.sourceLanguage);
     const source = video.currentSrc;
     if (source !== this.source || track !== this.nativeTrack) {
@@ -356,11 +376,15 @@ export class CaptionController {
       : youtubeTimeline
         ? { text: '', element: null, nativeTrack: true }
         : readCaption(this.player, video, this.settings.sourceLanguage);
-    this.prefetch(
-      usesModel && !video.paused ? (translationWindow?.texts ?? []) : [],
-      false,
-      Boolean(translationWindow),
-    );
+    const settling = Date.now() < this.seekSettlesAt;
+    this.notePlayback(video.paused);
+    const upcoming = usesModel && !video.paused ? (translationWindow?.texts ?? []) : [];
+    const texts = settling
+      ? []
+      : Date.now() < this.lookaheadAt
+        ? upcoming.slice(0, SEEK_PREVIEW_CUES)
+        : upcoming;
+    if (!video.paused) this.prefetch(texts, false, Boolean(translationWindow) && !settling);
     if (caption.element !== this.captionElement) {
       this.captionElement?.removeAttribute('data-subline-caption');
       this.captionElement?.removeAttribute('data-subline-timeline');
@@ -378,8 +402,14 @@ export class CaptionController {
     );
     const segment = Boolean(usesModel && timedCaption && needsSubtitleSegmentation(caption.text));
     const translationKey = JSON.stringify([caption.text, segment]);
-    this.original.hidden = !customOriginal || !caption.text;
-    this.original.textContent = customOriginal ? caption.text : '';
+    const visibleSource =
+      customOriginal && timedCaption
+        ? (sourceCaptionAt(timedCaption, video.currentTime) ?? '')
+        : customOriginal
+          ? caption.text
+          : '';
+    this.original.hidden = !visibleSource;
+    this.original.textContent = visibleSource;
     if (!caption.text && !existingText) {
       this.clearCaption();
       return;
@@ -416,7 +446,7 @@ export class CaptionController {
     if (cached !== undefined) {
       const display =
         typeof cached === 'string'
-          ? { text: caption.text, translation: cached }
+          ? { text: visibleSource || caption.text, translation: cached }
           : translatedCaptionAt(timedCaption!, cached, video.currentTime);
       this.original.textContent = customOriginal ? (display?.text ?? '') : '';
       this.original.hidden = !customOriginal || !display?.text;
@@ -427,12 +457,7 @@ export class CaptionController {
       return;
     }
     if (video.paused) {
-      if (this.requested) {
-        this.version++;
-        this.requested = '';
-        this.prefetch([], true);
-      }
-      this.clearLoadingTranslation();
+      if (!this.requested) this.clearLoadingTranslation();
       return;
     }
     if (
@@ -441,6 +466,7 @@ export class CaptionController {
       timedCaption.endTime <= this.leadUntil
     )
       return;
+    if (Date.now() < this.seekSettlesAt) return;
     const providerPending = this.requested === this.currentText && this.requested !== '';
     if (providerPending || Date.now() - this.changedAt < (timeline ? 0 : 300)) {
       if (!this.translated.classList.contains('error')) this.showLoadingTranslation();
@@ -476,6 +502,59 @@ export class CaptionController {
         this.requested = '';
         this.changedAt = Date.now() + 15000;
       });
+  }
+
+  private notePlaybackTime(time: number): void {
+    const previous = this.observedTime;
+    this.observedTime = time;
+    if (
+      Number.isFinite(previous) &&
+      Math.abs(time - previous) > SEEK_JUMP_SECONDS + SEEK_JUMP_TOLERANCE
+    ) {
+      this.holdForSeek();
+    }
+  }
+
+  private holdForSeek(): void {
+    this.scheduleLead = true;
+    this.seekSettlesAt = Date.now() + SEEK_SETTLE_MS;
+    this.lookaheadAt = Number.POSITIVE_INFINITY;
+    this.prefetch([]);
+    if (this.requested) {
+      this.version++;
+      this.requested = '';
+    }
+    if (!this.translation) this.clearLoadingTranslation();
+    clearTimeout(this.seekTimer);
+    clearTimeout(this.lookaheadTimer);
+    this.lookaheadTimer = undefined;
+    this.seekTimer = setTimeout(() => this.releaseSeekHold(), SEEK_SETTLE_MS);
+  }
+
+  private releaseSeekHold(): void {
+    this.seekTimer = undefined;
+    if (this.destroyed) return;
+    this.seekSettlesAt = 0;
+    this.lookaheadAt = Date.now() + LOOKAHEAD_DELAY_MS;
+    clearTimeout(this.lookaheadTimer);
+    this.lookaheadTimer = setTimeout(() => {
+      this.lookaheadTimer = undefined;
+      if (!this.destroyed) this.tick();
+    }, LOOKAHEAD_DELAY_MS);
+    this.tick();
+  }
+
+  private notePlayback(paused: boolean): void {
+    if (paused) {
+      if (this.playbackHeld || (!this.windowKey && !this.requested)) return;
+      this.playbackHeld = true;
+    } else {
+      if (!this.playbackHeld) return;
+      this.playbackHeld = false;
+    }
+    void this.connection
+      .sendMessage({ type: 'prefetch', texts: [], pause: paused })
+      .catch(() => {});
   }
 
   private prefetch(texts: string[], force = false, allowSegmentation = false): void {

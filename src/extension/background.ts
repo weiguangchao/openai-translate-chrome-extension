@@ -1,4 +1,5 @@
 import { fetchModels, translate } from '../shared/api';
+import { prefetchWindowLimit } from '../shared/limits';
 import { normalizeSettings, publicSettings, STORAGE_KEY, type Settings } from '../shared/settings';
 import { TranslationQueue } from './queue';
 
@@ -29,6 +30,7 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, respond) => {
     text?: unknown;
     texts?: unknown;
     segment?: unknown;
+    pause?: unknown;
   };
   const trusted =
     sender.id === chrome.runtime.id && sender.url?.startsWith(chrome.runtime.getURL(''));
@@ -45,7 +47,9 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, respond) => {
     if (['translate', 'prefetch'].includes(data.type) && supportedSender(sender)) {
       const consumer = `${sender.tab?.id}:${sender.frameId}`;
       if (data.type === 'prefetch' && Array.isArray(data.texts) && !data.texts.length) {
-        queue.prefetch(consumer, settings, []);
+        if (data.pause === true) queue.pause(consumer);
+        else if (data.pause === false) queue.resume(consumer);
+        else queue.prefetch(consumer, settings, []);
         return;
       }
       const youtube = new URL(sender.url!).hostname.endsWith('youtube.com');
@@ -54,7 +58,7 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, respond) => {
       if (data.type === 'prefetch') {
         if (
           !Array.isArray(data.texts) ||
-          data.texts.length > 30 ||
+          data.texts.length > prefetchWindowLimit ||
           data.texts.some((text) => typeof text !== 'string' || !text.trim() || text.length > 5000)
         )
           throw new Error('预加载字幕内容无效。');

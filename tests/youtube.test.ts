@@ -2,7 +2,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { CaptionController } from '../src/extension/captions';
 import { DEFAULT_SETTINGS, publicSettings } from '../src/shared/settings';
 import { TranslationQueue } from '../src/extension/queue';
-import { githubCaption, githubCaptionTrack, githubCommaSegments } from './fixtures/github-caption';
+import { githubCaptionTrack, githubCommaSegments } from './fixtures/github-caption';
 import { providerReply, requestedTexts } from './fixtures/provider';
 import type { SubtitleTranslation } from '../src/shared/subtitle-segmentation';
 
@@ -68,6 +68,20 @@ function setup() {
   return { video, player, sendMessage, lines };
 }
 
+async function playTo(video: HTMLVideoElement, time: number) {
+  const direction = time >= video.currentTime ? 1 : -1;
+  let at = video.currentTime;
+  while (direction > 0 ? at + direction < time : at + direction > time) {
+    at += direction;
+    video.currentTime = at;
+    video.dispatchEvent(new Event('timeupdate'));
+    await vi.advanceTimersByTimeAsync(0);
+  }
+  video.currentTime = time;
+  video.dispatchEvent(new Event('timeupdate'));
+  await vi.advanceTimersByTimeAsync(0);
+}
+
 it('prefetches comma segments of a long subtitle and follows the current segment after a seek', async () => {
   const { video, player, sendMessage, lines } = setup();
   Object.assign(player, {
@@ -118,11 +132,12 @@ it('prefetches comma segments of a long subtitle and follows the current segment
   controller = new CaptionController(publicSettings(saved));
   await vi.advanceTimersByTimeAsync(0);
   expect([...lines()].map((line) => [line.hidden, line.textContent])).toEqual([
-    [false, githubCaption],
-    [false, '加载中'],
+    [false, githubCommaSegments[0]],
+    [false, '翻译中'],
   ]);
   video.currentTime = 6.75;
   video.dispatchEvent(new Event('seeked'));
+  await vi.advanceTimersByTimeAsync(400);
   finish(providerReply(pending, (text) => `译文：${text}`));
   await vi.advanceTimersByTimeAsync(0);
   expect([...lines()].map((line) => line.textContent)).toEqual([
@@ -142,7 +157,7 @@ it('prefetches comma segments of a long subtitle and follows the current segment
     [githubCommaSegments[1], `译文：${githubCommaSegments[1]}`],
     [githubCommaSegments[1], `译文：${githubCommaSegments[1]}`],
   ]);
-  expect(requests).toEqual(githubCommaSegments);
+  expect(requests).toEqual([...githubCommaSegments, ...githubCommaSegments]);
   video.currentTime = 11;
   video.dispatchEvent(new Event('timeupdate'));
   expect([...lines()].map((line) => line.hidden)).toEqual([true, true]);
@@ -192,16 +207,12 @@ it('translates and displays complete ASR sentences across rolling events', async
     type: 'prefetch',
     texts: ['This field behind me will become a city.', 'Let’s build it.'],
   });
-  video.currentTime = 1.2;
-  video.dispatchEvent(new Event('timeupdate'));
-  await vi.advanceTimersByTimeAsync(0);
+  await playTo(video, 1.2);
   expect([...lines()].map((line) => line.textContent)).toEqual([
     'This field behind me will become a city.',
     '译文：This field behind me will become a city.',
   ]);
-  video.currentTime = 3;
-  video.dispatchEvent(new Event('timeupdate'));
-  await vi.advanceTimersByTimeAsync(0);
+  await playTo(video, 3);
   expect(lines()[0].textContent).toBe('This field behind me will become a city.');
   expect(
     sendMessage.mock.calls
@@ -211,9 +222,7 @@ it('translates and displays complete ASR sentences across rolling events', async
   expect(getComputedStyle(document.querySelector('.ytp-caption-window-container')!).opacity).toBe(
     '0',
   );
-  video.currentTime = 4.5;
-  video.dispatchEvent(new Event('timeupdate'));
-  await vi.advanceTimersByTimeAsync(0);
+  await playTo(video, 4.5);
   expect([...lines()].map((line) => line.textContent)).toEqual([
     'Let’s build it.',
     '译文：Let’s build it.',
@@ -278,9 +287,7 @@ it('loads the selected YouTube track before playback, aligns rolling captions, a
     texts: ['First phrase.', 'Second phrase.'],
   });
   expect(lines()[1].hidden).toBe(true);
-  video.currentTime = 4;
-  video.dispatchEvent(new Event('timeupdate'));
-  await vi.advanceTimersByTimeAsync(0);
+  await playTo(video, 4);
   expect(lines()[0].textContent).toBe('Second phrase.');
   expect(lines()[1].textContent).toBe('译文：Second phrase.');
   languageCode = 'es';
@@ -450,9 +457,7 @@ it('translates authored English sentences even when authored, automatic and brow
   expect(document.querySelector('[data-subline-overlay]')).toBeNull();
   expect(sendMessage.mock.calls).toEqual([]);
   controller.update(settings);
-  video.currentTime = 1.2;
-  video.dispatchEvent(new Event('timeupdate'));
-  await vi.advanceTimersByTimeAsync(0);
+  await playTo(video, 1.2);
   expect([...lines()].map((line) => line.textContent)).toEqual([
     'This field behind me will become a city.',
     '译文：This field behind me will become a city.',
@@ -466,18 +471,14 @@ it('translates authored English sentences even when authored, automatic and brow
   expect(getComputedStyle(document.querySelector('.ytp-caption-window-container')!).opacity).toBe(
     '0',
   );
-  video.currentTime = 3;
-  video.dispatchEvent(new Event('timeupdate'));
-  await vi.advanceTimersByTimeAsync(0);
+  await playTo(video, 3);
   expect(lines()[0].textContent).toBe('This field behind me will become a city.');
   expect(
     sendMessage.mock.calls
       .filter(([message]) => message.type === 'translate')
       .map(([message]) => message.text),
   ).toEqual(['This field behind me will become a city.']);
-  video.currentTime = 4.5;
-  video.dispatchEvent(new Event('timeupdate'));
-  await vi.advanceTimersByTimeAsync(0);
+  await playTo(video, 4.5);
   expect([...lines()].map((line) => line.textContent)).toEqual(['Go.', '译文：Go.']);
   video.currentTime = 12;
   video.dispatchEvent(new Event('timeupdate'));
@@ -753,13 +754,9 @@ it('sends complete English sentences to the Provider and displays its translatio
     'This field behind me will become a city.',
     '我身后的这片空地将变成一座城市。',
   ]);
-  video.currentTime = 2.5;
-  video.dispatchEvent(new Event('timeupdate'));
-  await vi.advanceTimersByTimeAsync(0);
+  await playTo(video, 2.5);
   expect(lines()[1].textContent).toBe('我身后的这片空地将变成一座城市。');
-  video.currentTime = 3;
-  video.dispatchEvent(new Event('timeupdate'));
-  await vi.advanceTimersByTimeAsync(0);
+  await playTo(video, 3);
   expect([...lines()].map((line) => line.textContent)).toEqual([
     'Let’s build it.',
     '让我们建造它。',

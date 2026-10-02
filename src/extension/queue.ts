@@ -5,6 +5,9 @@ import {
   type SubtitleTranslation,
 } from '../shared/subtitle-segmentation';
 
+const sendWindowMs = 1000;
+export const translationSendsPerSecond = 3;
+
 interface Job {
   key: string;
   group: string;
@@ -21,12 +24,17 @@ interface Job {
 interface Consumer {
   current?: string;
   window: string[];
+  paused?: boolean;
+  held?: { settings: Settings; texts: string[]; segment: boolean; keys: string[] };
 }
 
 export class TranslationQueue {
   private jobs = new Map<string, Job>();
   private consumers = new Map<string, Consumer>();
   private backoffUntil = 0;
+  private sentAt: number[] = [];
+  private sendTimer: ReturnType<typeof setTimeout> | undefined;
+  private promoting = false;
 
   private group(settings: Settings): string {
     return JSON.stringify([
@@ -65,11 +73,23 @@ export class TranslationQueue {
 
   prefetch(consumer: string, settings: Settings, texts: string[], segment = false): void {
     const keys = texts.map((text) => this.key(settings, text, segment));
-    const current = this.consumers.get(consumer)?.current;
+    const state = this.consumers.get(consumer);
+    if (
+      keys.length &&
+      state &&
+      this.windowAwaitingReply(state) &&
+      !keys.some((key) => state.window.includes(key))
+    ) {
+      state.held = { settings, texts, segment, keys };
+      return;
+    }
+    if (state) state.held = undefined;
+    const current = state?.current;
     if (keys.length)
       this.consumers.set(consumer, {
         current: current && keys.includes(current) ? current : undefined,
         window: keys,
+        paused: state?.paused,
       });
     else this.consumers.delete(consumer);
     this.prune(true);
@@ -82,10 +102,27 @@ export class TranslationQueue {
     }
   }
 
+  pause(consumer: string): void {
+    const state = this.consumers.get(consumer);
+    if (!state) return;
+    state.paused = true;
+    this.drain();
+  }
+
+  resume(consumer: string): void {
+    const state = this.consumers.get(consumer);
+    if (!state?.paused) return;
+    state.paused = false;
+    this.drain();
+  }
+
   reset(): void {
     this.consumers.clear();
     this.prune(true);
     this.backoffUntil = 0;
+    this.sentAt = [];
+    clearTimeout(this.sendTimer);
+    this.sendTimer = undefined;
   }
 
   private enqueue(key: string, settings: Settings, text: string, segment: boolean): Job {
@@ -127,17 +164,49 @@ export class TranslationQueue {
     }
   }
 
+  private windowAwaitingReply(state: Consumer): boolean {
+    return state.window.some((key) => {
+      const job = this.jobs.get(key);
+      return Boolean(job && (job.solo || (job.controller && !job.controller.signal.aborted)));
+    });
+  }
+
+  private parked(key: string): boolean {
+    for (const state of this.consumers.values()) {
+      if (!state.held || !this.windowAwaitingReply(state)) continue;
+      if (state.held.keys.includes(key) && !state.window.includes(key)) return true;
+    }
+    return false;
+  }
+
+  private promoteHeld(): void {
+    if (this.promoting || Date.now() < this.backoffUntil) return;
+    this.promoting = true;
+    try {
+      for (const [consumer, state] of [...this.consumers]) {
+        if (!state.held || this.windowAwaitingReply(state)) continue;
+        const held = state.held;
+        state.held = undefined;
+        this.prefetch(consumer, held.settings, held.texts, held.segment);
+      }
+    } finally {
+      this.promoting = false;
+    }
+  }
+
   private drain(): void {
-    const consumers = [...this.consumers.values()];
+    this.promoteHeld();
+    const consumers = [...this.consumers.values()].filter((state) => !state.paused);
     const ordered = consumers.flatMap((state) => (state.current ? [state.current] : []));
     const longest = Math.max(0, ...consumers.map((state) => state.window.length));
     for (let index = 0; index < longest; index++)
       for (const state of consumers) if (state.window[index]) ordered.push(state.window[index]);
     const waiting = [...new Set(ordered)].flatMap((key) => {
       const job = this.jobs.get(key);
-      return job && !job.controller ? [job] : [];
+      return job && !job.controller && !this.parked(key) ? [job] : [];
     });
-    while (waiting.length) {
+    const now = Date.now();
+    while (waiting.length && this.delayUntilSend(now) === 0) {
       const [first] = waiting;
       const batch =
         first.segment || first.solo
@@ -146,8 +215,38 @@ export class TranslationQueue {
               .filter((job) => !job.segment && !job.solo && job.group === first.group)
               .slice(0, translationBatchLimit);
       for (const job of batch) waiting.splice(waiting.indexOf(job), 1);
+      this.sentAt.push(now);
       this.run(batch);
     }
+    const heldReady = [...this.consumers.values()].some(
+      (state) => state.held && !this.windowAwaitingReply(state),
+    );
+    this.scheduleSend(now, waiting.length > 0 || heldReady);
+  }
+
+  private recentSends(now: number): number[] {
+    const recent = this.sentAt.filter((time) => now - time < sendWindowMs);
+    this.sentAt = recent;
+    return recent;
+  }
+
+  private delayUntilSend(now: number): number {
+    const recent = this.recentSends(now);
+    const windowDelay =
+      recent.length < translationSendsPerSecond ? 0 : sendWindowMs - (now - recent[0]);
+    return Math.max(windowDelay, this.backoffUntil - now, 0);
+  }
+
+  private scheduleSend(now: number, waiting: boolean): void {
+    clearTimeout(this.sendTimer);
+    this.sendTimer = undefined;
+    if (!waiting) return;
+    const delay = this.delayUntilSend(now);
+    if (delay === 0) return;
+    this.sendTimer = setTimeout(() => {
+      this.sendTimer = undefined;
+      this.drain();
+    }, delay);
   }
 
   private run(batch: Job[]): void {
@@ -178,6 +277,7 @@ export class TranslationQueue {
           if (this.jobs.get(job.key) === job) this.jobs.delete(job.key);
           job.resolve(result);
         });
+        this.drain();
       },
       (error) => {
         if (controller.signal.aborted) return;
@@ -186,6 +286,7 @@ export class TranslationQueue {
           if (this.jobs.get(job.key) === job) this.jobs.delete(job.key);
           job.reject(error instanceof Error ? error : new Error('翻译失败。'));
         }
+        this.drain();
       },
     );
   }

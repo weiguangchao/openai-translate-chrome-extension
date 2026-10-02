@@ -133,6 +133,16 @@ async function finish(translations: Record<string, string>) {
   await vi.advanceTimersByTimeAsync(0);
 }
 async function advance(time: number) {
+  const origin = video.currentTime;
+  const direction = time >= origin ? 1 : -1;
+  let at = origin;
+  while (direction > 0 ? at + direction < time : at + direction > time) {
+    at += direction;
+    video.currentTime = at;
+    video.dispatchEvent(new Event('timeupdate'));
+    await vi.advanceTimersByTimeAsync(0);
+  }
+  await vi.advanceTimersByTimeAsync(Math.abs(time - origin) * 1000);
   video.currentTime = time;
   video.dispatchEvent(new Event('timeupdate'));
   await vi.advanceTimersByTimeAsync(150);
@@ -168,7 +178,7 @@ it('preloads upcoming cues in one request before the first caption and displays 
   ]);
 });
 
-it('prefetches the next blocks in ten-cue requests, cancels them on seek, and immediately prioritizes the new position', async () => {
+it('keeps one block in flight, waits out a scrub, and requests only the cues at the new position', async () => {
   const dense = Array.from({ length: 30 }, (_, index) => ({
     startTime: 2 + index * 2,
     endTime: 4 + index * 2,
@@ -187,22 +197,50 @@ it('prefetches the next blocks in ten-cue requests, cancels them on seek, and im
   });
   controller = new CaptionController(publicSettings(saved));
   await vi.advanceTimersByTimeAsync(0);
-  const blocks = [0, 10, 20].map((start) => dense.slice(start, start + 10).map((cue) => cue.text));
-  expect(requested).toEqual(blocks);
+  const segment = dense.slice(0, 10).map((cue) => cue.text);
+  expect(requested).toEqual([segment]);
   Object.defineProperty(video, 'seeking', { configurable: true, value: true });
-  video.currentTime = 80;
+  video.currentTime = 40;
   video.dispatchEvent(new Event('seeking'));
-  await vi.advanceTimersByTimeAsync(0);
+  await vi.advanceTimersByTimeAsync(200);
   expect(translated()?.hidden).toBe(true);
-  expect(pending.map((request) => request.signal.aborted)).toEqual([true, true, true]);
+  expect(pending.map((request) => request.signal.aborted)).toEqual([true]);
+  expect(requested).toEqual([segment]);
+  video.currentTime = 80;
   Object.defineProperty(video, 'seeking', { value: false });
   video.dispatchEvent(new Event('seeked'));
-  await vi.advanceTimersByTimeAsync(0);
-  expect(requested).toEqual([...blocks, ['After seeking']]);
+  await vi.advanceTimersByTimeAsync(200);
+  expect(requested).toEqual([segment]);
+  await vi.advanceTimersByTimeAsync(600);
+  expect(requested).toEqual([segment, ['After seeking']]);
   await finish({ 'After seeking': '跳转后的字幕' });
   expect(translated()?.textContent).toBe('跳转后的字幕');
   await finish({ 'Cue 1': '迟到的旧字幕' });
   expect(translated()?.textContent).toBe('跳转后的字幕');
+});
+
+it('previews a few cues after a jump settles, then resumes the lookahead once playback continues', async () => {
+  const dense = Array.from({ length: 30 }, (_, index) => ({
+    startTime: 2 + index * 2,
+    endTime: 4 + index * 2,
+    text: `Cue ${index + 1}`,
+  }));
+  Object.defineProperty(video, 'textTracks', {
+    value: [{ mode: 'showing', kind: 'subtitles', language: 'en', cues: dense, activeCues: [] }],
+  });
+  controller = new CaptionController(publicSettings(saved));
+  await vi.advanceTimersByTimeAsync(0);
+  const started = requested.length;
+  video.currentTime = 42;
+  video.dispatchEvent(new Event('timeupdate'));
+  await vi.advanceTimersByTimeAsync(200);
+  expect(requested).toHaveLength(started);
+  expect(pending.slice(0, started).every((request) => request.signal.aborted)).toBe(true);
+  await vi.advanceTimersByTimeAsync(200);
+  expect(requested[started]).toEqual(['Cue 21', 'Cue 22', 'Cue 23', 'Cue 24']);
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(requested.at(-1)).toEqual(['Cue 25', 'Cue 26', 'Cue 27', 'Cue 28', 'Cue 29', 'Cue 30']);
+  expect(pending[started].signal.aborted).toBe(false);
 });
 
 it('starts translation one second ahead on first load and after seeking', async () => {
@@ -236,13 +274,15 @@ it('starts translation one second ahead on first load and after seeking', async 
   Object.defineProperty(video, 'seeking', { value: false });
   video.dispatchEvent(new Event('seeked'));
   await vi.advanceTimersByTimeAsync(0);
+  expect(requested).toHaveLength(1);
+  await vi.advanceTimersByTimeAsync(400);
   expect(requested.slice(1)).toEqual([['After']]);
   expect(original()?.textContent).toBe('Seek tail');
   expect(translated()?.hidden).toBe(true);
   expect(pending[0].signal.aborted).toBe(true);
 });
 
-it('cancels prefetching while paused, keeps the shown translation, and resumes on play', async () => {
+it('finishes in-flight prefetch while paused and does not send more until playback resumes', async () => {
   const dense = Array.from({ length: 25 }, (_, index) => ({
     startTime: 2 + index * 2,
     endTime: 4 + index * 2,
@@ -258,25 +298,51 @@ it('cancels prefetching while paused, keeps the shown translation, and resumes o
   };
   controller = new CaptionController(publicSettings(saved));
   await advance(2);
-  const blocks = [0, 10, 20].map((start) => dense.slice(start, start + 10).map((cue) => cue.text));
-  expect(requested).toEqual(blocks);
+  const segment = dense.slice(0, 10).map((cue) => cue.text);
+  expect(requested).toEqual([segment]);
   await setPaused(true);
-  expect(pending.map((request) => request.signal.aborted)).toEqual([true, true, true]);
+  expect(pending.map((request) => request.signal.aborted)).toEqual([false]);
   await vi.advanceTimersByTimeAsync(60000);
-  expect(requested).toHaveLength(3);
-  expect(translated()?.hidden).toBe(true);
-  pending.length = 0;
-  await setPaused(false);
-  expect(requested.slice(3)).toEqual(blocks);
+  expect(requested).toHaveLength(1);
   await finish({ 'Cue 1': '第一句' });
   expect(translated()?.textContent).toBe('第一句');
-  expect(requested).toHaveLength(6);
-  await setPaused(true);
-  expect(pending.slice(1).map((request) => request.signal.aborted)).toEqual([true, true]);
-  await vi.advanceTimersByTimeAsync(60000);
-  expect(requested).toHaveLength(6);
-  expect(translated()?.textContent).toBe('第一句');
   expect(translated()?.hidden).toBe(false);
+  expect(requested).toHaveLength(1);
+  video.currentTime = 22;
+  video.dispatchEvent(new Event('timeupdate'));
+  await vi.advanceTimersByTimeAsync(60000);
+  expect(requested).toHaveLength(1);
+  await setPaused(false);
+  expect(requested.at(-1)).toEqual(dense.slice(10, 20).map((cue) => cue.text));
+  await setPaused(true);
+  const sent = requested.length;
+  await vi.advanceTimersByTimeAsync(60000);
+  expect(requested).toHaveLength(sent);
+  expect(pending.at(-1)?.signal.aborted).toBe(false);
+});
+
+it('does not request the next segment while the current prefetch is waiting for the provider', async () => {
+  const dense = Array.from({ length: 24 }, (_, index) => ({
+    startTime: 2 + index * 2,
+    endTime: 4 + index * 2,
+    text: `Cue ${index + 1}`,
+  }));
+  Object.defineProperty(video, 'textTracks', {
+    value: [{ mode: 'showing', kind: 'subtitles', language: 'en', cues: dense, activeCues: [] }],
+  });
+  controller = new CaptionController(publicSettings(saved));
+  await vi.advanceTimersByTimeAsync(0);
+  const segment = dense.slice(0, 10).map((cue) => cue.text);
+  expect(requested).toEqual([segment]);
+  for (let time = 1; time <= 22; time++) {
+    video.currentTime = time;
+    video.dispatchEvent(new Event('timeupdate'));
+    await vi.advanceTimersByTimeAsync(0);
+  }
+  expect(requested).toEqual([segment]);
+  expect(pending[0].signal.aborted).toBe(false);
+  await finish({ 'Cue 1': '第一句' });
+  expect(requested.at(-1)).toEqual(dense.slice(10, 20).map((cue) => cue.text));
 });
 
 it('invalidates the old translation when the same video element loads a different source', async () => {
@@ -292,6 +358,7 @@ it('invalidates the old translation when the same video element loads a differen
   await vi.advanceTimersByTimeAsync(0);
   await finish({ 'First cue': '旧视频字幕' });
   expect(translated()?.textContent).not.toContain('旧视频字幕');
+  await vi.advanceTimersByTimeAsync(400);
   await finish({ 'New video': '新视频字幕' });
   expect(translated()?.textContent).toBe('新视频字幕');
 });

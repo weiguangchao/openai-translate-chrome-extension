@@ -39,7 +39,7 @@ it('shows the current translation, ignores a late reply, clears a missing cue an
   controller = new CaptionController(settings());
   await vi.advanceTimersByTimeAsync(450);
   expect(sendMessage).toHaveBeenCalledWith({ type: 'translate', text: 'First cue' });
-  expect(translationNode()?.textContent).toBe('加载中');
+  expect(translationNode()?.textContent).toBe('翻译中');
   expect(translationNode()?.hidden).toBe(false);
   expect(
     document.querySelector('[data-subline-overlay]')?.shadowRoot?.querySelector('.original')
@@ -214,7 +214,7 @@ it('keeps the controller alive for recoverable messaging errors and retries the 
   expect(translationNode()?.hidden).toBe(false);
 });
 
-it('translates only during playback and drops the pending request when paused', async () => {
+it('finishes an in-flight translation while paused and does not start another until playback resumes', async () => {
   const video = document.querySelector('video')!;
   const replies: ((value: unknown) => void)[] = [];
   const sendMessage = vi.fn((message: { type: string }) =>
@@ -235,14 +235,16 @@ it('translates only during playback and drops the pending request when paused', 
   await setPaused(false);
   expect(sendMessage).toHaveBeenLastCalledWith({ type: 'translate', text: 'First cue' });
   await setPaused(true);
-  expect(sendMessage).toHaveBeenLastCalledWith({ type: 'prefetch', texts: [] });
-  replies[0]({ ok: false, error: '字幕已更新。' });
-  await vi.advanceTimersByTimeAsync(30000);
-  expect(translationNode()?.hidden).toBe(true);
-  expect(translationNode()?.textContent).toBe('');
-  await setPaused(false);
-  replies[1]({ ok: true, data: '第一句译文' });
+  expect(sendMessage).toHaveBeenLastCalledWith({ type: 'prefetch', texts: [], pause: true });
+  expect(translationNode()?.textContent).toBe('翻译中');
+  replies[0]({ ok: true, data: '第一句译文' });
   await vi.advanceTimersByTimeAsync(1);
+  expect(translationNode()?.textContent).toBe('第一句译文');
+  expect(translationNode()?.hidden).toBe(false);
+  await vi.advanceTimersByTimeAsync(30000);
+  expect(translationNode()?.textContent).toBe('第一句译文');
+  await setPaused(false);
+  await vi.advanceTimersByTimeAsync(30000);
   expect(translationNode()?.textContent).toBe('第一句译文');
   await setPaused(true);
   await vi.advanceTimersByTimeAsync(30000);
@@ -250,7 +252,8 @@ it('translates only during playback and drops the pending request when paused', 
   expect(translationNode()?.hidden).toBe(false);
   expect(sendMessage.mock.calls.map(([message]) => message)).toEqual([
     { type: 'translate', text: 'First cue' },
-    { type: 'prefetch', texts: [] },
-    { type: 'translate', text: 'First cue' },
+    { type: 'prefetch', texts: [], pause: true },
+    { type: 'prefetch', texts: [], pause: false },
+    { type: 'prefetch', texts: [], pause: true },
   ]);
 });

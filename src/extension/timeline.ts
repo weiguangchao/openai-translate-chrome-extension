@@ -1,3 +1,4 @@
+import { prefetchSegmentCount, translationBatchLimit } from '../shared/limits';
 import { languageTrack } from './languages';
 import type { YoutubeCaptionKind } from './youtube-captions';
 
@@ -103,7 +104,14 @@ export function selectedTrack(video: HTMLVideoElement, language: string): TextTr
 
 export function captionWindow(cues: readonly TimedCue[], time: number) {
   const first = cues.findIndex((cue) => cue.endTime > time);
-  const remaining = first < 0 ? [] : cues.slice(first, (Math.floor(first / 10) + 3) * 10);
+  const remaining =
+    first < 0
+      ? []
+      : cues.slice(
+          first,
+          (Math.floor(first / translationBatchLimit) + prefetchSegmentCount) *
+            translationBatchLimit,
+        );
   const textAt = (at: number) =>
     remaining
       .filter((cue) => cue.startTime <= at && at < cue.endTime)
