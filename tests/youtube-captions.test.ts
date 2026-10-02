@@ -2,7 +2,10 @@ import { expect, it } from 'vitest';
 import { parseYoutubeCaptions } from '../src/extension/youtube-captions';
 import { captionWindow } from '../src/extension/timeline';
 import { githubCaption, githubCaptionTrack, githubCommaSegments } from './fixtures/github-caption';
-import { splitSubtitleAtCommas } from '../src/shared/subtitle-segmentation';
+import {
+  needsSubtitleSegmentation,
+  splitSubtitleAtCommas,
+} from '../src/shared/subtitle-segmentation';
 import { sourceCaptionAt, translatedCaptionAt } from '../src/extension/segmented-captions';
 
 it.each(['asr', 'authored'] as const)(
@@ -157,6 +160,7 @@ it('joins ASR fragments, uses word timestamps within a cue and preserves the fin
   expect(captionWindow(cues, 1.5)).toEqual({
     current: 'We are ready.',
     texts: ['We are ready.', 'Are you?', 'Let’s go'],
+    segments: [false, false, false],
   });
   expect(captionWindow(cues, 2).current).toBe('Are you?');
 });
@@ -343,17 +347,39 @@ it('ignores malformed and non-text events while retaining valid captions', () =>
   ).toEqual([{ startTime: 0, endTime: 1, text: 'Valid.' }]);
 });
 
-it('covers only the rest of the current segment of ten cues, however far apart', () => {
+it('covers the rest of the current segment and the following segment, however far apart', () => {
   const cues = Array.from({ length: 30 }, (_, index) => ({
     startTime: index * 10,
     endTime: index * 10 + 8,
     text: `Cue ${index + 1}`,
   }));
   const texts = (from: number, to: number) => cues.slice(from, to).map((cue) => cue.text);
-  expect(captionWindow(cues, 0).texts).toEqual(texts(0, 10));
-  expect(captionWindow(cues, 95)).toEqual({ current: 'Cue 10', texts: texts(9, 10) });
-  expect(captionWindow(cues, 105).texts).toEqual(texts(10, 20));
-  expect(captionWindow(cues, 165).texts).toEqual(texts(16, 20));
+  expect(captionWindow(cues, 0).texts).toEqual(texts(0, 20));
+  expect(captionWindow(cues, 95)).toEqual({
+    current: 'Cue 10',
+    texts: texts(9, 20),
+    segments: texts(9, 20).map(() => false),
+  });
+  expect(captionWindow(cues, 105).texts).toEqual(texts(10, 30));
+  expect(captionWindow(cues, 165).texts).toEqual(texts(16, 30));
   expect(captionWindow(cues, 205).texts).toEqual(texts(20, 30));
-  expect(captionWindow(cues, 9999)).toEqual({ current: '', texts: [] });
+  expect(captionWindow(cues, 9999)).toEqual({ current: '', texts: [], segments: [] });
+});
+
+it('marks a long cue shown on its own for segmentation, but not overlapping cues joined into one line', () => {
+  const first = 'When I first moved to the city, I didn’t know anyone at all,';
+  const second = 'and every night I walked along the river, wondering why.';
+  const long =
+    'Years later, standing on the same bridge, I finally understood that the city had become my home.';
+  const window = captionWindow(
+    [
+      { startTime: 2, endTime: 6, text: first },
+      { startTime: 4, endTime: 8, text: second },
+      { startTime: 8, endTime: 12, text: long },
+    ],
+    0,
+  );
+  expect(window.texts).toEqual([first, `${first}\n${second}`, second, long]);
+  expect(window.texts.map(needsSubtitleSegmentation)).toEqual([false, true, false, true]);
+  expect(window.segments).toEqual([false, false, false, true]);
 });

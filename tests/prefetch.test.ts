@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { CaptionController } from '../src/extension/captions';
 import { DEFAULT_SETTINGS, publicSettings, STORAGE_KEY } from '../src/shared/settings';
+import { splitSubtitleAtCommas } from '../src/shared/subtitle-segmentation';
 import { providerReply, requestedTexts } from './fixtures/provider';
 
 let controller: CaptionController | undefined;
@@ -8,6 +9,7 @@ let video: HTMLVideoElement;
 const saved = { ...DEFAULT_SETTINGS, apiKey: 'test-key', model: 'test-model' };
 const pending: { texts: string[]; signal: AbortSignal; resolve: (value: Response) => void }[] = [];
 const requested: string[][] = [];
+const messages: string[] = [];
 const cues = [
   { startTime: 2, endTime: 4, text: 'First cue' },
   { startTime: 4, endTime: 6, text: 'Second cue' },
@@ -46,8 +48,10 @@ beforeEach(async () => {
           listener = callback;
         },
       },
-      sendMessage: (message: unknown) =>
-        new Promise<Reply>((resolve) => listener(message, sender, resolve)),
+      sendMessage: (message: { type: string }) => {
+        messages.push(message.type);
+        return new Promise<Reply>((resolve) => listener(message, sender, resolve));
+      },
     },
     storage: {
       local: {
@@ -113,6 +117,7 @@ afterEach(() => {
   controller = undefined;
   pending.length = 0;
   requested.length = 0;
+  messages.length = 0;
   vi.useRealTimers();
   vi.unstubAllGlobals();
   vi.resetModules();
@@ -148,37 +153,32 @@ async function advance(time: number) {
   await vi.advanceTimersByTimeAsync(150);
 }
 
-it('preloads upcoming cues in one request before the first caption and displays them only at their timestamps', async () => {
+it('preloads upcoming cues in one request before the first caption and shows each reply at its timestamp without asking again', async () => {
   controller = new CaptionController(publicSettings(saved));
   await vi.advanceTimersByTimeAsync(0);
-  expect(requested).toEqual([['First cue', 'Second cue', 'Third cue', 'After seeking']]);
+  const opening = ['First cue', 'Second cue', 'Third cue', 'After seeking'];
+  expect(requested).toEqual([opening]);
   await finish({ 'First cue': '第一句', 'Second cue': '第二句', 'Third cue': '第三句' });
   expect(translated()?.hidden).toBe(true);
-  await advance(2);
-  expect(requested.at(-1)).toEqual(['First cue']);
-  await finish({ 'First cue': '第一句' });
-  expect(translated()?.textContent).toBe('第一句');
-  expect(translated()?.hidden).toBe(false);
-  await advance(4);
-  expect(requested.at(-1)).toEqual(['Second cue', 'Third cue', 'After seeking']);
-  await finish({ 'Second cue': '第二句' });
-  expect(translated()?.textContent).toBe('第二句');
-  await advance(6);
-  expect(requested.at(-1)).toEqual(['Third cue', 'After seeking']);
-  await finish({ 'Third cue': '第三句' });
-  expect(translated()?.textContent).toBe('第三句');
+  for (const [time, text] of [
+    [2, '第一句'],
+    [4, '第二句'],
+    [6, '第三句'],
+  ] as const) {
+    await advance(time - 0.1);
+    expect(translated()?.textContent).not.toBe(text);
+    video.currentTime = time;
+    video.dispatchEvent(new Event('timeupdate'));
+    expect(translated()?.textContent).toBe(text);
+    expect(translated()?.hidden).toBe(false);
+  }
   await advance(9);
   expect(translated()?.hidden).toBe(true);
-  expect(requested).toEqual([
-    ['First cue', 'Second cue', 'Third cue', 'After seeking'],
-    ['First cue'],
-    ['Second cue', 'Third cue', 'After seeking'],
-    ['Third cue', 'After seeking'],
-    ['After seeking'],
-  ]);
+  expect(requested).toEqual([opening]);
+  expect(messages).not.toContain('translate');
 });
 
-it('keeps one block in flight, waits out a scrub, and requests only the cues at the new position', async () => {
+it('queues the current and next segment on open, waits out a scrub, and requests only the cues at the new position', async () => {
   const dense = Array.from({ length: 30 }, (_, index) => ({
     startTime: 2 + index * 2,
     endTime: 4 + index * 2,
@@ -197,22 +197,23 @@ it('keeps one block in flight, waits out a scrub, and requests only the cues at 
   });
   controller = new CaptionController(publicSettings(saved));
   await vi.advanceTimersByTimeAsync(0);
-  const segment = dense.slice(0, 10).map((cue) => cue.text);
-  expect(requested).toEqual([segment]);
+  const block = (index: number) => dense.slice(index * 10, index * 10 + 10).map((cue) => cue.text);
+  const opening = [block(0), block(1)];
+  expect(requested).toEqual(opening);
   Object.defineProperty(video, 'seeking', { configurable: true, value: true });
   video.currentTime = 40;
   video.dispatchEvent(new Event('seeking'));
   await vi.advanceTimersByTimeAsync(200);
   expect(translated()?.hidden).toBe(true);
-  expect(pending.map((request) => request.signal.aborted)).toEqual([true]);
-  expect(requested).toEqual([segment]);
+  expect(pending.map((request) => request.signal.aborted)).toEqual([true, true]);
+  expect(requested).toEqual(opening);
   video.currentTime = 80;
   Object.defineProperty(video, 'seeking', { value: false });
   video.dispatchEvent(new Event('seeked'));
   await vi.advanceTimersByTimeAsync(200);
-  expect(requested).toEqual([segment]);
+  expect(requested).toEqual(opening);
   await vi.advanceTimersByTimeAsync(600);
-  expect(requested).toEqual([segment, ['After seeking']]);
+  expect(requested).toEqual([...opening, ['After seeking']]);
   await finish({ 'After seeking': '跳转后的字幕' });
   expect(translated()?.textContent).toBe('跳转后的字幕');
   await finish({ 'Cue 1': '迟到的旧字幕' });
@@ -298,22 +299,22 @@ it('finishes in-flight prefetch while paused and does not send more until playba
   };
   controller = new CaptionController(publicSettings(saved));
   await advance(2);
-  const segment = dense.slice(0, 10).map((cue) => cue.text);
-  expect(requested).toEqual([segment]);
+  const block = (index: number) => dense.slice(index * 10, index * 10 + 10).map((cue) => cue.text);
+  expect(requested).toEqual([block(0), block(1)]);
   await setPaused(true);
-  expect(pending.map((request) => request.signal.aborted)).toEqual([false]);
+  expect(pending.map((request) => request.signal.aborted)).toEqual([false, false]);
   await vi.advanceTimersByTimeAsync(60000);
-  expect(requested).toHaveLength(1);
+  expect(requested).toHaveLength(2);
   await finish({ 'Cue 1': '第一句' });
   expect(translated()?.textContent).toBe('第一句');
   expect(translated()?.hidden).toBe(false);
-  expect(requested).toHaveLength(1);
+  expect(requested).toHaveLength(2);
   video.currentTime = 22;
   video.dispatchEvent(new Event('timeupdate'));
   await vi.advanceTimersByTimeAsync(60000);
-  expect(requested).toHaveLength(1);
+  expect(requested).toHaveLength(2);
   await setPaused(false);
-  expect(requested.at(-1)).toEqual(dense.slice(10, 20).map((cue) => cue.text));
+  expect(requested.at(-1)).toEqual(dense.slice(20).map((cue) => cue.text));
   await setPaused(true);
   const sent = requested.length;
   await vi.advanceTimersByTimeAsync(60000);
@@ -321,7 +322,7 @@ it('finishes in-flight prefetch while paused and does not send more until playba
   expect(pending.at(-1)?.signal.aborted).toBe(false);
 });
 
-it('does not request the next segment while the current prefetch is waiting for the provider', async () => {
+it('queues the next segment with the opening window and preloads the following segment when playback enters it', async () => {
   const dense = Array.from({ length: 24 }, (_, index) => ({
     startTime: 2 + index * 2,
     endTime: 4 + index * 2,
@@ -332,17 +333,20 @@ it('does not request the next segment while the current prefetch is waiting for 
   });
   controller = new CaptionController(publicSettings(saved));
   await vi.advanceTimersByTimeAsync(0);
-  const segment = dense.slice(0, 10).map((cue) => cue.text);
-  expect(requested).toEqual([segment]);
-  for (let time = 1; time <= 22; time++) {
+  const block = (index: number) => dense.slice(index * 10, index * 10 + 10).map((cue) => cue.text);
+  expect(requested).toEqual([block(0), block(1)]);
+  expect(pending.map((request) => request.signal.aborted)).toEqual([false, false]);
+  for (let time = 1; time < 22; time++) {
     video.currentTime = time;
     video.dispatchEvent(new Event('timeupdate'));
     await vi.advanceTimersByTimeAsync(0);
   }
-  expect(requested).toEqual([segment]);
-  expect(pending[0].signal.aborted).toBe(false);
-  await finish({ 'Cue 1': '第一句' });
-  expect(requested.at(-1)).toEqual(dense.slice(10, 20).map((cue) => cue.text));
+  expect(requested).toEqual([block(0), block(1)]);
+  video.currentTime = 22;
+  video.dispatchEvent(new Event('timeupdate'));
+  await vi.advanceTimersByTimeAsync(0);
+  expect(requested.at(-1)).toEqual(dense.slice(20).map((cue) => cue.text));
+  expect(pending[1].signal.aborted).toBe(false);
 });
 
 it('invalidates the old translation when the same video element loads a different source', async () => {
@@ -392,4 +396,46 @@ it('distinguishes Chinese scripts and stops model work when the requested subtit
   controller.update({ ...publicSettings(saved), targetLanguage: 'zh-TW' });
   expect(translated()?.textContent).toBe('現有繁體字幕');
   expect(requested).toEqual(alreadyRequested);
+});
+
+it('translates overlapping cues joined into one line whole, splits a long cue of its own, and asks for neither again', async () => {
+  const first = 'When I first moved to the city, I didn’t know anyone at all,';
+  const second = 'and every night I walked along the river, wondering why.';
+  const joined = `${first}\n${second}`;
+  const long =
+    'Years later, standing on the same bridge, I finally understood that the city had become my home.';
+  Object.defineProperty(video, 'textTracks', {
+    value: [
+      {
+        mode: 'showing',
+        kind: 'subtitles',
+        language: 'en',
+        activeCues: [],
+        cues: [
+          { startTime: 2, endTime: 6, text: first },
+          { startTime: 4, endTime: 8, text: second },
+          { startTime: 8, endTime: 12, text: long },
+        ],
+      },
+    ],
+  });
+  const pieces = splitSubtitleAtCommas(long).map((part) => long.slice(part.from, part.to));
+  controller = new CaptionController(publicSettings(saved));
+  await vi.advanceTimersByTimeAsync(0);
+  expect(requested).toEqual([[first, joined, second], pieces]);
+  for (const request of [...pending])
+    request.resolve(providerReply(request.texts, (text) => `${text} 译文`));
+  await vi.advanceTimersByTimeAsync(0);
+  for (const [time, text] of [
+    [4, `${joined} 译文`],
+    [6, `${second} 译文`],
+    [8, `${pieces[0]} 译文`],
+  ] as const) {
+    await advance(time - 0.1);
+    video.currentTime = time;
+    video.dispatchEvent(new Event('timeupdate'));
+    expect(translated()?.textContent).toBe(text);
+  }
+  expect(requested).toHaveLength(2);
+  expect(messages).not.toContain('translate');
 });

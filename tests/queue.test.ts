@@ -27,7 +27,7 @@ function pendingProvider() {
 }
 const settings = { ...DEFAULT_SETTINGS, apiKey: 'test-key', model: 'test-model' };
 
-it('sends every cue right away, shares in-flight work, and requests a completed cue again', async () => {
+it('sends every cue right away, shares in-flight work, and serves a completed cue from the cache', async () => {
   const { fetch, requests, batches } = pendingProvider();
   const queue = new TranslationQueue();
   const first = queue.request('tab-1', settings, 'First');
@@ -44,12 +44,9 @@ it('sends every cue right away, shares in-flight work, and requests a completed 
     'Current 译文',
     'Current 译文',
   ]);
-  const again = queue.request('tab-4', settings, 'Current');
-  expect(fetch).toHaveBeenCalledTimes(translationSendsPerSecond);
+  await expect(queue.request('tab-4', settings, 'Current')).resolves.toBe('Current 译文');
   await vi.advanceTimersByTimeAsync(1000);
-  expect(fetch).toHaveBeenCalledTimes(4);
-  requests[3].resolve(providerReply(requests[3].texts, (text) => `${text} 译文`));
-  await expect(again).resolves.toBe('Current 译文');
+  expect(fetch).toHaveBeenCalledTimes(3);
 });
 
 it('backs off after a rate limit so subsequent cues do not repeatedly bill or hit the provider', async () => {
@@ -61,7 +58,76 @@ it('backs off after a rate limit so subsequent cues do not repeatedly bill or hi
   expect(fetch).toHaveBeenCalledTimes(1);
 });
 
-it('sends each new block of ten cues as one request and does not reuse a finished block', async () => {
+it('does not cache a failed request, but still serves cached cues while the provider backs off', async () => {
+  const fetch = vi
+    .fn()
+    .mockResolvedValueOnce(providerReply(['Cached'], () => '已缓存'))
+    .mockResolvedValue(new Response('', { status: 429 }));
+  vi.stubGlobal('fetch', fetch);
+  const queue = new TranslationQueue();
+  await expect(queue.request('tab', settings, 'Cached')).resolves.toBe('已缓存');
+  await expect(queue.request('tab', settings, 'First')).rejects.toThrow('请求过于频繁');
+  await expect(queue.request('tab', settings, 'Cached')).resolves.toBe('已缓存');
+  await expect(queue.prefetch('tab', settings, ['Cached', 'First'])).resolves.toEqual([
+    '已缓存',
+    null,
+  ]);
+  expect(fetch).toHaveBeenCalledTimes(2);
+  await vi.advanceTimersByTimeAsync(15000);
+  await expect(queue.request('tab', settings, 'First')).rejects.toThrow('请求过于频繁');
+  expect(fetch).toHaveBeenCalledTimes(3);
+});
+
+it('keeps finished translations through a settings reset and requests again only for other provider settings', async () => {
+  const { fetch, reply } = pendingProvider();
+  const queue = new TranslationQueue();
+  const first = queue.request('tab', settings, 'Cue');
+  reply(0);
+  await expect(first).resolves.toBe('Cue 译文');
+  queue.reset();
+  await expect(queue.request('tab', settings, 'Cue')).resolves.toBe('Cue 译文');
+  expect(fetch).toHaveBeenCalledTimes(1);
+  queue.reset();
+  const changed = queue.request('tab', { ...settings, model: 'other-model' }, 'Cue');
+  expect(fetch).toHaveBeenCalledTimes(2);
+  reply(1);
+  await expect(changed).resolves.toBe('Cue 译文');
+});
+
+it('forgets the oldest translations beyond the cache limit', async () => {
+  const { fetch, reply } = pendingProvider();
+  const queue = new TranslationQueue(2);
+  for (const [index, text] of ['A', 'B', 'C'].entries()) {
+    const done = queue.request('tab', settings, text);
+    reply(index);
+    await done;
+  }
+  await expect(queue.request('tab', settings, 'C')).resolves.toBe('C 译文');
+  await expect(queue.request('tab', settings, 'B')).resolves.toBe('B 译文');
+  expect(fetch).toHaveBeenCalledTimes(3);
+  void queue.request('tab', settings, 'A');
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(fetch).toHaveBeenCalledTimes(4);
+});
+
+it('answers a prefetch with cached and in-flight translations in order, and null for cues it drops or holds', async () => {
+  const { batches, reply } = pendingProvider();
+  const queue = new TranslationQueue();
+  const opening = queue.prefetch('tab', settings, ['A', 'B']);
+  const sliding = queue.prefetch('tab', settings, ['B', 'C']);
+  const held = queue.prefetch('tab', settings, ['X', 'Y']);
+  expect(batches()).toEqual([['A', 'B'], ['C']]);
+  await expect(held).resolves.toEqual([null, null]);
+  reply(0);
+  reply(1);
+  await expect(opening).resolves.toEqual([null, 'B 译文']);
+  await expect(sliding).resolves.toEqual(['B 译文', 'C 译文']);
+  expect(batches()).toEqual([['A', 'B'], ['C'], ['X', 'Y']]);
+  await expect(queue.prefetch('tab', settings, ['A', 'C'])).resolves.toEqual(['A 译文', 'C 译文']);
+  expect(batches()).toHaveLength(3);
+});
+
+it('sends each new block of ten cues as one request and reuses a finished block', async () => {
   const { batches, reply, requests } = pendingProvider();
   const queue = new TranslationQueue();
   const cues = Array.from({ length: 40 }, (_, index) => `Cue ${index + 1}`);
@@ -79,8 +145,10 @@ it('sends each new block of ten cues as one request and does not reuse a finishe
   expect(batches()).toEqual([block(0), block(1), block(2), block(3)]);
   [1, 2, 3].forEach(reply);
   await flush();
-  queue.prefetch('tab', settings, block(3));
-  expect(batches().slice(4)).toEqual([block(3)]);
+  await expect(queue.prefetch('tab', settings, block(3))).resolves.toEqual(
+    block(3).map((cue) => `${cue} 译文`),
+  );
+  expect(batches()).toHaveLength(4);
 });
 
 it('does not prefetch the next segment until the current provider request receives a reply', async () => {
@@ -126,7 +194,7 @@ it('drops a parked next segment when the current request is cancelled', async ()
   expect(batches()).toEqual([first, jumped]);
 });
 
-it('starts from the current cue mid-block and sends a short final batch at the end of a video', async () => {
+it('starts from the current cue mid-block, sends a short final batch at the end of a video, and skips finished cues', async () => {
   const { batches, reply } = pendingProvider();
   const queue = new TranslationQueue();
   const cues = Array.from({ length: 33 }, (_, index) => `Cue ${index + 1}`);
@@ -137,7 +205,7 @@ it('starts from the current cue mid-block and sends a short final batch at the e
   queue.prefetch('tab', settings, cues.slice(10, 33));
   expect(batches()).toHaveLength(3);
   await vi.advanceTimersByTimeAsync(1000);
-  expect(batches().slice(3)).toEqual([cues.slice(10, 20), cues.slice(20, 30), cues.slice(30, 33)]);
+  expect(batches().slice(3)).toEqual([cues.slice(30, 33)]);
 });
 
 it('retries each cue on its own when the batch reply cannot be matched to the cues', async () => {
@@ -151,9 +219,11 @@ it('retries each cue on its own when the batch reply cannot be matched to the cu
   expect(batches().slice(1)).toEqual([['First'], ['Second']]);
   requests[1].resolve(providerReply(['First'], () => '第一句'));
   await expect(first).resolves.toBe('第一句');
+  await expect(queue.request('tab', settings, 'First')).resolves.toBe('第一句');
+  expect(fetch).toHaveBeenCalledTimes(3);
 });
 
-it('keeps a batch running while any of its cues is still needed and cancels it once none are', async () => {
+it('keeps a batch running while any of its cues is still needed, caches all of its replies, and cancels it once none are', async () => {
   const { fetch, requests, batches } = pendingProvider();
   const queue = new TranslationQueue();
   queue.prefetch('tab', settings, ['Shared cue', 'Next cue']);
@@ -167,19 +237,15 @@ it('keeps a batch running while any of its cues is still needed and cancels it o
     providerReply(requests[0].texts, (text) => (text === 'Shared cue' ? '共享字幕' : '下一句')),
   );
   await expect(visible).resolves.toBe('共享字幕');
-  const again = queue.request('tab-3', settings, 'Next cue');
-  expect(fetch).toHaveBeenCalledTimes(2);
-  requests[1].resolve(providerReply(requests[1].texts, () => '下一句'));
-  await expect(again).resolves.toBe('下一句');
+  await expect(queue.request('tab-3', settings, 'Next cue')).resolves.toBe('下一句');
+  expect(fetch).toHaveBeenCalledTimes(1);
   queue.prefetch('tab', settings, ['A', 'B']);
   queue.prefetch('tab', settings, ['B', 'C']);
-  expect(batches().slice(2)).toEqual([['A', 'B']]);
-  await vi.advanceTimersByTimeAsync(1000);
-  expect(batches().slice(2)).toEqual([['A', 'B'], ['C']]);
-  expect(requests[2].signal.aborted).toBe(false);
+  expect(batches().slice(1)).toEqual([['A', 'B'], ['C']]);
+  expect(requests[1].signal.aborted).toBe(false);
   queue.prefetch('tab', settings, []);
+  expect(requests[1].signal.aborted).toBe(true);
   expect(requests[2].signal.aborted).toBe(true);
-  expect(requests[3].signal.aborted).toBe(true);
 });
 
 it('finishes sent requests while paused and does not send the rest until playback resumes', async () => {

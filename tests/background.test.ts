@@ -1,22 +1,20 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { DEFAULT_SETTINGS, STORAGE_KEY } from '../src/shared/settings';
+import { providerReply, requestedTexts } from './fixtures/provider';
 
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.resetModules();
 });
 
-it('keeps credentials in the background and rejects content-script requests to use draft API settings', async () => {
-  type Reply = { ok: boolean; data?: unknown; error?: string };
+type Reply = { ok: boolean; data?: unknown; error?: string };
+
+async function loadBackground(saved: object) {
   let listener!: (
     message: unknown,
     sender: chrome.runtime.MessageSender,
     reply: (value: Reply) => void,
   ) => boolean | undefined;
-  const fetch = vi
-    .fn()
-    .mockResolvedValue(Response.json({ choices: [{ message: { content: '你好' } }] }));
-  vi.stubGlobal('fetch', fetch);
   vi.stubGlobal('chrome', {
     runtime: {
       id: 'extension-id',
@@ -30,13 +28,7 @@ it('keeps credentials in the background and rejects content-script requests to u
     storage: {
       local: {
         setAccessLevel: vi.fn().mockResolvedValue(undefined),
-        get: vi.fn().mockResolvedValue({
-          [STORAGE_KEY]: {
-            ...structuredClone(DEFAULT_SETTINGS),
-            apiKey: 'trusted-secret',
-            model: 'saved-model',
-          },
-        }),
+        get: vi.fn().mockResolvedValue({ [STORAGE_KEY]: saved }),
       },
       onChanged: { addListener: vi.fn() },
     },
@@ -48,8 +40,19 @@ it('keeps credentials in the background and rejects content-script requests to u
     frameId: 0,
     tab: { id: 1 },
   } as chrome.runtime.MessageSender;
-  const send = (message: unknown) =>
-    new Promise<Reply>((resolve) => listener(message, sender, resolve));
+  return (message: unknown) => new Promise<Reply>((resolve) => listener(message, sender, resolve));
+}
+
+it('keeps credentials in the background and rejects content-script requests to use draft API settings', async () => {
+  const fetch = vi
+    .fn()
+    .mockResolvedValue(Response.json({ choices: [{ message: { content: '你好' } }] }));
+  vi.stubGlobal('fetch', fetch);
+  const send = await loadBackground({
+    ...structuredClone(DEFAULT_SETTINGS),
+    apiKey: 'trusted-secret',
+    model: 'saved-model',
+  });
   const publicReply = await send({ type: 'settings' });
   expect(publicReply.ok).toBe(true);
   expect(publicReply.data).not.toHaveProperty('apiKey');
@@ -69,4 +72,32 @@ it('keeps credentials in the background and rejects content-script requests to u
   ).resolves.toEqual({ ok: true, data: '你好' });
   expect(fetch.mock.calls[0][0]).toBe('https://api.openai.com/v1/chat/completions');
   expect(fetch.mock.calls[0][1].headers.Authorization).toBe('Bearer trusted-secret');
+});
+
+it('answers a prefetch with translations in the order asked, settling cues a later window drops', async () => {
+  const pending: { texts: string[]; resolve: (value: Response) => void }[] = [];
+  const fetch = vi.fn(
+    (_url: string, init: RequestInit) =>
+      new Promise<Response>((resolve) => pending.push({ texts: requestedTexts(init), resolve })),
+  );
+  vi.stubGlobal('fetch', fetch);
+  const send = await loadBackground({
+    ...structuredClone(DEFAULT_SETTINGS),
+    apiKey: 'key',
+    model: 'model',
+  });
+  const opening = send({ type: 'prefetch', texts: ['A', 'B', 'A'] });
+  await vi.waitFor(() => expect(pending).toHaveLength(1));
+  const sliding = send({ type: 'prefetch', texts: ['B', 'C'] });
+  await vi.waitFor(() => expect(pending).toHaveLength(2));
+  for (const request of pending)
+    request.resolve(providerReply(request.texts, (text) => `${text} 译文`));
+  await expect(opening).resolves.toEqual({ ok: true, data: [null, 'B 译文', null] });
+  await expect(sliding).resolves.toEqual({ ok: true, data: ['B 译文', 'C 译文'] });
+  await expect(send({ type: 'prefetch', texts: ['A', 'C'] })).resolves.toEqual({
+    ok: true,
+    data: ['A 译文', 'C 译文'],
+  });
+  await expect(send({ type: 'prefetch', texts: [], pause: true })).resolves.toEqual({ ok: true });
+  expect(fetch).toHaveBeenCalledTimes(2);
 });

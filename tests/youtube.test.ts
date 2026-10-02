@@ -55,6 +55,7 @@ function setup() {
       text?: string;
       texts?: string[];
       segment?: boolean;
+      segments?: boolean[];
     }): Promise<{ ok: boolean; data?: SubtitleTranslation }> =>
       Promise.resolve(
         message.type === 'translate' ? { ok: true, data: `译文：${message.text}` } : { ok: true },
@@ -125,7 +126,7 @@ it('prefetches comma segments of a long subtitle and follows the current segment
         data: await queue.request('video', saved, message.text!, message.segment),
       };
     if (message.type === 'prefetch')
-      queue.prefetch('video', saved, message.texts!, message.segment);
+      queue.prefetch('video', saved, message.texts!, message.segments);
     return { ok: true };
   });
   await import('../src/extension/youtube-page');
@@ -763,8 +764,6 @@ it('sends complete English sentences to the Provider and displays its translatio
   ]);
   expect(requests.map((request) => request.texts)).toEqual([
     ['This field behind me will become a city.', 'Let’s build it.'],
-    ['This field behind me will become a city.'],
-    ['Let’s build it.'],
   ]);
   queue.reset();
 });

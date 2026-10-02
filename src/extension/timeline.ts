@@ -1,4 +1,5 @@
 import { prefetchSegmentCount, translationBatchLimit } from '../shared/limits';
+import { needsSubtitleSegmentation } from '../shared/subtitle-segmentation';
 import { languageTrack } from './languages';
 import type { YoutubeCaptionKind } from './youtube-captions';
 
@@ -128,7 +129,10 @@ export function captionWindow(cues: readonly TimedCue[], time: number) {
     const text = textAt(at);
     if (text && !texts.includes(text)) texts.push(text);
   }
-  return { current, texts };
+  const segments = texts.map(
+    (text) => needsSubtitleSegmentation(text) && remaining.some((cue) => cue.text === text),
+  );
+  return { current, texts, segments };
 }
 
 export class YoutubeTimeline {
