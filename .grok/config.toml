@@ -1,9 +1,12 @@
+# Command and args follow .mcp.json (mcpServers.chrome-devtools).
 [mcp_servers.chrome-devtools]
 command = "npx"
 args = [
     "-y",
     "chrome-devtools-mcp@latest",
     "--autoConnect",
+    "--categoryExtensions",
+    "--experimentalIncludeAllPages",
 ]
 enabled = true
 startup_timeout_sec = 180
