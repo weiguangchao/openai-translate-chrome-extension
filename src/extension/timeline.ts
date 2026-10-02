@@ -1,5 +1,5 @@
 import { prefetchSegmentCount, translationBatchLimit } from '../shared/limits';
-import { needsSubtitleSegmentation } from '../shared/subtitle-segmentation';
+import { needsSubtitleSegmentation, splitSubtitleAtCommas } from '../shared/subtitle-segmentation';
 import { languageTrack } from './languages';
 import type { YoutubeCaptionKind } from './youtube-captions';
 
@@ -8,6 +8,13 @@ export interface TimedCue {
   endTime: number;
   text: string;
   timing?: CueTiming[];
+}
+
+export interface TimedCaption {
+  startTime: number;
+  endTime: number;
+  text: string;
+  segment: number;
 }
 
 export interface CueTiming {
@@ -24,14 +31,28 @@ export interface SubtitleTimeline {
   translation: TimedCue[] | null;
 }
 
+const trackCueCache = new WeakMap<TextTrack, TimedCue[]>();
+
 function trackCues(track: TextTrack | undefined): TimedCue[] | null {
-  return track?.cues
-    ? [...track.cues].map((cue) => ({
-        startTime: cue.startTime,
-        endTime: cue.endTime,
-        text: captionText(cue),
-      }))
-    : null;
+  if (!track?.cues) return null;
+  const cues = [...track.cues].map((cue) => ({
+    startTime: cue.startTime,
+    endTime: cue.endTime,
+    text: captionText(cue),
+  }));
+  const cached = trackCueCache.get(track);
+  if (
+    cached?.length === cues.length &&
+    cached.every(
+      (cue, index) =>
+        cue.startTime === cues[index].startTime &&
+        cue.endTime === cues[index].endTime &&
+        cue.text === cues[index].text,
+    )
+  )
+    return cached;
+  trackCueCache.set(track, cues);
+  return cues;
 }
 
 export class NativeTimeline {
@@ -103,36 +124,100 @@ export function selectedTrack(video: HTMLVideoElement, language: string): TextTr
   return languageTrack(tracks, (track) => track.language, language) ?? tracks[0];
 }
 
-export function captionWindow(cues: readonly TimedCue[], time: number) {
-  const first = cues.findIndex((cue) => cue.endTime > time);
-  const remaining =
-    first < 0
-      ? []
-      : cues.slice(
-          first,
-          (Math.floor(first / translationBatchLimit) + prefetchSegmentCount) *
-            translationBatchLimit,
-        );
-  const textAt = (at: number) =>
-    remaining
-      .filter((cue) => cue.startTime <= at && at < cue.endTime)
-      .map((cue) => cue.text)
-      .filter(Boolean)
-      .join('\n')
-      .trim();
-  const current = textAt(time);
-  const texts = current ? [current] : [];
+function boundaryTime(cue: TimedCue, position: number): number {
+  const span = cue.timing?.find((part) => part.to > position) ?? {
+    from: 0,
+    to: cue.text.length,
+    startTime: cue.startTime,
+    endTime: cue.endTime,
+  };
+  const ratio = Math.max(0, Math.min(1, (position - span.from) / (span.to - span.from)));
+  return span.startTime + (span.endTime - span.startTime) * ratio;
+}
+
+function splitSentence(cue: TimedCue, overlapping: boolean): Omit<TimedCaption, 'segment'>[] {
+  const parts =
+    !overlapping && needsSubtitleSegmentation(cue.text) ? splitSubtitleAtCommas(cue.text) : [];
+  if (parts.length < 2) return [{ startTime: cue.startTime, endTime: cue.endTime, text: cue.text }];
+  const starts = parts.map((part, index) => (index ? boundaryTime(cue, part.from) : cue.startTime));
+  return parts.map((part, index) => ({
+    startTime: starts[index],
+    endTime: starts[index + 1] ?? cue.endTime,
+    text: cue.text.slice(part.from, part.to),
+  }));
+}
+
+const captionCache = new WeakMap<readonly TimedCue[], TimedCaption[]>();
+
+export function timedCaptions(cues: readonly TimedCue[]): TimedCaption[] {
+  const cached = captionCache.get(cues);
+  if (cached) return cached;
+  const sentences = cues.filter((cue) => cue.text);
+  const captions: TimedCaption[] = [];
+  let segment = 0;
+  let size = 0;
+  let latestEnd = -Infinity;
+  sentences.forEach((sentence, index) => {
+    const overlapping =
+      latestEnd > sentence.startTime ||
+      (sentences[index + 1]?.startTime ?? Infinity) < sentence.endTime;
+    latestEnd = Math.max(latestEnd, sentence.endTime);
+    const parts = splitSentence(sentence, overlapping);
+    if (size && size + parts.length > translationBatchLimit) {
+      segment++;
+      size = 0;
+    }
+    for (const part of parts) {
+      if (size === translationBatchLimit) {
+        segment++;
+        size = 0;
+      }
+      captions.push({ ...part, segment });
+      size++;
+    }
+  });
+  captionCache.set(cues, captions);
+  return captions;
+}
+
+function activeAt<T extends TimedCue>(cues: readonly T[], at: number): T[] {
+  return cues.filter((cue) => cue.startTime <= at && at < cue.endTime && cue.text);
+}
+
+function joinedText(cues: readonly TimedCue[]): string {
+  return cues
+    .map((cue) => cue.text)
+    .join('\n')
+    .trim();
+}
+
+export function captionAt(cues: readonly TimedCue[], time: number): string {
+  return joinedText(activeAt(cues, time));
+}
+
+export function captionWindow(captions: readonly TimedCaption[], time: number) {
+  const first = captions.findIndex((caption) => caption.endTime > time);
+  let end = first;
+  if (first >= 0)
+    while (
+      end < captions.length &&
+      captions[end].segment < captions[first].segment + prefetchSegmentCount
+    )
+      end++;
+  const remaining = first < 0 ? [] : captions.slice(first, end);
   const boundaries = [...new Set(remaining.flatMap((cue) => [cue.startTime, cue.endTime]))]
     .filter((at) => at > time)
     .sort((a, b) => a - b);
-  for (const at of boundaries) {
-    const text = textAt(at);
-    if (text && !texts.includes(text)) texts.push(text);
+  const texts: string[] = [];
+  const segments: number[] = [];
+  for (const at of [time, ...boundaries]) {
+    const active = activeAt(remaining, at);
+    const text = joinedText(active);
+    if (!text || texts.includes(text)) continue;
+    texts.push(text);
+    segments.push(active[0].segment);
   }
-  const segments = texts.map(
-    (text) => needsSubtitleSegmentation(text) && remaining.some((cue) => cue.text === text),
-  );
-  return { current, texts, segments };
+  return { current: captionAt(remaining, time), texts, segments };
 }
 
 export class YoutubeTimeline {

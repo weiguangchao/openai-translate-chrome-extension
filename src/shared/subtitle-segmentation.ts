@@ -1,15 +1,3 @@
-export interface TranslatedPart {
-  from: number;
-  to: number;
-  translation: string;
-}
-
-export interface SegmentedTranslation {
-  segments: TranslatedPart[];
-}
-
-export type SubtitleTranslation = string | SegmentedTranslation;
-
 export const subtitleDisplayLimit = 90;
 
 export function subtitleDisplayLength(text: string): number {

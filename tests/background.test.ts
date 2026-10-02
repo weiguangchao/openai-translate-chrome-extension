@@ -101,3 +101,25 @@ it('answers a prefetch with translations in the order asked, settling cues a lat
   await expect(send({ type: 'prefetch', texts: [], pause: true })).resolves.toEqual({ ok: true });
   expect(fetch).toHaveBeenCalledTimes(2);
 });
+
+it('batches a prefetch by the segment of each caption and rejects malformed segment numbers', async () => {
+  const pending: string[][] = [];
+  const fetch = vi.fn((_url: string, init: RequestInit) => {
+    pending.push(requestedTexts(init));
+    return new Promise<Response>(() => {});
+  });
+  vi.stubGlobal('fetch', fetch);
+  const send = await loadBackground({
+    ...structuredClone(DEFAULT_SETTINGS),
+    apiKey: 'key',
+    model: 'model',
+  });
+  for (const segments of [[0], [0, -1], [0, 1.5], 'segments'])
+    await expect(send({ type: 'prefetch', texts: ['A', 'B'], segments })).resolves.toEqual({
+      ok: false,
+      error: '预加载字幕内容无效。',
+    });
+  expect(fetch).not.toHaveBeenCalled();
+  void send({ type: 'prefetch', texts: ['A', 'B', 'A', 'C'], segments: [0, 0, 0, 1] });
+  await vi.waitFor(() => expect(pending).toEqual([['A', 'B'], ['C']]));
+});

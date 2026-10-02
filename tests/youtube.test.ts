@@ -2,9 +2,8 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { CaptionController } from '../src/extension/captions';
 import { DEFAULT_SETTINGS, publicSettings } from '../src/shared/settings';
 import { TranslationQueue } from '../src/extension/queue';
-import { githubCaptionTrack, githubCommaSegments } from './fixtures/github-caption';
+import { githubCaptionTrack, githubCommaParts } from './fixtures/github-caption';
 import { providerReply, requestedTexts } from './fixtures/provider';
-import type { SubtitleTranslation } from '../src/shared/subtitle-segmentation';
 
 let controller: CaptionController | undefined;
 let resourceEntries: (entries: PerformanceEntry[]) => void;
@@ -54,9 +53,8 @@ function setup() {
       type: string;
       text?: string;
       texts?: string[];
-      segment?: boolean;
-      segments?: boolean[];
-    }): Promise<{ ok: boolean; data?: SubtitleTranslation }> =>
+      segments?: number[];
+    }): Promise<{ ok: boolean; data?: string }> =>
       Promise.resolve(
         message.type === 'translate' ? { ok: true, data: `译文：${message.text}` } : { ok: true },
       ),
@@ -83,7 +81,7 @@ async function playTo(video: HTMLVideoElement, time: number) {
   await vi.advanceTimersByTimeAsync(0);
 }
 
-it('prefetches comma segments of a long subtitle and follows the current segment after a seek', async () => {
+it('prefetches the comma parts of a long subtitle in one request and shows each part on time after a seek', async () => {
   const { video, player, sendMessage, lines } = setup();
   Object.assign(player, {
     getOption: () => ({ vssId: 'a.en' }),
@@ -105,13 +103,13 @@ it('prefetches comma segments of a long subtitle and follows the current segment
   });
   let finish!: (value: Response) => void;
   let pending: string[] = [];
-  const requests: string[] = [];
+  const requests: string[][] = [];
   vi.stubGlobal(
     'fetch',
     vi.fn(async (url: string, init?: RequestInit) => {
       if (url.includes('/api/timedtext')) return Response.json(githubCaptionTrack);
       pending = requestedTexts(init!);
-      requests.push(...pending);
+      requests.push(pending);
       return new Promise<Response>((resolve) => {
         finish = resolve;
       });
@@ -121,10 +119,7 @@ it('prefetches comma segments of a long subtitle and follows the current segment
   const queue = new TranslationQueue();
   sendMessage.mockImplementation(async (message) => {
     if (message.type === 'translate')
-      return {
-        ok: true,
-        data: await queue.request('video', saved, message.text!, message.segment),
-      };
+      return { ok: true, data: await queue.request('video', saved, message.text!) };
     if (message.type === 'prefetch')
       queue.prefetch('video', saved, message.texts!, message.segments);
     return { ok: true };
@@ -133,17 +128,22 @@ it('prefetches comma segments of a long subtitle and follows the current segment
   controller = new CaptionController(publicSettings(saved));
   await vi.advanceTimersByTimeAsync(0);
   expect([...lines()].map((line) => [line.hidden, line.textContent])).toEqual([
-    [false, githubCommaSegments[0]],
+    [false, githubCommaParts[0]],
     [false, '翻译中'],
+  ]);
+  expect(requests).toEqual([githubCommaParts]);
+  finish(providerReply(pending, (text) => `译文：${text}`));
+  await vi.advanceTimersByTimeAsync(0);
+  expect([...lines()].map((line) => line.textContent)).toEqual([
+    githubCommaParts[0],
+    `译文：${githubCommaParts[0]}`,
   ]);
   video.currentTime = 6.75;
   video.dispatchEvent(new Event('seeked'));
   await vi.advanceTimersByTimeAsync(400);
-  finish(providerReply(pending, (text) => `译文：${text}`));
-  await vi.advanceTimersByTimeAsync(0);
   expect([...lines()].map((line) => line.textContent)).toEqual([
-    githubCommaSegments[1],
-    `译文：${githubCommaSegments[1]}`,
+    githubCommaParts[1],
+    `译文：${githubCommaParts[1]}`,
   ]);
   const snapshots: string[][] = [];
   for (const time of [0, 3, 8.25, 2]) {
@@ -153,12 +153,12 @@ it('prefetches comma segments of a long subtitle and follows the current segment
     snapshots.push([...lines()].map((line) => line.textContent ?? ''));
   }
   expect(snapshots).toEqual([
-    [githubCommaSegments[0], `译文：${githubCommaSegments[0]}`],
-    [githubCommaSegments[1], `译文：${githubCommaSegments[1]}`],
-    [githubCommaSegments[1], `译文：${githubCommaSegments[1]}`],
-    [githubCommaSegments[1], `译文：${githubCommaSegments[1]}`],
+    [githubCommaParts[0], `译文：${githubCommaParts[0]}`],
+    [githubCommaParts[1], `译文：${githubCommaParts[1]}`],
+    [githubCommaParts[1], `译文：${githubCommaParts[1]}`],
+    [githubCommaParts[1], `译文：${githubCommaParts[1]}`],
   ]);
-  expect(requests).toEqual([...githubCommaSegments, ...githubCommaSegments]);
+  expect(requests).toEqual([githubCommaParts]);
   video.currentTime = 11;
   video.dispatchEvent(new Event('timeupdate'));
   expect([...lines()].map((line) => line.hidden)).toEqual([true, true]);
@@ -207,6 +207,7 @@ it('translates and displays complete ASR sentences across rolling events', async
   expect(sendMessage).toHaveBeenCalledWith({
     type: 'prefetch',
     texts: ['This field behind me will become a city.', 'Let’s build it.'],
+    segments: [0, 0],
   });
   await playTo(video, 1.2);
   expect([...lines()].map((line) => line.textContent)).toEqual([
@@ -286,6 +287,7 @@ it('loads the selected YouTube track before playback, aligns rolling captions, a
   expect(sendMessage).toHaveBeenCalledWith({
     type: 'prefetch',
     texts: ['First phrase.', 'Second phrase.'],
+    segments: [0, 0],
   });
   expect(lines()[1].hidden).toBe(true);
   await playTo(video, 4);
@@ -466,6 +468,7 @@ it('translates authored English sentences even when authored, automatic and brow
   expect(sendMessage).toHaveBeenCalledWith({
     type: 'prefetch',
     texts: ['This field behind me will become a city.', 'Go.'],
+    segments: [0, 0],
   });
   expect(fetch.mock.calls.map(([url]) => new URL(url).searchParams.get('track'))).toEqual(['.en']);
   expect(targetTrack.mode).toBe('showing');

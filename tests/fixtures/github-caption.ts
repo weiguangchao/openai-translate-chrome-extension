@@ -14,7 +14,7 @@ export const githubCaptionTrack = {
   ],
 };
 
-export const githubCommaSegments = [
+export const githubCommaParts = [
   'Myself, Mitchell the creator of Ghostie,',
   githubCaption.slice('Myself, Mitchell the creator of Ghostie, '.length),
 ];

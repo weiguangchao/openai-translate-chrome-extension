@@ -1,44 +1,28 @@
 import { expect, it } from 'vitest';
 import { parseYoutubeCaptions } from '../src/extension/youtube-captions';
-import { captionWindow } from '../src/extension/timeline';
-import { githubCaption, githubCaptionTrack, githubCommaSegments } from './fixtures/github-caption';
+import { captionAt, captionWindow, timedCaptions } from '../src/extension/timeline';
+import { githubCaption, githubCaptionTrack, githubCommaParts } from './fixtures/github-caption';
 import {
   needsSubtitleSegmentation,
   splitSubtitleAtCommas,
 } from '../src/shared/subtitle-segmentation';
-import { sourceCaptionAt, translatedCaptionAt } from '../src/extension/segmented-captions';
 
 it.each(['asr', 'authored'] as const)(
-  'maps comma segments to the original %s word timestamps',
+  'times each comma part of a long sentence from the original %s word timestamps',
   (kind) => {
     const cues = parseYoutubeCaptions(githubCaptionTrack, kind);
     expect(cues.map((cue) => cue.text)).toEqual([githubCaption]);
-    const parts = splitSubtitleAtCommas(githubCaption);
-    const result = {
-      segments: parts.map((part) => ({
-        ...part,
-        translation: `译:${githubCaption.slice(part.from, part.to)}`,
-      })),
-    };
-    const at = (time: number) => translatedCaptionAt(cues[0], result, time);
-    expect(at(0)).toEqual({
-      text: githubCommaSegments[0],
-      translation: `译:${githubCommaSegments[0]}`,
-    });
-    expect(at(1.49)?.text).toBe(githubCommaSegments[0]);
-    expect([1.5, 3, 6.75, 8.25, 2].map((time) => at(time)?.text)).toEqual([
-      githubCommaSegments[1],
-      githubCommaSegments[1],
-      githubCommaSegments[1],
-      githubCommaSegments[1],
-      githubCommaSegments[1],
-    ]);
-    expect(at(11)).toBeNull();
-    expect([0, 1.49, 1.5, 6.75].map((time) => sourceCaptionAt(cues[0], time))).toEqual([
-      githubCommaSegments[0],
-      githubCommaSegments[0],
-      githubCommaSegments[1],
-      githubCommaSegments[1],
+    const captions = timedCaptions(cues);
+    expect(captions.map((caption) => caption.text)).toEqual(githubCommaParts);
+    expect([0, 1.49, 1.5, 3, 6.75, 8.25, 2, 11].map((time) => captionAt(captions, time))).toEqual([
+      githubCommaParts[0],
+      githubCommaParts[0],
+      githubCommaParts[1],
+      githubCommaParts[1],
+      githubCommaParts[1],
+      githubCommaParts[1],
+      githubCommaParts[1],
+      '',
     ]);
   },
 );
@@ -77,32 +61,18 @@ it('maps normalized whitespace back to the timed source blocks', () => {
     'authored',
   );
   expect(cues[0].text).toBe(githubCaption);
-  const parts = splitSubtitleAtCommas(githubCaption);
-  const result = {
-    segments: parts.map((part) => ({
-      ...part,
-      translation: `译:${githubCaption.slice(part.from, part.to)}`,
-    })),
-  };
-  expect(translatedCaptionAt(cues[0], result, 4)?.text).toBe(githubCommaSegments[1]);
+  expect(captionAt(timedCaptions(cues), 4)).toBe(githubCommaParts[1]);
 });
 
-it('estimates segment times within an untimed block without a gap between segments', () => {
-  const cues = parseYoutubeCaptions(
-    { events: [{ tStartMs: 0, dDurationMs: 25600, segs: [{ utf8: githubCaption }] }] },
-    'authored',
+it('estimates part times within an untimed block without a gap between parts', () => {
+  const captions = timedCaptions(
+    parseYoutubeCaptions(
+      { events: [{ tStartMs: 0, dDurationMs: 25600, segs: [{ utf8: githubCaption }] }] },
+      'authored',
+    ),
   );
-  const parts = splitSubtitleAtCommas(githubCaption);
-  const result = {
-    segments: parts.map((part) => ({
-      ...part,
-      translation: `译:${githubCaption.slice(part.from, part.to)}`,
-    })),
-  };
-  expect([4, 4.2].map((time) => translatedCaptionAt(cues[0], result, time)?.text)).toEqual([
-    githubCommaSegments[0],
-    githubCommaSegments[1],
-  ]);
+  expect([4, 4.2].map((time) => captionAt(captions, time))).toEqual(githubCommaParts);
+  expect(captions[0].endTime).toBe(captions[1].startTime);
 });
 
 it('joins authored fragments across cues and splits multiple sentences within one cue', () => {
@@ -157,12 +127,12 @@ it('joins ASR fragments, uses word timestamps within a cue and preserves the fin
     { startTime: 2, endTime: 3, text: 'Are you?' },
     { startTime: 3, endTime: 4, text: 'Let’s go' },
   ]);
-  expect(captionWindow(cues, 1.5)).toEqual({
+  expect(captionWindow(timedCaptions(cues), 1.5)).toEqual({
     current: 'We are ready.',
     texts: ['We are ready.', 'Are you?', 'Let’s go'],
-    segments: [false, false, false],
+    segments: [0, 0, 0],
   });
-  expect(captionWindow(cues, 2).current).toBe('Are you?');
+  expect(captionWindow(timedCaptions(cues), 2).current).toBe('Are you?');
 });
 
 it('keeps a punctuated authored sentence intact across a gap between caption blocks', () => {
@@ -233,8 +203,8 @@ it('uses pauses in unpunctuated word timings and leaves silence between sentence
     { startTime: 2.5, endTime: 3.7, text: 'let’s go' },
     { startTime: 6, endTime: 7, text: 'goodbye' },
   ]);
-  expect(captionWindow(cues, 2).current).toBe('');
-  expect(captionWindow(cues, 3).current).toBe('let’s go');
+  expect(captionWindow(timedCaptions(cues), 2).current).toBe('');
+  expect(captionWindow(timedCaptions(cues), 3).current).toBe('let’s go');
 });
 
 it('keeps decimals, abbreviations, split words and repeated spoken words intact', () => {
@@ -353,33 +323,74 @@ it('covers the rest of the current segment and the following segment, however fa
     endTime: index * 10 + 8,
     text: `Cue ${index + 1}`,
   }));
+  const captions = timedCaptions(cues);
   const texts = (from: number, to: number) => cues.slice(from, to).map((cue) => cue.text);
-  expect(captionWindow(cues, 0).texts).toEqual(texts(0, 20));
-  expect(captionWindow(cues, 95)).toEqual({
+  expect(captionWindow(captions, 0).texts).toEqual(texts(0, 20));
+  expect(captionWindow(captions, 95)).toEqual({
     current: 'Cue 10',
     texts: texts(9, 20),
-    segments: texts(9, 20).map(() => false),
+    segments: [0, ...texts(10, 20).map(() => 1)],
   });
-  expect(captionWindow(cues, 105).texts).toEqual(texts(10, 30));
-  expect(captionWindow(cues, 165).texts).toEqual(texts(16, 30));
-  expect(captionWindow(cues, 205).texts).toEqual(texts(20, 30));
-  expect(captionWindow(cues, 9999)).toEqual({ current: '', texts: [], segments: [] });
+  expect(captionWindow(captions, 105).texts).toEqual(texts(10, 30));
+  expect(captionWindow(captions, 165).texts).toEqual(texts(16, 30));
+  expect(captionWindow(captions, 205).texts).toEqual(texts(20, 30));
+  expect(captionWindow(captions, 9999)).toEqual({ current: '', texts: [], segments: [] });
 });
 
-it('marks a long cue shown on its own for segmentation, but not overlapping cues joined into one line', () => {
+it('splits a long cue shown on its own at commas, but not overlapping cues joined into one line', () => {
   const first = 'When I first moved to the city, I didn’t know anyone at all,';
   const second = 'and every night I walked along the river, wondering why.';
   const long =
     'Years later, standing on the same bridge, I finally understood that the city had become my home.';
-  const window = captionWindow(
-    [
-      { startTime: 2, endTime: 6, text: first },
-      { startTime: 4, endTime: 8, text: second },
-      { startTime: 8, endTime: 12, text: long },
-    ],
-    0,
+  const parts = splitSubtitleAtCommas(long).map((part) => long.slice(part.from, part.to));
+  const captions = timedCaptions([
+    { startTime: 2, endTime: 6, text: first },
+    { startTime: 4, endTime: 8, text: second },
+    { startTime: 8, endTime: 12, text: long },
+  ]);
+  expect(captions.map((caption) => caption.text)).toEqual([first, second, ...parts]);
+  const window = captionWindow(captions, 0);
+  expect(window.texts).toEqual([first, `${first}\n${second}`, second, ...parts]);
+  expect(window.texts.map(needsSubtitleSegmentation)).toEqual([false, true, false, false, false]);
+  expect(window.segments).toEqual([0, 0, 0, 0, 0]);
+});
+
+it('keeps a long cue whole while it overlaps another cue', () => {
+  const long =
+    'Years later, standing on the same bridge, I finally understood that the city had become my home.';
+  const captions = timedCaptions([
+    { startTime: 0, endTime: 5, text: long },
+    { startTime: 4, endTime: 6, text: 'Overlap.' },
+  ]);
+  expect(captions.map((caption) => caption.text)).toEqual([long, 'Overlap.']);
+});
+
+it('packs up to ten captions into a segment and starts the next one rather than split a sentence', () => {
+  const long = ['a', 'b', 'c'].map((letter) => letter.repeat(60)).join(', ');
+  const captions = timedCaptions([
+    ...Array.from({ length: 8 }, (_, index) => ({
+      startTime: index * 4,
+      endTime: index * 4 + 3,
+      text: `Cue ${index + 1}.`,
+    })),
+    { startTime: 32, endTime: 44, text: long },
+    { startTime: 44, endTime: 47, text: 'After.' },
+  ]);
+  expect(captions.map((caption) => caption.segment)).toEqual([0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1]);
+  expect(captions.slice(8, 11).map((caption) => caption.text)).toEqual(
+    splitSubtitleAtCommas(long).map((part) => long.slice(part.from, part.to)),
   );
-  expect(window.texts).toEqual([first, `${first}\n${second}`, second, long]);
-  expect(window.texts.map(needsSubtitleSegmentation)).toEqual([false, true, false, true]);
-  expect(window.segments).toEqual([false, false, false, true]);
+  expect(captionWindow(captions, 0).segments).toEqual(captions.map((caption) => caption.segment));
+});
+
+it('spreads a sentence with more than ten parts over consecutive segments', () => {
+  const huge = Array.from({ length: 12 }, (_, index) => `${index}`.padEnd(85, 'x')).join(', ');
+  const captions = timedCaptions([
+    { startTime: 0, endTime: 2, text: 'Before.' },
+    { startTime: 2, endTime: 26, text: huge },
+    { startTime: 26, endTime: 28, text: 'After.' },
+  ]);
+  expect(captions.map((caption) => caption.segment)).toEqual([
+    0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2,
+  ]);
 });

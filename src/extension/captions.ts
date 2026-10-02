@@ -1,15 +1,12 @@
 import type { PublicSettings } from '../shared/settings';
-import {
-  needsSubtitleSegmentation,
-  type SubtitleTranslation,
-} from '../shared/subtitle-segmentation';
 import { ExtensionConnection } from './connection';
-import { sourceCaptionAt, translatedCaptionAt } from './segmented-captions';
 import {
+  captionAt,
   captionText,
   captionWindow,
   NativeTimeline,
   selectedTrack,
+  timedCaptions,
   YoutubeTimeline,
   type SubtitleTimeline,
 } from './timeline';
@@ -105,17 +102,6 @@ video.subline-native::cue { color: transparent !important; background: transpare
 `;
 const LOADING_TRANSLATION = '翻译中';
 
-function isTranslation(data: unknown, segment: boolean): data is SubtitleTranslation {
-  return (
-    typeof data === 'string' ||
-    (segment &&
-      typeof data === 'object' &&
-      data !== null &&
-      'segments' in data &&
-      Array.isArray(data.segments))
-  );
-}
-
 export class CaptionController {
   private settings: PublicSettings;
   private connection: ExtensionConnection;
@@ -134,7 +120,7 @@ export class CaptionController {
   private version = 0;
   private pageUrl = location.href;
   private positionedPlayer = false;
-  private translations = new Map<string, SubtitleTranslation>();
+  private translations = new Map<string, string>();
   private destroyed = false;
   private youtube = new YoutubeTimeline(() => this.tick());
   private native = new NativeTimeline();
@@ -365,14 +351,15 @@ export class CaptionController {
       this.scheduleLead = false;
     }
     const translationTime = Math.max(video.currentTime, this.leadUntil);
-    const timeline = cues ? captionWindow(cues, video.currentTime) : null;
+    const captions = cues ? timedCaptions(cues) : null;
+    const timeline = captions ? captionWindow(captions, video.currentTime) : null;
     const translationWindow =
-      cues && translationTime !== video.currentTime
-        ? captionWindow(cues, translationTime)
+      captions && translationTime !== video.currentTime
+        ? captionWindow(captions, translationTime)
         : timeline;
     const existingText =
       subtitles.mode === 'existing' && subtitles.translation
-        ? captionWindow(subtitles.translation, video.currentTime).current
+        ? captionAt(subtitles.translation, video.currentTime)
         : '';
     const usesModel =
       this.settings.configured &&
@@ -405,20 +392,13 @@ export class CaptionController {
     this.captionElement?.toggleAttribute('data-subline-timeline', Boolean(timeline) && !youtube);
     video.classList.toggle('subline-native', caption.nativeTrack);
     const customOriginal = youtube || caption.nativeTrack;
-    const timedCaption = cues?.find(
+    const timedCaption = captions?.find(
       (cue) =>
         cue.startTime <= video.currentTime &&
         video.currentTime < cue.endTime &&
         cue.text === caption.text,
     );
-    const segment = Boolean(usesModel && timedCaption && needsSubtitleSegmentation(caption.text));
-    const translationKey = JSON.stringify([caption.text, segment]);
-    const visibleSource =
-      customOriginal && timedCaption
-        ? (sourceCaptionAt(timedCaption, video.currentTime) ?? '')
-        : customOriginal
-          ? caption.text
-          : '';
+    const visibleSource = customOriginal ? caption.text : '';
     this.original.hidden = !visibleSource;
     this.original.textContent = visibleSource;
     if (!caption.text && !existingText) {
@@ -452,17 +432,11 @@ export class CaptionController {
       this.translated.textContent = '';
       this.translated.classList.remove('error');
     }
-    const cached = this.translations.get(translationKey);
+    const cached = this.translations.get(caption.text);
     if (cached !== undefined) {
-      const display =
-        typeof cached === 'string'
-          ? { text: visibleSource || caption.text, translation: cached }
-          : translatedCaptionAt(timedCaption!, cached, video.currentTime);
-      this.original.textContent = customOriginal ? (display?.text ?? '') : '';
-      this.original.hidden = !customOriginal || !display?.text;
       this.translated.classList.remove('error');
-      this.translated.textContent = display?.translation ?? '';
-      this.translated.hidden = !display?.translation;
+      this.translated.textContent = cached;
+      this.translated.hidden = !cached;
       this.requested = caption.text;
       return;
     }
@@ -487,18 +461,14 @@ export class CaptionController {
     this.requested = text;
     this.showLoadingTranslation();
     void this.connection
-      .sendMessage<SubtitleTranslation>({
-        type: 'translate',
-        text,
-        ...(segment ? { segment: true } : {}),
-      })
+      .sendMessage<string>({ type: 'translate', text })
       .then((response) => {
         this.tick();
         if (this.destroyed || this.version !== version || !this.translated) return;
         const data = response?.data;
-        if (!response?.ok || !isTranslation(data, segment))
+        if (!response?.ok || typeof data !== 'string')
           throw new Error(response?.error ?? '翻译未完成，请检查扩展配置。');
-        this.translations.set(translationKey, data);
+        this.translations.set(text, data);
         this.tick();
       })
       .catch((error) => {
@@ -565,9 +535,9 @@ export class CaptionController {
       .catch(() => {});
   }
 
-  private prefetch(texts: string[], force = false, segments: readonly boolean[] = []): void {
-    const flags = texts.map((_, index) => segments[index] === true);
-    const key = JSON.stringify([texts, flags]);
+  private prefetch(texts: string[], force = false, segments: readonly number[] = []): void {
+    const groups = texts.map((_, index) => segments[index] ?? 0);
+    const key = JSON.stringify([texts, groups]);
     if (
       !force &&
       ((!this.windowKey && !texts.length) ||
@@ -578,11 +548,7 @@ export class CaptionController {
     this.prefetchedAt = Date.now();
     const translations = this.translations;
     void this.connection
-      .sendMessage<unknown[]>({
-        type: 'prefetch',
-        texts,
-        ...(flags.some(Boolean) ? { segments: flags } : {}),
-      })
+      .sendMessage<unknown[]>({ type: 'prefetch', texts, segments: groups })
       .then((response) => {
         if (
           this.destroyed ||
@@ -593,9 +559,7 @@ export class CaptionController {
         )
           return;
         response.data.forEach((data, index) => {
-          const text = texts[index];
-          if (text && isTranslation(data, flags[index]))
-            translations.set(JSON.stringify([text, flags[index]]), data);
+          if (texts[index] && typeof data === 'string') translations.set(texts[index], data);
         });
         this.tick();
       })

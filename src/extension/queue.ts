@@ -1,9 +1,5 @@
-import { translateBatch, translateSubtitle, translationBatchLimit } from '../shared/api';
+import { translate, translateBatch, translationBatchLimit } from '../shared/api';
 import type { Settings } from '../shared/settings';
-import {
-  needsSubtitleSegmentation,
-  type SubtitleTranslation,
-} from '../shared/subtitle-segmentation';
 
 const sendWindowMs = 1000;
 export const translationSendsPerSecond = 3;
@@ -12,12 +8,12 @@ export const translationCacheLimit = 5000;
 interface Job {
   key: string;
   group: string;
+  segment?: string;
   settings: Settings;
   text: string;
-  segment: boolean;
   solo: boolean;
-  promise: Promise<SubtitleTranslation>;
-  resolve: (value: SubtitleTranslation) => void;
+  promise: Promise<string>;
+  resolve: (value: string) => void;
   reject: (error: Error) => void;
   controller?: AbortController;
   batch?: Job[];
@@ -26,12 +22,12 @@ interface Consumer {
   current?: string;
   window: string[];
   paused?: boolean;
-  held?: { settings: Settings; texts: string[]; segments: boolean[]; keys: string[] };
+  held?: { settings: Settings; texts: string[]; segments: number[]; keys: string[] };
 }
 
 export class TranslationQueue {
   private jobs = new Map<string, Job>();
-  private finished = new Map<string, SubtitleTranslation>();
+  private finished = new Map<string, string>();
   private consumers = new Map<string, Consumer>();
   private backoffUntil = 0;
   private sentAt: number[] = [];
@@ -51,17 +47,12 @@ export class TranslationQueue {
     ]);
   }
 
-  private key(settings: Settings, text: string, segment: boolean): string {
-    return JSON.stringify([this.group(settings), text, segment && needsSubtitleSegmentation(text)]);
+  private key(settings: Settings, text: string): string {
+    return JSON.stringify([this.group(settings), text]);
   }
 
-  request(
-    consumer: string,
-    settings: Settings,
-    text: string,
-    segment = false,
-  ): Promise<SubtitleTranslation> {
-    const key = this.key(settings, text, segment);
+  request(consumer: string, settings: Settings, text: string): Promise<string> {
+    const key = this.key(settings, text);
     const state: Consumer = this.consumers.get(consumer) ?? { window: [] };
     state.current = key;
     this.consumers.set(consumer, state);
@@ -69,7 +60,7 @@ export class TranslationQueue {
     const finished = this.finished.get(key);
     if (finished !== undefined) return Promise.resolve(finished);
     try {
-      const job = this.enqueue(key, settings, text, segment);
+      const job = this.enqueue(key, settings, text);
       this.drain();
       return job.promise;
     } catch (error) {
@@ -81,9 +72,9 @@ export class TranslationQueue {
     consumer: string,
     settings: Settings,
     texts: string[],
-    segments: boolean[] = [],
-  ): Promise<(SubtitleTranslation | null)[]> {
-    const keys = texts.map((text, index) => this.key(settings, text, segments[index] === true));
+    segments: number[] = [],
+  ): Promise<(string | null)[]> {
+    const keys = texts.map((text) => this.key(settings, text));
     const state = this.consumers.get(consumer);
     if (
       keys.length &&
@@ -107,7 +98,12 @@ export class TranslationQueue {
     if (Date.now() >= this.backoffUntil)
       texts.forEach((text, index) => {
         if (!this.finished.has(keys[index]))
-          this.enqueue(keys[index], settings, text, segments[index] === true);
+          this.enqueue(
+            keys[index],
+            settings,
+            text,
+            JSON.stringify([consumer, segments[index] ?? 0]),
+          );
       });
     this.drain();
     return this.results(keys);
@@ -136,7 +132,7 @@ export class TranslationQueue {
     this.sendTimer = undefined;
   }
 
-  private results(keys: string[]): Promise<(SubtitleTranslation | null)[]> {
+  private results(keys: string[]): Promise<(string | null)[]> {
     return Promise.all(
       keys.map(
         (key) => this.finished.get(key) ?? this.jobs.get(key)?.promise.catch(() => null) ?? null,
@@ -144,7 +140,7 @@ export class TranslationQueue {
     );
   }
 
-  private remember(key: string, translation: SubtitleTranslation): void {
+  private remember(key: string, translation: string): void {
     this.finished.delete(key);
     this.finished.set(key, translation);
     if (this.finished.size <= this.cacheLimit) return;
@@ -152,12 +148,15 @@ export class TranslationQueue {
     this.finished.delete(oldest);
   }
 
-  private enqueue(key: string, settings: Settings, text: string, segment: boolean): Job {
+  private enqueue(key: string, settings: Settings, text: string, segment?: string): Job {
     const existing = this.jobs.get(key);
-    if (existing) return existing;
+    if (existing) {
+      if (!existing.controller) existing.segment ??= segment;
+      return existing;
+    }
     if (Date.now() < this.backoffUntil) throw new Error('接口暂不可用，稍后将自动重试。');
     let resolve!: Job['resolve'], reject!: Job['reject'];
-    const promise = new Promise<SubtitleTranslation>((yes, no) => {
+    const promise = new Promise<string>((yes, no) => {
       resolve = yes;
       reject = no;
     });
@@ -165,9 +164,9 @@ export class TranslationQueue {
     const job: Job = {
       key,
       group: this.group(settings),
+      segment,
       settings,
       text,
-      segment: segment && needsSubtitleSegmentation(text),
       solo: false,
       promise,
       resolve,
@@ -235,12 +234,13 @@ export class TranslationQueue {
     const now = Date.now();
     while (waiting.length && this.delayUntilSend(now) === 0) {
       const [first] = waiting;
-      const batch =
-        first.segment || first.solo
-          ? [first]
-          : waiting
-              .filter((job) => !job.segment && !job.solo && job.group === first.group)
-              .slice(0, translationBatchLimit);
+      const batch = first.solo
+        ? [first]
+        : waiting
+            .filter(
+              (job) => !job.solo && job.group === first.group && job.segment === first.segment,
+            )
+            .slice(0, translationBatchLimit);
       for (const job of batch) waiting.splice(waiting.indexOf(job), 1);
       this.sentAt.push(now);
       this.run(batch);
@@ -280,16 +280,14 @@ export class TranslationQueue {
     const controller = new AbortController();
     for (const job of batch) Object.assign(job, { controller, batch });
     const [first] = batch;
-    const work: Promise<SubtitleTranslation[] | null> =
+    const work: Promise<string[] | null> =
       batch.length > 1
         ? translateBatch(
             first.settings,
             batch.map((job) => job.text),
             controller.signal,
           )
-        : translateSubtitle(first.settings, first.text, controller.signal, first.segment).then(
-            (result) => [result],
-          );
+        : translate(first.settings, first.text, controller.signal).then((result) => [result]);
     void work.then(
       (results) => {
         if (controller.signal.aborted) return;

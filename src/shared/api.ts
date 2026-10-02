@@ -1,11 +1,6 @@
 import { translationBatchLimit } from './limits';
 import { englishLanguageName, validateBaseUrl, validateSettings, type Settings } from './settings';
-import {
-  needsSubtitleSegmentation,
-  parseModelJson,
-  splitSubtitleAtCommas,
-  type SubtitleTranslation,
-} from './subtitle-segmentation';
+import { parseModelJson } from './subtitle-segmentation';
 
 class HttpError extends Error {
   constructor(
@@ -210,29 +205,4 @@ Return only a JSON object of the form {"translations":["..."]} containing exactl
   )
     return null;
   return translations.map((translation: string) => translation.trim());
-}
-
-export async function translateSubtitle(
-  settings: Settings,
-  text: string,
-  signal?: AbortSignal,
-  segment = false,
-): Promise<SubtitleTranslation> {
-  if (!segment || !needsSubtitleSegmentation(text)) return translate(settings, text, signal);
-  const parts = splitSubtitleAtCommas(text);
-  const pieces = parts.map((part) => text.slice(part.from, part.to));
-  if (pieces.length < 2) return translate(settings, text, signal);
-  const translations: string[] = [];
-  for (let index = 0; index < pieces.length; index += translationBatchLimit) {
-    const chunk = pieces.slice(index, index + translationBatchLimit);
-    const batch =
-      chunk.length === 1
-        ? [await translate(settings, chunk[0], signal)]
-        : await translateBatch(settings, chunk, signal);
-    if (batch) translations.push(...batch);
-    else for (const piece of chunk) translations.push(await translate(settings, piece, signal));
-  }
-  return {
-    segments: parts.map((part, index) => ({ ...part, translation: translations[index] })),
-  };
 }

@@ -302,3 +302,12 @@ it('does not send a batch that leaves the window before a send slot opens', asyn
   await vi.advanceTimersByTimeAsync(1000);
   expect(fetch).toHaveBeenCalledTimes(translationSendsPerSecond);
 });
+
+it('sends each segment as its own request, even with fewer than ten captions, and never mixes tabs', () => {
+  const { batches } = pendingProvider();
+  const queue = new TranslationQueue();
+  const cues = Array.from({ length: 12 }, (_, index) => `Cue ${index + 1}`);
+  queue.prefetch('tab', settings, cues, [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1]);
+  queue.prefetch('other-tab', settings, ['Other 1', 'Other 2'], [0, 0]);
+  expect(batches()).toEqual([cues.slice(0, 8), cues.slice(8), ['Other 1', 'Other 2']]);
+});

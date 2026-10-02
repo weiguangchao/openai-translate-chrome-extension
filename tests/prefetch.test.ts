@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { CaptionController } from '../src/extension/captions';
+import { NativeTimeline } from '../src/extension/timeline';
 import { DEFAULT_SETTINGS, publicSettings, STORAGE_KEY } from '../src/shared/settings';
 import { splitSubtitleAtCommas } from '../src/shared/subtitle-segmentation';
 import { providerReply, requestedTexts } from './fixtures/provider';
@@ -398,7 +399,7 @@ it('distinguishes Chinese scripts and stops model work when the requested subtit
   expect(requested).toEqual(alreadyRequested);
 });
 
-it('translates overlapping cues joined into one line whole, splits a long cue of its own, and asks for neither again', async () => {
+it('translates overlapping cues joined into one line whole, splits a long cue of its own, and sends both in one request', async () => {
   const first = 'When I first moved to the city, I didn’t know anyone at all,';
   const second = 'and every night I walked along the river, wondering why.';
   const joined = `${first}\n${second}`;
@@ -422,7 +423,7 @@ it('translates overlapping cues joined into one line whole, splits a long cue of
   const pieces = splitSubtitleAtCommas(long).map((part) => long.slice(part.from, part.to));
   controller = new CaptionController(publicSettings(saved));
   await vi.advanceTimersByTimeAsync(0);
-  expect(requested).toEqual([[first, joined, second], pieces]);
+  expect(requested).toEqual([[first, joined, second, ...pieces]]);
   for (const request of [...pending])
     request.resolve(providerReply(request.texts, (text) => `${text} 译文`));
   await vi.advanceTimersByTimeAsync(0);
@@ -430,12 +431,54 @@ it('translates overlapping cues joined into one line whole, splits a long cue of
     [4, `${joined} 译文`],
     [6, `${second} 译文`],
     [8, `${pieces[0]} 译文`],
+    [11, `${pieces[1]} 译文`],
   ] as const) {
     await advance(time - 0.1);
     video.currentTime = time;
     video.dispatchEvent(new Event('timeupdate'));
     expect(translated()?.textContent).toBe(text);
   }
-  expect(requested).toHaveLength(2);
+  expect(requested).toHaveLength(1);
   expect(messages).not.toContain('translate');
+});
+
+it('moves a long sentence that does not fit in the rest of a segment to the next request', async () => {
+  const long = ['a', 'b', 'c'].map((letter) => letter.repeat(60)).join(', ');
+  const parts = splitSubtitleAtCommas(long).map((part) => long.slice(part.from, part.to));
+  const short = Array.from({ length: 8 }, (_, index) => ({
+    startTime: 2 + index * 2,
+    endTime: 4 + index * 2,
+    text: `Cue ${index + 1}`,
+  }));
+  Object.defineProperty(video, 'textTracks', {
+    value: [
+      {
+        mode: 'showing',
+        kind: 'subtitles',
+        language: 'en',
+        activeCues: [],
+        cues: [
+          ...short,
+          { startTime: 18, endTime: 24, text: long },
+          { startTime: 24, endTime: 26, text: 'After' },
+        ],
+      },
+    ],
+  });
+  controller = new CaptionController(publicSettings(saved));
+  await vi.advanceTimersByTimeAsync(0);
+  expect(parts).toHaveLength(3);
+  expect(requested).toEqual([short.map((cue) => cue.text), [...parts, 'After']]);
+});
+
+it('reuses the cues read from a track until the track changes', () => {
+  const timeline = new NativeTimeline();
+  const read = () => timeline.read(video, 'en', 'zh-CN').source;
+  const first = read();
+  expect(read()).toBe(first);
+  Object.defineProperty(video.textTracks[0], 'cues', {
+    value: [{ startTime: 2, endTime: 4, text: 'Changed' }],
+  });
+  expect(read()).not.toBe(first);
+  expect(read()?.map((cue) => cue.text)).toEqual(['Changed']);
 });

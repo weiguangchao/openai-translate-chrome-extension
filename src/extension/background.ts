@@ -29,7 +29,6 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, respond) => {
     settings?: unknown;
     text?: unknown;
     texts?: unknown;
-    segment?: unknown;
     segments?: unknown;
     pause?: unknown;
   };
@@ -63,23 +62,26 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, respond) => {
           data.texts.some(
             (text) => typeof text !== 'string' || !text.trim() || text.length > 5000,
           ) ||
-          (data.segments !== undefined && !Array.isArray(data.segments))
+          (data.segments !== undefined &&
+            (!Array.isArray(data.segments) ||
+              data.segments.length !== data.texts.length ||
+              data.segments.some((segment) => !Number.isSafeInteger(segment) || segment < 0)))
         )
           throw new Error('预加载字幕内容无效。');
         const texts = data.texts as string[];
-        const segments = (data.segments ?? []) as unknown[];
+        const segments = (data.segments ?? []) as number[];
         const unique = [...new Set(texts)];
         const results = await queue.prefetch(
           consumer,
           settings,
           unique,
-          unique.map((text) => segments[texts.indexOf(text)] === true),
+          unique.map((text) => segments[texts.indexOf(text)] ?? 0),
         );
         return texts.map((text) => results[unique.indexOf(text)]);
       }
       if (typeof data.text !== 'string' || !data.text.trim() || data.text.length > 5000)
         throw new Error('字幕内容无效。');
-      return queue.request(consumer, settings, data.text, data.segment === true);
+      return queue.request(consumer, settings, data.text);
     }
     throw new Error('不支持的请求。');
   })().then(
