@@ -15,6 +15,7 @@ beforeEach(() => {
     '<div class="html5-video-player"><video></video><div class="ytp-caption-window-container"><span class="ytp-caption-segment">First cue</span></div></div>';
   Object.defineProperty(document.querySelector('video'), 'textTracks', { value: [] });
   Object.defineProperty(document.querySelector('video'), 'readyState', { value: 1 });
+  Object.defineProperty(document.querySelector('video'), 'paused', { value: false });
   runtime = {
     id: 'extension-id',
     sendMessage: vi.fn((message: { type: string }) =>

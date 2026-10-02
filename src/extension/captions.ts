@@ -128,6 +128,7 @@ export class CaptionController {
   private nativeTrack: TextTrack | undefined;
   private mediaEvents = [
     'play',
+    'pause',
     'loadedmetadata',
     'timeupdate',
     'seeking',
@@ -337,7 +338,11 @@ export class CaptionController {
       : youtubeTimeline
         ? { text: '', element: null, nativeTrack: true }
         : readCaption(this.player, video, this.settings.sourceLanguage);
-    this.prefetch(usesModel ? (timeline?.texts ?? []) : [], false, Boolean(timeline));
+    this.prefetch(
+      usesModel && !video.paused ? (timeline?.texts ?? []) : [],
+      false,
+      Boolean(timeline),
+    );
     if (caption.element !== this.captionElement) {
       this.captionElement?.removeAttribute('data-subline-caption');
       this.captionElement?.removeAttribute('data-subline-timeline');
@@ -400,6 +405,14 @@ export class CaptionController {
       this.translated.textContent = display?.translation ?? '';
       this.translated.hidden = !display?.translation;
       this.requested = caption.text;
+      return;
+    }
+    if (video.paused) {
+      if (this.requested) {
+        this.version++;
+        this.requested = '';
+        this.prefetch([], true);
+      }
       return;
     }
     if (this.requested === this.currentText || Date.now() - this.changedAt < (timeline ? 0 : 300))

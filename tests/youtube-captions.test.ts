@@ -333,12 +333,16 @@ it('ignores malformed and non-text events while retaining valid captions', () =>
   ).toEqual([{ startTime: 0, endTime: 1, text: 'Valid.' }]);
 });
 
-it('looks fifteen cues ahead however far apart they are', () => {
-  const cues = Array.from({ length: 20 }, (_, index) => ({
+it('covers the rest of the current block of ten cues and the next two blocks, however far apart', () => {
+  const cues = Array.from({ length: 45 }, (_, index) => ({
     startTime: index * 10,
     endTime: index * 10 + 8,
     text: `Cue ${index + 1}`,
   }));
-  expect(captionWindow(cues, 0).texts).toEqual(cues.slice(0, 15).map((cue) => cue.text));
-  expect(captionWindow(cues, 9).texts).toEqual(cues.slice(1, 16).map((cue) => cue.text));
+  const texts = (from: number, to: number) => cues.slice(from, to).map((cue) => cue.text);
+  expect(captionWindow(cues, 0).texts).toEqual(texts(0, 30));
+  expect(captionWindow(cues, 95)).toEqual({ current: 'Cue 10', texts: texts(9, 30) });
+  expect(captionWindow(cues, 100).texts).toEqual(texts(10, 40));
+  expect(captionWindow(cues, 205).texts).toEqual(texts(20, 45));
+  expect(captionWindow(cues, 999)).toEqual({ current: '', texts: [] });
 });

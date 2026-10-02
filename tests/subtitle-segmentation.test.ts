@@ -4,14 +4,6 @@ import { DEFAULT_SETTINGS } from '../src/shared/settings';
 import { parseSubtitleSegments } from '../src/shared/subtitle-segmentation';
 import { githubCaption, githubModelResponse } from './fixtures/github-caption';
 
-vi.mock('../src/shared/rate-limiter', () => ({
-  RateLimiter: class {
-    acquire() {
-      return Promise.resolve();
-    }
-  },
-}));
-
 const settings = { ...DEFAULT_SETTINGS, apiKey: 'fixture-key', model: 'fixture-model' };
 afterEach(() => vi.unstubAllGlobals());
 

@@ -54,7 +54,7 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, respond) => {
       if (data.type === 'prefetch') {
         if (
           !Array.isArray(data.texts) ||
-          data.texts.length > 15 ||
+          data.texts.length > 30 ||
           data.texts.some((text) => typeof text !== 'string' || !text.trim() || text.length > 5000)
         )
           throw new Error('预加载字幕内容无效。');

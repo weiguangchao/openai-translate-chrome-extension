@@ -20,6 +20,7 @@ beforeEach(async () => {
   document.body.innerHTML = '<div class="video-js"><video></video></div>';
   video = document.querySelector('video')!;
   Object.defineProperty(video, 'readyState', { value: 1 });
+  Object.defineProperty(video, 'paused', { configurable: true, value: false });
   Object.defineProperty(video, 'textTracks', {
     configurable: true,
     value: [{ mode: 'showing', kind: 'subtitles', language: 'en', cues, activeCues: [] }],
@@ -155,8 +156,8 @@ it('preloads upcoming cues in one request before the first caption and displays 
   expect(requested).toHaveLength(1);
 });
 
-it('prefetches the next cues in five-cue requests, cancels them on seek, and immediately prioritizes the new position', async () => {
-  const dense = Array.from({ length: 16 }, (_, index) => ({
+it('prefetches the next blocks in ten-cue requests, cancels them on seek, and immediately prioritizes the new position', async () => {
+  const dense = Array.from({ length: 30 }, (_, index) => ({
     startTime: 2 + index * 2,
     endTime: 4 + index * 2,
     text: `Cue ${index + 1}`,
@@ -174,22 +175,59 @@ it('prefetches the next cues in five-cue requests, cancels them on seek, and imm
   });
   controller = new CaptionController(publicSettings(saved));
   await vi.advanceTimersByTimeAsync(0);
-  const ahead = dense.slice(0, 10).map((cue) => cue.text);
-  expect(requested).toEqual([ahead.slice(0, 5), ahead.slice(5)]);
+  const blocks = [0, 10, 20].map((start) => dense.slice(start, start + 10).map((cue) => cue.text));
+  expect(requested).toEqual(blocks);
   Object.defineProperty(video, 'seeking', { configurable: true, value: true });
   video.currentTime = 80;
   video.dispatchEvent(new Event('seeking'));
   await vi.advanceTimersByTimeAsync(0);
   expect(translated()?.hidden).toBe(true);
-  expect(pending.map((request) => request.signal.aborted)).toEqual([true, true]);
+  expect(pending.map((request) => request.signal.aborted)).toEqual([true, true, true]);
   Object.defineProperty(video, 'seeking', { value: false });
   video.dispatchEvent(new Event('seeked'));
   await vi.advanceTimersByTimeAsync(0);
-  expect(requested).toEqual([ahead.slice(0, 5), ahead.slice(5), ['After seeking']]);
+  expect(requested).toEqual([...blocks, ['After seeking']]);
   await finish({ 'After seeking': '跳转后的字幕' });
   expect(translated()?.textContent).toBe('跳转后的字幕');
   await finish({ 'Cue 1': '迟到的旧字幕' });
   expect(translated()?.textContent).toBe('跳转后的字幕');
+});
+
+it('cancels prefetching while paused, keeps the shown translation, and resumes on play', async () => {
+  const dense = Array.from({ length: 25 }, (_, index) => ({
+    startTime: 2 + index * 2,
+    endTime: 4 + index * 2,
+    text: `Cue ${index + 1}`,
+  }));
+  Object.defineProperty(video, 'textTracks', {
+    value: [{ mode: 'showing', kind: 'subtitles', language: 'en', cues: dense, activeCues: [] }],
+  });
+  const setPaused = async (paused: boolean) => {
+    Object.defineProperty(video, 'paused', { value: paused });
+    video.dispatchEvent(new Event(paused ? 'pause' : 'play'));
+    await vi.advanceTimersByTimeAsync(0);
+  };
+  controller = new CaptionController(publicSettings(saved));
+  await advance(2);
+  const blocks = [0, 10, 20].map((start) => dense.slice(start, start + 10).map((cue) => cue.text));
+  expect(requested).toEqual(blocks);
+  await setPaused(true);
+  expect(pending.map((request) => request.signal.aborted)).toEqual([true, true, true]);
+  await vi.advanceTimersByTimeAsync(60000);
+  expect(requested).toHaveLength(3);
+  expect(translated()?.hidden).toBe(true);
+  pending.length = 0;
+  await setPaused(false);
+  expect(requested.slice(3)).toEqual(blocks);
+  await finish({ 'Cue 1': '第一句' });
+  expect(translated()?.textContent).toBe('第一句');
+  expect(requested).toHaveLength(6);
+  await setPaused(true);
+  expect(pending.slice(1).map((request) => request.signal.aborted)).toEqual([true, true]);
+  await vi.advanceTimersByTimeAsync(60000);
+  expect(requested).toHaveLength(6);
+  expect(translated()?.textContent).toBe('第一句');
+  expect(translated()?.hidden).toBe(false);
 });
 
 it('invalidates the old translation when the same video element loads a different source', async () => {

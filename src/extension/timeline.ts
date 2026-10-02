@@ -102,11 +102,8 @@ export function selectedTrack(video: HTMLVideoElement, language: string): TextTr
 }
 
 export function captionWindow(cues: readonly TimedCue[], time: number) {
-  const remaining: TimedCue[] = [];
-  for (const cue of cues) {
-    if (cue.endTime > time) remaining.push(cue);
-    if (remaining.length >= 24) break;
-  }
+  const first = cues.findIndex((cue) => cue.endTime > time);
+  const remaining = first < 0 ? [] : cues.slice(first, (Math.floor(first / 10) + 3) * 10);
   const textAt = (at: number) =>
     remaining
       .filter((cue) => cue.startTime <= at && at < cue.endTime)
@@ -120,7 +117,6 @@ export function captionWindow(cues: readonly TimedCue[], time: number) {
     .filter((at) => at > time)
     .sort((a, b) => a - b);
   for (const at of boundaries) {
-    if (texts.length >= 15) break;
     const text = textAt(at);
     if (text && !texts.includes(text)) texts.push(text);
   }

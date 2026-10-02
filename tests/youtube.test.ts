@@ -6,14 +6,6 @@ import { githubCaption, githubCaptionTrack, githubModelResponse } from './fixtur
 import { providerReply, requestedTexts } from './fixtures/provider';
 import type { SubtitleTranslation } from '../src/shared/subtitle-segmentation';
 
-vi.mock('../src/shared/rate-limiter', () => ({
-  RateLimiter: class {
-    acquire() {
-      return Promise.resolve();
-    }
-  },
-}));
-
 let controller: CaptionController | undefined;
 let resourceEntries: (entries: PerformanceEntry[]) => void;
 afterEach(() => {
@@ -42,6 +34,7 @@ function setup() {
     '<div class="html5-video-player"><video></video><button class="ytp-subtitles-button" aria-pressed="true"></button><div class="ytp-caption-window-container"></div></div>';
   const video = document.querySelector('video')!;
   Object.defineProperty(video, 'textTracks', { configurable: true, value: [] });
+  Object.defineProperty(video, 'paused', { configurable: true, value: false });
   history.replaceState(null, '', '/watch?v=video-1');
   const player = document.querySelector('.html5-video-player')!;
   vi.spyOn(window, 'postMessage').mockImplementation((data) => {

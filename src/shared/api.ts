@@ -1,4 +1,3 @@
-import { RateLimiter } from './rate-limiter';
 import { englishLanguageName, validateBaseUrl, validateSettings, type Settings } from './settings';
 import {
   needsSubtitleSegmentation,
@@ -16,7 +15,6 @@ class HttpError extends Error {
     super(message);
   }
 }
-const providerQueue = new RateLimiter(3, 1000);
 function endpoint(settings: Settings, path: string): string {
   return validateBaseUrl(settings.baseUrl).href.replace(/\/+$/, '') + path;
 }
@@ -29,9 +27,7 @@ async function request(
   if (!settings.apiKey.trim()) throw new Error('请先填写 API Key。');
   let response: Response;
   try {
-    const url = endpoint(settings, path);
-    await providerQueue.acquire(signal);
-    response = await fetch(url, {
+    response = await fetch(endpoint(settings, path), {
       method: body ? 'POST' : 'GET',
       headers: {
         Authorization: `Bearer ${settings.apiKey.trim()}`,
@@ -87,7 +83,7 @@ export async function fetchModels(settings: Settings): Promise<string[]> {
   if (!ids.length) throw new Error('接口没有返回可用模型，可手动填写 Model ID。');
   return [...new Set(ids)].sort((a, b) => a.localeCompare(b));
 }
-export const translationBatchLimit = 5;
+export const translationBatchLimit = 10;
 
 function translatorInstructions(settings: Settings, task: string): string {
   const source = englishLanguageName(settings.sourceLanguage);

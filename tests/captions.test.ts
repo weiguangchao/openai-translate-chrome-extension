@@ -14,6 +14,10 @@ beforeEach(() => {
     value: [],
   });
   Object.defineProperty(document.querySelector('video'), 'readyState', { value: 1 });
+  Object.defineProperty(document.querySelector('video'), 'paused', {
+    configurable: true,
+    value: false,
+  });
 });
 afterEach(() => {
   controller?.destroy();
@@ -91,6 +95,7 @@ it('finds an HBO subtitle layer that is a sibling of the video wrapper', async (
     '<div class="stream-player"><div class="media-wrapper"><video></video></div><div data-testid="subtitles">HBO cue</div></div>';
   Object.defineProperty(document.querySelector('video'), 'textTracks', { value: [] });
   Object.defineProperty(document.querySelector('video'), 'readyState', { value: 1 });
+  Object.defineProperty(document.querySelector('video'), 'paused', { value: false });
   const sendMessage = vi.fn().mockResolvedValue({ ok: true, data: 'HBO 译文' });
   vi.stubGlobal('chrome', { runtime: { id: 'extension-id', sendMessage } });
   controller = new CaptionController(settings());
@@ -201,4 +206,45 @@ it('keeps the controller alive for recoverable messaging errors and retries the 
   await vi.advanceTimersByTimeAsync(16000);
   expect(translationNode()?.textContent).toBe('恢复后的译文');
   expect(translationNode()?.hidden).toBe(false);
+});
+
+it('translates only during playback and drops the pending request when paused', async () => {
+  const video = document.querySelector('video')!;
+  const replies: ((value: unknown) => void)[] = [];
+  const sendMessage = vi.fn((message: { type: string }) =>
+    message.type === 'translate'
+      ? new Promise((resolve) => replies.push(resolve))
+      : Promise.resolve({ ok: true }),
+  );
+  const setPaused = async (paused: boolean) => {
+    Object.defineProperty(video, 'paused', { value: paused });
+    video.dispatchEvent(new Event(paused ? 'pause' : 'play'));
+    await vi.advanceTimersByTimeAsync(0);
+  };
+  vi.stubGlobal('chrome', { runtime: { id: 'extension-id', sendMessage } });
+  Object.defineProperty(video, 'paused', { value: true });
+  controller = new CaptionController(settings());
+  await vi.advanceTimersByTimeAsync(30000);
+  expect(sendMessage).not.toHaveBeenCalled();
+  await setPaused(false);
+  expect(sendMessage).toHaveBeenLastCalledWith({ type: 'translate', text: 'First cue' });
+  await setPaused(true);
+  expect(sendMessage).toHaveBeenLastCalledWith({ type: 'prefetch', texts: [] });
+  replies[0]({ ok: false, error: '字幕已更新。' });
+  await vi.advanceTimersByTimeAsync(30000);
+  expect(translationNode()?.hidden).toBe(true);
+  expect(translationNode()?.textContent).toBe('');
+  await setPaused(false);
+  replies[1]({ ok: true, data: '第一句译文' });
+  await vi.advanceTimersByTimeAsync(1);
+  expect(translationNode()?.textContent).toBe('第一句译文');
+  await setPaused(true);
+  await vi.advanceTimersByTimeAsync(30000);
+  expect(translationNode()?.textContent).toBe('第一句译文');
+  expect(translationNode()?.hidden).toBe(false);
+  expect(sendMessage.mock.calls.map(([message]) => message)).toEqual([
+    { type: 'translate', text: 'First cue' },
+    { type: 'prefetch', texts: [] },
+    { type: 'translate', text: 'First cue' },
+  ]);
 });

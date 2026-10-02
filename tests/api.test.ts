@@ -8,14 +8,6 @@ import {
   type Settings,
 } from '../src/shared/settings';
 
-vi.mock('../src/shared/rate-limiter', () => ({
-  RateLimiter: class {
-    acquire() {
-      return Promise.resolve();
-    }
-  },
-}));
-
 const config = (): Settings => ({
   ...structuredClone(DEFAULT_SETTINGS),
   baseUrl: 'https://provider.example/api/v1/',
@@ -112,7 +104,7 @@ describe('OpenAI-compatible provider contract', () => {
   );
 
   it.each(['chat', 'completions'] as const)(
-    'translates up to five cues in one %s request and returns translations in cue order',
+    'translates up to ten cues in one %s request and returns translations in cue order',
     async (apiFormat) => {
       const content = '```json\n{"translations":[" 第一句 ","第二句","第三句"]}\n```';
       const fetch = vi.fn().mockResolvedValue(
@@ -152,10 +144,15 @@ describe('OpenAI-compatible provider contract', () => {
     await expect(translateBatch(config(), ['One.', 'Two.'])).resolves.toBeNull();
   });
 
-  it('refuses batches larger than five cues before contacting the provider', async () => {
+  it('refuses batches larger than ten cues before contacting the provider', async () => {
     const fetch = vi.fn();
     vi.stubGlobal('fetch', fetch);
-    await expect(translateBatch(config(), ['1', '2', '3', '4', '5', '6'])).rejects.toThrow();
+    await expect(
+      translateBatch(
+        config(),
+        Array.from({ length: 11 }, (_, index) => `${index}`),
+      ),
+    ).rejects.toThrow();
     expect(fetch).not.toHaveBeenCalled();
   });
 

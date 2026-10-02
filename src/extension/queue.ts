@@ -24,7 +24,6 @@ interface Consumer {
 }
 
 export class TranslationQueue {
-  private active = 0;
   private jobs = new Map<string, Job>();
   private consumers = new Map<string, Consumer>();
   private cache = new Map<string, SubtitleTranslation>();
@@ -97,7 +96,6 @@ export class TranslationQueue {
     const existing = this.jobs.get(key);
     if (existing) return existing;
     if (Date.now() < this.backoffUntil) throw new Error('接口暂不可用，稍后将自动重试。');
-    if (this.jobs.size >= 32) throw new Error('翻译任务过多，请稍后重试。');
     let resolve!: Job['resolve'], reject!: Job['reject'];
     const promise = new Promise<SubtitleTranslation>((yes, no) => {
       resolve = yes;
@@ -136,27 +134,21 @@ export class TranslationQueue {
   private drain(): void {
     const consumers = [...this.consumers.values()];
     const ordered = consumers.flatMap((state) => (state.current ? [state.current] : []));
-    const due = new Set(ordered);
-    for (let index = 0; index < 15; index++)
-      for (const state of consumers) {
-        const key = state.window[index];
-        if (!key) continue;
-        ordered.push(key);
-        if (index < 2 * translationBatchLimit) due.add(key);
-      }
+    const longest = Math.max(0, ...consumers.map((state) => state.window.length));
+    for (let index = 0; index < longest; index++)
+      for (const state of consumers) if (state.window[index]) ordered.push(state.window[index]);
     const waiting = [...new Set(ordered)].flatMap((key) => {
       const job = this.jobs.get(key);
       return job && !job.controller ? [job] : [];
     });
-    while (this.active < 2 && waiting.length) {
+    while (waiting.length) {
       const [first] = waiting;
-      const single = first.segment || first.solo;
-      const batch = single
-        ? [first]
-        : waiting
-            .filter((job) => !job.segment && !job.solo && job.group === first.group)
-            .slice(0, translationBatchLimit);
-      if (!single && batch.length < translationBatchLimit && !due.has(first.key)) break;
+      const batch =
+        first.segment || first.solo
+          ? [first]
+          : waiting
+              .filter((job) => !job.segment && !job.solo && job.group === first.group)
+              .slice(0, translationBatchLimit);
       for (const job of batch) waiting.splice(waiting.indexOf(job), 1);
       this.run(batch);
     }
@@ -165,7 +157,6 @@ export class TranslationQueue {
   private run(batch: Job[]): void {
     const controller = new AbortController();
     for (const job of batch) Object.assign(job, { controller, batch });
-    this.active++;
     const [first] = batch;
     const work: Promise<SubtitleTranslation[] | null> =
       batch.length > 1
@@ -177,44 +168,31 @@ export class TranslationQueue {
         : translateSubtitle(first.settings, first.text, controller.signal, first.segment).then(
             (result) => [result],
           );
-    void work
-      .then(
-        (results) => {
-          if (controller.signal.aborted) return;
-          if (!results) {
-            for (const job of batch)
-              Object.assign(job, { controller: undefined, batch: undefined, solo: true });
-            return;
-          }
-          batch.forEach((job, index) => {
-            const result = results[index];
-            this.cache.set(job.key, result);
-            if (this.cache.size > 250) this.cache.delete(this.cache.keys().next().value!);
-            const queued = this.jobs.get(job.key);
-            if (queued === job || (queued && !queued.controller)) {
-              this.jobs.delete(job.key);
-              queued.resolve(result);
-            }
-            job.resolve(result);
-          });
-        },
-        (error) => {
-          if (controller.signal.aborted) return;
-          this.backoffUntil = Date.now() + 15000;
-          for (const [queuedKey, queued] of this.jobs) {
-            if (queued.controller) continue;
-            queued.reject(new Error('接口暂不可用，稍后将自动重试。'));
-            this.jobs.delete(queuedKey);
-          }
-          for (const job of batch) {
-            if (this.jobs.get(job.key) === job) this.jobs.delete(job.key);
-            job.reject(error instanceof Error ? error : new Error('翻译失败。'));
-          }
-        },
-      )
-      .finally(() => {
-        this.active--;
-        this.drain();
-      });
+    void work.then(
+      (results) => {
+        if (controller.signal.aborted) return;
+        if (!results) {
+          for (const job of batch)
+            Object.assign(job, { controller: undefined, batch: undefined, solo: true });
+          this.drain();
+          return;
+        }
+        batch.forEach((job, index) => {
+          const result = results[index];
+          this.cache.set(job.key, result);
+          if (this.cache.size > 250) this.cache.delete(this.cache.keys().next().value!);
+          if (this.jobs.get(job.key) === job) this.jobs.delete(job.key);
+          job.resolve(result);
+        });
+      },
+      (error) => {
+        if (controller.signal.aborted) return;
+        this.backoffUntil = Date.now() + 15000;
+        for (const job of batch) {
+          if (this.jobs.get(job.key) === job) this.jobs.delete(job.key);
+          job.reject(error instanceof Error ? error : new Error('翻译失败。'));
+        }
+      },
+    );
   }
 }
