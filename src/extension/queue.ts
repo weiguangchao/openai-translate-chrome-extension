@@ -26,7 +26,6 @@ interface Consumer {
 export class TranslationQueue {
   private jobs = new Map<string, Job>();
   private consumers = new Map<string, Consumer>();
-  private cache = new Map<string, SubtitleTranslation>();
   private backoffUntil = 0;
 
   private group(settings: Settings): string {
@@ -55,8 +54,6 @@ export class TranslationQueue {
     state.current = key;
     this.consumers.set(consumer, state);
     this.prune(false);
-    const cached = this.cache.get(key);
-    if (cached !== undefined) return Promise.resolve(cached);
     try {
       const job = this.enqueue(key, settings, text, segment);
       this.drain();
@@ -78,7 +75,7 @@ export class TranslationQueue {
     this.prune(true);
     try {
       texts.forEach((text, index) => {
-        if (!this.cache.has(keys[index])) this.enqueue(keys[index], settings, text, segment);
+        this.enqueue(keys[index], settings, text, segment);
       });
     } finally {
       this.drain();
@@ -88,7 +85,6 @@ export class TranslationQueue {
   reset(): void {
     this.consumers.clear();
     this.prune(true);
-    this.cache.clear();
     this.backoffUntil = 0;
   }
 
@@ -179,8 +175,6 @@ export class TranslationQueue {
         }
         batch.forEach((job, index) => {
           const result = results[index];
-          this.cache.set(job.key, result);
-          if (this.cache.size > 250) this.cache.delete(this.cache.keys().next().value!);
           if (this.jobs.get(job.key) === job) this.jobs.delete(job.key);
           job.resolve(result);
         });

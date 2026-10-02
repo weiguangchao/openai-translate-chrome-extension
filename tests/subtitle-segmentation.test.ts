@@ -1,199 +1,166 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { translateSubtitle } from '../src/shared/api';
 import { DEFAULT_SETTINGS } from '../src/shared/settings';
-import { parseSubtitleSegments } from '../src/shared/subtitle-segmentation';
-import { githubCaption, githubModelResponse } from './fixtures/github-caption';
+import { splitSubtitleAtCommas, subtitleDisplayLength } from '../src/shared/subtitle-segmentation';
+import { githubCaption, githubCommaSegments } from './fixtures/github-caption';
 
 const settings = { ...DEFAULT_SETTINGS, apiKey: 'fixture-key', model: 'fixture-model' };
 afterEach(() => vi.unstubAllGlobals());
 
+it('packs comma-separated clauses into as few segments as the display limit allows', () => {
+  const clause = 'a'.repeat(40);
+  const text = `${clause}, ${clause}, ${clause}`;
+  expect(splitSubtitleAtCommas(text).map((part) => text.slice(part.from, part.to))).toEqual([
+    `${clause}, ${clause},`,
+    clause,
+  ]);
+  expect(subtitleDisplayLength(`${clause}, ${clause},`)).toBeLessThanOrEqual(100);
+  expect(subtitleDisplayLength(text)).toBeGreaterThan(100);
+});
+
+it('does not split a caption that already fits', () => {
+  const text = 'Hello, world, again.';
+  expect(splitSubtitleAtCommas(text)).toEqual([{ from: 0, to: text.length }]);
+});
+
+it('splits on a Chinese comma and keeps an overlong clause without one intact', () => {
+  const head = '甲'.repeat(40);
+  const tail = '乙'.repeat(20);
+  const chinese = `${head}，${tail}`;
+  expect(splitSubtitleAtCommas(chinese).map((part) => chinese.slice(part.from, part.to))).toEqual([
+    `${head}，`,
+    tail,
+  ]);
+  const unbroken = `${'a'.repeat(120)}, tail`;
+  expect(splitSubtitleAtCommas(unbroken).map((part) => unbroken.slice(part.from, part.to))).toEqual(
+    [`${'a'.repeat(120)},`, 'tail'],
+  );
+});
+
+it('splits the sample caption only at the comma that keeps the first clause on screen', () => {
+  expect(
+    splitSubtitleAtCommas(githubCaption).map((part) => githubCaption.slice(part.from, part.to)),
+  ).toEqual(githubCommaSegments);
+});
+
 it.each(['chat', 'completions'] as const)(
-  'translates and segments a long subtitle in one %s request with validated source offsets',
+  'translates comma segments with the normal %s translation request',
   async (apiFormat) => {
-    const fetch = vi.fn(async () =>
-      Response.json({
+    const fetch = vi.fn(async (_url: string, init: RequestInit) => {
+      const body = JSON.parse(init.body as string) as {
+        messages?: { content: string }[];
+        prompt?: string;
+      };
+      const instructions = body.messages?.[0].content ?? body.prompt?.split('\n\nInput:\n')[0];
+      const input =
+        body.messages?.[1].content ??
+        body.prompt?.split('\n\nInput:\n')[1]?.split('\n\nOutput:')[0];
+      expect(instructions).toContain(`exactly ${githubCommaSegments.length} strings`);
+      expect(instructions).not.toContain('exact contiguous original');
+      expect(JSON.parse(input!)).toEqual(githubCommaSegments);
+      return Response.json({
         choices: [
           apiFormat === 'chat'
-            ? { message: { content: JSON.stringify(githubModelResponse) } }
-            : { text: JSON.stringify(githubModelResponse) },
+            ? {
+                message: {
+                  content: JSON.stringify({
+                    translations: githubCommaSegments.map((part) => `译:${part}`),
+                  }),
+                },
+              }
+            : {
+                text: JSON.stringify({
+                  translations: githubCommaSegments.map((part) => `译:${part}`),
+                }),
+              },
         ],
-      }),
-    );
+      });
+    });
     vi.stubGlobal('fetch', fetch);
+    const parts = splitSubtitleAtCommas(githubCaption);
     await expect(
       translateSubtitle({ ...settings, apiFormat }, githubCaption, undefined, true),
     ).resolves.toEqual({
-      segments: [
-        { from: 0, to: 76, translation: '我、Ghostie 的创作者米切尔，还有许多人都开始意识到' },
-        { from: 77, to: 148, translation: 'GitHub 可能已经不是存放我们代码最安全的地方了' },
-        { from: 149, to: 191, translation: '因为他们会莫名其妙地撤销合并' },
-        { from: 192, to: 256, translation: '停机时间更是按天计算，而不是按分钟。' },
-      ],
+      segments: parts.map((part) => ({
+        ...part,
+        translation: `译:${githubCaption.slice(part.from, part.to)}`,
+      })),
     });
     expect(fetch).toHaveBeenCalledTimes(1);
   },
 );
 
-it('keeps short subtitles on the plain translation path', async () => {
-  const fetch = vi.fn(async () =>
-    Response.json({ choices: [{ message: { content: '我们走吧。' } }] }),
+it('keeps short subtitles and comma-free long subtitles on the plain translation path', async () => {
+  const fetch = vi.fn(async (_url: string, _init: RequestInit) =>
+    Response.json({ choices: [{ message: { content: '整句译文' } }] }),
   );
   vi.stubGlobal('fetch', fetch);
-  await expect(translateSubtitle(settings, 'Let’s go.', undefined, true)).resolves.toBe(
-    '我们走吧。',
+  await expect(translateSubtitle(settings, 'Let’s go.', undefined, true)).resolves.toBe('整句译文');
+  await expect(translateSubtitle(settings, 'a'.repeat(120), undefined, true)).resolves.toBe(
+    '整句译文',
   );
-  expect(fetch).toHaveBeenCalledTimes(1);
+  const bodies = fetch.mock.calls.map(
+    (call) => JSON.parse(String(call[1].body)).messages[1].content as string,
+  );
+  expect(bodies).toEqual(['Let’s go.', 'a'.repeat(120)]);
 });
 
-it('accepts semantic boundaries in unspaced Japanese without an English grammar dictionary', async () => {
-  const text =
-    '私たちは長い間このサービスに大切なソースコードを保存してきましたが最近は予告のない障害が何度も発生しているため別のサービスへの移行を検討しています';
-  vi.stubGlobal(
-    'fetch',
-    vi.fn(async () =>
-      Response.json({
-        choices: [
-          {
-            message: {
-              content: JSON.stringify({
-                segments: [
-                  {
-                    source: '私たちは長い間このサービスに大切なソースコードを保存してきましたが',
-                    translation: '我们长期把重要的源代码保存在这个服务上',
-                  },
-                  {
-                    source: '最近は予告のない障害が何度も発生しているため',
-                    translation: '但最近频繁出现毫无预警的故障',
-                  },
-                  {
-                    source: '別のサービスへの移行を検討しています',
-                    translation: '所以我们正在考虑迁移到其他服务',
-                  },
-                ],
-              }),
-            },
-          },
-        ],
-      }),
-    ),
+it('translates each comma segment separately when the batch reply is unusable', async () => {
+  const parts = splitSubtitleAtCommas(githubCaption).map((part) =>
+    githubCaption.slice(part.from, part.to),
   );
-  const result = await translateSubtitle(
-    { ...settings, sourceLanguage: 'ja' },
-    text,
-    undefined,
-    true,
-  );
-  expect(
-    typeof result === 'string'
-      ? result
-      : result.segments.map((part) => [text.slice(part.from, part.to), part.translation]),
-  ).toEqual([
-    [
-      '私たちは長い間このサービスに大切なソースコードを保存してきましたが',
-      '我们长期把重要的源代码保存在这个服务上',
-    ],
-    ['最近は予告のない障害が何度も発生しているため', '但最近频繁出现毫无预警的故障'],
-    ['別のサービスへの移行を検討しています', '所以我们正在考虑迁移到其他服务'],
-  ]);
-});
-
-it('corrects an invalid response once without returning the unsegmented paragraph', async () => {
-  const fetch = vi
-    .fn()
-    .mockResolvedValueOnce(Response.json({ choices: [{ message: { content: '整段译文' } }] }))
-    .mockResolvedValueOnce(
-      Response.json({
-        choices: [
-          { message: { content: `\`\`\`json\n${JSON.stringify(githubModelResponse)}\n\`\`\`` } },
-        ],
-      }),
-    );
-  vi.stubGlobal('fetch', fetch);
-  const result = await translateSubtitle(settings, githubCaption, undefined, true);
-  expect(
-    typeof result === 'string' ? result : result.segments.map((part) => part.translation),
-  ).toEqual([
-    '我、Ghostie 的创作者米切尔，还有许多人都开始意识到',
-    'GitHub 可能已经不是存放我们代码最安全的地方了',
-    '因为他们会莫名其妙地撤销合并',
-    '停机时间更是按天计算，而不是按分钟。',
-  ]);
-  expect(fetch).toHaveBeenCalledTimes(2);
-});
-
-it('fails after one correction when the provider cannot produce valid segments', async () => {
-  const fetch = vi.fn(async () =>
-    Response.json({
+  const fetch = vi.fn(async (_url: string, init: RequestInit) => {
+    const content = JSON.parse(init.body as string).messages[1].content as string;
+    return Response.json({
       choices: [
         {
           message: {
-            content: JSON.stringify({
-              segments: [{ source: githubCaption, translation: '整段译文' }],
-            }),
+            content: content.startsWith('[') ? '不是译文列表' : `译:${content}`,
           },
         },
       ],
-    }),
-  );
+    });
+  });
   vi.stubGlobal('fetch', fetch);
-  await expect(translateSubtitle(settings, githubCaption, undefined, true)).rejects.toThrow(
-    '有效的语义分段',
-  );
-  expect(fetch).toHaveBeenCalledTimes(2);
+  await expect(translateSubtitle(settings, githubCaption, undefined, true)).resolves.toEqual({
+    segments: splitSubtitleAtCommas(githubCaption).map((part, index) => ({
+      ...part,
+      translation: `译:${parts[index]}`,
+    })),
+  });
+  expect(fetch).toHaveBeenCalledTimes(1 + parts.length);
 });
 
-it.each([
-  { name: 'omitted words', segments: githubModelResponse.segments.slice(1) },
-  {
-    name: 'repeated words',
-    segments: [githubModelResponse.segments[0], ...githubModelResponse.segments],
-  },
-  { name: 'reordered words', segments: [...githubModelResponse.segments].reverse() },
-  {
-    name: 'rewritten words',
-    segments: githubModelResponse.segments.map((part) => ({
-      ...part,
-      source: part.source.replace('GitHub', 'Gitlab'),
-    })),
-  },
-  {
-    name: 'empty translations',
-    segments: githubModelResponse.segments.map((part) => ({ ...part, translation: '' })),
-  },
-  {
-    name: 'oversized source chunks',
-    segments: [
-      { source: githubCaption.slice(0, 148), translation: '太长' },
-      { source: githubCaption.slice(149), translation: '依然太长' },
-    ],
-  },
-  {
-    name: 'oversized translations',
-    segments: githubModelResponse.segments.map((part) => ({
-      ...part,
-      translation: '译文'.repeat(100),
-    })),
-  },
-])(
-  'rejects $name instead of losing source text or drawing an oversized caption',
-  ({ segments }) => {
-    expect(() => parseSubtitleSegments(githubCaption, JSON.stringify({ segments }), 'en')).toThrow(
-      '有效的语义分段',
-    );
-  },
-);
-
-it('rejects boundaries inside words even when the combined text is exact', () => {
-  expect(() =>
-    parseSubtitleSegments(
-      'GitHub stays.',
-      JSON.stringify({
-        segments: [
-          { source: 'Git', translation: 'Git' },
-          { source: 'Hub stays.', translation: 'Hub 留下来。' },
-        ],
-      }),
-      'en',
-    ),
-  ).toThrow('有效的语义分段');
+it('translates comma segments beyond one batch without asking the provider to choose boundaries', async () => {
+  const pieces = Array.from({ length: 11 }, (_, index) => `${index}`.padEnd(90, 'x'));
+  const text = pieces.join(', ');
+  const fetch = vi.fn(async (_url: string, init: RequestInit) => {
+    const content = JSON.parse(init.body as string).messages[1].content as string;
+    const batch = content.startsWith('[') ? (JSON.parse(content) as string[]) : [content];
+    return Response.json({
+      choices: [
+        {
+          message: {
+            content:
+              batch.length > 1
+                ? JSON.stringify({ translations: batch.map((part) => `译:${part}`) })
+                : `译:${batch[0]}`,
+          },
+        },
+      ],
+    });
+  });
+  vi.stubGlobal('fetch', fetch);
+  const result = await translateSubtitle(settings, text, undefined, true);
+  expect(fetch).toHaveBeenCalledTimes(2);
+  expect(typeof result === 'string' ? [] : result.segments.map((part) => part.translation)).toEqual(
+    splitSubtitleAtCommas(text).map((part) => `译:${text.slice(part.from, part.to)}`),
+  );
+  const firstInput = JSON.parse(
+    JSON.parse(String(fetch.mock.calls[0][1].body)).messages[1].content,
+  ) as string[];
+  expect(firstInput).toHaveLength(10);
+  expect(JSON.parse(String(fetch.mock.calls[1][1].body)).messages[0].content).toContain(
+    'Output only the translation',
+  );
 });

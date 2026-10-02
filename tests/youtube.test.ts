@@ -2,7 +2,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { CaptionController } from '../src/extension/captions';
 import { DEFAULT_SETTINGS, publicSettings } from '../src/shared/settings';
 import { TranslationQueue } from '../src/extension/queue';
-import { githubCaption, githubCaptionTrack, githubModelResponse } from './fixtures/github-caption';
+import { githubCaption, githubCaptionTrack, githubCommaSegments } from './fixtures/github-caption';
 import { providerReply, requestedTexts } from './fixtures/provider';
 import type { SubtitleTranslation } from '../src/shared/subtitle-segmentation';
 
@@ -68,7 +68,7 @@ function setup() {
   return { video, player, sendMessage, lines };
 }
 
-it('prefetches one semantic translation and follows the current segment when it arrives after a seek', async () => {
+it('prefetches comma segments of a long subtitle and follows the current segment after a seek', async () => {
   const { video, player, sendMessage, lines } = setup();
   Object.assign(player, {
     getOption: () => ({ vssId: 'a.en' }),
@@ -89,12 +89,14 @@ it('prefetches one semantic translation and follows the current segment when it 
     }),
   });
   let finish!: (value: Response) => void;
+  let pending: string[] = [];
   const requests: string[] = [];
   vi.stubGlobal(
     'fetch',
     vi.fn(async (url: string, init?: RequestInit) => {
       if (url.includes('/api/timedtext')) return Response.json(githubCaptionTrack);
-      requests.push(...requestedTexts(init!));
+      pending = requestedTexts(init!);
+      requests.push(...pending);
       return new Promise<Response>((resolve) => {
         finish = resolve;
       });
@@ -115,16 +117,17 @@ it('prefetches one semantic translation and follows the current segment when it 
   await import('../src/extension/youtube-page');
   controller = new CaptionController(publicSettings(saved));
   await vi.advanceTimersByTimeAsync(0);
-  expect([...lines()].map((line) => line.hidden)).toEqual([true, true]);
+  expect([...lines()].map((line) => [line.hidden, line.textContent])).toEqual([
+    [false, githubCaption],
+    [false, '加载中'],
+  ]);
   video.currentTime = 6.75;
   video.dispatchEvent(new Event('seeked'));
-  finish(
-    Response.json({ choices: [{ message: { content: JSON.stringify(githubModelResponse) } }] }),
-  );
+  finish(providerReply(pending, (text) => `译文：${text}`));
   await vi.advanceTimersByTimeAsync(0);
   expect([...lines()].map((line) => line.textContent)).toEqual([
-    "now that they're randomly reverting merges",
-    '因为他们会莫名其妙地撤销合并',
+    githubCommaSegments[1],
+    `译文：${githubCommaSegments[1]}`,
   ]);
   const snapshots: string[][] = [];
   for (const time of [0, 3, 8.25, 2]) {
@@ -134,24 +137,12 @@ it('prefetches one semantic translation and follows the current segment when it 
     snapshots.push([...lines()].map((line) => line.textContent ?? ''));
   }
   expect(snapshots).toEqual([
-    [
-      'Myself, Mitchell the creator of Ghostie, and many other people are realizing',
-      '我、Ghostie 的创作者米切尔，还有许多人都开始意识到',
-    ],
-    [
-      'that GitHub might not be the safest place for us to be leaving our code',
-      'GitHub 可能已经不是存放我们代码最安全的地方了',
-    ],
-    [
-      'and having downtime that is measured in days instead of minutes.',
-      '停机时间更是按天计算，而不是按分钟。',
-    ],
-    [
-      'Myself, Mitchell the creator of Ghostie, and many other people are realizing',
-      '我、Ghostie 的创作者米切尔，还有许多人都开始意识到',
-    ],
+    [githubCommaSegments[0], `译文：${githubCommaSegments[0]}`],
+    [githubCommaSegments[1], `译文：${githubCommaSegments[1]}`],
+    [githubCommaSegments[1], `译文：${githubCommaSegments[1]}`],
+    [githubCommaSegments[1], `译文：${githubCommaSegments[1]}`],
   ]);
-  expect(requests).toEqual([githubCaption]);
+  expect(requests).toEqual(githubCommaSegments);
   video.currentTime = 11;
   video.dispatchEvent(new Event('timeupdate'));
   expect([...lines()].map((line) => line.hidden)).toEqual([true, true]);
@@ -364,8 +355,8 @@ it('uses the current video session to load source subtitles and removes duplicat
       const text = language === 'en' ? 'This field behind me' : '我身后的这片空地';
       return Response.json({
         events: [
-          { tStartMs: 0, dDurationMs: 2000, segs: [{ utf8: `\u200b ${text} \u200b`, pPenId: 3 }] },
-          { tStartMs: 0, dDurationMs: 2000, segs: [{ utf8: `\u200b ${text} \u200b`, pPenId: 4 }] },
+          { tStartMs: 0, dDurationMs: 4000, segs: [{ utf8: `\u200b ${text} \u200b`, pPenId: 3 }] },
+          { tStartMs: 0, dDurationMs: 4000, segs: [{ utf8: `\u200b ${text} \u200b`, pPenId: 4 }] },
           ...(language === 'zh-Hans'
             ? [{ tStartMs: 500, dDurationMs: 1000, segs: [{ utf8: '即将变成一座城市' }] }]
             : []),
@@ -773,7 +764,11 @@ it('sends complete English sentences to the Provider and displays its translatio
     'Let’s build it.',
     '让我们建造它。',
   ]);
-  expect(requests.length).toBe(1);
+  expect(requests.map((request) => request.texts)).toEqual([
+    ['This field behind me will become a city.', 'Let’s build it.'],
+    ['This field behind me will become a city.'],
+    ['Let’s build it.'],
+  ]);
   queue.reset();
 });
 

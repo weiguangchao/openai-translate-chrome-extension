@@ -39,6 +39,12 @@ it('shows the current translation, ignores a late reply, clears a missing cue an
   controller = new CaptionController(settings());
   await vi.advanceTimersByTimeAsync(450);
   expect(sendMessage).toHaveBeenCalledWith({ type: 'translate', text: 'First cue' });
+  expect(translationNode()?.textContent).toBe('加载中');
+  expect(translationNode()?.hidden).toBe(false);
+  expect(
+    document.querySelector('[data-subline-overlay]')?.shadowRoot?.querySelector('.original')
+      ?.textContent,
+  ).toBe('First cue');
   document.querySelector('.ytp-caption-segment')!.textContent = 'Second cue';
   await vi.advanceTimersByTimeAsync(450);
   replies[0]({ ok: true, data: '过时译文' });

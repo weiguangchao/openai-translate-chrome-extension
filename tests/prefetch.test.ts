@@ -126,7 +126,7 @@ function translated() {
 }
 async function finish(translations: Record<string, string>) {
   const [text] = Object.keys(translations);
-  const request = pending.find((item) => item.texts.includes(text))!;
+  const request = [...pending].reverse().find((item) => item.texts.includes(text))!;
   request.resolve(
     providerReply(request.texts, (source) => translations[source] ?? `${source} 译文`),
   );
@@ -145,15 +145,27 @@ it('preloads upcoming cues in one request before the first caption and displays 
   await finish({ 'First cue': '第一句', 'Second cue': '第二句', 'Third cue': '第三句' });
   expect(translated()?.hidden).toBe(true);
   await advance(2);
+  expect(requested.at(-1)).toEqual(['First cue']);
+  await finish({ 'First cue': '第一句' });
   expect(translated()?.textContent).toBe('第一句');
   expect(translated()?.hidden).toBe(false);
   await advance(4);
+  expect(requested.at(-1)).toEqual(['Second cue', 'Third cue', 'After seeking']);
+  await finish({ 'Second cue': '第二句' });
   expect(translated()?.textContent).toBe('第二句');
   await advance(6);
+  expect(requested.at(-1)).toEqual(['Third cue', 'After seeking']);
+  await finish({ 'Third cue': '第三句' });
   expect(translated()?.textContent).toBe('第三句');
   await advance(9);
   expect(translated()?.hidden).toBe(true);
-  expect(requested).toHaveLength(1);
+  expect(requested).toEqual([
+    ['First cue', 'Second cue', 'Third cue', 'After seeking'],
+    ['First cue'],
+    ['Second cue', 'Third cue', 'After seeking'],
+    ['Third cue', 'After seeking'],
+    ['After seeking'],
+  ]);
 });
 
 it('prefetches the next blocks in ten-cue requests, cancels them on seek, and immediately prioritizes the new position', async () => {
@@ -191,6 +203,43 @@ it('prefetches the next blocks in ten-cue requests, cancels them on seek, and im
   expect(translated()?.textContent).toBe('跳转后的字幕');
   await finish({ 'Cue 1': '迟到的旧字幕' });
   expect(translated()?.textContent).toBe('跳转后的字幕');
+});
+
+it('starts translation one second ahead on first load and after seeking', async () => {
+  const cues = [
+    { startTime: 0, endTime: 0.6, text: 'Opening' },
+    { startTime: 0.6, endTime: 4, text: 'Stay' },
+    { startTime: 4, endTime: 6, text: 'Next' },
+    { startTime: 20, endTime: 20.3, text: 'Seek tail' },
+    { startTime: 20.3, endTime: 24, text: 'After' },
+  ];
+  Object.defineProperty(video, 'textTracks', {
+    value: [{ mode: 'showing', kind: 'subtitles', language: 'en', cues, activeCues: [] }],
+  });
+  const original = () =>
+    document
+      .querySelector('[data-subline-overlay]')
+      ?.shadowRoot?.querySelectorAll<HTMLElement>('.line')[0];
+  controller = new CaptionController(publicSettings(saved));
+  await vi.advanceTimersByTimeAsync(0);
+  expect(requested).toEqual([['Stay', 'Next', 'Seek tail', 'After']]);
+  expect(original()?.textContent).toBe('Opening');
+  expect(translated()?.hidden).toBe(true);
+  await advance(3.2);
+  expect(requested).toEqual([['Stay', 'Next', 'Seek tail', 'After']]);
+  expect(pending[0].signal.aborted).toBe(false);
+  expect(original()?.textContent).toBe('Stay');
+  Object.defineProperty(video, 'seeking', { configurable: true, value: true });
+  video.currentTime = 20;
+  video.dispatchEvent(new Event('seeking'));
+  await vi.advanceTimersByTimeAsync(0);
+  Object.defineProperty(video, 'seeking', { value: false });
+  video.dispatchEvent(new Event('seeked'));
+  await vi.advanceTimersByTimeAsync(0);
+  expect(requested.slice(1)).toEqual([['After']]);
+  expect(original()?.textContent).toBe('Seek tail');
+  expect(translated()?.hidden).toBe(true);
+  expect(pending[0].signal.aborted).toBe(true);
 });
 
 it('cancels prefetching while paused, keeps the shown translation, and resumes on play', async () => {

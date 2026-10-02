@@ -2,8 +2,7 @@ import { englishLanguageName, validateBaseUrl, validateSettings, type Settings }
 import {
   needsSubtitleSegmentation,
   parseModelJson,
-  parseSubtitleSegments,
-  subtitleDisplayLimit,
+  splitSubtitleAtCommas,
   type SubtitleTranslation,
 } from './subtitle-segmentation';
 
@@ -219,26 +218,20 @@ export async function translateSubtitle(
   segment = false,
 ): Promise<SubtitleTranslation> {
   if (!segment || !needsSubtitleSegmentation(text)) return translate(settings, text, signal);
-  checkText(text);
-  const instructions = `This text is too long to display on screen at once. Translate it and divide it into natural, readable semantic units in the same response.
-Understand the entire input before choosing boundaries. Preserve phrases, names, and closely related ideas; do not split at fixed character counts or treat every comma or conjunction as a boundary. Use the same method for any source language, including unpunctuated speech.
-Each source segment and its translation must fit within ${subtitleDisplayLimit} display units. Han, Japanese kana, and Korean characters count as 2 units; other characters count as 1. Prefer coherent clauses rather than tiny fragments, usually 50–90 units per source segment.
-Return only JSON with this shape: {"segments":[{"source":"exact contiguous original substring","translation":"translation of only that substring"}]}.
-Return at least two segments. The source segments must cover ALL the original text in order, exactly once. Copy original spelling, case, punctuation, and internal whitespace exactly. Only whitespace BETWEEN segments may be omitted. Never rewrite, add, omit, duplicate, reorder, or split a word in the source. Do not return timestamps or character offsets.
-Translate each segment using the context of the whole input.`;
-  const maxTokens = Math.min(16384, Math.max(2048, text.length * 4));
-  const response = await complete(settings, instructions, text, maxTokens, signal);
-  try {
-    return parseSubtitleSegments(text, response, settings.sourceLanguage);
-  } catch {
-    if (signal?.aborted) throw new Error('字幕已更新。');
-    const retry = await complete(
-      settings,
-      `${instructions}\nThe previous response failed validation. Recheck exact source coverage, word boundaries, nonempty translations, and the display limit. Return a corrected JSON object.`,
-      text,
-      maxTokens,
-      signal,
-    );
-    return parseSubtitleSegments(text, retry, settings.sourceLanguage);
+  const parts = splitSubtitleAtCommas(text);
+  const pieces = parts.map((part) => text.slice(part.from, part.to));
+  if (pieces.length < 2) return translate(settings, text, signal);
+  const translations: string[] = [];
+  for (let index = 0; index < pieces.length; index += translationBatchLimit) {
+    const chunk = pieces.slice(index, index + translationBatchLimit);
+    const batch =
+      chunk.length === 1
+        ? [await translate(settings, chunk[0], signal)]
+        : await translateBatch(settings, chunk, signal);
+    if (batch) translations.push(...batch);
+    else for (const piece of chunk) translations.push(await translate(settings, piece, signal));
   }
+  return {
+    segments: parts.map((part, index) => ({ ...part, translation: translations[index] })),
+  };
 }

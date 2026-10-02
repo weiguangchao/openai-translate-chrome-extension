@@ -23,7 +23,7 @@ function pendingProvider() {
 }
 const settings = { ...DEFAULT_SETTINGS, apiKey: 'test-key', model: 'test-model' };
 
-it('sends every cue right away, shares in-flight work, and caches completed translations', async () => {
+it('sends every cue right away, shares in-flight work, and requests a completed cue again', async () => {
   const { fetch, requests, batches } = pendingProvider();
   const queue = new TranslationQueue();
   const first = queue.request('tab-1', settings, 'First');
@@ -40,8 +40,10 @@ it('sends every cue right away, shares in-flight work, and caches completed tran
     'Current 译文',
     'Current 译文',
   ]);
-  await expect(queue.request('tab-4', settings, 'Current')).resolves.toBe('Current 译文');
-  expect(fetch).toHaveBeenCalledTimes(3);
+  const again = queue.request('tab-4', settings, 'Current');
+  expect(fetch).toHaveBeenCalledTimes(4);
+  requests[3].resolve(providerReply(requests[3].texts, (text) => `${text} 译文`));
+  await expect(again).resolves.toBe('Current 译文');
 });
 
 it('backs off after a rate limit so subsequent cues do not repeatedly bill or hit the provider', async () => {
@@ -53,22 +55,24 @@ it('backs off after a rate limit so subsequent cues do not repeatedly bill or hi
   expect(fetch).toHaveBeenCalledTimes(1);
 });
 
-it('sends each new block of ten cues as one request so two blocks stay translated ahead', async () => {
-  const { batches, reply } = pendingProvider();
+it('sends each new block of ten cues as one request and does not reuse a finished block', async () => {
+  const { batches, reply, requests } = pendingProvider();
   const queue = new TranslationQueue();
   const cues = Array.from({ length: 40 }, (_, index) => `Cue ${index + 1}`);
   const block = (index: number) => cues.slice(index * 10, index * 10 + 10);
   queue.prefetch('tab', settings, cues.slice(0, 30));
   expect(batches()).toEqual([block(0), block(1), block(2)]);
-  [0, 1, 2].forEach(reply);
-  await flush();
   for (let start = 1; start < 10; start++) {
     queue.prefetch('tab', settings, cues.slice(start, 30));
     expect(batches()).toHaveLength(3);
   }
   queue.prefetch('tab', settings, cues.slice(10, 40));
   expect(batches()).toEqual([block(0), block(1), block(2), block(3)]);
-  await expect(queue.request('tab', settings, 'Cue 30')).resolves.toBe('Cue 30 译文');
+  expect(requests[0].signal.aborted).toBe(true);
+  [1, 2, 3].forEach(reply);
+  await flush();
+  queue.prefetch('tab', settings, block(3));
+  expect(batches().slice(4)).toEqual([block(3)]);
 });
 
 it('starts from the current cue mid-block and sends a short final batch at the end of a video', async () => {
@@ -80,7 +84,11 @@ it('starts from the current cue mid-block and sends a short final batch at the e
   [0, 1, 2].forEach(reply);
   await flush();
   queue.prefetch('tab', settings, cues.slice(10, 33));
-  expect(batches()[3]).toEqual(cues.slice(30, 33));
+  expect(batches().slice(3)).toEqual([
+    cues.slice(10, 20),
+    cues.slice(20, 30),
+    cues.slice(30, 33),
+  ]);
 });
 
 it('retries each cue on its own when the batch reply cannot be matched to the cues', async () => {
@@ -109,13 +117,15 @@ it('keeps a batch running while any of its cues is still needed and cancels it o
     providerReply(requests[0].texts, (text) => (text === 'Shared cue' ? '共享字幕' : '下一句')),
   );
   await expect(visible).resolves.toBe('共享字幕');
-  await expect(queue.request('tab-3', settings, 'Next cue')).resolves.toBe('下一句');
-  expect(fetch).toHaveBeenCalledTimes(1);
+  const again = queue.request('tab-3', settings, 'Next cue');
+  expect(fetch).toHaveBeenCalledTimes(2);
+  requests[1].resolve(providerReply(requests[1].texts, () => '下一句'));
+  await expect(again).resolves.toBe('下一句');
   queue.prefetch('tab', settings, ['A', 'B']);
   queue.prefetch('tab', settings, ['B', 'C']);
-  expect(batches().slice(1)).toEqual([['A', 'B'], ['C']]);
-  expect(requests[1].signal.aborted).toBe(false);
+  expect(batches().slice(2)).toEqual([['A', 'B'], ['C']]);
+  expect(requests[2].signal.aborted).toBe(false);
   queue.prefetch('tab', settings, []);
-  expect(requests[1].signal.aborted).toBe(true);
   expect(requests[2].signal.aborted).toBe(true);
+  expect(requests[3].signal.aborted).toBe(true);
 });

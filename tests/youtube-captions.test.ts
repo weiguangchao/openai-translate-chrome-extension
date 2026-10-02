@@ -1,41 +1,36 @@
 import { expect, it } from 'vitest';
 import { parseYoutubeCaptions } from '../src/extension/youtube-captions';
 import { captionWindow } from '../src/extension/timeline';
-import { githubCaption, githubCaptionTrack, githubModelResponse } from './fixtures/github-caption';
-import { parseSubtitleSegments } from '../src/shared/subtitle-segmentation';
+import { githubCaption, githubCaptionTrack, githubCommaSegments } from './fixtures/github-caption';
+import { splitSubtitleAtCommas } from '../src/shared/subtitle-segmentation';
 import { translatedCaptionAt } from '../src/extension/segmented-captions';
 
 it.each(['asr', 'authored'] as const)(
-  'maps model-selected source segments to the original %s word timestamps',
+  'maps comma segments to the original %s word timestamps',
   (kind) => {
     const cues = parseYoutubeCaptions(githubCaptionTrack, kind);
     expect(cues.map((cue) => cue.text)).toEqual([githubCaption]);
-    const result = parseSubtitleSegments(githubCaption, JSON.stringify(githubModelResponse), 'en');
-    expect(
-      [0, 3, 6.75, 8.25, 2, 11].map((time) => translatedCaptionAt(cues[0], result, time)),
-    ).toEqual([
-      {
-        text: 'Myself, Mitchell the creator of Ghostie, and many other people are realizing',
-        translation: '我、Ghostie 的创作者米切尔，还有许多人都开始意识到',
-      },
-      {
-        text: 'that GitHub might not be the safest place for us to be leaving our code',
-        translation: 'GitHub 可能已经不是存放我们代码最安全的地方了',
-      },
-      {
-        text: "now that they're randomly reverting merges",
-        translation: '因为他们会莫名其妙地撤销合并',
-      },
-      {
-        text: 'and having downtime that is measured in days instead of minutes.',
-        translation: '停机时间更是按天计算，而不是按分钟。',
-      },
-      {
-        text: 'Myself, Mitchell the creator of Ghostie, and many other people are realizing',
-        translation: '我、Ghostie 的创作者米切尔，还有许多人都开始意识到',
-      },
-      null,
+    const parts = splitSubtitleAtCommas(githubCaption);
+    const result = {
+      segments: parts.map((part) => ({
+        ...part,
+        translation: `译:${githubCaption.slice(part.from, part.to)}`,
+      })),
+    };
+    const at = (time: number) => translatedCaptionAt(cues[0], result, time);
+    expect(at(0)).toEqual({
+      text: githubCommaSegments[0],
+      translation: `译:${githubCommaSegments[0]}`,
+    });
+    expect(at(1.49)?.text).toBe(githubCommaSegments[0]);
+    expect([1.5, 3, 6.75, 8.25, 2].map((time) => at(time)?.text)).toEqual([
+      githubCommaSegments[1],
+      githubCommaSegments[1],
+      githubCommaSegments[1],
+      githubCommaSegments[1],
+      githubCommaSegments[1],
     ]);
+    expect(at(11)).toBeNull();
   },
 );
 
@@ -73,11 +68,14 @@ it('maps normalized whitespace back to the timed source blocks', () => {
     'authored',
   );
   expect(cues[0].text).toBe(githubCaption);
-  const result = parseSubtitleSegments(githubCaption, JSON.stringify(githubModelResponse), 'en');
-  expect(translatedCaptionAt(cues[0], result, 4)).toEqual({
-    text: 'that GitHub might not be the safest place for us to be leaving our code',
-    translation: 'GitHub 可能已经不是存放我们代码最安全的地方了',
-  });
+  const parts = splitSubtitleAtCommas(githubCaption);
+  const result = {
+    segments: parts.map((part) => ({
+      ...part,
+      translation: `译:${githubCaption.slice(part.from, part.to)}`,
+    })),
+  };
+  expect(translatedCaptionAt(cues[0], result, 4)?.text).toBe(githubCommaSegments[1]);
 });
 
 it('estimates segment times within an untimed block without a gap between segments', () => {
@@ -85,10 +83,16 @@ it('estimates segment times within an untimed block without a gap between segmen
     { events: [{ tStartMs: 0, dDurationMs: 25600, segs: [{ utf8: githubCaption }] }] },
     'authored',
   );
-  const result = parseSubtitleSegments(githubCaption, JSON.stringify(githubModelResponse), 'en');
-  expect([7.69, 7.7].map((time) => translatedCaptionAt(cues[0], result, time)?.text)).toEqual([
-    'Myself, Mitchell the creator of Ghostie, and many other people are realizing',
-    'that GitHub might not be the safest place for us to be leaving our code',
+  const parts = splitSubtitleAtCommas(githubCaption);
+  const result = {
+    segments: parts.map((part) => ({
+      ...part,
+      translation: `译:${githubCaption.slice(part.from, part.to)}`,
+    })),
+  };
+  expect([4, 4.2].map((time) => translatedCaptionAt(cues[0], result, time)?.text)).toEqual([
+    githubCommaSegments[0],
+    githubCommaSegments[1],
   ]);
 });
 

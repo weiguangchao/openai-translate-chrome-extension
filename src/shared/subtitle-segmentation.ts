@@ -35,48 +35,34 @@ export function parseModelJson(response: string): unknown {
   return JSON.parse(response.trim().replace(/^```(?:json)?\s*\n?([\s\S]*?)\n?```$/i, '$1'));
 }
 
-export function parseSubtitleSegments(
-  source: string,
-  response: string,
-  language: string,
-): SegmentedTranslation {
-  const invalid = () => new Error('模型未返回完整、有效的语义分段，请重试或更换模型。');
-  let value: unknown;
-  try {
-    value = parseModelJson(response);
-  } catch {
-    throw invalid();
-  }
-  const segments = (value as { segments?: unknown } | null)?.segments;
-  if (!Array.isArray(segments) || segments.length < 2 || segments.length > 128) throw invalid();
-  const boundaries = new Set([0, source.length]);
-  for (const part of new Intl.Segmenter(language, { granularity: 'word' }).segment(source)) {
-    boundaries.add(part.index);
-    boundaries.add(part.index + part.segment.length);
-  }
+function isComma(character: string): boolean {
+  return character === ',' || character === '，';
+}
+
+export function splitSubtitleAtCommas(text: string): { from: number; to: number }[] {
+  const cuts: number[] = [];
+  for (let index = 0; index < text.length; index++) if (isComma(text[index])) cuts.push(index + 1);
+  cuts.push(text.length);
+  const segments: { from: number; to: number }[] = [];
   let cursor = 0;
-  const result: TranslatedPart[] = [];
-  for (const part of segments) {
-    if (typeof part?.source !== 'string' || typeof part?.translation !== 'string') throw invalid();
-    const text = part.source.trim();
-    const translation = part.translation.trim();
-    while (/\s/u.test(source[cursor] ?? '') && cursor < source.length) cursor++;
-    const from = cursor;
-    const to = from + text.length;
-    if (
-      !text ||
-      !translation ||
-      translation.length > 5000 ||
-      !source.startsWith(text, from) ||
-      !boundaries.has(from) ||
-      !boundaries.has(to) ||
-      needsSubtitleSegmentation(text) ||
-      needsSubtitleSegmentation(translation)
-    )
-      throw invalid();
-    result.push({ from, to, translation });
+  while (cursor < text.length) {
+    while (cursor < text.length && /\s/u.test(text[cursor])) cursor++;
+    if (cursor >= text.length) break;
+    let to = -1;
+    for (const cut of cuts) {
+      if (cut <= cursor) continue;
+      const end = cursor + text.slice(cursor, cut).trimEnd().length;
+      if (end <= cursor) continue;
+      if (subtitleDisplayLength(text.slice(cursor, end)) <= subtitleDisplayLimit) to = end;
+      else break;
+    }
+    if (to <= cursor) {
+      const cut = cuts.find((item) => item > cursor) ?? text.length;
+      to = cursor + text.slice(cursor, cut).trimEnd().length;
+    }
+    if (to <= cursor) break;
+    segments.push({ from: cursor, to });
     cursor = to;
   }
-  if (source.slice(cursor).trim()) throw invalid();
-  return { segments: result };
+  return segments;
 }
