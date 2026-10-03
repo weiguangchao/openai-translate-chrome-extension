@@ -4,6 +4,13 @@ import { NativeTimeline } from '../src/extension/timeline';
 import { DEFAULT_SETTINGS, publicSettings, STORAGE_KEY } from '../src/shared/settings';
 import { splitSubtitleAtCommas } from '../src/shared/subtitle-segmentation';
 import { providerReply, requestedTexts } from './fixtures/provider';
+import {
+  longCaption,
+  longCaptionParts,
+  longTranslations,
+  longResult,
+  structuredReply,
+} from './fixtures/long-caption';
 
 let controller: CaptionController | undefined;
 let video: HTMLVideoElement;
@@ -123,6 +130,12 @@ function translated() {
     .querySelector('[data-subline-overlay]')
     ?.shadowRoot?.querySelectorAll<HTMLElement>('.line')[1];
 }
+
+function original() {
+  return document
+    .querySelector('[data-subline-overlay]')
+    ?.shadowRoot?.querySelector<HTMLElement>('.original');
+}
 async function finish(translations: Record<string, string>) {
   const [text] = Object.keys(translations);
   const request = [...pending].reverse().find((item) => item.texts.includes(text))!;
@@ -146,6 +159,109 @@ async function advance(time: number) {
   video.dispatchEvent(new Event('timeupdate'));
   await vi.advanceTimersByTimeAsync(150);
 }
+
+it('renders a late split at the current time, follows estimated boundaries, and reuses it after seeking', async () => {
+  Object.defineProperty(video, 'textTracks', {
+    value: [
+      {
+        mode: 'showing',
+        kind: 'subtitles',
+        language: 'en',
+        activeCues: [],
+        cues: [
+          { text: longCaption, startTime: 2, endTime: 14 },
+          { text: 'After.', startTime: 14, endTime: 16 },
+        ],
+      },
+    ],
+  });
+  controller = new CaptionController(publicSettings(saved));
+  await advance(8);
+  expect(requested).toEqual([[longCaption, 'After.']]);
+  expect(translated()?.textContent).toBe('翻译中');
+  expect(original()?.hidden).toBe(true);
+  expect(original()?.textContent).toBe('');
+  pending[0].resolve(
+    structuredReply([longResult(), { id: 1, parts: [{ translation: '之后。' }] }]),
+  );
+  await vi.advanceTimersByTimeAsync(0);
+  const sourceText = () =>
+    document.querySelector('[data-subline-overlay]')?.shadowRoot?.querySelector('.original')
+      ?.textContent;
+  expect(sourceText()).toBe(longCaptionParts[1]);
+  expect(translated()?.textContent).toBe(longTranslations[1]);
+  const boundary = 2 + 12 * (longCaption.indexOf(longCaptionParts[2]) / longCaption.length);
+  await advance(boundary - 0.01);
+  expect(sourceText()).toBe(longCaptionParts[1]);
+  video.currentTime = boundary;
+  video.dispatchEvent(new Event('timeupdate'));
+  expect(sourceText()).toBe(longCaptionParts[2]);
+  expect(translated()?.textContent).toBe(longTranslations[2]);
+  await advance(14);
+  expect(translated()?.textContent).toBe('之后。');
+  video.currentTime = 3;
+  video.dispatchEvent(new Event('seeked'));
+  await vi.advanceTimersByTimeAsync(500);
+  expect(sourceText()).toBe(longCaptionParts[0]);
+  expect(translated()?.textContent).toBe(longTranslations[0]);
+  expect(requested).toEqual([[longCaption, 'After.']]);
+});
+
+it.each(['playing', 'paused', 'seeking'])(
+  'does not paint a long input while a cached split travels from the background (%s)',
+  async (state) => {
+    Object.defineProperty(video, 'textTracks', {
+      value: [
+        {
+          mode: 'showing',
+          kind: 'subtitles',
+          language: 'en',
+          activeCues: [],
+          cues: [{ text: longCaption, startTime: 2, endTime: 14 }],
+        },
+      ],
+    });
+    controller = new CaptionController(publicSettings(saved));
+    await vi.advanceTimersByTimeAsync(0);
+    pending[0].resolve(structuredReply([longResult()]));
+    await vi.advanceTimersByTimeAsync(0);
+    const send = chrome.runtime.sendMessage;
+    let deliver!: () => void;
+    vi.spyOn(chrome.runtime, 'sendMessage').mockImplementation((message) => {
+      const request = message as unknown as { type: string };
+      const reply = send(request);
+      return request.type === 'translate'
+        ? Promise.resolve(reply).then(
+            (value) =>
+              new Promise((resolve) => {
+                deliver = () => resolve(value);
+              }),
+          )
+        : reply;
+    });
+    if (state === 'paused') Object.defineProperty(video, 'paused', { value: true });
+    video.currentTime = 2;
+    video.dispatchEvent(new Event(state === 'seeking' ? 'seeked' : 'timeupdate'));
+    await vi.advanceTimersByTimeAsync(100);
+    expect(original()?.hidden).toBe(true);
+    expect(original()?.textContent).toBe('');
+    deliver();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(original()?.textContent).toBe(longCaptionParts[0]);
+    expect(original()?.hidden).toBe(false);
+    expect(translated()?.textContent).toBe(longTranslations[0]);
+    const writes = vi.spyOn(original()!, 'textContent', 'set');
+    await vi.advanceTimersByTimeAsync(450);
+    expect(writes).not.toHaveBeenCalled();
+    video.currentTime = 8;
+    video.dispatchEvent(new Event('timeupdate'));
+    expect(original()?.textContent).toBe(longCaptionParts[1]);
+    expect(translated()?.textContent).toBe(longTranslations[1]);
+    expect(writes.mock.calls.map(([text]) => text)).toEqual([longCaptionParts[1]]);
+    expect(requested).toEqual([[longCaption]]);
+    writes.mockRestore();
+  },
+);
 
 it('preloads in the background and queries it at caption boundaries without another provider request', async () => {
   controller = new CaptionController(publicSettings(saved));

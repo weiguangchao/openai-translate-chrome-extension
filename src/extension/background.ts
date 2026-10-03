@@ -30,6 +30,7 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, respond) => {
     text?: unknown;
     texts?: unknown;
     segments?: unknown;
+    needsSplit?: unknown;
     pause?: unknown;
     cacheOnly?: unknown;
   };
@@ -66,25 +67,37 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, respond) => {
           (data.segments !== undefined &&
             (!Array.isArray(data.segments) ||
               data.segments.length !== data.texts.length ||
-              data.segments.some((segment) => !Number.isSafeInteger(segment) || segment < 0)))
+              data.segments.some((segment) => !Number.isSafeInteger(segment) || segment < 0))) ||
+          (data.needsSplit !== undefined &&
+            (!Array.isArray(data.needsSplit) ||
+              data.needsSplit.length !== data.texts.length ||
+              data.needsSplit.some((flag) => typeof flag !== 'boolean')))
         )
           throw new Error('预加载字幕内容无效。');
         const texts = data.texts as string[];
         const segments = (data.segments ?? []) as number[];
-        const unique = [...new Set(texts)];
+        const needsSplit = (data.needsSplit ?? []) as boolean[];
+        const keys = texts.map((text, index) => JSON.stringify([text, needsSplit[index] === true]));
+        const unique = [...new Set(keys)].map((key) => keys.indexOf(key));
         const results = await queue.prefetch(
           consumer,
           settings,
-          unique,
-          unique.map((text) => segments[texts.indexOf(text)] ?? 0),
+          unique.map((index) => texts[index]),
+          unique.map((index) => segments[index] ?? 0),
+          unique.map((index) => needsSplit[index] === true),
         );
-        return texts.map((text) => results[unique.indexOf(text)]);
+        return keys.map((key) => results[unique.indexOf(keys.indexOf(key))]);
       }
-      if (typeof data.text !== 'string' || !data.text.trim() || data.text.length > 5000)
+      if (
+        typeof data.text !== 'string' ||
+        !data.text.trim() ||
+        data.text.length > 5000 ||
+        (data.needsSplit !== undefined && typeof data.needsSplit !== 'boolean')
+      )
         throw new Error('字幕内容无效。');
       return data.cacheOnly === true
-        ? queue.lookup(settings, data.text)
-        : queue.request(consumer, settings, data.text);
+        ? queue.lookup(settings, data.text, data.needsSplit === true)
+        : queue.request(consumer, settings, data.text, data.needsSplit === true);
     }
     throw new Error('不支持的请求。');
   })().then(

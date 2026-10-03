@@ -1,4 +1,10 @@
-import { translate, translateBatch, translationBatchLimit } from '../shared/api';
+import {
+  translate,
+  translateBatch,
+  translateCaptionBatch,
+  translationBatchLimit,
+} from '../shared/api';
+import { translationInput, type CaptionTranslation } from '../shared/caption-translation';
 import type { Settings } from '../shared/settings';
 
 const sendWindowMs = 1000;
@@ -11,9 +17,10 @@ interface Job {
   segment?: string;
   settings: Settings;
   text: string;
+  needsSplit: boolean;
   solo: boolean;
-  promise: Promise<string>;
-  resolve: (value: string) => void;
+  promise: Promise<CaptionTranslation>;
+  resolve: (value: CaptionTranslation) => void;
   reject: (error: Error) => void;
   controller?: AbortController;
   batch?: Job[];
@@ -22,12 +29,18 @@ interface Consumer {
   current?: string;
   window: string[];
   paused?: boolean;
-  held?: { settings: Settings; texts: string[]; segments: number[]; keys: string[] };
+  held?: {
+    settings: Settings;
+    texts: string[];
+    segments: number[];
+    needsSplit: boolean[];
+    keys: string[];
+  };
 }
 
 export class TranslationQueue {
   private jobs = new Map<string, Job>();
-  private finished = new Map<string, string>();
+  private finished = new Map<string, CaptionTranslation>();
   private consumers = new Map<string, Consumer>();
   private backoffUntil = 0;
   private sentAt: number[] = [];
@@ -46,19 +59,28 @@ export class TranslationQueue {
     ]);
   }
 
-  private key(settings: Settings, text: string): string {
-    return JSON.stringify([this.group(settings), text]);
+  private key(settings: Settings, text: string, needsSplit = false): string {
+    return JSON.stringify([
+      this.group(settings),
+      text,
+      translationInput(text, needsSplit).needsSplit,
+    ]);
   }
 
-  lookup(settings: Settings, text: string): Promise<string | null> {
-    const key = this.key(settings, text);
+  lookup(settings: Settings, text: string, needsSplit = false): Promise<CaptionTranslation | null> {
+    const key = this.key(settings, text, needsSplit);
     return Promise.resolve(
       this.finished.get(key) ?? this.jobs.get(key)?.promise.catch(() => null) ?? null,
     );
   }
 
-  request(consumer: string, settings: Settings, text: string): Promise<string> {
-    const key = this.key(settings, text);
+  request(
+    consumer: string,
+    settings: Settings,
+    text: string,
+    needsSplit = false,
+  ): Promise<CaptionTranslation> {
+    const key = this.key(settings, text, needsSplit);
     const state: Consumer = this.consumers.get(consumer) ?? { window: [] };
     state.current = key;
     this.consumers.set(consumer, state);
@@ -66,7 +88,7 @@ export class TranslationQueue {
     const finished = this.finished.get(key);
     if (finished !== undefined) return Promise.resolve(finished);
     try {
-      const job = this.enqueue(key, settings, text);
+      const job = this.enqueue(key, settings, text, needsSplit);
       this.drain();
       return job.promise;
     } catch (error) {
@@ -79,8 +101,9 @@ export class TranslationQueue {
     settings: Settings,
     texts: string[],
     segments: number[] = [],
-  ): Promise<(string | null)[]> {
-    const keys = texts.map((text) => this.key(settings, text));
+    needsSplit: boolean[] = [],
+  ): Promise<(CaptionTranslation | null)[]> {
+    const keys = texts.map((text, index) => this.key(settings, text, needsSplit[index]));
     const state = this.consumers.get(consumer);
     if (
       keys.length &&
@@ -88,7 +111,7 @@ export class TranslationQueue {
       this.windowAwaitingReply(state) &&
       !keys.some((key) => state.window.includes(key))
     ) {
-      state.held = { settings, texts, segments, keys };
+      state.held = { settings, texts, segments, needsSplit, keys };
       return this.results(keys);
     }
     if (state) state.held = undefined;
@@ -108,6 +131,7 @@ export class TranslationQueue {
             keys[index],
             settings,
             text,
+            needsSplit[index],
             JSON.stringify([consumer, segments[index] ?? 0]),
           );
       });
@@ -138,7 +162,7 @@ export class TranslationQueue {
     this.sendTimer = undefined;
   }
 
-  private results(keys: string[]): Promise<(string | null)[]> {
+  private results(keys: string[]): Promise<(CaptionTranslation | null)[]> {
     return Promise.all(
       keys.map(
         (key) => this.finished.get(key) ?? this.jobs.get(key)?.promise.catch(() => null) ?? null,
@@ -146,7 +170,7 @@ export class TranslationQueue {
     );
   }
 
-  private remember(key: string, translation: string): void {
+  private remember(key: string, translation: CaptionTranslation): void {
     this.finished.delete(key);
     this.finished.set(key, translation);
     if (this.finished.size <= this.cacheLimit) return;
@@ -154,7 +178,13 @@ export class TranslationQueue {
     this.finished.delete(oldest);
   }
 
-  private enqueue(key: string, settings: Settings, text: string, segment?: string): Job {
+  private enqueue(
+    key: string,
+    settings: Settings,
+    text: string,
+    needsSplit = false,
+    segment?: string,
+  ): Job {
     const existing = this.jobs.get(key);
     if (existing) {
       if (!existing.controller) existing.segment ??= segment;
@@ -162,7 +192,7 @@ export class TranslationQueue {
     }
     if (Date.now() < this.backoffUntil) throw new Error('接口暂不可用，稍后将自动重试。');
     let resolve!: Job['resolve'], reject!: Job['reject'];
-    const promise = new Promise<string>((yes, no) => {
+    const promise = new Promise<CaptionTranslation>((yes, no) => {
       resolve = yes;
       reject = no;
     });
@@ -173,6 +203,7 @@ export class TranslationQueue {
       segment,
       settings,
       text,
+      needsSplit: translationInput(text, needsSplit).needsSplit,
       solo: false,
       promise,
       resolve,
@@ -219,7 +250,7 @@ export class TranslationQueue {
         if (!state.held || this.windowAwaitingReply(state)) continue;
         const held = state.held;
         state.held = undefined;
-        void this.prefetch(consumer, held.settings, held.texts, held.segments);
+        void this.prefetch(consumer, held.settings, held.texts, held.segments, held.needsSplit);
       }
     } finally {
       this.promoting = false;
@@ -285,7 +316,7 @@ export class TranslationQueue {
   private run(batch: Job[]): void {
     const controller = new AbortController();
     for (const job of batch) Object.assign(job, { controller, batch });
-    const deliver = (index: number, translation: string) => {
+    const deliver = (index: number, translation: CaptionTranslation) => {
       if (controller.signal.aborted) return;
       const job = batch[index];
       if (!job) return;
@@ -296,8 +327,14 @@ export class TranslationQueue {
       this.drain();
     };
     const [first] = batch;
-    const work: Promise<string[] | null> =
-      batch.length > 1
+    const work: Promise<CaptionTranslation[] | null> = batch.some((job) => job.needsSplit)
+      ? translateCaptionBatch(
+          first.settings,
+          batch.map((job) => translationInput(job.text, job.needsSplit)),
+          controller.signal,
+          deliver,
+        )
+      : batch.length > 1
         ? translateBatch(
             first.settings,
             batch.map((job) => job.text),
@@ -311,6 +348,11 @@ export class TranslationQueue {
         if (!results) {
           for (const job of batch) {
             if (this.jobs.get(job.key) !== job) continue;
+            if (job.solo) {
+              this.jobs.delete(job.key);
+              job.reject(new Error('字幕断句结果无效，请稍后重试。'));
+              continue;
+            }
             Object.assign(job, { controller: undefined, batch: undefined, solo: true });
           }
           this.drain();

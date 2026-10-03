@@ -1,6 +1,7 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { DEFAULT_SETTINGS, STORAGE_KEY } from '../src/shared/settings';
 import { providerReply, requestedTexts } from './fixtures/provider';
+import { longCaption, longResult, structuredReply } from './fixtures/long-caption';
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -142,4 +143,36 @@ it('batches a prefetch by the segment of each caption and rejects malformed segm
   expect(fetch).not.toHaveBeenCalled();
   void send({ type: 'prefetch', texts: ['A', 'B', 'A', 'C'], segments: [0, 0, 0, 1] });
   await vi.waitFor(() => expect(pending).toEqual([['A', 'B'], ['C']]));
+});
+
+it('validates split flags and keeps split and unsplit duplicates separate across messages', async () => {
+  const fetch = vi
+    .fn()
+    .mockImplementation(async () =>
+      structuredReply([{ id: 0, parts: [{ translation: '完整译文' }] }, longResult(1)]),
+    );
+  vi.stubGlobal('fetch', fetch);
+  const send = await loadBackground({ ...DEFAULT_SETTINGS, apiKey: 'key', model: 'model' });
+  for (const needsSplit of [true, [true], [true, 1]])
+    await expect(
+      send({ type: 'prefetch', texts: [longCaption, longCaption], needsSplit }),
+    ).resolves.toMatchObject({ ok: false });
+  await expect(
+    send({ type: 'translate', text: longCaption, needsSplit: [] }),
+  ).resolves.toMatchObject({ ok: false });
+  expect(fetch).not.toHaveBeenCalled();
+  const reply = await send({
+    type: 'prefetch',
+    texts: [longCaption, longCaption, longCaption],
+    needsSplit: [false, true, true],
+  });
+  expect(reply.ok).toBe(true);
+  const data = reply.data as unknown[];
+  expect(data[0]).toBe('完整译文');
+  expect(data[1]).toEqual(data[2]);
+  expect(data[1]).toMatchObject({ parts: expect.any(Array) });
+  await expect(
+    send({ type: 'translate', text: longCaption, needsSplit: true, cacheOnly: true }),
+  ).resolves.toEqual({ ok: true, data: data[1] });
+  expect(fetch).toHaveBeenCalledTimes(1);
 });

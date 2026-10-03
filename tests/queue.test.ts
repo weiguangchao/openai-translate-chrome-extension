@@ -2,6 +2,8 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { TranslationQueue, translationSendsPerSecond } from '../src/extension/queue';
 import { DEFAULT_SETTINGS } from '../src/shared/settings';
 import { providerReply, requestedTexts } from './fixtures/provider';
+import { readCaptionTranslation, translationInput } from '../src/shared/caption-translation';
+import { longCaption, longResult, structuredReply } from './fixtures/long-caption';
 
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => {
@@ -26,6 +28,73 @@ function pendingProvider() {
   return { fetch, requests, batches, reply };
 }
 const settings = { ...DEFAULT_SETTINGS, apiKey: 'test-key', model: 'test-model' };
+
+it('caches all split parts under their parent and separates split and unsplit versions of the same text', async () => {
+  const { fetch, requests } = pendingProvider();
+  const queue = new TranslationQueue();
+  const pending = queue.prefetch(
+    'tab',
+    settings,
+    [longCaption, longCaption],
+    [0, 0],
+    [false, true],
+  );
+  requests[0].resolve(
+    structuredReply([{ id: 0, parts: [{ translation: '整句译文' }] }, longResult(1)]),
+  );
+  const split = readCaptionTranslation(translationInput(longCaption, true), longResult());
+  await expect(pending).resolves.toEqual(['整句译文', split]);
+  await expect(queue.request('tab', settings, longCaption, true)).resolves.toEqual(split);
+  await expect(queue.request('tab', settings, longCaption)).resolves.toBe('整句译文');
+  expect(fetch).toHaveBeenCalledTimes(1);
+});
+
+it('retries only an invalid split with the split flag intact, keeping ordinary neighbors cached', async () => {
+  const { fetch, requests } = pendingProvider();
+  const queue = new TranslationQueue();
+  const pending = queue.prefetch(
+    'tab',
+    settings,
+    ['Before.', longCaption, 'After.'],
+    [0, 0, 0],
+    [false, true, false],
+  );
+  requests[0].resolve(
+    structuredReply([
+      { id: 0, parts: [{ translation: '之前。' }] },
+      { id: 1, parts: longResult().parts.slice(0, 2) },
+      { id: 2, parts: [{ translation: '之后。' }] },
+    ]),
+  );
+  await flush();
+  expect(requests.map((request) => request.texts)).toEqual([
+    ['Before.', longCaption, 'After.'],
+    [longCaption],
+  ]);
+  expect(
+    JSON.parse(JSON.parse(fetch.mock.calls[1][1].body as string).messages[1].content)[0],
+  ).toMatchObject({ id: 0, needsSplit: true });
+  await expect(queue.lookup(settings, 'Before.')).resolves.toBe('之前。');
+  requests[1].resolve(structuredReply([longResult()]));
+  await expect(pending).resolves.toEqual([
+    '之前。',
+    readCaptionTranslation(translationInput(longCaption, true), longResult()),
+    '之后。',
+  ]);
+  expect(fetch).toHaveBeenCalledTimes(2);
+});
+
+it('stops after one corrective retry for a persistently invalid split and never caches it', async () => {
+  const fetch = vi.fn().mockImplementation(async () => structuredReply([{ id: 0, parts: [] }]));
+  vi.stubGlobal('fetch', fetch);
+  const queue = new TranslationQueue();
+  await expect(queue.request('tab', settings, longCaption, true)).rejects.toThrow(
+    '字幕断句结果无效',
+  );
+  await vi.advanceTimersByTimeAsync(3000);
+  expect(fetch).toHaveBeenCalledTimes(2);
+  await expect(queue.lookup(settings, longCaption, true)).resolves.toBeNull();
+});
 
 it('sends every cue right away, shares in-flight work, and serves a completed cue from the cache', async () => {
   const { fetch, requests, batches } = pendingProvider();
@@ -306,6 +375,26 @@ it('does not send a batch that leaves the window before a send slot opens', asyn
 function chatDelta(content: string): string {
   return `data: ${JSON.stringify({ choices: [{ delta: { content } }] })}\n\n`;
 }
+
+it('keeps streamed neighbors but discards an incomplete split when playback leaves the request', async () => {
+  const provider = streamingProvider();
+  const queue = new TranslationQueue();
+  const pending = queue.prefetch('tab', settings, ['First', longCaption], [0, 0], [false, true]);
+  await flush();
+  provider.push(
+    chatDelta(
+      '{"results":[{"id":0,"parts":[{"translation":"第一句"}]},{"id":1,"parts":[' +
+        JSON.stringify(longResult().parts[0]),
+    ),
+  );
+  await flush();
+  await expect(queue.lookup(settings, 'First')).resolves.toBe('第一句');
+  queue.prefetch('tab', settings, []);
+  await expect(pending).resolves.toEqual(['第一句', null]);
+  await expect(queue.lookup(settings, longCaption, true)).resolves.toBeNull();
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(provider.fetch).toHaveBeenCalledTimes(1);
+});
 function streamingProvider() {
   let control!: ReadableStreamDefaultController<Uint8Array>;
   const fetch = vi.fn((_url: string, init: RequestInit) => {
