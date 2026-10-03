@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { mediaIdentity, SourceCache } from '../src/extension/source-cache';
-import type { TimedCue } from '../src/extension/timeline';
+import { mediaIdentity, SourceCache } from '../src/core/bridge/source-cache';
+import type { TimedCue } from '../src/core/cues';
 
 const cues = [{ startTime: 1, endTime: 3, text: 'Source sentence.' }];
 beforeEach(() => vi.useFakeTimers());

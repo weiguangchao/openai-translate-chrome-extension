@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest';
-import { authoredSubtitleSentences } from '../src/extension/subtitle-sentences';
-import { parseYoutubeCaptions } from '../src/extension/youtube-captions';
-import { captionAt, timedCaptions } from '../src/extension/timeline';
+import { authoredSubtitleSentences } from '../src/core/sentences';
+import { parseYoutubeCaptions } from '../src/platforms/youtube/captions';
+import { captionAt, timedCaptions } from '../src/core/timeline';
 
 it('uses YouTube sentence boundaries and timing for multiline authored subtitles', () => {
   const text = "Oh, thank you.\nI've got to talk to that\nmailman.";

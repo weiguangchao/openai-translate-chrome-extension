@@ -119,7 +119,7 @@ it('answers a prefetch with translations in the order asked, settling cues a lat
     ok: true,
     data: ['A 译文', 'C 译文'],
   });
-  await expect(send({ type: 'prefetch', texts: [], pause: true })).resolves.toEqual({ ok: true });
+  await expect(send({ type: 'prefetch-pause' })).resolves.toEqual({ ok: true });
   expect(fetch).toHaveBeenCalledTimes(2);
 });
 

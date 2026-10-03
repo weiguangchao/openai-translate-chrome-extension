@@ -1,4 +1,4 @@
-import type { CueTiming, TimedCue } from './timeline';
+import type { CueTiming, TimedCue } from './cues';
 import { needsSubtitleSegmentation } from '../shared/subtitle-segmentation';
 
 interface SentenceInput extends TimedCue {

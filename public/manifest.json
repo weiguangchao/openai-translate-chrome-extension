@@ -47,14 +47,14 @@
       "all_frames": true
     },
     {
-      "matches": [
-        "https://www.youtube.com/*",
-        "https://m.youtube.com/*",
-        "https://*.max.com/*",
-        "https://*.hbomax.com/*",
-        "https://*.hbo.com/*"
-      ],
-      "js": ["content.js"],
+      "matches": ["https://www.youtube.com/*", "https://m.youtube.com/*"],
+      "js": ["youtube-content.js"],
+      "run_at": "document_end",
+      "all_frames": true
+    },
+    {
+      "matches": ["https://*.max.com/*", "https://*.hbomax.com/*", "https://*.hbo.com/*"],
+      "js": ["hbo-content.js"],
       "run_at": "document_end",
       "all_frames": true
     }

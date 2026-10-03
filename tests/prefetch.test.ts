@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { CaptionController } from '../src/extension/captions';
-import { NativeTimeline } from '../src/extension/timeline';
+import { CaptionController } from '../src/core/controller';
+import { createHboPlatform } from '../src/platforms/hbo/platform';
+import { NativeTimeline } from '../src/core/native';
 import { DEFAULT_SETTINGS, publicSettings, STORAGE_KEY } from '../src/shared/settings';
 import { splitSubtitleAtCommas } from '../src/shared/subtitle-segmentation';
 import { providerReply, requestedTexts } from './fixtures/provider';
@@ -98,7 +99,7 @@ it.each([true, false])(
       },
     };
     Object.defineProperty(video, 'textTracks', { value: [sourceTrack, targetTrack] });
-    controller = new CaptionController({ ...publicSettings(saved), configured });
+    controller = new CaptionController(createHboPlatform, { ...publicSettings(saved), configured });
     await advance(2);
     expect(targetTrack.mode).toBe('disabled');
     expect(sourceTrack.mode).toBe('showing');
@@ -175,7 +176,7 @@ it('renders a late split at the current time, follows estimated boundaries, and 
       },
     ],
   });
-  controller = new CaptionController(publicSettings(saved));
+  controller = new CaptionController(createHboPlatform, publicSettings(saved));
   await advance(8);
   expect(requested).toEqual([[longCaption, 'After.']]);
   expect(translated()?.textContent).toBe('翻译中');
@@ -221,7 +222,7 @@ it.each(['playing', 'paused', 'seeking'])(
         },
       ],
     });
-    controller = new CaptionController(publicSettings(saved));
+    controller = new CaptionController(createHboPlatform, publicSettings(saved));
     await vi.advanceTimersByTimeAsync(0);
     pending[0].resolve(structuredReply([longResult()]));
     await vi.advanceTimersByTimeAsync(0);
@@ -264,7 +265,7 @@ it.each(['playing', 'paused', 'seeking'])(
 );
 
 it('preloads in the background and queries it at caption boundaries without another provider request', async () => {
-  controller = new CaptionController(publicSettings(saved));
+  controller = new CaptionController(createHboPlatform, publicSettings(saved));
   await vi.advanceTimersByTimeAsync(0);
   const opening = ['First cue', 'Second cue', 'Third cue', 'After seeking'];
   expect(requested).toEqual([opening]);
@@ -306,7 +307,7 @@ it('queues the current and next segment on open, waits out a scrub, and requests
       },
     ],
   });
-  controller = new CaptionController(publicSettings(saved));
+  controller = new CaptionController(createHboPlatform, publicSettings(saved));
   await vi.advanceTimersByTimeAsync(0);
   const block = (index: number) => dense.slice(index * 10, index * 10 + 10).map((cue) => cue.text);
   const opening = [block(0), block(1)];
@@ -340,7 +341,7 @@ it('previews a few cues after a jump settles, then resumes the lookahead once pl
   Object.defineProperty(video, 'textTracks', {
     value: [{ mode: 'showing', kind: 'subtitles', language: 'en', cues: dense, activeCues: [] }],
   });
-  controller = new CaptionController(publicSettings(saved));
+  controller = new CaptionController(createHboPlatform, publicSettings(saved));
   await vi.advanceTimersByTimeAsync(0);
   const started = requested.length;
   video.currentTime = 42;
@@ -370,7 +371,7 @@ it('starts translation one second ahead on first load and after seeking', async 
     document
       .querySelector('[data-subline-overlay]')
       ?.shadowRoot?.querySelectorAll<HTMLElement>('.line')[0];
-  controller = new CaptionController(publicSettings(saved));
+  controller = new CaptionController(createHboPlatform, publicSettings(saved));
   await vi.advanceTimersByTimeAsync(0);
   expect(requested).toEqual([['Stay', 'Next', 'Seek tail', 'After']]);
   expect(original()?.textContent).toBe('Opening');
@@ -408,7 +409,7 @@ it('finishes in-flight prefetch while paused and does not send more until playba
     video.dispatchEvent(new Event(paused ? 'pause' : 'play'));
     await vi.advanceTimersByTimeAsync(0);
   };
-  controller = new CaptionController(publicSettings(saved));
+  controller = new CaptionController(createHboPlatform, publicSettings(saved));
   await advance(2);
   const block = (index: number) => dense.slice(index * 10, index * 10 + 10).map((cue) => cue.text);
   expect(requested).toEqual([block(0), block(1)]);
@@ -442,7 +443,7 @@ it('queues the next segment with the opening window and preloads the following s
   Object.defineProperty(video, 'textTracks', {
     value: [{ mode: 'showing', kind: 'subtitles', language: 'en', cues: dense, activeCues: [] }],
   });
-  controller = new CaptionController(publicSettings(saved));
+  controller = new CaptionController(createHboPlatform, publicSettings(saved));
   await vi.advanceTimersByTimeAsync(0);
   const block = (index: number) => dense.slice(index * 10, index * 10 + 10).map((cue) => cue.text);
   expect(requested).toEqual([block(0), block(1)]);
@@ -461,7 +462,7 @@ it('queues the next segment with the opening window and preloads the following s
 });
 
 it('invalidates the old translation when the same video element loads a different source', async () => {
-  controller = new CaptionController(publicSettings(saved));
+  controller = new CaptionController(createHboPlatform, publicSettings(saved));
   await advance(2);
   Object.defineProperty(video, 'currentSrc', { value: 'https://media.example/next.mp4' });
   const track = video.textTracks[0];
@@ -481,7 +482,7 @@ it('invalidates the old translation when the same video element loads a differen
 it('continues using the provider when a native target track appears', async () => {
   const tracks = [video.textTracks[0]];
   Object.defineProperty(video, 'textTracks', { value: tracks });
-  controller = new CaptionController(publicSettings(saved));
+  controller = new CaptionController(createHboPlatform, publicSettings(saved));
   await advance(2);
   await finish({ 'First cue': '模型生成的字幕' });
   const target = {
@@ -502,7 +503,7 @@ it('continues using the provider when a native target track appears', async () =
 });
 
 it('queries the background again on a repeated caption while keeping the displayed caption between ticks', async () => {
-  controller = new CaptionController(publicSettings(saved));
+  controller = new CaptionController(createHboPlatform, publicSettings(saved));
   await vi.advanceTimersByTimeAsync(0);
   await finish({ 'First cue': '第一句', 'Second cue': '第二句' });
   await advance(2);
@@ -539,7 +540,7 @@ it('translates overlapping cues joined into one line whole, splits a long cue of
     ],
   });
   const pieces = splitSubtitleAtCommas(long).map((part) => long.slice(part.from, part.to));
-  controller = new CaptionController(publicSettings(saved));
+  controller = new CaptionController(createHboPlatform, publicSettings(saved));
   await vi.advanceTimersByTimeAsync(0);
   expect(requested).toEqual([[first, joined, second, ...pieces]]);
   for (const request of [...pending])
@@ -584,7 +585,7 @@ it('moves a long sentence that does not fit in the rest of a segment to the next
       },
     ],
   });
-  controller = new CaptionController(publicSettings(saved));
+  controller = new CaptionController(createHboPlatform, publicSettings(saved));
   await vi.advanceTimersByTimeAsync(0);
   expect(parts).toHaveLength(3);
   expect(requested).toEqual([short.map((cue) => cue.text), [...parts, 'After']]);
@@ -622,7 +623,7 @@ it('shows the first closed translation before the rest of the segment is written
   );
   const delta = (content: string) =>
     `data: ${JSON.stringify({ choices: [{ delta: { content } }] })}\n\n`;
-  controller = new CaptionController(publicSettings(saved));
+  controller = new CaptionController(createHboPlatform, publicSettings(saved));
   await vi.advanceTimersByTimeAsync(0);
   expect(requested).toEqual([['Opening line', 'Following line']]);
   control.enqueue(new TextEncoder().encode(delta('{"translations":["开场字幕","')));

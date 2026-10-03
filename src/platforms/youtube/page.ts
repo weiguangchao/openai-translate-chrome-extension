@@ -1,6 +1,7 @@
-import { pageVideoId, SourceCache } from './source-cache';
-import { parseYoutubeCaptions, type YoutubeCaptionKind } from './youtube-captions';
-import { languageTrack } from './languages';
+import { servePageTimeline } from '../../core/bridge/page';
+import { languageTrack } from '../../core/languages';
+import { parseYoutubeCaptions, type YoutubeCaptionKind } from './captions';
+import { PLAYER, subtitlesHidden, youtubeVideoId } from './player';
 
 interface Track {
   baseUrl?: string;
@@ -15,13 +16,11 @@ interface YoutubePlayer extends HTMLElement {
   };
   getOption?: (module: string, option: string) => Track | undefined;
 }
-
-interface Selection {
-  sourceKind?: YoutubeCaptionKind | null;
-  source?: { id: string; url: string; kind: YoutubeCaptionKind };
+interface CaptionResource {
+  id: string;
+  url: string;
+  kind: YoutubeCaptionKind;
 }
-const cache = new SourceCache(publish);
-let latest: { requestId: number; revision: number } | undefined;
 
 const contextParameters = ['pot', 'potc', 'c', 'cver'] as const;
 const requestContexts = new Map<string, { startedAt: number; parameters: URLSearchParams }>();
@@ -63,7 +62,7 @@ if (typeof PerformanceObserver !== 'undefined') {
   observer.observe({ type: 'resource', buffered: true });
 }
 
-function trackResource(track: Track | undefined): Selection['source'] {
+function trackResource(track: Track | undefined): CaptionResource | undefined {
   if (!track?.baseUrl) return;
   const url = timedtextUrl(track.baseUrl);
   if (!url) return;
@@ -91,18 +90,17 @@ function captionKind(track: Track | undefined): YoutubeCaptionKind | null {
     : null;
 }
 
-function select(videoId: string, sourceLanguage: string): Selection {
-  const player = document.querySelector<YoutubePlayer>('.html5-video-player');
+function select(videoId: string, sourceLanguage: string): CaptionResource | undefined {
+  const player = document.querySelector<YoutubePlayer>(PLAYER);
   const response = player?.getPlayerResponse?.();
   const tracks = response?.captions?.playerCaptionsTracklistRenderer?.captionTracks;
   if (
     !player ||
-    player.classList.contains('ad-showing') ||
-    player.querySelector('.ytp-subtitles-button')?.getAttribute('aria-pressed') === 'false' ||
+    subtitlesHidden(player) ||
     response?.videoDetails?.videoId !== videoId ||
     !Array.isArray(tracks)
   )
-    return {};
+    return;
   const selected = player.getOption?.('captions', 'track');
   const active =
     tracks.find((track) => selected?.vssId && track.vssId === selected.vssId) ??
@@ -117,68 +115,30 @@ function select(videoId: string, sourceLanguage: string): Selection {
       sourceLanguage,
     ) ??
     languageTrack(tracks, (track) => track.languageCode ?? '', sourceLanguage);
-  return {
-    sourceKind: captionKind(source),
-    source: trackResource(source),
-  };
+  return trackResource(source);
 }
 
-function publish(): void {
-  if (!latest) return;
-  window.postMessage(
-    {
-      type: 'subline:timeline-response',
-      requestId: latest.requestId,
-      revision: cache.revision,
-      ...(latest.revision === cache.revision ? { unchanged: true } : { state: cache.state }),
-    },
-    location.origin,
-  );
-}
-
-window.addEventListener('message', (event: MessageEvent) => {
-  const data = event.data;
-  if (event.source !== window || event.origin !== location.origin) return;
-  if (data?.type === 'subline:timeline-stop' && data.requestId === latest?.requestId) {
-    latest = undefined;
-    cache.stop();
-    return;
-  }
-  if (
-    data?.type !== 'subline:timeline-request' ||
-    !Number.isSafeInteger(data.requestId) ||
-    typeof data.videoId !== 'string' ||
-    data.videoId.length > 200 ||
-    data.videoId !== pageVideoId() ||
-    typeof data.sourceLanguage !== 'string' ||
-    data.sourceLanguage.length > 40
-  )
-    return;
-  let selection: Selection;
-  try {
-    selection = select(data.videoId, data.sourceLanguage);
-  } catch {
-    selection = {};
-  }
-  cache.select(data.videoId, selection.source?.id ?? '', data.sourceLanguage, selection.sourceKind);
-  latest = { requestId: data.requestId, revision: data.revision };
-  publish();
-  const source = selection.source;
-  if (source)
-    cache.load(source.url, async (signal) => {
-      const response = await fetch(source.url, {
-        credentials: 'same-origin',
-        signal: AbortSignal.any([signal, AbortSignal.timeout(15000)]),
+servePageTimeline('youtube', {
+  videoId: youtubeVideoId,
+  update({ videoId, sourceLanguage }, cache) {
+    let selected: CaptionResource | undefined;
+    try {
+      selected = select(videoId, sourceLanguage);
+    } catch {}
+    const source = selected;
+    cache.select(videoId, source?.id ?? '', sourceLanguage);
+    if (source)
+      cache.load(source.url, async (signal) => {
+        const response = await fetch(source.url, {
+          credentials: 'same-origin',
+          signal: AbortSignal.any([signal, AbortSignal.timeout(15000)]),
+        });
+        if (!response.ok) throw new Error('Caption track unavailable');
+        const cues = parseYoutubeCaptions(await response.json(), source.kind);
+        if (!cues.length) throw new Error('Empty caption track');
+        return cues;
       });
-      if (!response.ok) throw new Error('Caption track unavailable');
-      const cues = parseYoutubeCaptions(await response.json(), source.kind);
-      if (!cues.length) throw new Error('Empty caption track');
-      return cues;
-    });
+  },
 });
 
-window.addEventListener('pagehide', () => {
-  latest = undefined;
-  cache.clear();
-  requestContexts.clear();
-});
+window.addEventListener('pagehide', () => requestContexts.clear());

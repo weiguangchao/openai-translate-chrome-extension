@@ -4,7 +4,7 @@ import {
   subtitleUnits,
   translationInput,
 } from '../src/shared/caption-translation';
-import { captionWindow, timedCaptions, translatedCaptions } from '../src/extension/timeline';
+import { captionWindow, timedCaptions, translatedCaptions } from '../src/core/timeline';
 import { scanTranslationResults } from '../src/shared/subtitle-segmentation';
 
 const text =

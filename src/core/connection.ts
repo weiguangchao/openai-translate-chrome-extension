@@ -1,8 +1,4 @@
-interface Reply<T> {
-  ok?: boolean;
-  data?: T;
-  error?: string;
-}
+import type { ContentRequest, Reply } from '../shared/messages';
 
 export class ExtensionConnection {
   private invalidated = false;
@@ -14,7 +10,7 @@ export class ExtensionConnection {
     return !this.invalidated;
   }
 
-  async sendMessage<T = unknown>(message: unknown): Promise<Reply<T>> {
+  async sendMessage<T = unknown>(message: ContentRequest): Promise<Reply<T>> {
     try {
       const response = await Promise.resolve().then(() => {
         if (!this.active) throw new Error('Extension context invalidated.');
