@@ -1,4 +1,4 @@
-import type { TimedCue } from './timeline';
+import type { TimedCue } from '../../core/cues';
 
 export interface HboSubtitleFile {
   url: string;

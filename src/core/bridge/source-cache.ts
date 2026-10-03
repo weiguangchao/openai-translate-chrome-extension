@@ -1,8 +1,8 @@
-import type { SubtitleTimeline, TimedCue } from './timeline';
-import type { YoutubeCaptionKind } from './youtube-captions';
+import type { TimedCue } from '../cues';
+import type { TimelineState } from './protocol';
 
 export class SourceCache {
-  state: SubtitleTimeline = { mode: 'checking', source: null };
+  state: TimelineState = { mode: 'checking', source: null };
   revision = 0;
   private key = '';
   private resource = '';
@@ -13,12 +13,17 @@ export class SourceCache {
 
   constructor(private changed: () => void) {}
 
-  select(video: string, track: string, language: string, kind?: YoutubeCaptionKind | null): void {
+  select(video: string, track: string, language: string): void {
     const key = JSON.stringify([video, track, language]);
     if (key === this.key) return;
     this.clear();
     this.key = key;
-    this.state = { mode: 'checking', source: null, sourceId: key, sourceKind: kind };
+    this.state = { mode: 'checking', source: null, sourceId: key };
+  }
+
+  update(patch: Partial<Pick<TimelineState, 'mode' | 'source'>>): void {
+    this.state = { ...this.state, ...patch };
+    this.revision++;
   }
 
   load(
@@ -69,12 +74,6 @@ export class SourceCache {
     this.state = { mode: 'checking', source: null };
     this.revision++;
   }
-}
-
-export function pageVideoId(): string {
-  if (/(^|\.)youtube\.com$/.test(location.hostname))
-    return new URL(location.href).searchParams.get('v') ?? location.pathname.split('/')[2] ?? '';
-  return `${location.origin}${location.pathname}`;
 }
 
 export function mediaIdentity(value: string): string {

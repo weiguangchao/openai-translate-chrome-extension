@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { CaptionController } from '../src/extension/captions';
-import { hboMediaUrl, parseHboManifest, parseHboVtt } from '../src/extension/hbo-captions';
-import { HboTimeline } from '../src/extension/hbo-timeline';
+import { CaptionController } from '../src/core/controller';
+import { createHboPlatform } from '../src/platforms/hbo/platform';
+import { hboMediaUrl, parseHboManifest, parseHboVtt } from '../src/platforms/hbo/captions';
+import { BridgeTimeline } from '../src/core/bridge/client';
 import { TranslationQueue } from '../src/extension/queue';
 import { DEFAULT_SETTINGS, publicSettings } from '../src/shared/settings';
 import { providerReply, requestedTexts } from './fixtures/provider';
@@ -164,15 +165,11 @@ beforeEach(async () => {
         text: string;
         texts: string[];
         segments?: number[];
-        pause?: boolean;
         cacheOnly?: boolean;
       }) => {
+        if (message.type === 'prefetch-pause') queue.pause('hbo');
+        if (message.type === 'prefetch-resume') queue.resume('hbo');
         if (message.type === 'prefetch') {
-          if (message.pause !== undefined) {
-            if (message.pause) queue.pause('hbo');
-            else queue.resume('hbo');
-            return { ok: true };
-          }
           return {
             ok: true,
             data: await queue.prefetch('hbo', settings, message.texts, message.segments),
@@ -189,7 +186,7 @@ beforeEach(async () => {
       },
     },
   });
-  await import('../src/extension/hbo-page');
+  await import('../src/platforms/hbo/page');
 });
 
 afterEach(async () => {
@@ -221,7 +218,7 @@ it.each([mediaUrl, edgeMediaUrl])(
   'prefetches two segments from %s without TextTrack or visible cues, hiding the two-second provider latency',
   async (url) => {
     stream.url = url;
-    controller = new CaptionController(publicSettings(settings));
+    controller = new CaptionController(createHboPlatform, publicSettings(settings));
     await vi.advanceTimersByTimeAsync(0);
     expect(requested.map((request) => request.texts)).toEqual([
       Array.from({ length: 10 }, (_, i) => `Cue ${i + 1}`),
@@ -266,7 +263,7 @@ it('displays streamed HBO translations before either prefetched segment finishes
     `data: ${JSON.stringify({ choices: [{ delta: { content } }] })}\n\n`;
   const push = (index: number, content: string) =>
     batches[index].control.enqueue(new TextEncoder().encode(delta(content)));
-  controller = new CaptionController(publicSettings(settings));
+  controller = new CaptionController(createHboPlatform, publicSettings(settings));
   await vi.advanceTimersByTimeAsync(0);
   expect(batches.map(({ texts }) => texts)).toEqual([
     Array.from({ length: 10 }, (_, i) => `Cue ${i + 1}`),
@@ -307,7 +304,7 @@ it('displays and translates one HBO track when alternate tracks have overlapping
       return originalFetch(url, init);
     }),
   );
-  controller = new CaptionController(publicSettings(settings));
+  controller = new CaptionController(createHboPlatform, publicSettings(settings));
   for (const [time, cue] of [
     [4, 1],
     [34, 11],
@@ -344,7 +341,7 @@ it('accepts HBO edge subtitle URLs while rejecting lookalike hosts and unsafe UR
 });
 
 it('cancels old model requests after seeking and ignores their late results', async () => {
-  controller = new CaptionController(publicSettings(settings));
+  controller = new CaptionController(createHboPlatform, publicSettings(settings));
   await vi.advanceTimersByTimeAsync(0);
   video.currentTime = 65;
   video.dispatchEvent(new Event('seeking'));
@@ -363,7 +360,10 @@ it.each([true, false])(
   'ignores HBO target subtitles and requires a provider, configured=%s',
   async (configured) => {
     targetLanguage = 'zh-Hans';
-    controller = new CaptionController({ ...publicSettings(settings), configured });
+    controller = new CaptionController(createHboPlatform, {
+      ...publicSettings(settings),
+      configured,
+    });
     await playTo(3);
     expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).includes('/zh-Hans/'))).toBe(
       false,
@@ -381,7 +381,7 @@ it.each([true, false])(
 it('does not download a target track even when it would fail', async () => {
   targetLanguage = 'zh-CN';
   failTarget = true;
-  controller = new CaptionController(publicSettings(settings));
+  controller = new CaptionController(createHboPlatform, publicSettings(settings));
   await playTo(4);
   expect(lines()?.[1].textContent).toBe('译文 Cue 1');
   expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).includes('/zh-CN/'))).toBe(false);
@@ -389,7 +389,7 @@ it('does not download a target track even when it would fail', async () => {
 });
 
 it('stops prefetch and clears the displayed subtitles when the HBO selection is off', async () => {
-  controller = new CaptionController(publicSettings(settings));
+  controller = new CaptionController(createHboPlatform, publicSettings(settings));
   await playTo(3);
   expect(lines()?.[1].textContent).toBe('译文 Cue 1');
   selected = null;
@@ -414,7 +414,7 @@ it('aborts subtitle downloads when switching episode or disabling the extension'
       );
     }),
   );
-  controller = new CaptionController(publicSettings(settings));
+  controller = new CaptionController(createHboPlatform, publicSettings(settings));
   await vi.advanceTimersByTimeAsync(0);
   expect(signals).toHaveLength(1);
   history.replaceState(null, '', '/video/watch/episode-2');
@@ -430,7 +430,7 @@ it('aborts subtitle downloads when switching episode or disabling the extension'
 it('keeps DOM translation available when the HBO player adapter is unavailable', async () => {
   document.querySelector('[data-testid="caption_renderer_overlay"]')!.textContent = 'DOM cue';
   stream.streamMode = 'LIVE';
-  controller = new CaptionController(publicSettings(settings));
+  controller = new CaptionController(createHboPlatform, publicSettings(settings));
   await vi.advanceTimersByTimeAsync(3000);
   expect(requested.map((request) => request.texts)).toEqual([['DOM cue']]);
   expect(lines()?.[0].textContent).toBe('DOM cue');
@@ -456,7 +456,7 @@ it('renders HBO multiline captions as timed sentences in the plugin overlay', as
       return originalFetch(url, init);
     }),
   );
-  controller = new CaptionController(publicSettings(settings));
+  controller = new CaptionController(createHboPlatform, publicSettings(settings));
   await playTo(3);
   expect(requested.map(({ texts }) => texts)).toEqual([
     ['Oh, thank you.', "I've got to talk to that mailman."],
@@ -497,7 +497,7 @@ it('reads the committed React branch instead of an old episode retained on the D
       alternate: { memoizedProps: props, return: currentRoot },
     },
   });
-  controller = new CaptionController(publicSettings(settings));
+  controller = new CaptionController(createHboPlatform, publicSettings(settings));
   await vi.advanceTimersByTimeAsync(0);
   const urls = vi.mocked(fetch).mock.calls.map(([url]) => url);
   expect(urls).toContain(mediaUrl.replace('episode', 'current'));
@@ -507,8 +507,8 @@ it('reads the committed React branch instead of an old episode retained on the D
 
 it('rejects unsolicited or malformed bridge responses', () => {
   const changed = vi.fn();
-  const timeline = new HboTimeline(changed);
-  timeline.read('en');
+  const timeline = new BridgeTimeline('hbo', changed);
+  timeline.read(`${location.origin}${location.pathname}`, 'en');
   for (const data of [
     { requestId: 999, state: { mode: 'model', source: [], translation: null } },
     {
@@ -614,7 +614,7 @@ it('parses VTT identifiers, markup, entities and CRLF while skipping metadata an
 });
 
 it('keeps the HBO source across target/provider/style changes, seeks, blob renewal and signed URL renewal', async () => {
-  controller = new CaptionController(publicSettings(settings));
+  controller = new CaptionController(createHboPlatform, publicSettings(settings));
   await playTo(3);
   const downloads = () =>
     vi.mocked(fetch).mock.calls.filter(([url]) => String(url).includes('h264.io'));
@@ -647,7 +647,7 @@ it('keeps the HBO source across target/provider/style changes, seeks, blob renew
 
 it('replaces the HBO source for source-language, track-role and episode changes', async () => {
   targetLanguage = 'es';
-  controller = new CaptionController(publicSettings(settings));
+  controller = new CaptionController(createHboPlatform, publicSettings(settings));
   await playTo(3);
   const manifests = () =>
     vi.mocked(fetch).mock.calls.filter(([url]) => new URL(String(url)).pathname.endsWith('.mpd'));
@@ -677,7 +677,7 @@ it('does not translate a known target-language DOM when the HBO source track is 
   );
   selected = { language: 'zh-Hans', role: 'subtitle' };
   document.querySelector('[data-testid="caption_renderer_overlay"]')!.textContent = '已有中文字幕';
-  controller = new CaptionController(publicSettings(settings));
+  controller = new CaptionController(createHboPlatform, publicSettings(settings));
   await playTo(3);
   expect(lines()?.[1].hidden).toBe(true);
   expect(requested).toEqual([]);
@@ -691,7 +691,7 @@ it('does not send target-language DOM to the provider after a source download fa
     'fetch',
     vi.fn(async () => new Response('', { status: 503 })),
   );
-  controller = new CaptionController(publicSettings(settings));
+  controller = new CaptionController(createHboPlatform, publicSettings(settings));
   await playTo(3);
   expect(lines()?.[1].hidden).toBe(true);
   expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1);

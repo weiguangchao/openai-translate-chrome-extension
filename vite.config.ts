@@ -14,7 +14,7 @@ export default defineConfig({
           environment: 'node',
           exclude: [
             ...configDefaults.exclude,
-            'tests/{captions,content,prefetch,youtube,hbo}.test.ts',
+            'tests/{captions,content,controller,prefetch,youtube,hbo}.test.ts',
             'tests/{popup,settings-alerts,settings-models}.test.tsx',
           ],
         },
@@ -25,7 +25,7 @@ export default defineConfig({
           name: 'dom',
           environment: 'jsdom',
           include: [
-            'tests/{captions,content,prefetch}.test.ts',
+            'tests/{captions,content,controller,prefetch}.test.ts',
             'tests/{popup,settings-alerts,settings-models}.test.tsx',
           ],
         },

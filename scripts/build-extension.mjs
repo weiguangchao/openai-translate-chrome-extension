@@ -10,30 +10,20 @@ await build({
   target: 'chrome120',
   minify: true,
 });
-await build({
-  entryPoints: ['src/extension/youtube-page.ts'],
-  outfile: 'dist/youtube-page.js',
-  bundle: true,
-  format: 'iife',
-  target: 'chrome120',
-  minify: true,
-});
-await build({
-  entryPoints: ['src/extension/hbo-page.ts'],
-  outfile: 'dist/hbo-page.js',
-  bundle: true,
-  format: 'iife',
-  target: 'chrome120',
-  minify: true,
-});
-await build({
-  entryPoints: ['src/extension/content.ts'],
-  outfile: 'dist/content.js',
-  bundle: true,
-  format: 'iife',
-  target: 'chrome120',
-  minify: true,
-});
+for (const [entry, output] of [
+  ['src/platforms/youtube/page.ts', 'youtube-page.js'],
+  ['src/platforms/youtube/content.ts', 'youtube-content.js'],
+  ['src/platforms/hbo/page.ts', 'hbo-page.js'],
+  ['src/platforms/hbo/content.ts', 'hbo-content.js'],
+])
+  await build({
+    entryPoints: [entry],
+    outfile: `dist/${output}`,
+    bundle: true,
+    format: 'iife',
+    target: 'chrome120',
+    minify: true,
+  });
 
 // Package local PNG icons without a native image dependency.
 function crc32(bytes) {

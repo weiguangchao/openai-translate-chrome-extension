@@ -36,7 +36,7 @@ npm run build
 - 切出的字幕条时间由扩展从原字幕计算，模型不生成时间戳。有词级时间戳时保留原始同步关系，没有时按文字位置估算。如果词级时间无法生成有效的子字幕区间，则保留切分结果、改按文字位置估算，不重新拼回整条长句。拖动进度后按当前位置显示。极长且无标点的连续文本按接口的 5000 字符上限组成输入窗口。
 - YouTube 在原文轨道尚未就绪、下载失败或没有指定语言轨道时，不将当前 DOM 中的半句或网站译文发送给 Provider。下载失败会重试；句子时间轴就绪后开始显示自定义字幕。
 - HBO 与 YouTube 一样，只读取原文并交给 Provider 翻译。不读取点播清单或浏览器 TextTrack 中的目标语言字幕，避免原文与平台译文的时间轴错配；需要先配置 API。支持简繁体及语言地区标签匹配。
-- HBO / Max：适配 `max.com`、`hbomax.com`、`hbo.com`，当前点播播放器通过页面内的播放器状态获取 DASH 清单，支持 `h264.io` 和 `e.hbo` CDN，提前读取原文 WebVTT 文件，合并跨 Period 的字幕并校正时间偏移，再使用与 YouTube 相同的分段预取和流式翻译；不必等当前字幕出现在 DOM 中。字幕关闭、语言切换、换集或扩展停用后取消旧下载并清理显示。读取失败会重试，不支持的播放器保留 TextTrack / DOM 适配。站点字幕 DOM 选择器集中在 `src/extension/captions.ts`。
+- HBO / Max：适配 `max.com`、`hbomax.com`、`hbo.com`，当前点播播放器通过页面内的播放器状态获取 DASH 清单，支持 `h264.io` 和 `e.hbo` CDN，提前读取原文 WebVTT 文件，合并跨 Period 的字幕并校正时间偏移，再使用与 YouTube 相同的分段预取和流式翻译；不必等当前字幕出现在 DOM 中。字幕关闭、语言切换、换集或扩展停用后取消旧下载并清理显示。读取失败会重试，不支持的播放器保留 TextTrack / DOM 适配。HBO 字幕 DOM 选择器集中在 `src/platforms/hbo/player.ts`，YouTube 播放器选择器集中在 `src/platforms/youtube/player.ts`。
 - 已在登录后的 HBO Chrome 点播播放器验证字幕清单和 WebVTT 时间轴。当前适配依赖播放器页面结构，支持静态 DASH 清单中的独立 WebVTT 字幕；播放器版本、地区、直播或其他字幕封装可能需要新增适配。画布、封闭 Shadow DOM、跨域且不在授权域名内的嵌入播放器等不可读取字幕不受支持。
 - 无可读字幕的视频不提供语音识别；不下载或解密视频，不处理 DRM。播放器仅提供字幕 DOM、未公开轨道列表时，无法检测其他语言的字幕，需要在播放器中选择原文语言。
 - YouTube 和取得时间轴的 HBO 在字幕加载完成后立即开始预取，无需等待第一句出现。每段最多 10 条本地切分后的输入字幕，按段向 Provider 发送一次请求；Provider 进一步切分后可以产生超过 10 条显示字幕。段边界只落在句子之间：长句切出的几条字幕总在同一段，当前段放不下时整句移到下一段，所以一段可能不足 10 条；只有一句本身超过 10 条时才跨段。预取窗口是当前段里尚未结束的字幕，再加上紧接着的下一段。视频正常打开时，用当前进度往后 1 秒定位当前段，这一段和下一段同时压入队列。正常播放刚进入某一段时，立刻预加载它的下一段。中途打开或拖动进度时，同样从当前进度往后 1 秒重新计算，当前段可能不足 10 条。翻译成功的字幕按接口配置、原文和是否需要 Provider 断句缓存在扩展后台（仅内存，最多 5000 条），再次出现时直接复用，不再请求 Provider；仍在进行的相同字幕会合并为一次请求，失败或被中止的请求不会缓存。切分边界与译文一起缓存；页面只保留当前输入字幕的结果和请求状态，不积累历史或预取译文。字幕切换时从后台取回，同一条字幕显示期间不重复查询；暂停或拖动进度期间只查询已完成或进行中的翻译，不发起新的 Provider 请求。浏览器回收扩展后台（空闲约 30 秒）、重启浏览器或重新加载扩展后，后台缓存清空；只改字号、颜色等显示设置不会让缓存失效。纯普通字幕批次按原顺序逐条接收译文；含超长项的批次通过输入 ID 对应结果，每个结果内包含一条或多条译文。普通批次在译文字符串闭合后发布，含超长项的批次在单项结果对象闭合、边界和译文通过校验后发布，不必等待剩余项。校验包含边界递增、完整覆盖、非空译文和超长项的宽度限制。无效结果只对失败项单独重试一次，保留断句标记和已成功的相邻项；再次失败时显示错误，不缓存无效结果；需要断句的超长输入继续等待有效结果，不回退显示整条长原文。几条时间重叠的字幕拼成一行时没有单句时间可依，不切分，整行一起翻译。拖动进度后取消不再需要的任务，优先翻译新位置的字幕；切换视频、语言或配置时重新检测字幕并丢弃旧显示状态。
@@ -72,12 +72,17 @@ TypeScript 文件禁止任何注释，包括行注释、块注释、JSDoc 和工
 ## 项目结构
 
 ```text
-src/ui/                设置页、弹出面板、字幕预览
-src/shared/            配置、接口客户端、本地存储
-src/extension/         Service Worker、字幕适配、翻译队列
-public/manifest.json   Chrome 扩展权限与入口
-scripts/               扩展打包与本地图标生成
-tests/                 API 合约与字幕行为测试
+src/ui/                    设置页、弹出面板、字幕预览
+src/shared/                配置、接口客户端、本地存储、平台注册表、运行时消息类型
+src/core/                  平台无关的字幕基础设施：断句与分段、时间轴桥接、字幕层、播放状态、翻译请求、调度器
+src/platforms/youtube/     YouTube 适配：页面脚本读取字幕轨道，Platform 实现决定字幕来源与原生字幕隐藏
+src/platforms/hbo/         HBO 适配：页面脚本读取 DASH/WebVTT，Platform 实现含 TextTrack 与 DOM 回退
+src/extension/             Service Worker 与翻译队列
+public/manifest.json       Chrome 扩展权限与入口
+scripts/                   扩展打包与本地图标生成
+tests/                     API 合约与字幕行为测试
 ```
+
+依赖只能沿 `platforms → core → shared` 方向，平台之间不互相引用，`extension` 只依赖 `shared`；`npm run lint` 会检查这条规则。每个平台打包成独立的页面脚本（`<平台>-page.js`，运行在网页 MAIN world）和内容脚本（`<平台>-content.js`），二者通过 `src/core/bridge` 的统一协议交换字幕时间轴。新增平台时在 `src/shared/platforms.ts` 注册域名，在 `src/platforms/<平台>/` 实现 `Platform` 接口和页面脚本，再在 manifest 与 `scripts/build-extension.mjs` 中加入两个入口；`tests/registry.test.ts` 会校验 manifest 与注册表一致。
 
 接口依据 [OpenAI Chat Completions 文档](https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create) 和 [Models 文档](https://developers.openai.com/api/reference/resources/models/methods/list)。`/model` 是第三方兼容回退。场景预览图片来自 [Unsplash 图片资源](https://images.unsplash.com/photo-1470770841072-f978cf4d019e)，打包在本地，不在运行时请求外部图片。

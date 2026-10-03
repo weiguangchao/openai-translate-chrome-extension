@@ -1,5 +1,5 @@
-import type { TimedCue } from './timeline';
-import { subtitleSentences } from './subtitle-sentences';
+import type { TimedCue } from '../../core/cues';
+import { subtitleSentences } from '../../core/sentences';
 
 export type YoutubeCaptionKind = 'authored' | 'asr';
 

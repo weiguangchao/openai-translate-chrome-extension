@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
-import { parseYoutubeCaptions } from '../src/extension/youtube-captions';
-import { captionAt, captionWindow, timedCaptions } from '../src/extension/timeline';
+import { parseYoutubeCaptions } from '../src/platforms/youtube/captions';
+import { captionAt, captionWindow, timedCaptions } from '../src/core/timeline';
 import { githubCaption, githubCaptionTrack, githubCommaParts } from './fixtures/github-caption';
 import {
   needsSubtitleSegmentation,

@@ -19,6 +19,26 @@ const noComments = {
   },
 };
 
+function layer(files, forbidden) {
+  return {
+    files,
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              regex: `(^|/)(${forbidden.join('|')})/`,
+              message:
+                'Dependencies flow platforms → core → shared; platforms never import each other.',
+            },
+          ],
+        },
+      ],
+    },
+  };
+}
+
 export default [
   { ignores: ['dist/**', 'coverage/**', '.artifacts/**'] },
   {
@@ -30,4 +50,9 @@ export default [
     },
     rules: { 'local/no-comments': 'error' },
   },
+  layer(['src/shared/**'], ['core', 'platforms', 'extension', 'ui']),
+  layer(['src/core/**'], ['platforms', 'extension', 'ui']),
+  layer(['src/platforms/youtube/**'], ['hbo', 'extension', 'ui']),
+  layer(['src/platforms/hbo/**'], ['youtube', 'extension', 'ui']),
+  layer(['src/extension/**'], ['core', 'platforms', 'ui']),
 ];

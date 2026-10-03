@@ -1,5 +1,6 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { CaptionController } from '../src/extension/captions';
+import { CaptionController } from '../src/core/controller';
+import { createYoutubePlatform } from '../src/platforms/youtube/platform';
 import { DEFAULT_SETTINGS, publicSettings } from '../src/shared/settings';
 import { TranslationQueue } from '../src/extension/queue';
 import { githubCaptionTrack, githubCommaParts } from './fixtures/github-caption';
@@ -137,8 +138,8 @@ it('prefetches the comma parts of a long subtitle in one request and shows each 
       );
     return { ok: true };
   });
-  await import('../src/extension/youtube-page');
-  controller = new CaptionController(publicSettings(saved));
+  await import('../src/platforms/youtube/page');
+  controller = new CaptionController(createYoutubePlatform, publicSettings(saved));
   await vi.advanceTimersByTimeAsync(0);
   expect([...lines()].map((line) => [line.hidden, line.textContent])).toEqual([
     [false, githubCommaParts[0]],
@@ -226,8 +227,9 @@ it('translates and displays complete ASR sentences across rolling events', async
   );
   document.querySelector('.ytp-caption-window-container')!.innerHTML =
     '<span class="ytp-caption-segment">This field behind me</span>';
-  await import('../src/extension/youtube-page');
+  await import('../src/platforms/youtube/page');
   controller = new CaptionController(
+    createYoutubePlatform,
     publicSettings({ ...DEFAULT_SETTINGS, apiKey: 'key', model: 'model' }),
   );
   await vi.advanceTimersByTimeAsync(0);
@@ -303,8 +305,9 @@ it('loads the selected YouTube track before playback, aligns rolling captions, a
   });
   fetch.mockResolvedValueOnce(new Response('', { status: 503 }));
   vi.stubGlobal('fetch', fetch);
-  await import('../src/extension/youtube-page');
+  await import('../src/platforms/youtube/page');
   controller = new CaptionController(
+    createYoutubePlatform,
     publicSettings({ ...DEFAULT_SETTINGS, apiKey: 'key', model: 'model' }),
   );
   await vi.advanceTimersByTimeAsync(0);
@@ -401,9 +404,10 @@ it('uses the current video session to load source subtitles and removes duplicat
       });
     }),
   );
-  await import('../src/extension/youtube-page');
+  await import('../src/platforms/youtube/page');
   video.currentTime = 1;
   controller = new CaptionController(
+    createYoutubePlatform,
     publicSettings({ ...DEFAULT_SETTINGS, apiKey: 'key', model: 'model' }),
   );
   await vi.advanceTimersByTimeAsync(1100);
@@ -482,9 +486,9 @@ it('translates authored English sentences even when authored, automatic and brow
     }),
   );
   vi.stubGlobal('fetch', fetch);
-  await import('../src/extension/youtube-page');
+  await import('../src/platforms/youtube/page');
   const settings = publicSettings({ ...DEFAULT_SETTINGS, apiKey: 'key', model: 'model' });
-  controller = new CaptionController({ ...settings, configured: false });
+  controller = new CaptionController(createYoutubePlatform, { ...settings, configured: false });
   await vi.advanceTimersByTimeAsync(1100);
   expect(document.querySelector('[data-subline-overlay]')).toBeNull();
   expect(sendMessage.mock.calls).toEqual([]);
@@ -561,9 +565,10 @@ it('downloads the source language and calls the Provider when website auto-trans
       ),
     ),
   );
-  await import('../src/extension/youtube-page');
+  await import('../src/platforms/youtube/page');
   video.currentTime = 2;
   controller = new CaptionController(
+    createYoutubePlatform,
     publicSettings({ ...DEFAULT_SETTINGS, apiKey: 'key', model: 'model' }),
   );
   await vi.advanceTimersByTimeAsync(1500);
@@ -617,9 +622,9 @@ it.each([
           : new Response('', { status: 503 }),
       ),
     );
-    await import('../src/extension/youtube-page');
+    await import('../src/platforms/youtube/page');
     const settings = publicSettings({ ...DEFAULT_SETTINGS, apiKey: 'key', model: 'model' });
-    controller = new CaptionController(settings);
+    controller = new CaptionController(createYoutubePlatform, settings);
     video.currentTime = 1;
     await vi.advanceTimersByTimeAsync(1500);
     expect(lines()[0].textContent).toBe('');
@@ -687,8 +692,9 @@ it('keeps custom captions in a fullscreen ancestor and restores the website laye
       }),
     ),
   );
-  await import('../src/extension/youtube-page');
+  await import('../src/platforms/youtube/page');
   controller = new CaptionController(
+    createYoutubePlatform,
     publicSettings({ ...DEFAULT_SETTINGS, apiKey: 'key', model: 'model' }),
   );
   await vi.advanceTimersByTimeAsync(1500);
@@ -775,8 +781,8 @@ it('sends complete English sentences to the Provider and displays its translatio
       queue.prefetch('video', saved, (message as unknown as { texts: string[] }).texts);
     return { ok: true };
   });
-  await import('../src/extension/youtube-page');
-  controller = new CaptionController(publicSettings(saved));
+  await import('../src/platforms/youtube/page');
+  controller = new CaptionController(createYoutubePlatform, publicSettings(saved));
   await vi.advanceTimersByTimeAsync(0);
   expect(requests).toEqual([
     {
@@ -833,8 +839,9 @@ it('waits for the configured source language instead of translating the website 
     }),
   );
   vi.stubGlobal('fetch', fetch);
-  await import('../src/extension/youtube-page');
+  await import('../src/platforms/youtube/page');
   controller = new CaptionController(
+    createYoutubePlatform,
     publicSettings({ ...DEFAULT_SETTINGS, apiKey: 'key', model: 'model' }),
   );
   await vi.advanceTimersByTimeAsync(1500);
@@ -879,9 +886,9 @@ it('keeps the YouTube source across target/provider/style changes, seeks, blob r
     }),
   );
   vi.stubGlobal('fetch', fetch);
-  await import('../src/extension/youtube-page');
+  await import('../src/platforms/youtube/page');
   const saved = { ...DEFAULT_SETTINGS, apiKey: 'key', model: 'model' };
-  controller = new CaptionController(publicSettings(saved));
+  controller = new CaptionController(createYoutubePlatform, publicSettings(saved));
   await vi.advanceTimersByTimeAsync(0);
   expect(fetch).toHaveBeenCalledTimes(1);
   for (const next of [
