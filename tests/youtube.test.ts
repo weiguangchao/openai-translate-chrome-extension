@@ -4,6 +4,8 @@ import { DEFAULT_SETTINGS, publicSettings } from '../src/shared/settings';
 import { TranslationQueue } from '../src/extension/queue';
 import { githubCaptionTrack, githubCommaParts } from './fixtures/github-caption';
 import { providerReply, requestedTexts } from './fixtures/provider';
+import type { CaptionTranslation } from '../src/shared/caption-translation';
+import { structuredReply } from './fixtures/long-caption';
 
 let controller: CaptionController | undefined;
 let resourceEntries: (entries: PerformanceEntry[]) => void;
@@ -55,7 +57,8 @@ function setup() {
       texts?: string[];
       segments?: number[];
       cacheOnly?: boolean;
-    }): Promise<{ ok: boolean; data?: string | null }> =>
+      needsSplit?: boolean | boolean[];
+    }): Promise<{ ok: boolean; data?: CaptionTranslation | null }> =>
       Promise.resolve(
         message.type === 'translate' ? { ok: true, data: `译文：${message.text}` } : { ok: true },
       ),
@@ -103,14 +106,12 @@ it('prefetches the comma parts of a long subtitle in one request and shows each 
     }),
   });
   let finish!: (value: Response) => void;
-  let pending: string[] = [];
   const requests: string[][] = [];
   vi.stubGlobal(
     'fetch',
     vi.fn(async (url: string, init?: RequestInit) => {
       if (url.includes('/api/timedtext')) return Response.json(githubCaptionTrack);
-      pending = requestedTexts(init!);
-      requests.push(pending);
+      requests.push(requestedTexts(init!));
       return new Promise<Response>((resolve) => {
         finish = resolve;
       });
@@ -123,11 +124,17 @@ it('prefetches the comma parts of a long subtitle in one request and shows each 
       return {
         ok: true,
         data: await (message.cacheOnly
-          ? queue.lookup(saved, message.text!)
-          : queue.request('video', saved, message.text!)),
+          ? queue.lookup(saved, message.text!, message.needsSplit === true)
+          : queue.request('video', saved, message.text!, message.needsSplit === true)),
       };
     if (message.type === 'prefetch')
-      queue.prefetch('video', saved, message.texts!, message.segments);
+      queue.prefetch(
+        'video',
+        saved,
+        message.texts!,
+        message.segments,
+        message.needsSplit as boolean[],
+      );
     return { ok: true };
   });
   await import('../src/extension/youtube-page');
@@ -138,7 +145,24 @@ it('prefetches the comma parts of a long subtitle in one request and shows each 
     [false, '翻译中'],
   ]);
   expect(requests).toEqual([githubCommaParts]);
-  finish(providerReply(pending, (text) => `译文：${text}`));
+  const split = [
+    'and many other people are realizing',
+    'that GitHub might not be the safest place for us to be leaving our code',
+    "now that they're randomly reverting merges and having downtime",
+    'that is measured in days instead of minutes.',
+  ];
+  finish(
+    structuredReply([
+      { id: 0, parts: [{ translation: `译文：${githubCommaParts[0]}` }] },
+      {
+        id: 1,
+        parts: [6, 21, 30, 38].map((endExclusive, index) => ({
+          endExclusive,
+          translation: `译文：${split[index]}`,
+        })),
+      },
+    ]),
+  );
   await vi.advanceTimersByTimeAsync(0);
   expect([...lines()].map((line) => line.textContent)).toEqual([
     githubCommaParts[0],
@@ -147,10 +171,7 @@ it('prefetches the comma parts of a long subtitle in one request and shows each 
   video.currentTime = 6.75;
   video.dispatchEvent(new Event('seeked'));
   await vi.advanceTimersByTimeAsync(400);
-  expect([...lines()].map((line) => line.textContent)).toEqual([
-    githubCommaParts[1],
-    `译文：${githubCommaParts[1]}`,
-  ]);
+  expect([...lines()].map((line) => line.textContent)).toEqual([split[2], `译文：${split[2]}`]);
   const snapshots: string[][] = [];
   for (const time of [0, 3, 8.25, 2]) {
     video.currentTime = time;
@@ -160,9 +181,9 @@ it('prefetches the comma parts of a long subtitle in one request and shows each 
   }
   expect(snapshots).toEqual([
     [githubCommaParts[0], `译文：${githubCommaParts[0]}`],
-    [githubCommaParts[1], `译文：${githubCommaParts[1]}`],
-    [githubCommaParts[1], `译文：${githubCommaParts[1]}`],
-    [githubCommaParts[1], `译文：${githubCommaParts[1]}`],
+    [split[1], `译文：${split[1]}`],
+    [split[2], `译文：${split[2]}`],
+    [split[0], `译文：${split[0]}`],
   ]);
   expect(requests).toEqual([githubCommaParts]);
   video.currentTime = 11;

@@ -130,6 +130,7 @@ it('joins ASR fragments, uses word timestamps within a cue and preserves the fin
   expect(captionWindow(timedCaptions(cues), 1.5)).toEqual({
     current: 'We are ready.',
     texts: ['We are ready.', 'Are you?', 'Let’s go'],
+    needsSplit: [false, false, false],
     segments: [0, 0, 0],
   });
   expect(captionWindow(timedCaptions(cues), 2).current).toBe('Are you?');
@@ -330,11 +331,17 @@ it('covers the rest of the current segment and the following segment, however fa
     current: 'Cue 10',
     texts: texts(9, 20),
     segments: [0, ...texts(10, 20).map(() => 1)],
+    needsSplit: texts(9, 20).map(() => false),
   });
   expect(captionWindow(captions, 105).texts).toEqual(texts(10, 30));
   expect(captionWindow(captions, 165).texts).toEqual(texts(16, 30));
   expect(captionWindow(captions, 205).texts).toEqual(texts(20, 30));
-  expect(captionWindow(captions, 9999)).toEqual({ current: '', texts: [], segments: [] });
+  expect(captionWindow(captions, 9999)).toEqual({
+    current: '',
+    texts: [],
+    segments: [],
+    needsSplit: [],
+  });
 });
 
 it('splits a long cue shown on its own at commas, but not overlapping cues joined into one line', () => {

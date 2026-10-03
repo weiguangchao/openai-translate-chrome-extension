@@ -2,6 +2,7 @@ import { prefetchSegmentCount, translationBatchLimit } from '../shared/limits';
 import { needsSubtitleSegmentation, splitSubtitleAtCommas } from '../shared/subtitle-segmentation';
 import { languageTrack } from './languages';
 import type { YoutubeCaptionKind } from './youtube-captions';
+import type { TranslationPart } from '../shared/caption-translation';
 import { pageVideoId } from './source-cache';
 
 export interface TimedCue {
@@ -11,11 +12,9 @@ export interface TimedCue {
   timing?: CueTiming[];
 }
 
-export interface TimedCaption {
-  startTime: number;
-  endTime: number;
-  text: string;
+export interface TimedCaption extends TimedCue {
   segment: number;
+  needsSplit?: boolean;
 }
 
 export interface CueTiming {
@@ -130,13 +129,56 @@ function boundaryTime(cue: TimedCue, position: number): number {
 function splitSentence(cue: TimedCue, overlapping: boolean): Omit<TimedCaption, 'segment'>[] {
   const parts =
     !overlapping && needsSubtitleSegmentation(cue.text) ? splitSubtitleAtCommas(cue.text) : [];
-  if (parts.length < 2) return [{ startTime: cue.startTime, endTime: cue.endTime, text: cue.text }];
+  const captions = parts.length < 2 ? [cue] : splitTimedCue(cue, parts);
+  return captions.map((caption) => ({
+    ...caption,
+    ...(!overlapping && needsSubtitleSegmentation(caption.text) ? { needsSplit: true } : {}),
+  }));
+}
+
+function splitTimedCue(cue: TimedCue, parts: { from: number; to: number }[]): TimedCue[] {
   const starts = parts.map((part, index) => (index ? boundaryTime(cue, part.from) : cue.startTime));
   return parts.map((part, index) => ({
     startTime: starts[index],
     endTime: starts[index + 1] ?? cue.endTime,
     text: cue.text.slice(part.from, part.to),
+    ...(cue.timing
+      ? {
+          timing: cue.timing
+            .filter((span) => span.to > part.from && span.from < part.to)
+            .map((span) => {
+              const from = Math.max(span.from, part.from);
+              const to = Math.min(span.to, part.to);
+              const at = (position: number) =>
+                span.startTime +
+                ((span.endTime - span.startTime) * (position - span.from)) / (span.to - span.from);
+              return {
+                from: from - part.from,
+                to: to - part.from,
+                startTime: at(from),
+                endTime: at(to),
+              };
+            }),
+        }
+      : {}),
   }));
+}
+
+export function translatedCaptions(
+  cue: TimedCue,
+  parts: TranslationPart[],
+): (TimedCue & { translation: string })[] {
+  let captions = splitTimedCue(cue, parts);
+  if (
+    captions.some(
+      (caption) =>
+        !Number.isFinite(caption.startTime) ||
+        !Number.isFinite(caption.endTime) ||
+        caption.endTime <= caption.startTime,
+    )
+  )
+    captions = splitTimedCue({ ...cue, timing: undefined }, parts);
+  return captions.map((caption, index) => ({ ...caption, translation: parts[index].translation }));
 }
 
 const captionCache = new WeakMap<readonly TimedCue[], TimedCaption[]>();
@@ -202,14 +244,18 @@ export function captionWindow(captions: readonly TimedCaption[], time: number) {
     .sort((a, b) => a - b);
   const texts: string[] = [];
   const segments: number[] = [];
+  const needsSplit: boolean[] = [];
   for (const at of [time, ...boundaries]) {
     const active = activeAt(remaining, at);
     const text = joinedText(active);
-    if (!text || texts.includes(text)) continue;
+    const split = active.length === 1 && active[0].needsSplit === true;
+    if (!text || texts.some((item, index) => item === text && needsSplit[index] === split))
+      continue;
     texts.push(text);
     segments.push(active[0].segment);
+    needsSplit.push(split);
   }
-  return { current: captionAt(remaining, time), texts, segments };
+  return { current: captionAt(remaining, time), texts, segments, needsSplit };
 }
 
 export class YoutubeTimeline {

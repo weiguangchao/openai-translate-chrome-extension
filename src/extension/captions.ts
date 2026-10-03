@@ -1,4 +1,5 @@
 import type { PublicSettings } from '../shared/settings';
+import type { CaptionTranslation } from '../shared/caption-translation';
 import { ExtensionConnection } from './connection';
 import { HboTimeline } from './hbo-timeline';
 import { pageVideoId } from './source-cache';
@@ -8,6 +9,7 @@ import {
   NativeTimeline,
   selectedTrack,
   timedCaptions,
+  translatedCaptions,
   YoutubeTimeline,
   type SubtitleTimeline,
 } from './timeline';
@@ -208,12 +210,13 @@ export class CaptionController {
   private resizeObserver =
     typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(() => this.tick());
   private currentText = '';
+  private currentNeedsSplit = false;
   private changedAt = 0;
   private requested = '';
   private version = 0;
   private pageVideo = pageVideoId();
   private positionedPlayer = false;
-  private translationReady = false;
+  private translationResult: CaptionTranslation | null = null;
   private checkedCache = false;
   private destroyed = false;
   private youtube = new YoutubeTimeline(() => this.tick());
@@ -286,8 +289,9 @@ export class CaptionController {
     this.nativeTrack = undefined;
     this.version++;
     this.currentText = '';
+    this.currentNeedsSplit = false;
     this.requested = '';
-    this.translationReady = false;
+    this.translationResult = null;
     this.checkedCache = false;
     this.video?.classList.remove('subline-native');
     if (this.player) {
@@ -469,7 +473,8 @@ export class CaptionController {
       : Date.now() < this.lookaheadAt
         ? upcoming.slice(0, SEEK_PREVIEW_CUES)
         : upcoming;
-    if (!video.paused) this.prefetch(texts, false, translationWindow?.segments);
+    if (!video.paused)
+      this.prefetch(texts, false, translationWindow?.segments, translationWindow?.needsSplit);
     const captionSource = caption.element;
     const domPlaced = Boolean(captionSource && !timeline && !youtube);
     if (domPlaced) {
@@ -491,9 +496,7 @@ export class CaptionController {
         video.currentTime < cue.endTime &&
         cue.text === caption.text,
     );
-    const visibleSource = customOriginal ? caption.text : '';
-    this.original.hidden = !visibleSource;
-    this.original.textContent = visibleSource;
+    const needsSplit = timedCaption?.needsSplit === true;
     if (!caption.text) {
       this.clearCaption();
       return;
@@ -535,18 +538,18 @@ export class CaptionController {
     if (!usesModel) {
       if (this.currentText) this.version++;
       this.currentText = '';
+      this.currentNeedsSplit = false;
       this.requested = '';
       this.translated.classList.remove('error');
-      this.translationReady = false;
+      this.translationResult = null;
       this.checkedCache = false;
       this.translated.textContent = '';
       this.translated.hidden = true;
-      return;
-    }
-    if (caption.text !== this.currentText) {
+    } else if (caption.text !== this.currentText || needsSplit !== this.currentNeedsSplit) {
       this.version++;
       this.currentText = caption.text;
-      this.translationReady = false;
+      this.currentNeedsSplit = needsSplit;
+      this.translationResult = null;
       this.checkedCache = false;
       this.changedAt = Date.now();
       this.requested = '';
@@ -554,7 +557,33 @@ export class CaptionController {
       this.translated.textContent = '';
       this.translated.classList.remove('error');
     }
-    if (this.translationReady) return;
+    let sourceText = usesModel && needsSplit ? '' : caption.text;
+    let translation: string | null = null;
+    if (this.translationResult !== null) {
+      if (typeof this.translationResult === 'string') translation = this.translationResult;
+      else {
+        const parts = this.translationResult.parts;
+        const active =
+          timedCaption && needsSplit
+            ? translatedCaptions(timedCaption, parts).find(
+                (part) => part.startTime <= video.currentTime && video.currentTime < part.endTime,
+              )
+            : undefined;
+        sourceText = active?.text ?? sourceText;
+        translation =
+          active?.translation ??
+          (needsSplit ? null : parts.map((part) => part.translation).join(' '));
+      }
+    }
+    const visibleSource = customOriginal ? sourceText : '';
+    if (this.original.textContent !== visibleSource) this.original.textContent = visibleSource;
+    this.original.hidden = !visibleSource;
+    if (!usesModel) return;
+    if (translation !== null) {
+      if (this.translated.textContent !== translation) this.translated.textContent = translation;
+      this.translated.hidden = !translation;
+      return;
+    }
     const cacheOnly =
       video.paused ||
       Boolean(
@@ -575,9 +604,10 @@ export class CaptionController {
     if (cacheOnly) this.checkedCache = true;
     else this.showLoadingTranslation();
     void this.connection
-      .sendMessage<string | null>({
+      .sendMessage<CaptionTranslation | null>({
         type: 'translate',
         text,
+        ...(needsSplit ? { needsSplit: true } : {}),
         ...(cacheOnly ? { cacheOnly: true } : {}),
       })
       .then((response) => {
@@ -589,12 +619,13 @@ export class CaptionController {
         }
         this.tick();
         if (this.destroyed || this.version !== version || !this.translated) return;
-        if (!response?.ok || typeof data !== 'string')
+        if (
+          !response?.ok ||
+          (typeof data !== 'string' && (!data || !Array.isArray(data.parts) || !data.parts.length))
+        )
           throw new Error(response?.error ?? '翻译未完成，请检查扩展配置。');
-        this.translationReady = true;
+        this.translationResult = data;
         this.translated.classList.remove('error');
-        this.translated.textContent = data;
-        this.translated.hidden = !data;
         this.tick();
       })
       .catch((error) => {
@@ -661,9 +692,15 @@ export class CaptionController {
       .catch(() => {});
   }
 
-  private prefetch(texts: string[], force = false, segments: readonly number[] = []): void {
+  private prefetch(
+    texts: string[],
+    force = false,
+    segments: readonly number[] = [],
+    needsSplit: readonly boolean[] = [],
+  ): void {
     const groups = texts.map((_, index) => segments[index] ?? 0);
-    const key = JSON.stringify([texts, groups]);
+    const flags = texts.map((_, index) => needsSplit[index] === true);
+    const key = JSON.stringify([texts, groups, flags]);
     if (
       !force &&
       ((!this.windowKey && !texts.length) ||
@@ -672,7 +709,14 @@ export class CaptionController {
       return;
     this.windowKey = key;
     this.prefetchedAt = Date.now();
-    void this.connection.sendMessage({ type: 'prefetch', texts, segments: groups }).catch(() => {});
+    void this.connection
+      .sendMessage({
+        type: 'prefetch',
+        texts,
+        segments: groups,
+        ...(flags.some(Boolean) ? { needsSplit: flags } : {}),
+      })
+      .catch(() => {});
   }
 
   private showLoadingTranslation(): void {
@@ -709,8 +753,9 @@ export class CaptionController {
   private clearCaption(): void {
     if (this.currentText) this.version++;
     this.currentText = '';
+    this.currentNeedsSplit = false;
     this.requested = '';
-    this.translationReady = false;
+    this.translationResult = null;
     this.checkedCache = false;
     if (this.translated) {
       this.translated.hidden = true;

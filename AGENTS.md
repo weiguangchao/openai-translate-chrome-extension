@@ -6,12 +6,12 @@
 
 ### Sentence
 
-A sentence is one cue of the source subtitle timeline; on YouTube, cues are first rejoined and cut at sentence-ending punctuation, so each one is a complete sentence. A sentence becomes one caption, or several when it is split at commas.
+A sentence is one cue in the source subtitle timeline. YouTube first rejoins cues and splits them at sentence-ending punctuation. Sentences over 80 display columns are split locally at commas, except DOM-only or overlapping subtitles.
 
 ### Caption
 
-A caption is the text shown on screen at one time and translated as one item: a whole sentence, or one comma-split part of a sentence wider than 90 display columns. Each caption has its own start and end time, and captions are numbered sequentially from zero.
+An input caption is a whole sentence or one locally split part. An input still over 80 display columns is split and translated into display captions by the Provider in the same request. Provider-split captions appear only when ready, with matching source and translation shown together at times computed by the extension.
 
 ### Segment
 
-A segment is up to ten consecutive captions sent to the Provider in one request, which returns one translation per caption in order; segments are numbered sequentially from zero. A segment never ends inside a sentence: a sentence whose captions do not fit starts the next segment, so a segment may hold fewer than ten captions. Only a sentence with more than ten captions spans several segments.
+A segment contains up to ten consecutive input captions sent in one Provider request; segments are numbered from zero. Each result maps to an input ID and may contain multiple display captions, so the limit applies before Provider splitting. A sentence moves to the next segment if it does not fit; only a sentence with more than ten input captions spans segments.

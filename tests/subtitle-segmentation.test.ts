@@ -24,7 +24,7 @@ it('reads each closed translation without parsing a partial JSON document', () =
 });
 
 it('packs comma-separated clauses into as few parts as the display limit allows', () => {
-  const clause = 'a'.repeat(40);
+  const clause = 'a'.repeat(Math.floor((subtitleDisplayLimit - 3) / 2));
   const text = `${clause}, ${clause}, ${clause}`;
   expect(splitSubtitleAtCommas(text).map((part) => text.slice(part.from, part.to))).toEqual([
     `${clause}, ${clause},`,

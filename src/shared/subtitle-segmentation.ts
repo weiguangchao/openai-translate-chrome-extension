@@ -1,4 +1,4 @@
-export const subtitleDisplayLimit = 90;
+export const subtitleDisplayLimit = 80;
 
 export function subtitleDisplayLength(text: string): number {
   return [...text].reduce(
@@ -25,7 +25,7 @@ export function parseModelJson(response: string): unknown {
 
 export function scanTranslationStrings(source: string): { values: string[]; closed: boolean } {
   const text = stripOpeningFence(source);
-  const start = findTranslationsArray(text);
+  const start = findArray(text, 'translations');
   if (start < 0) return { values: [], closed: false };
   const values: string[] = [];
   let index = start + 1;
@@ -81,7 +81,28 @@ function skipSpace(text: string, index: number): number {
   return cursor;
 }
 
-function findTranslationsArray(text: string): number {
+export function scanTranslationResults(source: string): unknown[] {
+  const text = stripOpeningFence(source);
+  const start = findArray(text, 'results');
+  if (start < 0) return [];
+  const values: unknown[] = [];
+  let index = skipSpace(text, start + 1);
+  while (index < text.length && text[index] !== ']') {
+    const end = skipValue(text, index);
+    if (end < 0) break;
+    try {
+      values.push(JSON.parse(text.slice(index, end)));
+    } catch {
+      break;
+    }
+    index = skipSpace(text, end);
+    if (text[index] !== ',') break;
+    index = skipSpace(text, index + 1);
+  }
+  return values;
+}
+
+function findArray(text: string, name: string): number {
   let index = skipSpace(text, 0);
   if (index >= text.length) return -1;
   if (text[index] === '[') return index;
@@ -96,7 +117,7 @@ function findTranslationsArray(text: string): number {
     index = skipSpace(text, key.end);
     if (text[index] !== ':') return -1;
     index = skipSpace(text, index + 1);
-    if (key.value === 'translations') return text[index] === '[' ? index : -1;
+    if (key.value === name) return text[index] === '[' ? index : -1;
     const next = skipValue(text, index);
     if (next < 0) return -1;
     index = skipSpace(text, next);
