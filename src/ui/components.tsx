@@ -1,14 +1,4 @@
-import {
-  Check,
-  ChevronDown,
-  Expand,
-  Film,
-  Languages,
-  LockKeyhole,
-  SlidersHorizontal,
-  Subtitles,
-  X,
-} from 'lucide-react';
+import { Check, ChevronDown, Expand, Languages, Subtitles, X } from 'lucide-react';
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { LANGUAGES, type Settings } from '../shared/settings';
 
@@ -20,7 +10,6 @@ export function Logo({ small = false }: { small?: boolean }) {
         <strong>
           Subline<span className="brand-period">.</span>
         </strong>
-        {!small && <span>双语字幕，随心而译</span>}
       </div>
     </div>
   );
@@ -149,13 +138,7 @@ const SAMPLES: Record<string, [string, string]> = {
   th: ['มีโลกทั้งใบกำลังรอเราอยู่', 'บางช่วงเวลาก็คุ้มค่าที่จะค่อย ๆ ซึมซับ'],
   vi: ['Cả một thế giới đang chờ chúng ta.', 'Có những khoảnh khắc đáng để sống chậm lại.'],
 };
-export function SubtitlePreview({
-  settings,
-  onStyle,
-}: {
-  settings: Settings;
-  onStyle?: () => void;
-}) {
+export function SubtitlePreview({ settings }: { settings: Settings }) {
   const [expanded, setExpanded] = useState(false);
   const [sample, setSample] = useState(0);
   const sampleText = (language: string) => (SAMPLES[language] ?? SAMPLES.en)[sample];
@@ -173,9 +156,6 @@ export function SubtitlePreview({
       />
       <div className="scene-shade" />
       <div className="scene-top">
-        <span>
-          <Film size={12} /> A little more of the world
-        </span>
         {!large && (
           <button
             className="scene-button"
@@ -231,23 +211,10 @@ export function SubtitlePreview({
               <b>{settings.translation.size} px</b>
             </span>
           </div>
-          {onStyle && (
-            <button className="preview-style-button" onClick={onStyle}>
-              <SlidersHorizontal size={14} /> 自定义字幕样式 <span aria-hidden>›</span>
-            </button>
-          )}
-          <p>预览仅展示样式，实际译文由所选模型生成。</p>
         </div>
       </section>
       {expanded && <PreviewDialog onClose={() => setExpanded(false)}>{scene(true)}</PreviewDialog>}
     </>
-  );
-}
-export function PrivacyNote() {
-  return (
-    <span className="privacy-note">
-      <LockKeyhole size={13} /> 设置仅保存在当前浏览器
-    </span>
   );
 }
 export function LanguageIcon() {

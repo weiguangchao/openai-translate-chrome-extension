@@ -1,4 +1,3 @@
-export type ApiFormat = 'chat' | 'completions';
 export interface SubtitleStyle {
   color: string;
   size: number;
@@ -8,7 +7,6 @@ export interface Settings {
   baseUrl: string;
   apiKey: string;
   model: string;
-  apiFormat: ApiFormat;
   sourceLanguage: string;
   targetLanguage: string;
   original: SubtitleStyle;
@@ -18,7 +16,7 @@ export interface Settings {
   youtube: boolean;
   hbo: boolean;
 }
-export type PublicSettings = Omit<Settings, 'apiKey' | 'baseUrl' | 'model' | 'apiFormat'> & {
+export type PublicSettings = Omit<Settings, 'apiKey' | 'baseUrl' | 'model'> & {
   configured: boolean;
 };
 export const LANGUAGES = [
@@ -43,7 +41,6 @@ export const DEFAULT_SETTINGS: Settings = {
   baseUrl: 'https://api.openai.com/v1',
   apiKey: '',
   model: '',
-  apiFormat: 'chat',
   sourceLanguage: 'en',
   targetLanguage: 'zh-CN',
   original: { color: '#FFFFFF', size: 24 },
@@ -63,7 +60,6 @@ export function normalizeSettings(value: unknown): Settings {
     if (typeof input[key] === 'string') result[key] = input[key];
   for (const key of ['sourceLanguage', 'targetLanguage'] as const)
     if (LANGUAGES.some((l) => l.value === input[key])) result[key] = input[key]!;
-  if (input.apiFormat === 'completions') result.apiFormat = 'completions';
   for (const key of ['original', 'translation'] as const) {
     if (/^#[\da-f]{6}$/i.test(input[key]?.color ?? '')) result[key].color = input[key]!.color;
     if (Number.isFinite(input[key]?.size))
@@ -76,7 +72,7 @@ export function normalizeSettings(value: unknown): Settings {
   return result;
 }
 export function publicSettings(settings: Settings): PublicSettings {
-  const { apiKey: _key, baseUrl: _url, model: _model, apiFormat: _format, ...rest } = settings;
+  const { apiKey: _key, baseUrl: _url, model: _model, ...rest } = settings;
   return { ...rest, configured: Boolean(settings.apiKey.trim() && settings.model.trim()) };
 }
 export function validateBaseUrl(raw: string): URL {

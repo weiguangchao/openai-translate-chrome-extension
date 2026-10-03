@@ -1,13 +1,10 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import {
   ArrowLeftRight,
-  ArrowRight,
-  BookOpen,
   Check,
   CheckCheck,
   ChevronRight,
   CircleHelp,
-  ExternalLink,
   Eye,
   EyeOff,
   Globe2,
@@ -43,33 +40,24 @@ import {
   HboMark,
   LanguageSelect,
   Logo,
-  PrivacyNote,
   Select,
   SubtitlePreview,
   Toggle,
   YoutubeMark,
 } from './components';
 
-type Page = 'general' | 'appearance' | 'guide';
+type Page = 'general' | 'appearance';
 type Notice = { kind: 'success' | 'error'; text: string } | null;
 const PAGES = [
   {
     id: 'general' as const,
     name: '常规设置',
     icon: Settings2,
-    description: '连接翻译服务，让每一段精彩都有你熟悉的语言。',
   },
   {
     id: 'appearance' as const,
     name: '字幕样式',
     icon: SlidersHorizontal,
-    description: '调整两种语言的颜色与大小，找到最舒服的阅读方式。',
-  },
-  {
-    id: 'guide' as const,
-    name: '使用指南',
-    icon: BookOpen,
-    description: '完成简单设置，就可以带着两种语言看世界。',
   },
 ];
 
@@ -114,12 +102,7 @@ export function App() {
   const [testResult, setTestResult] = useState('');
   const dirty = ready && JSON.stringify(settings) !== saved;
   const current = PAGES.find((item) => item.id === page)!;
-  const fingerprint = JSON.stringify([
-    settings.baseUrl,
-    settings.apiKey,
-    settings.model,
-    settings.apiFormat,
-  ]);
+  const fingerprint = JSON.stringify([settings.baseUrl, settings.apiKey, settings.model]);
   const connected = connection === fingerprint;
 
   useEffect(() => {
@@ -151,9 +134,7 @@ export function App() {
     setNotice(null);
     setSettings((previous) => ({ ...previous, [key]: value }));
     if (key === 'baseUrl' || key === 'apiKey') setModels([]);
-    if (
-      ['baseUrl', 'apiKey', 'model', 'apiFormat', 'sourceLanguage', 'targetLanguage'].includes(key)
-    )
+    if (['baseUrl', 'apiKey', 'model', 'sourceLanguage', 'targetLanguage'].includes(key))
       setTestResult('');
   }
   function navigate(next: Page) {
@@ -213,12 +194,7 @@ export function App() {
         });
       } else {
         setConnection(
-          JSON.stringify([
-            requestSettings.baseUrl,
-            requestSettings.apiKey,
-            requestSettings.model,
-            requestSettings.apiFormat,
-          ]),
+          JSON.stringify([requestSettings.baseUrl, requestSettings.apiKey, requestSettings.model]),
         );
         setTestResult(result as string);
         setNotice({ kind: 'success', text: '连接成功，已完成一条示例字幕的翻译。' });
@@ -250,24 +226,6 @@ export function App() {
             </button>
           ))}
         </nav>
-        <div className="sidebar-bottom">
-          <div className="sidebar-help">
-            <span className="help-icon">
-              <Languages size={21} />
-            </span>
-            <h3>好故事，不止一种语言。</h3>
-            <p>听懂对白，也读懂世界。</p>
-            <button onClick={() => navigate('guide')}>
-              开始使用 <ArrowRight size={14} />
-            </button>
-          </div>
-          <div className="version">
-            <span>
-              <img src="./logo.svg" alt="" /> Subline for Chrome
-            </span>
-            <span>v0.1.0</span>
-          </div>
-        </div>
       </aside>
       <main className="workspace">
         <header className="topbar">
@@ -277,16 +235,10 @@ export function App() {
             <ChevronRight size={13} />
             <span>{current.name}</span>
           </div>
-          <span className="local-tag">
-            <span className="status-dot" /> 本地工作空间
-          </span>
         </header>
-        <div className="page-content">
+        <div className={`page-content ${page === 'general' ? 'general-page' : ''}`}>
           <div className="page-heading">
-            <div>
-              <h1>{current.name}</h1>
-              <p>{current.description}</p>
-            </div>
+            <h1>{current.name}</h1>
             <button
               className="button primary save-button"
               onClick={() => void save()}
@@ -303,10 +255,7 @@ export function App() {
           {!isExtension && (
             <div className="browser-note">
               <Info size={14} />
-              <span>当前为浏览器预览。安装 Chrome 扩展后，即可在视频页面启用双语字幕。</span>
-              <button onClick={() => navigate('guide')}>
-                安装方法 <ChevronRight size={13} />
-              </button>
+              <span>浏览器预览：API Key 刷新后需重新填写。</span>
             </div>
           )}
           {notice && (
@@ -321,7 +270,7 @@ export function App() {
               </button>
             </div>
           )}
-          <div className="content-grid">
+          <div className={`content-grid ${page === 'appearance' ? 'with-preview' : ''}`}>
             <div className="settings-column">
               {page === 'general' && (
                 <>
@@ -332,9 +281,8 @@ export function App() {
                     <div>
                       <h2>
                         启用双语字幕{' '}
-                        <span className="small-tag">{settings.enabled ? '已开启' : '已暂停'}</span>
+                        <span className="small-tag">{settings.enabled ? '已开启' : '已关闭'}</span>
                       </h2>
-                      <p>在支持的视频网站中，自动显示双语字幕</p>
                     </div>
                     <Toggle
                       label="启用双语字幕"
@@ -342,16 +290,10 @@ export function App() {
                       onChange={(value) => update('enabled', value)}
                     />
                   </div>
-                  <Section
-                    icon={<Languages size={19} />}
-                    title="语言偏好"
-                    description="一边看喜欢的内容，一边熟悉另一种语言。"
-                  >
+                  <Section icon={<Languages size={19} />} title="字幕语言">
                     <div className="language-pair">
                       <div className="field">
-                        <label htmlFor="source-language">
-                          学习语言 <span>原文</span>
-                        </label>
+                        <label htmlFor="source-language">原文语言</label>
                         <LanguageSelect
                           id="source-language"
                           value={settings.sourceLanguage}
@@ -360,7 +302,7 @@ export function App() {
                       </div>
                       <button
                         className="swap-button"
-                        aria-label="交换学习语言和母语"
+                        aria-label="互换原文和译文语言"
                         title="交换语言"
                         onClick={() =>
                           setSettings((previous) => ({
@@ -373,9 +315,7 @@ export function App() {
                         <ArrowLeftRight size={17} />
                       </button>
                       <div className="field">
-                        <label htmlFor="target-language">
-                          我的母语 <span>译文</span>
-                        </label>
+                        <label htmlFor="target-language">译文语言</label>
                         <LanguageSelect
                           id="target-language"
                           value={settings.targetLanguage}
@@ -390,8 +330,8 @@ export function App() {
                   </Section>
                   <Section
                     icon={<PlugZap size={19} />}
-                    title="翻译服务"
-                    description="连接 OpenAI 或兼容 OpenAI 的 API 服务。"
+                    title="Provider"
+                    description="OpenAI 兼容接口"
                     className="api-section"
                   >
                     <div className={`connection-badge ${connected ? 'connected' : ''}`}>
@@ -430,7 +370,8 @@ export function App() {
                         <label htmlFor="api-key">
                           API Key{' '}
                           <span className="label-side">
-                            <LockKeyhole size={11} /> 仅本地保存
+                            <LockKeyhole size={11} />
+                            {isExtension ? '仅本地保存' : '仅当前页面有效'}
                           </span>
                         </label>
                         <div className="input-icon key-input">
@@ -499,27 +440,7 @@ export function App() {
                             {busy === 'models' ? '获取中' : '获取模型'}
                           </button>
                         </div>
-                        <p className="field-hint">从你的 API 服务获取模型，也可以手动填写。</p>
                       </div>
-                      <details className="advanced">
-                        <summary>
-                          高级接口设置 <ChevronRight size={13} />
-                        </summary>
-                        <div className="field">
-                          <label htmlFor="api-format">接口类型</label>
-                          <Select
-                            id="api-format"
-                            value={settings.apiFormat}
-                            onChange={(value) =>
-                              update('apiFormat', value as Settings['apiFormat'])
-                            }
-                          >
-                            <option value="chat">Chat Completions · /chat/completions</option>
-                            <option value="completions">Completions · /completions</option>
-                          </Select>
-                          <p className="field-hint">根据服务商及模型支持的接口选择。</p>
-                        </div>
-                      </details>
                     </fieldset>
                     <div className="api-footer">
                       <span>
@@ -553,9 +474,7 @@ export function App() {
                     <div className="site-options">
                       <div>
                         <YoutubeMark />
-                        <span>
-                          YouTube<small>视频与自动生成字幕</small>
-                        </span>
+                        <span>YouTube</span>
                         <Toggle
                           label="在 YouTube 启用"
                           checked={settings.youtube}
@@ -564,9 +483,7 @@ export function App() {
                       </div>
                       <div>
                         <HboMark />
-                        <span>
-                          HBO Max<small>可读取的播放器字幕</small>
-                        </span>
+                        <span>HBO Max</span>
                         <Toggle
                           label="在 HBO Max 启用"
                           checked={settings.hbo}
@@ -579,23 +496,11 @@ export function App() {
               )}
               {page === 'appearance' && (
                 <>
-                  <div className="page-callout">
-                    <Layers3 size={21} />
-                    <div>
-                      <strong>原文在上，译文在下</strong>
-                      <p>YouTube 使用自定义字幕，原文在上，译文在下，按句同步显示。</p>
-                    </div>
-                  </div>
                   {(['original', 'translation'] as const).map((kind) => (
                     <Section
                       key={kind}
                       icon={kind === 'original' ? <Subtitles size={19} /> : <Languages size={19} />}
                       title={kind === 'original' ? '原文样式' : '译文样式'}
-                      description={
-                        kind === 'original'
-                          ? '正在学习的语言，保留原汁原味的表达。'
-                          : '用熟悉的语言，理解每一句对白。'
-                      }
                     >
                       <div className="color-field">
                         <label htmlFor={`${kind}-color`}>字体颜色</label>
@@ -726,149 +631,17 @@ export function App() {
                   </Section>
                 </>
               )}
-              {page === 'guide' && (
-                <>
-                  <Section icon={<BookOpen size={19} />} title="从这里开始">
-                    <ol className="guide-steps">
-                      <li>
-                        <span>1</span>
-                        <div>
-                          <h3>安装到 Chrome</h3>
-                          <p>
-                            在项目目录运行 <code>npm install</code> 和 <code>npm run build</code>
-                            。打开 <code>chrome://extensions</code>
-                            ，开启「开发者模式」，点击「加载已解压的扩展程序」，选择项目中的{' '}
-                            <code>dist</code> 文件夹。
-                          </p>
-                        </div>
-                      </li>
-                      <li>
-                        <span>2</span>
-                        <div>
-                          <h3>连接你的翻译服务</h3>
-                          <p>
-                            填写 Base URL 和 API
-                            Key，点击「获取模型」并选择支持文本翻译的模型。也可以手动填写 Model
-                            ID，再用「测试连接」确认。
-                          </p>
-                          <button className="text-button" onClick={() => navigate('general')}>
-                            配置翻译服务 <ArrowRight size={13} />
-                          </button>
-                        </div>
-                      </li>
-                      <li>
-                        <span>3</span>
-                        <div>
-                          <h3>选择语言，保存设置</h3>
-                          <p>
-                            选择正在学习的原文语言和你的母语。按需调整字幕样式，然后点击「保存更改」。
-                          </p>
-                        </div>
-                      </li>
-                      <li>
-                        <span>4</span>
-                        <div>
-                          <h3>打开视频，开启原字幕</h3>
-                          <p>
-                            在 YouTube 或 HBO Max
-                            播放视频，开启播放器字幕，并将字幕语言设为学习语言。安装或重新加载扩展后，请刷新已有的视频页面。
-                          </p>
-                        </div>
-                      </li>
-                    </ol>
-                  </Section>
-                  <Section icon={<CircleHelp size={19} />} title="常见问题">
-                    <div className="faq">
-                      <details>
-                        <summary>为什么还没有显示译文？</summary>
-                        <p>
-                          先确认扩展已启用，原文语言和母语设置正确。YouTube
-                          需要开启字幕并配置翻译服务，人工字幕和自动字幕都会先断句再交给模型翻译；首次翻译需要等待接口响应。HBO
-                          可直接加载已有母语字幕，无需 API Key。部分 HBO
-                          播放器会将字幕绘制在不可读取的图层上，这类字幕目前也无法翻译。
-                        </p>
-                      </details>
-                      <details>
-                        <summary>模型列表获取失败怎么办？</summary>
-                        <p>
-                          检查 Base URL 和 API Key。扩展先请求 /models，接口返回 404 或 405 时尝试
-                          /model。若服务商不提供模型列表，可手动填写 Model ID。浏览器预览还受 CORS
-                          限制，安装扩展并授权 API 域名后可跨域请求。
-                        </p>
-                      </details>
-                      <details>
-                        <summary>会上传什么内容？</summary>
-                        <p>
-                          YouTube 会将原文按句发送到翻译服务。HBO
-                          使用已有母语字幕时不会调用模型。需要翻译时，会把当前和预加载的字幕、所选语言、提示词和模型
-                          ID 发送到你配置的服务商。API Key
-                          仅用于该服务的身份验证，不会提供给视频网站。扩展不收集观看记录，不接入分析服务。浏览器预览不会持久化
-                          API Key。
-                        </p>
-                      </details>
-                      <details>
-                        <summary>翻译是否收费？支持离线吗？</summary>
-                        <p>
-                          API
-                          调用由你的服务商按其规则计费，包括「测试连接」。字幕翻译需要可访问的接口，也可配置本地的
-                          OpenAI 兼容服务。
-                        </p>
-                      </details>
-                    </div>
-                  </Section>
-                  <div className="guide-links">
-                    <a href="https://www.youtube.com" target="_blank" rel="noreferrer">
-                      <YoutubeMark /> 打开 YouTube <ExternalLink size={13} />
-                    </a>
-                    <a href="https://www.hbomax.com" target="_blank" rel="noreferrer">
-                      <HboMark /> 打开 HBO Max <ExternalLink size={13} />
-                    </a>
-                  </div>
-                </>
-              )}
               <footer className="settings-footer">
-                <PrivacyNote />
                 <span className={dirty ? 'unsaved' : ''}>
                   {dirty ? '有未保存的更改' : '所有更改已保存'}
                 </span>
               </footer>
             </div>
-            <aside className="preview-column">
-              <SubtitlePreview
-                settings={settings}
-                onStyle={page !== 'appearance' ? () => navigate('appearance') : undefined}
-              />
-              <div className="preview-explainer">
-                <span className="explainer-icon">
-                  <Layers3 size={20} />
-                </span>
-                <div>
-                  <h3>原声的精彩，双语的理解。</h3>
-                  <p>原文与译文一起看，让理解跟上对白，也让语言学习自然发生。</p>
-                  <button onClick={() => navigate('guide')}>
-                    了解双语字幕 <ArrowRight size={13} />
-                  </button>
-                </div>
-              </div>
-              <div className="works-with">
-                <span>陪你看喜欢的内容</span>
-                <div>
-                  <span>
-                    <YoutubeMark /> YouTube
-                  </span>
-                  <i />
-                  <HboMark />
-                </div>
-              </div>
-              <div className="privacy-detail">
-                <ShieldCheck size={16} />
-                <p>
-                  由你选择的 AI 提供翻译
-                  <br />
-                  无需注册，使用你自己的 API Key
-                </p>
-              </div>
-            </aside>
+            {page === 'appearance' && (
+              <aside className="preview-column" aria-label="字幕预览">
+                <SubtitlePreview settings={settings} />
+              </aside>
+            )}
           </div>
         </div>
       </main>

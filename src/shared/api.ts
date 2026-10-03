@@ -127,11 +127,10 @@ function providerKey(settings: Settings): string {
 
 function probes(settings: Settings, batch: boolean): Probe[] {
   const key = providerKey(settings);
-  const chat = settings.apiFormat === 'chat';
   const steps: Probe[] = [];
   let stream = batch && !streamRejected.has(key);
-  let reasoning = chat && !reasoningRejected.has(key);
-  let maxTokens = chat ? !maxTokensRejected.has(key) : true;
+  let reasoning = !reasoningRejected.has(key);
+  let maxTokens = !maxTokensRejected.has(key);
   const push = (dropped: Dropped) => steps.push({ stream, reasoning, maxTokens, dropped });
   push(null);
   if (stream) {
@@ -142,7 +141,7 @@ function probes(settings: Settings, batch: boolean): Probe[] {
     reasoning = false;
     push('reasoning');
   }
-  if (chat && maxTokens) {
+  if (maxTokens) {
     maxTokens = false;
     push('maxTokens');
   }
@@ -164,17 +163,12 @@ function completionBody(
   maxTokens: number,
   probe: Probe,
 ): object {
-  const chat = settings.apiFormat === 'chat';
   return {
     model: settings.model.trim(),
-    ...(chat
-      ? {
-          messages: [
-            { role: 'system', content: instructions },
-            { role: 'user', content: input },
-          ],
-        }
-      : { prompt: `${instructions}\n\nInput:\n${input}\n\nOutput:` }),
+    messages: [
+      { role: 'system', content: instructions },
+      { role: 'user', content: input },
+    ],
     stream: probe.stream,
     ...(probe.maxTokens ? { max_tokens: maxTokens } : {}),
     ...(probe.reasoning ? { reasoning_effort: 'low' as const } : {}),
@@ -192,21 +186,17 @@ async function complete(
 ): Promise<string> {
   validateSettings(settings, true);
   const instructions = translatorInstructions(settings, task);
-  const chat = settings.apiFormat === 'chat';
-  const path = chat ? '/chat/completions' : '/completions';
   let lastError: unknown;
   for (const probe of probes(settings, batch)) {
     try {
       const text = await postModel(
         settings,
-        path,
         completionBody(settings, instructions, input, maxTokens, probe),
         signal,
-        chat,
         onText,
       );
       rememberRejection(settings, probe.dropped);
-      if (!text.trim()) throw new Error('模型未返回译文，请确认该模型支持所选接口类型。');
+      if (!text.trim()) throw new Error('模型未返回译文，请确认该模型支持 /chat/completions。');
       return text.trim();
     } catch (error) {
       lastError = error;
@@ -218,15 +208,13 @@ async function complete(
 
 async function postModel(
   settings: Settings,
-  path: string,
   body: object,
   signal: AbortSignal | undefined,
-  chat: boolean,
   onText?: (text: string) => void,
 ): Promise<string> {
   const deadline = withDeadline(signal);
-  const response = await fetchApi(settings, path, body, deadline);
-  return readModelText(response, chat, deadline, onText);
+  const response = await fetchApi(settings, '/chat/completions', body, deadline);
+  return readModelText(response, deadline, onText);
 }
 
 export async function translate(
@@ -307,11 +295,10 @@ function finalizedBatch(
 
 async function readModelText(
   response: Response,
-  chat: boolean,
   signal: AbortSignal,
   onText?: (text: string) => void,
 ): Promise<string> {
-  if (!response.body) return modelTextFromBuffer(await response.text(), chat, true, onText);
+  if (!response.body) return modelTextFromBuffer(await response.text(), true, onText);
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let pending = '';
@@ -337,16 +324,16 @@ async function readModelText(
       }
       if (mode === 'json') {
         if (!done) continue;
-        const text = jsonModelText(pending, chat);
+        const text = jsonModelText(pending);
         if (text) onText?.(text);
         return text;
       }
       const split = splitEvents(pending);
       pending = split.rest;
       let piece = '';
-      for (const event of split.events) piece += eventModelText(event, chat) ?? '';
+      for (const event of split.events) piece += eventModelText(event) ?? '';
       if (done && pending.trim()) {
-        piece += eventModelText(pending, chat) ?? '';
+        piece += eventModelText(pending) ?? '';
         pending = '';
       }
       if (piece) {
@@ -365,23 +352,18 @@ async function readModelText(
   }
 }
 
-function modelTextFromBuffer(
-  raw: string,
-  chat: boolean,
-  done: boolean,
-  onText?: (text: string) => void,
-): string {
+function modelTextFromBuffer(raw: string, done: boolean, onText?: (text: string) => void): string {
   const sniffed = sniffBody(raw, done);
   if (sniffed === 'json') {
-    const text = jsonModelText(raw, chat);
+    const text = jsonModelText(raw);
     if (text) onText?.(text);
     return text;
   }
   if (sniffed !== 'sse') throw invalidJson();
   const split = splitEvents(raw);
   let generated = '';
-  for (const event of split.events) generated += eventModelText(event, chat) ?? '';
-  if (split.rest.trim()) generated += eventModelText(split.rest, chat) ?? '';
+  for (const event of split.events) generated += eventModelText(event) ?? '';
+  if (split.rest.trim()) generated += eventModelText(split.rest) ?? '';
   if (generated) onText?.(generated);
   return generated;
 }
@@ -416,7 +398,7 @@ function splitEvents(buffer: string): { events: string[]; rest: string } {
   return { events, rest: buffer.slice(start) };
 }
 
-function eventModelText(event: string, chat: boolean): string | null {
+function eventModelText(event: string): string | null {
   const data = event
     .split(/\r?\n/)
     .filter((line) => line.startsWith('data:'))
@@ -425,29 +407,25 @@ function eventModelText(event: string, chat: boolean): string | null {
     .trim();
   if (!data || data === '[DONE]') return null;
   try {
-    return choiceText(JSON.parse(data) as unknown, chat, true);
+    return choiceText(JSON.parse(data) as unknown, true);
   } catch {
     return null;
   }
 }
 
-function jsonModelText(raw: string, chat: boolean): string {
+function jsonModelText(raw: string): string {
   let payload: unknown;
   try {
     payload = JSON.parse(raw);
   } catch {
     throw invalidJson();
   }
-  return choiceText(payload, chat, false) ?? '';
+  return choiceText(payload, false) ?? '';
 }
 
-function choiceText(payload: unknown, chat: boolean, streamed: boolean): string | null {
+function choiceText(payload: unknown, streamed: boolean): string | null {
   const choice = (payload as { choices?: unknown[] } | null)?.choices?.[0] as
-    { delta?: { content?: unknown }; message?: { content?: unknown }; text?: unknown } | undefined;
-  const value = chat
-    ? streamed
-      ? choice?.delta?.content
-      : choice?.message?.content
-    : choice?.text;
+    { delta?: { content?: unknown }; message?: { content?: unknown } } | undefined;
+  const value = streamed ? choice?.delta?.content : choice?.message?.content;
   return typeof value === 'string' ? value : null;
 }

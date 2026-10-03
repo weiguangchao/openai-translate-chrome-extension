@@ -40,7 +40,6 @@ export class TranslationQueue {
     return JSON.stringify([
       settings.baseUrl,
       settings.apiKey,
-      settings.apiFormat,
       settings.model,
       settings.sourceLanguage,
       settings.targetLanguage,

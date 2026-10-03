@@ -63,73 +63,65 @@ describe('OpenAI-compatible provider contract', () => {
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 
-  it.each(['chat', 'completions'] as const)(
-    'translates with the %s protocol using the built-in English translator prompt and literal content',
+  it.each([undefined, 'chat', 'completions'])(
+    'translates through chat completions with saved apiFormat=%s and literal content',
     async (apiFormat) => {
       const fetch = vi
         .fn()
         .mockResolvedValue(
-          Response.json(
-            apiFormat === 'chat'
-              ? { choices: [{ message: { content: '  保留字幕中的变量。  ' } }] }
-              : { choices: [{ text: '  保留字幕中的变量。  ' }] },
-          ),
+          Response.json({ choices: [{ message: { content: '  保留字幕中的变量。  ' } }] }),
         );
       vi.stubGlobal('fetch', fetch);
       const text = 'Keep {{target_language}} and $& literal.';
-      await expect(translate({ ...config(), apiFormat }, text)).resolves.toBe('保留字幕中的变量。');
+      const settings = normalizeSettings({ ...config(), apiFormat });
+      expect(settings).not.toHaveProperty('apiFormat');
+      await expect(translate(settings, text)).resolves.toBe('保留字幕中的变量。');
       const [url, init] = fetch.mock.calls[0];
-      expect(url).toBe(
-        `https://provider.example/api/v1/${apiFormat === 'chat' ? 'chat/completions' : 'completions'}`,
-      );
+      expect(url).toBe('https://provider.example/api/v1/chat/completions');
+      expect(init.method).toBe('POST');
       const body = JSON.parse(init.body);
       expect(body.model).toBe('subtitle-model');
-      const instructions: string =
-        apiFormat === 'chat' ? body.messages[0].content : body.prompt.split('\n\nInput:\n')[0];
+      const instructions: string = body.messages[0].content;
       expect(instructions).toMatch(/^Translate the given English into Simplified Chinese\./);
       expect(instructions).toContain('Output only the translation');
       expect(instructions).not.toMatch(/subtitle|film|movie/i);
       expect(instructions).toMatch(/^[\x20-\x7E\n]+$/);
-      if (apiFormat === 'chat') {
-        expect(body.messages[0].role).toBe('system');
-        expect(body.messages[1]).toEqual({ role: 'user', content: text });
-      } else expect(body.prompt).toBe(`${instructions}\n\nInput:\n${text}\n\nOutput:`);
+      expect(body.messages[0].role).toBe('system');
+      expect(body.messages[1]).toEqual({ role: 'user', content: text });
+      expect(body).not.toHaveProperty('prompt');
       expect(body.stream).toBe(false);
       expect(body.max_tokens).toBe(1024);
-      expect(body.reasoning_effort).toBe(apiFormat === 'chat' ? 'low' : undefined);
+      expect(body.reasoning_effort).toBe('low');
       expect(init.redirect).toBe('error');
       expect(init.credentials).toBe('omit');
     },
   );
 
-  it.each(['chat', 'completions'] as const)(
-    'translates up to ten cues in one %s request and returns translations in cue order',
+  it.each([undefined, 'chat', 'completions'])(
+    'translates batches through chat completions with saved apiFormat=%s and preserves cue order',
     async (apiFormat) => {
       const content = '```json\n{"translations":[" 第一句 ","第二句","第三句"]}\n```';
       const fetch = vi.fn().mockResolvedValue(
         Response.json({
-          choices: [apiFormat === 'chat' ? { message: { content } } : { text: content }],
+          choices: [{ message: { content } }],
         }),
       );
       vi.stubGlobal('fetch', fetch);
       const texts = ['One.', 'Two "quoted"\nlines.', 'Three.'];
-      await expect(translateBatch({ ...config(), apiFormat }, texts)).resolves.toEqual([
-        '第一句',
-        '第二句',
-        '第三句',
-      ]);
+      await expect(
+        translateBatch(normalizeSettings({ ...config(), apiFormat }), texts),
+      ).resolves.toEqual(['第一句', '第二句', '第三句']);
       expect(fetch).toHaveBeenCalledTimes(1);
+      expect(fetch.mock.calls[0][0]).toBe('https://provider.example/api/v1/chat/completions');
       const body = JSON.parse(fetch.mock.calls[0][1].body);
-      const instructions: string =
-        apiFormat === 'chat' ? body.messages[0].content : body.prompt.split('\n\nInput:\n')[0];
+      const instructions: string = body.messages[0].content;
       expect(instructions).toMatch(/^Translate the given English into Simplified Chinese\./);
       expect(instructions).toContain('exactly 3 strings');
-      expect(apiFormat === 'chat' ? body.messages[1].content : body.prompt).toContain(
-        JSON.stringify(texts),
-      );
+      expect(body.messages[1].content).toBe(JSON.stringify(texts));
+      expect(body).not.toHaveProperty('prompt');
       expect(body.stream).toBe(true);
       expect(body.max_tokens).toBe(Math.min(16384, Math.max(2048, texts.join('').length * 4)));
-      expect(body.reasoning_effort).toBe(apiFormat === 'chat' ? 'low' : undefined);
+      expect(body.reasoning_effort).toBe('low');
     },
   );
 
@@ -296,26 +288,26 @@ describe('streaming batch replies', () => {
     expect(body.reasoning_effort).toBe('low');
   });
 
-  it('reads a completions stream from choices[0].text and ignores a JSON envelope around it', async () => {
+  it('reads a chat stream when upgrading a legacy completions setting', async () => {
     const gate = sseControl();
     const fetch = vi.fn().mockImplementation(async () => gate.response);
     vi.stubGlobal('fetch', fetch);
     const seen: string[] = [];
     const pending = translateBatch(
-      { ...config(), apiFormat: 'completions', model: 'sse-completions' },
+      normalizeSettings({ ...config(), apiFormat: 'completions', model: 'legacy-sse' }),
       ['One.', 'Two.'],
       undefined,
       (index, translation) => seen.splice(index, 1, translation),
     );
     await vi.waitFor(() => expect(fetch).toHaveBeenCalled());
-    const payload = (text: string) => `data: ${JSON.stringify({ choices: [{ text }] })}\n\n`;
-    gate.push(payload('{"translations":["甲'));
+    gate.push(chatEvent('{"translations":["甲'));
     await pause();
     expect(seen).toEqual([]);
-    gate.push(payload('","乙"]}'));
+    gate.push(chatEvent('","乙"]}'));
     await vi.waitFor(() => expect(seen).toEqual(['甲', '乙']));
     gate.close();
     await expect(pending).resolves.toEqual(['甲', '乙']);
+    expect(fetch.mock.calls[0][0]).toBe('https://provider.example/api/v1/chat/completions');
     expect(JSON.parse(fetch.mock.calls[0][1].body).stream).toBe(true);
   });
 
@@ -440,21 +432,29 @@ describe('streaming batch replies', () => {
     expect(JSON.parse(fetch.mock.calls[3][1].body).max_tokens).toBe(1024);
   });
 
-  it('does not remove max_tokens from a completions batch', async () => {
+  it('keeps every batch retry on chat completions for a legacy completions setting', async () => {
     const fetch = vi.fn().mockImplementation(async () => new Response('', { status: 400 }));
     vi.stubGlobal('fetch', fetch);
     await expect(
-      translateBatch({ ...config(), apiFormat: 'completions', model: 'completions-400' }, [
-        'A',
-        'B',
-      ]),
+      translateBatch(
+        normalizeSettings({ ...config(), apiFormat: 'completions', model: 'legacy-400' }),
+        ['A', 'B'],
+      ),
     ).rejects.toThrow('HTTP 400');
-    expect(fetch).toHaveBeenCalledTimes(2);
-    const bodies = fetch.mock.calls.map((call) => JSON.parse(call[1].body));
-    expect(bodies.map((body) => body.stream)).toEqual([true, false]);
-    expect(bodies.every((body) => body.max_tokens > 0 && body.reasoning_effort === undefined)).toBe(
-      true,
+    expect(fetch).toHaveBeenCalledTimes(4);
+    expect(fetch.mock.calls.map((call) => call[0])).toEqual(
+      Array(4).fill('https://provider.example/api/v1/chat/completions'),
     );
+    const bodies = fetch.mock.calls.map((call) => JSON.parse(call[1].body));
+    expect(bodies.map((body) => body.stream)).toEqual([true, false, false, false]);
+    expect(bodies.map((body) => body.reasoning_effort)).toEqual([
+      'low',
+      'low',
+      undefined,
+      undefined,
+    ]);
+    expect(bodies.map((body) => body.max_tokens)).toEqual([2048, 2048, 2048, undefined]);
+    expect(bodies.every((body) => Array.isArray(body.messages) && !('prompt' in body))).toBe(true);
   });
 });
 
