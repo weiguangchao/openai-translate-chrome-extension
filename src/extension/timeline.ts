@@ -26,6 +26,7 @@ export interface CueTiming {
 
 export interface SubtitleTimeline {
   mode: 'checking' | 'model' | 'existing';
+  sourceId?: string;
   sourceKind?: YoutubeCaptionKind | null;
   source: TimedCue[] | null;
   translation: TimedCue[] | null;

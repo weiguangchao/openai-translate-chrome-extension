@@ -19,6 +19,14 @@ await build({
   minify: true,
 });
 await build({
+  entryPoints: ['src/extension/hbo-page.ts'],
+  outfile: 'dist/hbo-page.js',
+  bundle: true,
+  format: 'iife',
+  target: 'chrome120',
+  minify: true,
+});
+await build({
   entryPoints: ['src/extension/content.ts'],
   outfile: 'dist/content.js',
   bundle: true,

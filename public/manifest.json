@@ -33,6 +33,13 @@
   "options_page": "index.html",
   "content_scripts": [
     {
+      "matches": ["https://*.max.com/*", "https://*.hbomax.com/*", "https://*.hbo.com/*"],
+      "js": ["hbo-page.js"],
+      "world": "MAIN",
+      "run_at": "document_start",
+      "all_frames": true
+    },
+    {
       "matches": ["https://www.youtube.com/*", "https://m.youtube.com/*"],
       "js": ["youtube-page.js"],
       "world": "MAIN",

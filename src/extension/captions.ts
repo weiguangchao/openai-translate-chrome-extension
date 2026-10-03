@@ -1,5 +1,6 @@
 import type { PublicSettings } from '../shared/settings';
 import { ExtensionConnection } from './connection';
+import { HboTimeline } from './hbo-timeline';
 import {
   captionAt,
   captionText,
@@ -215,6 +216,7 @@ export class CaptionController {
   private translations = new Map<string, string>();
   private destroyed = false;
   private youtube = new YoutubeTimeline(() => this.tick());
+  private hbo = new HboTimeline(() => this.tick());
   private native = new NativeTimeline();
   private translationMode: SubtitleTimeline['mode'] | null = null;
   private windowKey = '';
@@ -271,6 +273,7 @@ export class CaptionController {
     this.resetSources();
     this.style.remove();
     this.youtube.destroy();
+    this.hbo.destroy();
     this.translations = new Map();
   }
 
@@ -315,6 +318,7 @@ export class CaptionController {
 
   private resetSources(): void {
     this.youtube.reset();
+    this.hbo.reset();
     this.native.reset();
   }
 
@@ -403,9 +407,18 @@ export class CaptionController {
       this.settings.targetLanguage,
     );
     if (youtubeTimeline) this.native.reset();
-    const subtitles =
+    const nativeSubtitles =
       youtubeTimeline ??
       this.native.read(video, this.settings.sourceLanguage, this.settings.targetLanguage);
+    const hboSubtitles =
+      !youtubeTimeline && nativeSubtitles.mode !== 'existing'
+        ? this.hbo.read(video, this.settings.sourceLanguage, this.settings.targetLanguage)
+        : null;
+    if (youtubeTimeline || nativeSubtitles.mode === 'existing') this.hbo.reset();
+    const subtitles =
+      hboSubtitles && (hboSubtitles.source !== null || hboSubtitles.mode !== 'model')
+        ? hboSubtitles
+        : nativeSubtitles;
     if (!this.settings.configured && subtitles.mode !== 'existing') {
       if (this.host) this.unmount();
       return;
@@ -427,7 +440,7 @@ export class CaptionController {
     }
     this.notePlaybackTime(video.currentTime);
     const track = selectedTrack(video, this.settings.sourceLanguage);
-    const source = video.currentSrc;
+    const source = `${video.currentSrc}:${subtitles.sourceId ?? ''}`;
     if (source !== this.source || track !== this.nativeTrack) {
       this.source = source;
       this.nativeTrack = track;

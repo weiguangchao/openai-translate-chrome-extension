@@ -12,7 +12,10 @@ export default defineConfig({
         test: {
           name: 'node',
           environment: 'node',
-          exclude: [...configDefaults.exclude, 'tests/{captions,content,prefetch,youtube}.test.ts'],
+          exclude: [
+            ...configDefaults.exclude,
+            'tests/{captions,content,prefetch,youtube,hbo}.test.ts',
+          ],
         },
       },
       {
@@ -21,6 +24,15 @@ export default defineConfig({
           name: 'dom',
           environment: 'jsdom',
           include: ['tests/{captions,content,prefetch}.test.ts'],
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: 'hbo',
+          environment: 'jsdom',
+          include: ['tests/hbo.test.ts'],
+          environmentOptions: { jsdom: { url: 'https://play.hbomax.com/video/watch/episode-1' } },
         },
       },
       {
