@@ -1,8 +1,7 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   ArrowLeftRight,
   Check,
-  CheckCheck,
   ChevronRight,
   CircleHelp,
   Eye,
@@ -21,7 +20,6 @@ import {
   ShieldCheck,
   SlidersHorizontal,
   Subtitles,
-  X,
 } from 'lucide-react';
 import {
   DEFAULT_SETTINGS,
@@ -33,7 +31,9 @@ import {
   allowApiHost,
   apiAction,
   isExtension,
+  loadCachedModels,
   loadSettings,
+  saveCachedModels,
   saveSettings,
 } from '../shared/storage';
 import {
@@ -45,9 +45,9 @@ import {
   Toggle,
   YoutubeMark,
 } from './components';
+import { useAlert } from './Alert';
 
 type Page = 'general' | 'appearance';
-type Notice = { kind: 'success' | 'error'; text: string } | null;
 const PAGES = [
   {
     id: 'general' as const,
@@ -93,13 +93,13 @@ export function App() {
   const [settings, setSettings] = useState<Settings>(structuredClone(DEFAULT_SETTINGS));
   const [saved, setSaved] = useState(JSON.stringify(DEFAULT_SETTINGS));
   const [ready, setReady] = useState(false);
-  const [notice, setNotice] = useState<Notice>(null);
+  const { alert, showAlert } = useAlert();
   const [busy, setBusy] = useState<'save' | 'models' | 'test' | null>(null);
   const [models, setModels] = useState<string[]>([]);
+  const modelsVersion = useRef(0);
   const [manualModel, setManualModel] = useState(false);
   const [showKey, setShowKey] = useState(false);
   const [connection, setConnection] = useState('');
-  const [testResult, setTestResult] = useState('');
   const dirty = ready && JSON.stringify(settings) !== saved;
   const current = PAGES.find((item) => item.id === page)!;
   const fingerprint = JSON.stringify([settings.baseUrl, settings.apiKey, settings.model]);
@@ -111,11 +111,23 @@ export function App() {
         setSettings(value);
         setSaved(JSON.stringify(value));
         setReady(true);
+        if (!isExtension)
+          showAlert({ kind: 'info', text: '浏览器预览：API Key 刷新后需重新填写。' });
       })
       .catch(() => {
-        setNotice({ kind: 'error', text: '无法读取本地设置，请检查浏览器存储权限。' });
+        showAlert({ kind: 'error', text: '无法读取本地设置，请检查浏览器存储权限。' });
       });
-  }, []);
+  }, [showAlert]);
+  useEffect(() => {
+    if (!ready) return;
+    const version = ++modelsVersion.current;
+    void loadCachedModels({ baseUrl: settings.baseUrl, apiKey: settings.apiKey }).then((ids) => {
+      if (modelsVersion.current === version) setModels(ids);
+    });
+    return () => {
+      modelsVersion.current++;
+    };
+  }, [ready, settings.baseUrl, settings.apiKey]);
   useEffect(() => {
     if (!dirty) return;
     const warn = (event: BeforeUnloadEvent) => {
@@ -124,18 +136,10 @@ export function App() {
     window.addEventListener('beforeunload', warn);
     return () => window.removeEventListener('beforeunload', warn);
   }, [dirty]);
-  useEffect(() => {
-    if (notice?.kind !== 'success') return;
-    const timer = setTimeout(() => setNotice(null), 5000);
-    return () => clearTimeout(timer);
-  }, [notice]);
 
   function update<K extends keyof Settings>(key: K, value: Settings[K]) {
-    setNotice(null);
     setSettings((previous) => ({ ...previous, [key]: value }));
     if (key === 'baseUrl' || key === 'apiKey') setModels([]);
-    if (['baseUrl', 'apiKey', 'model', 'sourceLanguage', 'targetLanguage'].includes(key))
-      setTestResult('');
   }
   function navigate(next: Page) {
     setPage(next);
@@ -146,7 +150,6 @@ export function App() {
       validateSettings(settings);
       const permission = settings.apiKey.trim() ? allowApiHost(settings) : Promise.resolve();
       setBusy('save');
-      setNotice(null);
       await permission;
       const normalized = {
         ...settings,
@@ -157,14 +160,14 @@ export function App() {
       await saveSettings(normalized);
       setSettings(normalized);
       setSaved(JSON.stringify(normalized));
-      setNotice({
+      showAlert({
         kind: 'success',
         text: isExtension
           ? '设置已保存，已打开的视频页面会自动应用。'
           : '预览设置已保存。API Key 仅保留在当前页面，安装扩展后可本地保存。',
       });
     } catch (error) {
-      setNotice({
+      showAlert({
         kind: 'error',
         text: error instanceof Error ? error.message : '保存失败，请重试。',
       });
@@ -179,16 +182,16 @@ export function App() {
       const permission = allowApiHost(settings);
       const requestSettings = structuredClone(settings);
       setBusy(kind);
-      setNotice(null);
-      setTestResult('');
       await permission;
       const result = await apiAction(kind, requestSettings);
       if (kind === 'models') {
         const ids = result as string[];
+        modelsVersion.current++;
         setModels(ids);
         setManualModel(false);
         if (!requestSettings.model) update('model', ids[0]);
-        setNotice({
+        await saveCachedModels(requestSettings, ids);
+        showAlert({
           kind: 'success',
           text: `已获取 ${ids.length} 个模型，请选择支持文本翻译的模型。`,
         });
@@ -196,12 +199,14 @@ export function App() {
         setConnection(
           JSON.stringify([requestSettings.baseUrl, requestSettings.apiKey, requestSettings.model]),
         );
-        setTestResult(result as string);
-        setNotice({ kind: 'success', text: '连接成功，已完成一条示例字幕的翻译。' });
+        showAlert({
+          kind: 'success',
+          text: '连接测试成功',
+        });
       }
     } catch (error) {
       if (kind === 'test') setConnection('');
-      setNotice({ kind: 'error', text: error instanceof Error ? error.message : '接口请求失败。' });
+      showAlert({ kind: 'error', text: error instanceof Error ? error.message : '接口请求失败。' });
     } finally {
       setBusy(null);
     }
@@ -209,6 +214,7 @@ export function App() {
 
   return (
     <div className="app-shell">
+      {alert}
       <aside className="sidebar">
         <Logo />
         <div className="sidebar-rule" />
@@ -252,24 +258,6 @@ export function App() {
               {dirty ? '保存更改' : '已保存'}
             </button>
           </div>
-          {!isExtension && (
-            <div className="browser-note">
-              <Info size={14} />
-              <span>浏览器预览：API Key 刷新后需重新填写。</span>
-            </div>
-          )}
-          {notice && (
-            <div
-              className={`notice ${notice.kind}`}
-              role={notice.kind === 'error' ? 'alert' : 'status'}
-            >
-              {notice.kind === 'success' ? <CheckCheck size={17} /> : <Info size={17} />}
-              <span>{notice.text}</span>
-              <button aria-label="关闭提示" onClick={() => setNotice(null)}>
-                <X size={16} />
-              </button>
-            </div>
-          )}
           <div className={`content-grid ${page === 'appearance' ? 'with-preview' : ''}`}>
             <div className="settings-column">
               {page === 'general' && (
@@ -459,16 +447,6 @@ export function App() {
                         {busy === 'test' ? '连接中…' : '测试连接'}
                       </button>
                     </div>
-                    {testResult && (
-                      <div className="test-result">
-                        <CheckCheck size={15} />
-                        <div>
-                          <strong>示例翻译成功</strong>
-                          <p>{testResult}</p>
-                          <small>测试调用会按服务商规则计费。</small>
-                        </div>
-                      </div>
-                    )}
                   </Section>
                   <Section icon={<MonitorPlay size={19} />} title="支持的网站">
                     <div className="site-options">
