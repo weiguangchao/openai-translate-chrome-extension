@@ -61,6 +61,11 @@ it('shows the current translation, ignores a late reply, clears a missing cue an
   expect(getComputedStyle(document.querySelector('.ytp-caption-window-container')!).opacity).toBe(
     '0',
   );
+  expect(
+    document
+      .querySelector('[data-subline-overlay]')
+      ?.shadowRoot?.querySelector<HTMLElement>('.stack')?.style.bottom,
+  ).toBe('9%');
   document.querySelector('.ytp-caption-segment')!.textContent = '';
   await vi.advanceTimersByTimeAsync(150);
   expect(translationNode()?.hidden).toBe(true);
@@ -108,6 +113,175 @@ it('finds an HBO subtitle layer that is a sibling of the video wrapper', async (
   await vi.advanceTimersByTimeAsync(450);
   expect(sendMessage).toHaveBeenCalledWith({ type: 'translate', text: 'HBO cue' });
   expect(translationNode()?.textContent).toBe('HBO 译文');
+});
+
+function box(top: number, height: number, width = 640): DOMRect {
+  return new DOMRect(80, top, width, height);
+}
+function stubBox(element: HTMLElement, value: DOMRect): void {
+  element.getBoundingClientRect = () => value;
+}
+function stackNode() {
+  return document
+    .querySelector('[data-subline-overlay]')
+    ?.shadowRoot?.querySelector<HTMLElement>('.stack');
+}
+async function playMax(html: string) {
+  document.body.innerHTML = html;
+  const video = document.querySelector('video')!;
+  Object.defineProperty(video, 'textTracks', { configurable: true, value: [] });
+  Object.defineProperty(video, 'readyState', { configurable: true, value: 1 });
+  Object.defineProperty(video, 'paused', { configurable: true, value: false });
+  const sendMessage = vi.fn().mockResolvedValue({ ok: true, data: '是吗?' });
+  vi.stubGlobal('chrome', { runtime: { id: 'extension-id', sendMessage } });
+  controller = new CaptionController(settings());
+  await vi.advanceTimersByTimeAsync(450);
+  return sendMessage;
+}
+
+it.each([
+  ['collapsed', 0],
+  ['full screen', 450],
+])(
+  'places the Max translation under the visible cue when the overlay is %s',
+  async (_label, overlayHeight) => {
+    const sendMessage = await playMax(
+      '<div id="player" data-testid="playerContainer"><video></video><div id="overlay" data-testid="caption_renderer_overlay"><div id="cue">[chuckles] It is?</div></div></div>',
+    );
+    const player = document.getElementById('player')!;
+    const overlay = document.getElementById('overlay')!;
+    const cue = document.getElementById('cue')!;
+    stubBox(player, box(0, 450, 800));
+    stubBox(overlay, box(0, overlayHeight, 800));
+    stubBox(cue, box(360, 28));
+    await vi.advanceTimersByTimeAsync(150);
+    expect(sendMessage).toHaveBeenCalledWith({ type: 'translate', text: '[chuckles] It is?' });
+    const top = Number.parseFloat(stackNode()?.style.top ?? '');
+    expect(top).toBeGreaterThan(360);
+    expect(top).toBeLessThan(420);
+    expect(stackNode()?.style.bottom).toBe('auto');
+    expect(cue.hasAttribute('data-subline-caption')).toBe(true);
+    expect(overlay.hasAttribute('data-subline-caption')).toBe(false);
+  },
+);
+
+it('places the Max translation under the cue glyphs when the overlay box stays at the top', async () => {
+  await playMax(
+    '<div id="player" data-testid="playerContainer"><video></video><div id="overlay" data-testid="caption_renderer_overlay">[chuckles] It is?</div></div>',
+  );
+  const player = document.getElementById('player')!;
+  const overlay = document.getElementById('overlay')!;
+  stubBox(player, box(0, 450, 800));
+  stubBox(overlay, box(8, 24, 800));
+  const glyphs = box(360, 28);
+  const previous = Range.prototype.getClientRects;
+  Range.prototype.getClientRects = function getClientRects() {
+    return [glyphs] as unknown as DOMRectList;
+  };
+  try {
+    await vi.advanceTimersByTimeAsync(150);
+    const top = Number.parseFloat(stackNode()?.style.top ?? '');
+    expect(top).toBeGreaterThan(360);
+    expect(top).toBeLessThan(420);
+  } finally {
+    if (previous) Range.prototype.getClientRects = previous;
+    else delete (Range.prototype as { getClientRects?: () => DOMRectList }).getClientRects;
+  }
+});
+
+it('places the Max translation under a bottom cue when the matched overlay sits at the top', async () => {
+  await playMax(
+    '<div id="player" data-testid="playerContainer"><video></video><div id="overlay" data-testid="caption_renderer_overlay">[chuckles] It is?</div><div id="cue">[chuckles] It is?</div></div>',
+  );
+  const player = document.getElementById('player')!;
+  const overlay = document.getElementById('overlay')!;
+  const cue = document.getElementById('cue')!;
+  stubBox(player, box(0, 450, 800));
+  stubBox(overlay, box(8, 24, 800));
+  stubBox(cue, box(360, 28));
+  await vi.advanceTimersByTimeAsync(150);
+  const top = Number.parseFloat(stackNode()?.style.top ?? '');
+  expect(top).toBeGreaterThan(360);
+  expect(top).toBeLessThan(420);
+  expect(cue.hasAttribute('data-subline-caption')).toBe(true);
+  expect(overlay.hasAttribute('data-subline-caption')).toBe(false);
+});
+
+it('anchors Max translations to visible glyphs instead of padding or hidden old cues', async () => {
+  await playMax(
+    '<div id="player" data-testid="playerContainer"><video></video><div id="overlay" data-testid="caption_renderer_overlay"><div id="cue"><span>Current cue</span><span style="visibility:hidden">Old cue</span></div></div></div>',
+  );
+  stubBox(document.getElementById('player')!, box(0, 450, 800));
+  stubBox(document.getElementById('overlay')!, box(0, 450, 800));
+  stubBox(document.getElementById('cue')!, box(360, 80));
+  const previous = Range.prototype.getClientRects;
+  Range.prototype.getClientRects = function getClientRects() {
+    const glyphs = this.startContainer.textContent === 'Current cue' ? box(360, 28) : box(420, 20);
+    return [glyphs] as unknown as DOMRectList;
+  };
+  try {
+    await vi.advanceTimersByTimeAsync(150);
+    expect(stackNode()?.style.top).toBe('388px');
+  } finally {
+    if (previous) Range.prototype.getClientRects = previous;
+    else delete (Range.prototype as { getClientRects?: () => DOMRectList }).getClientRects;
+  }
+});
+
+it('follows a replaced Max cue and resized player, and restores the original when disabled', async () => {
+  await playMax(
+    '<div id="player" data-testid="playerContainer"><video></video><div id="overlay" data-testid="caption_renderer_overlay"><div id="cue">First cue</div></div></div>',
+  );
+  const player = document.getElementById('player')!;
+  const overlay = document.getElementById('overlay')!;
+  const cue = document.getElementById('cue')!;
+  stubBox(player, box(50, 450, 800));
+  stubBox(overlay, box(50, 450, 800));
+  stubBox(cue, box(410, 28));
+  await vi.advanceTimersByTimeAsync(150);
+  expect(stackNode()?.style.top).toBe('388px');
+  const replacement = document.createElement('div');
+  replacement.textContent = 'Second cue';
+  cue.replaceWith(replacement);
+  stubBox(player, box(0, 900, 1600));
+  stubBox(overlay, box(0, 900, 1600));
+  stubBox(replacement, box(750, 40));
+  await vi.advanceTimersByTimeAsync(450);
+  expect(stackNode()?.style.top).toBe('790px');
+  expect(cue.hasAttribute('data-subline-caption')).toBe(false);
+  expect(replacement.hasAttribute('data-subline-caption')).toBe(true);
+  controller!.update({ ...settings(), enabled: false });
+  expect(replacement.hasAttribute('data-subline-caption')).toBe(false);
+  expect(document.querySelector('[data-subline-overlay]')).toBeNull();
+});
+
+it('reserves enough space below the Max original when the translation wraps', async () => {
+  await playMax(
+    '<div id="player" data-testid="playerContainer"><video></video><div id="overlay" data-testid="caption_renderer_overlay"><div id="cue">Bottom cue</div></div></div>',
+  );
+  const player = document.getElementById('player')!;
+  stubBox(player, box(0, 450, 800));
+  stubBox(document.getElementById('overlay')!, box(0, 450, 800));
+  document.getElementById('cue')!.getBoundingClientRect = () =>
+    box(412 - Number.parseFloat(player.style.getPropertyValue('--subline-reserve')), 28);
+  Object.defineProperty(stackNode(), 'offsetHeight', { value: 120 });
+  await vi.advanceTimersByTimeAsync(150);
+  expect(player.style.getPropertyValue('--subline-reserve')).toBe('128px');
+  expect(stackNode()?.style.top).toBe('312px');
+});
+
+it('reads the current Max caption overlay even when it sits outside the video root', async () => {
+  document.body.innerHTML =
+    '<div data-testid="playerContainer"><div data-testid="player-root-element"><div><div><video></video></div></div></div><div data-testid="caption_renderer_overlay">Max cue</div></div>';
+  Object.defineProperty(document.querySelector('video'), 'textTracks', { value: [] });
+  Object.defineProperty(document.querySelector('video'), 'readyState', { value: 1 });
+  Object.defineProperty(document.querySelector('video'), 'paused', { value: false });
+  const sendMessage = vi.fn().mockResolvedValue({ ok: true, data: 'Max 译文' });
+  vi.stubGlobal('chrome', { runtime: { id: 'extension-id', sendMessage } });
+  controller = new CaptionController(settings());
+  await vi.advanceTimersByTimeAsync(450);
+  expect(sendMessage).toHaveBeenCalledWith({ type: 'translate', text: 'Max cue' });
+  expect(translationNode()?.textContent).toBe('Max 译文');
 });
 
 it('does not contact the service or modify the player before API setup is complete', async () => {
