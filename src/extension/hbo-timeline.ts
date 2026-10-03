@@ -1,4 +1,5 @@
 import type { SubtitleTimeline, TimedCue } from './timeline';
+import { pageVideoId } from './source-cache';
 
 function validCues(value: unknown): value is TimedCue[] | null {
   return (
@@ -30,18 +31,10 @@ export class HboTimeline {
     window.addEventListener('message', this.receive);
   }
 
-  read(
-    video: HTMLVideoElement,
-    sourceLanguage: string,
-    targetLanguage: string,
-  ): SubtitleTimeline | null {
+  read(sourceLanguage: string): SubtitleTimeline | null {
     if (!/(^|\.)(max\.com|hbomax\.com|hbo\.com)$/.test(location.hostname)) return null;
-    const context = JSON.stringify([
-      location.href,
-      video.currentSrc,
-      sourceLanguage,
-      targetLanguage,
-    ]);
+    const videoId = pageVideoId();
+    const context = JSON.stringify([videoId, sourceLanguage]);
     if (context !== this.context) {
       this.reset();
       this.context = context;
@@ -53,9 +46,8 @@ export class HboTimeline {
         {
           type: 'subline:hbo-timeline-request',
           requestId: this.pendingId,
-          pageUrl: location.href,
+          videoId,
           sourceLanguage,
-          targetLanguage,
           revision: this.revision,
         },
         location.origin,
@@ -78,11 +70,9 @@ export class HboTimeline {
     const state = data.state;
     if (
       !state ||
-      !['checking', 'model', 'existing'].includes(state.mode) ||
-      !Number.isSafeInteger(data.generation) ||
+      !['checking', 'model'].includes(state.mode) ||
       !Number.isSafeInteger(data.revision) ||
-      !validCues(state.source) ||
-      !validCues(state.translation)
+      !validCues(state.source)
     )
       return;
     const copy = (cues: TimedCue[] | null) =>
@@ -92,8 +82,7 @@ export class HboTimeline {
     this.state = {
       mode: state.mode,
       source: copy(state.source),
-      translation: copy(state.translation),
-      sourceId: `hbo:${data.generation}`,
+      sourceId: typeof state.sourceId === 'string' ? state.sourceId : undefined,
     };
     this.revision = data.revision;
     this.changed();

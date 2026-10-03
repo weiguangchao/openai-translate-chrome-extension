@@ -9,6 +9,26 @@ afterEach(() => {
 
 type Reply = { ok: boolean; data?: unknown; error?: string };
 
+it('answers cache-only lookups without starting model work and reuses background translations', async () => {
+  const fetch = vi.fn().mockResolvedValue(providerReply(['Hello'], () => '你好'));
+  vi.stubGlobal('fetch', fetch);
+  const send = await loadBackground({ ...DEFAULT_SETTINGS, apiKey: 'key', model: 'model' });
+  await expect(send({ type: 'translate', text: 'Hello', cacheOnly: true })).resolves.toEqual({
+    ok: true,
+    data: null,
+  });
+  expect(fetch).not.toHaveBeenCalled();
+  await expect(send({ type: 'translate', text: 'Hello' })).resolves.toEqual({
+    ok: true,
+    data: '你好',
+  });
+  await expect(send({ type: 'translate', text: 'Hello', cacheOnly: true })).resolves.toEqual({
+    ok: true,
+    data: '你好',
+  });
+  expect(fetch).toHaveBeenCalledTimes(1);
+});
+
 async function loadBackground(saved: object) {
   let listener!: (
     message: unknown,

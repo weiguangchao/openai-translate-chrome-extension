@@ -2,6 +2,7 @@ import { prefetchSegmentCount, translationBatchLimit } from '../shared/limits';
 import { needsSubtitleSegmentation, splitSubtitleAtCommas } from '../shared/subtitle-segmentation';
 import { languageTrack } from './languages';
 import type { YoutubeCaptionKind } from './youtube-captions';
+import { pageVideoId } from './source-cache';
 
 export interface TimedCue {
   startTime: number;
@@ -25,79 +26,69 @@ export interface CueTiming {
 }
 
 export interface SubtitleTimeline {
-  mode: 'checking' | 'model' | 'existing';
+  mode: 'checking' | 'model';
   sourceId?: string;
   sourceKind?: YoutubeCaptionKind | null;
   source: TimedCue[] | null;
-  translation: TimedCue[] | null;
-}
-
-const trackCueCache = new WeakMap<TextTrack, TimedCue[]>();
-
-function trackCues(track: TextTrack | undefined): TimedCue[] | null {
-  if (!track?.cues) return null;
-  const cues = [...track.cues].map((cue) => ({
-    startTime: cue.startTime,
-    endTime: cue.endTime,
-    text: captionText(cue),
-  }));
-  const cached = trackCueCache.get(track);
-  if (
-    cached?.length === cues.length &&
-    cached.every(
-      (cue, index) =>
-        cue.startTime === cues[index].startTime &&
-        cue.endTime === cues[index].endTime &&
-        cue.text === cues[index].text,
-    )
-  )
-    return cached;
-  trackCueCache.set(track, cues);
-  return cues;
 }
 
 export class NativeTimeline {
   private video: HTMLVideoElement | null = null;
   private src = '';
-  private enabledTracks = new Set<TextTrack>();
+  private track: TextTrack | undefined;
+  private language = '';
+  private cues: TimedCue[] | null = null;
 
-  read(video: HTMLVideoElement, sourceLanguage: string, targetLanguage: string): SubtitleTimeline {
-    if (video !== this.video || video.currentSrc !== this.src) {
+  read(video: HTMLVideoElement, sourceLanguage: string): SubtitleTimeline {
+    const track = selectedTrack(video, sourceLanguage);
+    if (
+      video !== this.video ||
+      video.currentSrc !== this.src ||
+      track !== this.track ||
+      sourceLanguage !== this.language
+    ) {
       this.reset();
       this.video = video;
       this.src = video.currentSrc;
+      this.track = track;
+      this.language = sourceLanguage;
     }
-    const tracks = [...video.textTracks].filter((track) =>
-      ['subtitles', 'captions'].includes(track.kind),
-    );
-    const target = languageTrack(tracks, (track) => track.language, targetLanguage);
-    const source = target
-      ? languageTrack(tracks, (track) => track.language, sourceLanguage)
-      : selectedTrack(video, sourceLanguage);
-    const needed = target ? [target, source] : [];
-    for (const track of this.enabledTracks) if (!needed.includes(track)) this.release(track);
-    for (const track of needed) {
-      if (track?.mode === 'disabled') {
-        this.enabledTracks.add(track);
-        track.mode = 'hidden';
-      }
-    }
+    const cues = track?.cues
+      ? [...track.cues].map((cue) => ({
+          startTime: cue.startTime,
+          endTime: cue.endTime,
+          text: captionText(cue),
+        }))
+      : null;
+    if (
+      !cues ||
+      !this.cues ||
+      cues.length !== this.cues.length ||
+      cues.some(
+        (cue, i) =>
+          cue.startTime !== this.cues![i].startTime ||
+          cue.endTime !== this.cues![i].endTime ||
+          cue.text !== this.cues![i].text,
+      )
+    )
+      this.cues = cues;
+    const otherLanguage =
+      !track &&
+      [...video.textTracks].some(
+        (track) => track.mode === 'showing' && ['subtitles', 'captions'].includes(track.kind),
+      );
     return {
-      mode: target ? 'existing' : video.readyState >= 1 ? 'model' : 'checking',
-      source: target && !source ? [] : trackCues(source),
-      translation: trackCues(target),
+      mode: video.readyState >= 1 ? 'model' : 'checking',
+      source: otherLanguage ? [] : this.cues,
     };
   }
 
-  private release(track: TextTrack): void {
-    if (track.mode === 'hidden') track.mode = 'disabled';
-    this.enabledTracks.delete(track);
-  }
-
   reset(): void {
-    for (const track of this.enabledTracks) this.release(track);
     this.video = null;
     this.src = '';
+    this.track = undefined;
+    this.language = '';
+    this.cues = null;
   }
 }
 
@@ -122,7 +113,7 @@ export function selectedTrack(video: HTMLVideoElement, language: string): TextTr
   const tracks = [...video.textTracks].filter(
     (track) => track.mode === 'showing' && ['subtitles', 'captions'].includes(track.kind),
   );
-  return languageTrack(tracks, (track) => track.language, language) ?? tracks[0];
+  return languageTrack(tracks, (track) => track.language, language);
 }
 
 function boundaryTime(cue: TimedCue, position: number): number {
@@ -226,32 +217,28 @@ export class YoutubeTimeline {
   private pendingId = 0;
   private requestedAt = -Infinity;
   private context = '';
-  private state: SubtitleTimeline = { mode: 'checking', source: null, translation: null };
+  private state: SubtitleTimeline = { mode: 'checking', source: null };
   private revision = -1;
 
   constructor(private changed: () => void) {
     window.addEventListener('message', this.receive);
   }
 
-  read(video: HTMLVideoElement, language: string, targetLanguage: string): SubtitleTimeline | null {
+  read(video: HTMLVideoElement, language: string): SubtitleTimeline | null {
     if (!/(^|\.)youtube\.com$/.test(location.hostname)) return null;
-    const videoId =
-      new URL(location.href).searchParams.get('v') ?? location.pathname.split('/')[2] ?? '';
-    const context = `${videoId}:${language}:${targetLanguage}:${video.currentSrc}`;
+    const videoId = pageVideoId();
+    const context = JSON.stringify([videoId, language]);
     if (this.context !== context) {
       this.reset();
       this.context = context;
     }
-    if (
+    const hidden = Boolean(
       video.closest('.ad-showing') ||
       video
         .closest('.html5-video-player')
         ?.querySelector('.ytp-subtitles-button')
-        ?.getAttribute('aria-pressed') === 'false'
-    ) {
-      this.reset();
-      return this.state;
-    }
+        ?.getAttribute('aria-pressed') === 'false',
+    );
     if (Date.now() - this.requestedAt >= 1000) {
       this.requestedAt = Date.now();
       this.pendingId = ++this.requestId;
@@ -261,13 +248,12 @@ export class YoutubeTimeline {
           requestId: this.pendingId,
           videoId,
           sourceLanguage: language,
-          targetLanguage,
           revision: this.revision,
         },
         location.origin,
       );
     }
-    return this.state;
+    return hidden ? { mode: 'checking', source: [] } : this.state;
   }
 
   private receive = (event: MessageEvent) => {
@@ -276,6 +262,7 @@ export class YoutubeTimeline {
       event.source !== window ||
       event.origin !== location.origin ||
       data?.type !== 'subline:timeline-response' ||
+      !this.pendingId ||
       data.requestId !== this.pendingId
     )
       return;
@@ -324,21 +311,27 @@ export class YoutubeTimeline {
       mode: state.mode,
       sourceKind: state.sourceKind,
       source: state.source,
-      translation: null,
+      sourceId: typeof state.sourceId === 'string' ? state.sourceId : undefined,
     };
     this.revision = Number.isSafeInteger(data.revision) ? data.revision : -1;
     this.changed();
   };
 
   reset(): void {
+    if (this.pendingId)
+      window.postMessage(
+        { type: 'subline:timeline-stop', requestId: this.pendingId },
+        location.origin,
+      );
     this.context = '';
-    this.state = { mode: 'checking', source: null, translation: null };
+    this.state = { mode: 'checking', source: null };
     this.pendingId = 0;
     this.requestedAt = -Infinity;
     this.revision = -1;
   }
 
   destroy(): void {
+    this.reset();
     window.removeEventListener('message', this.receive);
   }
 }

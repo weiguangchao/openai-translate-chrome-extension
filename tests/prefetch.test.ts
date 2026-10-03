@@ -79,37 +79,30 @@ beforeEach(async () => {
 });
 
 it.each([true, false])(
-  'uses an existing target track without model requests, configured=%s',
+  'ignores native target tracks and requires a provider, configured=%s',
   async (configured) => {
     const sourceTrack = video.textTracks[0];
     const targetTrack = {
       mode: 'disabled',
       kind: 'subtitles',
       language: 'zh-Hans',
-      cues: null as typeof cues | null,
+      get cues() {
+        throw new Error('Target subtitles must not be read');
+      },
     };
     Object.defineProperty(video, 'textTracks', { value: [sourceTrack, targetTrack] });
     controller = new CaptionController({ ...publicSettings(saved), configured });
     await advance(2);
-    expect(targetTrack.mode).toBe('hidden');
-    expect(requested).toEqual([]);
-    targetTrack.cues = [
-      { startTime: 2.5, endTime: 5, text: '已有译文第一段' },
-      { startTime: 7, endTime: 10, text: '已有译文第二段' },
-    ];
-    await advance(3);
-    expect(translated()?.textContent).toBe('已有译文第一段');
-    expect(translated()?.hidden).toBe(false);
-    await advance(4.5);
-    expect(translated()?.textContent).toBe('已有译文第一段');
-    await advance(6);
-    expect(translated()?.hidden).toBe(true);
-    await advance(9);
-    expect(translated()?.textContent).toBe('已有译文第二段');
-    expect(requested).toEqual([]);
-    controller.update({ ...publicSettings(saved), enabled: false });
     expect(targetTrack.mode).toBe('disabled');
     expect(sourceTrack.mode).toBe('showing');
+    if (configured) {
+      expect(requested).toEqual([cues.map((cue) => cue.text)]);
+      await finish({ 'First cue': 'Provider 译文' });
+      expect(translated()?.textContent).toBe('Provider 译文');
+    } else {
+      expect(requested).toEqual([]);
+      expect(translated()).toBeUndefined();
+    }
   },
 );
 
@@ -154,7 +147,7 @@ async function advance(time: number) {
   await vi.advanceTimersByTimeAsync(150);
 }
 
-it('preloads upcoming cues in one request before the first caption and shows each reply at its timestamp without asking again', async () => {
+it('preloads in the background and queries it at caption boundaries without another provider request', async () => {
   controller = new CaptionController(publicSettings(saved));
   await vi.advanceTimersByTimeAsync(0);
   const opening = ['First cue', 'Second cue', 'Third cue', 'After seeking'];
@@ -170,13 +163,14 @@ it('preloads upcoming cues in one request before the first caption and shows eac
     expect(translated()?.textContent).not.toBe(text);
     video.currentTime = time;
     video.dispatchEvent(new Event('timeupdate'));
+    await vi.advanceTimersByTimeAsync(0);
     expect(translated()?.textContent).toBe(text);
     expect(translated()?.hidden).toBe(false);
   }
   await advance(9);
   expect(translated()?.hidden).toBe(true);
   expect(requested).toEqual([opening]);
-  expect(messages).not.toContain('translate');
+  expect(messages).toContain('translate');
 });
 
 it('queues the current and next segment on open, waits out a scrub, and requests only the cues at the new position', async () => {
@@ -368,35 +362,43 @@ it('invalidates the old translation when the same video element loads a differen
   expect(translated()?.textContent).toBe('新视频字幕');
 });
 
-it('distinguishes Chinese scripts and stops model work when the requested subtitle track becomes available', async () => {
-  const tracks = [
-    video.textTracks[0],
-    {
-      mode: 'disabled',
-      kind: 'subtitles',
-      language: 'zh-Hant',
-      cues: [{ startTime: 2, endTime: 10, text: '現有繁體字幕' }],
-    },
-  ];
+it('continues using the provider when a native target track appears', async () => {
+  const tracks = [video.textTracks[0]];
   Object.defineProperty(video, 'textTracks', { value: tracks });
   controller = new CaptionController(publicSettings(saved));
   await advance(2);
-  await finish({ 'First cue': '模型生成的简体字幕' });
-  expect(translated()?.textContent).toBe('模型生成的简体字幕');
-  tracks.push({
+  await finish({ 'First cue': '模型生成的字幕' });
+  const target = {
     mode: 'disabled',
     kind: 'subtitles',
     language: 'zh-CN',
-    cues: [{ startTime: 2, endTime: 10, text: '现有简体字幕' }],
-  });
-  const alreadyRequested = [...requested];
+    get cues() {
+      throw new Error('Target subtitles must not be read');
+    },
+  };
+  tracks.push(target as unknown as TextTrack);
   await advance(3);
-  expect(translated()?.textContent).toBe('现有简体字幕');
-  await advance(7);
-  expect(requested).toEqual(alreadyRequested);
-  controller.update({ ...publicSettings(saved), targetLanguage: 'zh-TW' });
-  expect(translated()?.textContent).toBe('現有繁體字幕');
-  expect(requested).toEqual(alreadyRequested);
+  expect(translated()?.textContent).toBe('模型生成的字幕');
+  expect(target.mode).toBe('disabled');
+  await advance(4);
+  expect(translated()?.textContent).toBe('Second cue 译文');
+  expect(requested).toHaveLength(1);
+});
+
+it('queries the background again on a repeated caption while keeping the displayed caption between ticks', async () => {
+  controller = new CaptionController(publicSettings(saved));
+  await vi.advanceTimersByTimeAsync(0);
+  await finish({ 'First cue': '第一句', 'Second cue': '第二句' });
+  await advance(2);
+  const firstMessages = messages.filter((type) => type === 'translate').length;
+  await vi.advanceTimersByTimeAsync(5000);
+  expect(messages.filter((type) => type === 'translate')).toHaveLength(firstMessages);
+  expect(translated()?.textContent).toBe('第一句');
+  await advance(4);
+  await advance(2);
+  expect(translated()?.textContent).toBe('第一句');
+  expect(messages.filter((type) => type === 'translate').length).toBeGreaterThan(firstMessages + 1);
+  expect(requested).toHaveLength(1);
 });
 
 it('translates overlapping cues joined into one line whole, splits a long cue of its own, and sends both in one request', async () => {
@@ -436,10 +438,11 @@ it('translates overlapping cues joined into one line whole, splits a long cue of
     await advance(time - 0.1);
     video.currentTime = time;
     video.dispatchEvent(new Event('timeupdate'));
+    await vi.advanceTimersByTimeAsync(0);
     expect(translated()?.textContent).toBe(text);
   }
   expect(requested).toHaveLength(1);
-  expect(messages).not.toContain('translate');
+  expect(messages).toContain('translate');
 });
 
 it('moves a long sentence that does not fit in the rest of a segment to the next request', async () => {
@@ -518,7 +521,7 @@ it('shows the first closed translation before the rest of the segment is written
 
 it('reuses the cues read from a track until the track changes', () => {
   const timeline = new NativeTimeline();
-  const read = () => timeline.read(video, 'en', 'zh-CN').source;
+  const read = () => timeline.read(video, 'en').source;
   const first = read();
   expect(read()).toBe(first);
   Object.defineProperty(video.textTracks[0], 'cues', {

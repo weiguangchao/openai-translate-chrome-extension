@@ -391,10 +391,12 @@ it('keeps the controller alive for recoverable messaging errors and retries the 
 it('finishes an in-flight translation while paused and does not start another until playback resumes', async () => {
   const video = document.querySelector('video')!;
   const replies: ((value: unknown) => void)[] = [];
-  const sendMessage = vi.fn((message: { type: string }) =>
-    message.type === 'translate'
-      ? new Promise((resolve) => replies.push(resolve))
-      : Promise.resolve({ ok: true }),
+  const sendMessage = vi.fn((message: { type: string; cacheOnly?: boolean }) =>
+    message.cacheOnly
+      ? Promise.resolve({ ok: true, data: null })
+      : message.type === 'translate'
+        ? new Promise((resolve) => replies.push(resolve))
+        : Promise.resolve({ ok: true }),
   );
   const setPaused = async (paused: boolean) => {
     Object.defineProperty(video, 'paused', { value: paused });
@@ -405,7 +407,11 @@ it('finishes an in-flight translation while paused and does not start another un
   Object.defineProperty(video, 'paused', { value: true });
   controller = new CaptionController(settings());
   await vi.advanceTimersByTimeAsync(30000);
-  expect(sendMessage).not.toHaveBeenCalled();
+  expect(sendMessage).toHaveBeenCalledExactlyOnceWith({
+    type: 'translate',
+    text: 'First cue',
+    cacheOnly: true,
+  });
   await setPaused(false);
   expect(sendMessage).toHaveBeenLastCalledWith({ type: 'translate', text: 'First cue' });
   await setPaused(true);
@@ -425,6 +431,7 @@ it('finishes an in-flight translation while paused and does not start another un
   expect(translationNode()?.textContent).toBe('第一句译文');
   expect(translationNode()?.hidden).toBe(false);
   expect(sendMessage.mock.calls.map(([message]) => message)).toEqual([
+    { type: 'translate', text: 'First cue', cacheOnly: true },
     { type: 'translate', text: 'First cue' },
     { type: 'prefetch', texts: [], pause: true },
     { type: 'prefetch', texts: [], pause: false },

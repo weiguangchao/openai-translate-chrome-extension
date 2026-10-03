@@ -51,6 +51,13 @@ export class TranslationQueue {
     return JSON.stringify([this.group(settings), text]);
   }
 
+  lookup(settings: Settings, text: string): Promise<string | null> {
+    const key = this.key(settings, text);
+    return Promise.resolve(
+      this.finished.get(key) ?? this.jobs.get(key)?.promise.catch(() => null) ?? null,
+    );
+  }
+
   request(consumer: string, settings: Settings, text: string): Promise<string> {
     const key = this.key(settings, text);
     const state: Consumer = this.consumers.get(consumer) ?? { window: [] };

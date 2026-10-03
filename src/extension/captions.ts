@@ -1,8 +1,8 @@
 import type { PublicSettings } from '../shared/settings';
 import { ExtensionConnection } from './connection';
 import { HboTimeline } from './hbo-timeline';
+import { pageVideoId } from './source-cache';
 import {
-  captionAt,
   captionText,
   captionWindow,
   NativeTimeline,
@@ -211,9 +211,10 @@ export class CaptionController {
   private changedAt = 0;
   private requested = '';
   private version = 0;
-  private pageUrl = location.href;
+  private pageVideo = pageVideoId();
   private positionedPlayer = false;
-  private translations = new Map<string, string>();
+  private translationReady = false;
+  private checkedCache = false;
   private destroyed = false;
   private youtube = new YoutubeTimeline(() => this.tick());
   private hbo = new HboTimeline(() => this.tick());
@@ -259,9 +260,7 @@ export class CaptionController {
   update(settings: PublicSettings): void {
     if (this.destroyed) return;
     this.settings = settings;
-    this.translations = new Map();
     this.unmount();
-    this.resetSources();
     this.tick();
   }
 
@@ -274,7 +273,6 @@ export class CaptionController {
     this.style.remove();
     this.youtube.destroy();
     this.hbo.destroy();
-    this.translations = new Map();
   }
 
   private unmount(): void {
@@ -289,6 +287,8 @@ export class CaptionController {
     this.version++;
     this.currentText = '';
     this.requested = '';
+    this.translationReady = false;
+    this.checkedCache = false;
     this.video?.classList.remove('subline-native');
     if (this.player) {
       this.player.classList.remove('subline-player', 'subline-youtube');
@@ -383,9 +383,8 @@ export class CaptionController {
       this.resetSources();
       return;
     }
-    if (location.href !== this.pageUrl) {
-      this.pageUrl = location.href;
-      this.translations = new Map();
+    if (pageVideoId() !== this.pageVideo) {
+      this.pageVideo = pageVideoId();
       this.unmount();
       this.resetSources();
     }
@@ -401,25 +400,14 @@ export class CaptionController {
       this.resetSources();
       return;
     }
-    const youtubeTimeline = this.youtube.read(
-      video,
-      this.settings.sourceLanguage,
-      this.settings.targetLanguage,
-    );
-    if (youtubeTimeline) this.native.reset();
-    const nativeSubtitles =
-      youtubeTimeline ??
-      this.native.read(video, this.settings.sourceLanguage, this.settings.targetLanguage);
-    const hboSubtitles =
-      !youtubeTimeline && nativeSubtitles.mode !== 'existing'
-        ? this.hbo.read(video, this.settings.sourceLanguage, this.settings.targetLanguage)
-        : null;
-    if (youtubeTimeline || nativeSubtitles.mode === 'existing') this.hbo.reset();
+    const youtubeTimeline = this.youtube.read(video, this.settings.sourceLanguage);
+    const hboSubtitles = youtubeTimeline ? null : this.hbo.read(this.settings.sourceLanguage);
     const subtitles =
-      hboSubtitles && (hboSubtitles.source !== null || hboSubtitles.mode !== 'model')
+      youtubeTimeline ??
+      (hboSubtitles && (hboSubtitles.source !== null || hboSubtitles.mode !== 'model')
         ? hboSubtitles
-        : nativeSubtitles;
-    if (!this.settings.configured && subtitles.mode !== 'existing') {
+        : this.native.read(video, this.settings.sourceLanguage));
+    if (!this.settings.configured) {
       if (this.host) this.unmount();
       return;
     }
@@ -429,7 +417,6 @@ export class CaptionController {
     if (subtitles.mode !== this.translationMode) {
       this.prefetch([], Boolean(this.requested));
       this.clearCaption();
-      this.translations = new Map();
       this.translationMode = subtitles.mode;
     }
     if (video.seeking) {
@@ -440,14 +427,13 @@ export class CaptionController {
     }
     this.notePlaybackTime(video.currentTime);
     const track = selectedTrack(video, this.settings.sourceLanguage);
-    const source = `${video.currentSrc}:${subtitles.sourceId ?? ''}`;
+    const source = subtitles.sourceId ?? video.currentSrc;
     if (source !== this.source || track !== this.nativeTrack) {
       this.source = source;
       this.nativeTrack = track;
       this.scheduleLead = true;
       this.version++;
       this.clearCaption();
-      this.translations = new Map();
       this.prefetch([]);
     }
     const cues = subtitles.source;
@@ -462,10 +448,6 @@ export class CaptionController {
       captions && translationTime !== video.currentTime
         ? captionWindow(captions, translationTime)
         : timeline;
-    const existingText =
-      subtitles.mode === 'existing' && subtitles.translation
-        ? captionAt(subtitles.translation, video.currentTime)
-        : '';
     const usesModel =
       this.settings.configured &&
       subtitles.mode === 'model' &&
@@ -512,7 +494,7 @@ export class CaptionController {
     const visibleSource = customOriginal ? caption.text : '';
     this.original.hidden = !visibleSource;
     this.original.textContent = visibleSource;
-    if (!caption.text && !existingText) {
+    if (!caption.text) {
       this.clearCaption();
       return;
     }
@@ -555,56 +537,64 @@ export class CaptionController {
       this.currentText = '';
       this.requested = '';
       this.translated.classList.remove('error');
-      this.translated.textContent = existingText;
-      this.translated.hidden = !existingText;
+      this.translationReady = false;
+      this.checkedCache = false;
+      this.translated.textContent = '';
+      this.translated.hidden = true;
       return;
     }
     if (caption.text !== this.currentText) {
       this.version++;
       this.currentText = caption.text;
+      this.translationReady = false;
+      this.checkedCache = false;
       this.changedAt = Date.now();
       this.requested = '';
       this.translated.hidden = true;
       this.translated.textContent = '';
       this.translated.classList.remove('error');
     }
-    const cached = this.translations.get(caption.text);
-    if (cached !== undefined) {
-      this.translated.classList.remove('error');
-      this.translated.textContent = cached;
-      this.translated.hidden = !cached;
-      this.requested = caption.text;
-      return;
-    }
-    if (video.paused) {
-      if (!this.requested) this.clearLoadingTranslation();
-      return;
-    }
-    if (
-      timedCaption &&
-      video.currentTime < this.leadUntil &&
-      timedCaption.endTime <= this.leadUntil
-    )
-      return;
-    if (Date.now() < this.seekSettlesAt) return;
+    if (this.translationReady) return;
+    const cacheOnly =
+      video.paused ||
+      Boolean(
+        timedCaption &&
+        video.currentTime < this.leadUntil &&
+        timedCaption.endTime <= this.leadUntil,
+      ) ||
+      Date.now() < this.seekSettlesAt;
     const providerPending = this.requested === this.currentText && this.requested !== '';
+    if (cacheOnly && (this.checkedCache || providerPending)) return;
     if (providerPending || Date.now() - this.changedAt < (timeline ? 0 : 300)) {
-      if (!this.translated.classList.contains('error')) this.showLoadingTranslation();
+      if (!cacheOnly && !this.translated.classList.contains('error')) this.showLoadingTranslation();
       return;
     }
     const text = this.currentText,
       version = this.version;
     this.requested = text;
-    this.showLoadingTranslation();
+    if (cacheOnly) this.checkedCache = true;
+    else this.showLoadingTranslation();
     void this.connection
-      .sendMessage<string>({ type: 'translate', text })
+      .sendMessage<string | null>({
+        type: 'translate',
+        text,
+        ...(cacheOnly ? { cacheOnly: true } : {}),
+      })
       .then((response) => {
+        const data = response?.data;
+        if (cacheOnly && response?.ok && data === null) {
+          if (this.version === version) this.requested = '';
+          this.tick();
+          return;
+        }
         this.tick();
         if (this.destroyed || this.version !== version || !this.translated) return;
-        const data = response?.data;
         if (!response?.ok || typeof data !== 'string')
           throw new Error(response?.error ?? '翻译未完成，请检查扩展配置。');
-        this.translations.set(text, data);
+        this.translationReady = true;
+        this.translated.classList.remove('error');
+        this.translated.textContent = data;
+        this.translated.hidden = !data;
         this.tick();
       })
       .catch((error) => {
@@ -682,24 +672,7 @@ export class CaptionController {
       return;
     this.windowKey = key;
     this.prefetchedAt = Date.now();
-    const translations = this.translations;
-    void this.connection
-      .sendMessage<unknown[]>({ type: 'prefetch', texts, segments: groups })
-      .then((response) => {
-        if (
-          this.destroyed ||
-          this.windowKey !== key ||
-          this.translations !== translations ||
-          !response?.ok ||
-          !Array.isArray(response.data)
-        )
-          return;
-        response.data.forEach((data, index) => {
-          if (texts[index] && typeof data === 'string') translations.set(texts[index], data);
-        });
-        this.tick();
-      })
-      .catch(() => {});
+    void this.connection.sendMessage({ type: 'prefetch', texts, segments: groups }).catch(() => {});
   }
 
   private showLoadingTranslation(): void {
@@ -737,6 +710,8 @@ export class CaptionController {
     if (this.currentText) this.version++;
     this.currentText = '';
     this.requested = '';
+    this.translationReady = false;
+    this.checkedCache = false;
     if (this.translated) {
       this.translated.hidden = true;
       this.translated.textContent = '';

@@ -102,7 +102,7 @@ beforeEach(async () => {
   vi.stubGlobal(
     'fetch',
     vi.fn(async (url: string, init: RequestInit) => {
-      if (url.endsWith('.mpd')) return new Response(manifest());
+      if (new URL(url).pathname.endsWith('.mpd')) return new Response(manifest());
       if (url.endsWith('.vtt')) {
         if (failTarget && !url.includes('/en-US/')) throw new Error('Unavailable');
         return new Response(
@@ -136,6 +136,7 @@ beforeEach(async () => {
         texts: string[];
         segments?: number[];
         pause?: boolean;
+        cacheOnly?: boolean;
       }) => {
         if (message.type === 'prefetch') {
           if (message.pause !== undefined) {
@@ -149,7 +150,12 @@ beforeEach(async () => {
           };
         }
         if (message.type === 'translate')
-          return { ok: true, data: await queue.request('hbo', settings, message.text) };
+          return {
+            ok: true,
+            data: await (message.cacheOnly
+              ? queue.lookup(settings, message.text)
+              : queue.request('hbo', settings, message.text)),
+          };
         return { ok: true };
       },
     },
@@ -220,23 +226,32 @@ it('cancels old model requests after seeking and ignores their late results', as
 });
 
 it.each([true, false])(
-  'uses existing target subtitles without a provider, configured=%s',
+  'ignores HBO target subtitles and requires a provider, configured=%s',
   async (configured) => {
     targetLanguage = 'zh-Hans';
     controller = new CaptionController({ ...publicSettings(settings), configured });
     await playTo(3);
-    expect(lines()?.[1].textContent).toBe('已有字幕 1');
-    expect(requested).toEqual([]);
+    expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).includes('/zh-Hans/'))).toBe(
+      false,
+    );
+    if (configured) {
+      expect(lines()?.[1].textContent).toBe('译文 Cue 1');
+      expect(requested).toHaveLength(2);
+    } else {
+      expect(lines()).toBeUndefined();
+      expect(requested).toEqual([]);
+    }
   },
 );
 
-it('does not fall back to the model if an existing target track fails', async () => {
+it('does not download a target track even when it would fail', async () => {
   targetLanguage = 'zh-CN';
   failTarget = true;
   controller = new CaptionController(publicSettings(settings));
   await playTo(4);
-  expect(lines()?.[1].hidden).toBe(true);
-  expect(requested).toEqual([]);
+  expect(lines()?.[1].textContent).toBe('译文 Cue 1');
+  expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).includes('/zh-CN/'))).toBe(false);
+  expect(requested).toHaveLength(2);
 });
 
 it('stops prefetch and clears the displayed subtitles when the HBO selection is off', async () => {
@@ -321,7 +336,7 @@ it('reads the committed React branch instead of an old episode retained on the D
 it('rejects unsolicited or malformed bridge responses', () => {
   const changed = vi.fn();
   const timeline = new HboTimeline(changed);
-  timeline.read(video, 'en', 'zh-CN');
+  timeline.read('en');
   for (const data of [
     { requestId: 999, state: { mode: 'model', source: [], translation: null } },
     {
@@ -390,4 +405,89 @@ it('parses VTT identifiers, markup, entities and CRLF while skipping metadata an
     { startTime: 11, endTime: 13, text: 'Hello & goodbye.\nSecond line <3' },
   ]);
   expect(() => parseHboVtt('<html>Not subtitles</html>')).toThrow('Invalid WebVTT');
+});
+
+it('keeps the HBO source across target/provider/style changes, seeks, blob renewal and signed URL renewal', async () => {
+  controller = new CaptionController(publicSettings(settings));
+  await playTo(3);
+  const downloads = () =>
+    vi.mocked(fetch).mock.calls.filter(([url]) => String(url).includes('h264.io'));
+  expect(downloads()).toHaveLength(4);
+  for (const next of [
+    { ...settings, targetLanguage: 'ja' },
+    { ...settings, model: 'other', baseUrl: 'https://other.example/v1', apiKey: 'other' },
+    { ...settings, original: { ...settings.original, size: 36 } },
+  ]) {
+    controller.update(publicSettings(next));
+    await vi.advanceTimersByTimeAsync(1200);
+    expect(downloads()).toHaveLength(4);
+    expect(lines()?.[0].textContent).toBe('Cue 1');
+  }
+  stream.url = `${mediaUrl}?token=fresh&Signature=new&Expires=9999999999`;
+  Object.defineProperty(video, 'currentSrc', { value: 'blob:renewed-same-episode' });
+  history.replaceState(null, '', '/video/watch/episode-1?tracking=changed');
+  video.dispatchEvent(new Event('pause'));
+  video.currentTime = 33;
+  video.dispatchEvent(new Event('seeked'));
+  await vi.advanceTimersByTimeAsync(1600);
+  expect(downloads()).toHaveLength(4);
+  expect(lines()?.[0].textContent).toBe('Cue 11');
+  controller.update({ ...publicSettings(settings), enabled: false });
+  await vi.advanceTimersByTimeAsync(0);
+  controller.update(publicSettings(settings));
+  await vi.advanceTimersByTimeAsync(1200);
+  expect(downloads()).toHaveLength(4);
+});
+
+it('replaces the HBO source for source-language, track-role and episode changes', async () => {
+  targetLanguage = 'es';
+  controller = new CaptionController(publicSettings(settings));
+  await playTo(3);
+  const manifests = () =>
+    vi.mocked(fetch).mock.calls.filter(([url]) => new URL(String(url)).pathname.endsWith('.mpd'));
+  expect(manifests()).toHaveLength(1);
+  controller.update(publicSettings({ ...settings, sourceLanguage: 'es' }));
+  await vi.advanceTimersByTimeAsync(1200);
+  expect(manifests()).toHaveLength(2);
+  expect(lines()?.[0].textContent).toBe('已有字幕 1');
+  selected = { language: 'es', role: 'subtitle' };
+  await vi.advanceTimersByTimeAsync(1200);
+  expect(manifests()).toHaveLength(3);
+  history.replaceState(null, '', '/video/watch/episode-2');
+  stream.url = mediaUrl.replace('episode', 'next');
+  await vi.advanceTimersByTimeAsync(1200);
+  expect(manifests()).toHaveLength(4);
+});
+
+it('does not translate a known target-language DOM when the HBO source track is absent', async () => {
+  const originalFetch = fetch;
+  vi.stubGlobal(
+    'fetch',
+    vi.fn((url: string, init: RequestInit) =>
+      new URL(url).pathname.endsWith('.mpd')
+        ? Promise.resolve(new Response(manifest(['zh-Hans'])))
+        : originalFetch(url, init),
+    ),
+  );
+  selected = { language: 'zh-Hans', role: 'subtitle' };
+  document.querySelector('[data-testid="caption_renderer_overlay"]')!.textContent = '已有中文字幕';
+  controller = new CaptionController(publicSettings(settings));
+  await playTo(3);
+  expect(lines()?.[1].hidden).toBe(true);
+  expect(requested).toEqual([]);
+  expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).endsWith('.vtt'))).toBe(false);
+});
+
+it('does not send target-language DOM to the provider after a source download fails', async () => {
+  selected = { language: 'zh-Hans', role: 'subtitle' };
+  document.querySelector('[data-testid="caption_renderer_overlay"]')!.textContent = '已有中文字幕';
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => new Response('', { status: 503 })),
+  );
+  controller = new CaptionController(publicSettings(settings));
+  await playTo(3);
+  expect(lines()?.[1].hidden).toBe(true);
+  expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1);
+  expect(requested).toEqual([]);
 });

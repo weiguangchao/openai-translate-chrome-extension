@@ -54,7 +54,8 @@ function setup() {
       text?: string;
       texts?: string[];
       segments?: number[];
-    }): Promise<{ ok: boolean; data?: string }> =>
+      cacheOnly?: boolean;
+    }): Promise<{ ok: boolean; data?: string | null }> =>
       Promise.resolve(
         message.type === 'translate' ? { ok: true, data: `译文：${message.text}` } : { ok: true },
       ),
@@ -119,7 +120,12 @@ it('prefetches the comma parts of a long subtitle in one request and shows each 
   const queue = new TranslationQueue();
   sendMessage.mockImplementation(async (message) => {
     if (message.type === 'translate')
-      return { ok: true, data: await queue.request('video', saved, message.text!) };
+      return {
+        ok: true,
+        data: await (message.cacheOnly
+          ? queue.lookup(saved, message.text!)
+          : queue.request('video', saved, message.text!)),
+      };
     if (message.type === 'prefetch')
       queue.prefetch('video', saved, message.texts!, message.segments);
     return { ok: true };
@@ -393,9 +399,11 @@ it('uses the current video session to load source subtitles and removes duplicat
   expect(lines()[1].textContent).toBe('译文：This field behind me');
   expect(lines()[1].hidden).toBe(false);
 
+  const downloads = vi.mocked(fetch).mock.calls.length;
   session = 'session-2';
   await vi.advanceTimersByTimeAsync(1100);
-  expect(lines()[1].hidden).toBe(true);
+  expect(lines()[1].hidden).toBe(false);
+  expect(vi.mocked(fetch)).toHaveBeenCalledTimes(downloads);
   request(videoId, session, token, 4);
   await vi.advanceTimersByTimeAsync(1100);
   expect(lines()[1].textContent).toBe('译文：This field behind me');
@@ -736,7 +744,12 @@ it('sends complete English sentences to the Provider and displays its translatio
   const queue = new TranslationQueue();
   sendMessage.mockImplementation(async (message) => {
     if (message.type === 'translate')
-      return { ok: true, data: await queue.request('video', saved, message.text!) };
+      return {
+        ok: true,
+        data: await (message.cacheOnly
+          ? queue.lookup(saved, message.text!)
+          : queue.request('video', saved, message.text!)),
+      };
     if (message.type === 'prefetch')
       queue.prefetch('video', saved, (message as unknown as { texts: string[] }).texts);
     return { ok: true };
@@ -814,4 +827,72 @@ it('waits for the configured source language instead of translating the website 
     '译文：English source.',
   ]);
   expect(sendMessage).toHaveBeenCalledWith({ type: 'translate', text: 'English source.' });
+});
+
+it('keeps the YouTube source across target/provider/style changes, seeks, blob renewal and signed URL renewal', async () => {
+  const { video, player, lines } = setup();
+  let token = 'old';
+  let active = '.en';
+  let videoId = 'video-1';
+  Object.assign(player, {
+    getOption: () => ({ vssId: active }),
+    getPlayerResponse: () => ({
+      videoDetails: { videoId },
+      captions: {
+        playerCaptionsTracklistRenderer: {
+          captionTracks: [
+            { languageCode: 'en', vssId: '.en' },
+            { languageCode: 'en', vssId: 'a.en', kind: 'asr' },
+            { languageCode: 'es', vssId: '.es' },
+          ].map((track) => ({
+            ...track,
+            baseUrl: `https://www.youtube.com/api/timedtext?v=${videoId}&lang=${track.languageCode}&signature=${token}`,
+          })),
+        },
+      },
+    }),
+  });
+  const fetch = vi.fn(async () =>
+    Response.json({
+      events: [{ tStartMs: 0, dDurationMs: 90000, segs: [{ utf8: 'Cached source.' }] }],
+    }),
+  );
+  vi.stubGlobal('fetch', fetch);
+  await import('../src/extension/youtube-page');
+  const saved = { ...DEFAULT_SETTINGS, apiKey: 'key', model: 'model' };
+  controller = new CaptionController(publicSettings(saved));
+  await vi.advanceTimersByTimeAsync(0);
+  expect(fetch).toHaveBeenCalledTimes(1);
+  for (const next of [
+    { ...saved, targetLanguage: 'ja' },
+    { ...saved, model: 'other', baseUrl: 'https://other.example/v1', apiKey: 'other' },
+    { ...saved, original: { ...saved.original, size: 36 } },
+  ]) {
+    controller.update(publicSettings(next));
+    await vi.advanceTimersByTimeAsync(1200);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(lines()[0].textContent).toBe('Cached source.');
+  }
+  token = 'fresh';
+  Object.defineProperty(video, 'currentSrc', { value: 'blob:renewed' });
+  history.replaceState(null, '', '/watch?v=video-1&tracking=changed');
+  video.currentTime = 33;
+  video.dispatchEvent(new Event('seeked'));
+  await vi.advanceTimersByTimeAsync(1600);
+  expect(fetch).toHaveBeenCalledTimes(1);
+  controller.update({ ...publicSettings(saved), enabled: false });
+  await vi.advanceTimersByTimeAsync(0);
+  controller.update(publicSettings(saved));
+  await vi.advanceTimersByTimeAsync(1200);
+  expect(fetch).toHaveBeenCalledTimes(1);
+  active = 'a.en';
+  await vi.advanceTimersByTimeAsync(1200);
+  expect(fetch).toHaveBeenCalledTimes(2);
+  controller.update(publicSettings({ ...saved, sourceLanguage: 'es' }));
+  await vi.advanceTimersByTimeAsync(1200);
+  expect(fetch).toHaveBeenCalledTimes(3);
+  videoId = 'video-2';
+  history.replaceState(null, '', '/watch?v=video-2');
+  await vi.advanceTimersByTimeAsync(1200);
+  expect(fetch).toHaveBeenCalledTimes(4);
 });

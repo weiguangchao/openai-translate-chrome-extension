@@ -1,6 +1,7 @@
 import { hboMediaUrl, parseHboManifest, parseHboVtt, type HboSubtitleTrack } from './hbo-captions';
 import { languageTrack } from './languages';
-import type { SubtitleTimeline, TimedCue } from './timeline';
+import type { TimedCue } from './timeline';
+import { mediaIdentity, pageVideoId, SourceCache } from './source-cache';
 
 interface TextSelection {
   language?: string;
@@ -50,28 +51,8 @@ function playerState() {
   return null;
 }
 
-let context = '';
-let generation = 0;
-let revision = 0;
-let state: SubtitleTimeline = { mode: 'checking', source: null, translation: null };
+const cache = new SourceCache(publish);
 let latest: { requestId: number; revision: number } | undefined;
-let controller = new AbortController();
-let pending = false;
-let loaded = false;
-let retryAt = 0;
-
-function clear(): void {
-  controller.abort();
-  controller = new AbortController();
-  context = '';
-  generation++;
-  revision++;
-  latest = undefined;
-  pending = false;
-  loaded = false;
-  retryAt = 0;
-  state = { mode: 'checking', source: null, translation: null };
-}
 
 function publish(): void {
   if (!latest) return;
@@ -79,9 +60,8 @@ function publish(): void {
     {
       type: 'subline:hbo-timeline-response',
       requestId: latest.requestId,
-      generation,
-      revision,
-      ...(latest.revision === revision ? { unchanged: true } : { state }),
+      revision: cache.revision,
+      ...(latest.revision === cache.revision ? { unchanged: true } : { state: cache.state }),
     },
     location.origin,
   );
@@ -122,102 +102,61 @@ async function loadTrack(track: HboSubtitleTrack, signal: AbortSignal): Promise<
   );
 }
 
-function load(
-  url: string,
-  sourceLanguage: string,
-  targetLanguage: string,
-  selected: TextSelection,
-): void {
-  if (pending || loaded || Date.now() < retryAt) return;
-  pending = true;
-  const active = controller;
-  void (async () => {
-    try {
-      const tracks = parseHboManifest(await resource(url, active.signal), url);
-      if (active.signal.aborted) return;
-      const role = selected.role === 'closedcaptions' ? 'caption' : 'subtitle';
-      const preferred = [...tracks].sort(
-        (a, b) => Number(b.role === role) - Number(a.role === role),
-      );
-      const source = languageTrack(preferred, (track) => track.language, sourceLanguage);
-      const target = languageTrack(tracks, (track) => track.language, targetLanguage);
-      state = {
-        mode: target ? 'existing' : source ? 'checking' : 'model',
-        source: null,
-        translation: null,
-      };
-      revision++;
-      publish();
-      await Promise.all([
-        source
-          ? loadTrack(source, active.signal).then((cues) => {
-              if (active.signal.aborted) return;
-              state.source = cues;
-              if (!target) state.mode = 'model';
-              revision++;
-              publish();
-            })
-          : undefined,
-        target
-          ? loadTrack(target, active.signal).then((cues) => {
-              if (active.signal.aborted) return;
-              state.translation = cues;
-              revision++;
-              publish();
-            })
-          : undefined,
-      ]);
-      if (!active.signal.aborted) loaded = true;
-    } catch {
-      if (active.signal.aborted) return;
-      retryAt = Date.now() + 15000;
-      if (state.mode !== 'existing') state.mode = 'model';
-      revision++;
-      publish();
-    } finally {
-      if (!active.signal.aborted) pending = false;
-    }
-  })();
-}
-
 window.addEventListener('message', (event: MessageEvent) => {
   const data = event.data;
   if (event.source !== window || event.origin !== location.origin) return;
   if (data?.type === 'subline:hbo-timeline-stop' && data.requestId === latest?.requestId) {
-    clear();
+    latest = undefined;
+    cache.stop();
     return;
   }
   if (
     data?.type !== 'subline:hbo-timeline-request' ||
     !Number.isSafeInteger(data.requestId) ||
-    data.pageUrl !== location.href ||
+    data.videoId !== pageVideoId() ||
     typeof data.sourceLanguage !== 'string' ||
-    data.sourceLanguage.length > 40 ||
-    typeof data.targetLanguage !== 'string' ||
-    data.targetLanguage.length > 40
+    data.sourceLanguage.length > 40
   )
     return;
   let player: ReturnType<typeof playerState> = null;
   try {
     player = playerState();
   } catch {}
-  const key = JSON.stringify([
-    data.pageUrl,
-    data.sourceLanguage,
-    data.targetLanguage,
-    player,
-    document.querySelector('video')?.currentSrc,
-  ]);
-  if (key !== context) {
-    clear();
-    context = key;
-    if (!player) state.mode = 'model';
-    else if (player.known && !player.selected?.language) state.source = [];
-  }
+  const videoId = JSON.stringify([data.videoId, player ? mediaIdentity(player.url) : null]);
+  const role = player?.selected?.role === 'closedcaptions' ? 'caption' : 'subtitle';
+  const selected = player?.selected;
+  const selectedSource =
+    selected && languageTrack([selected], (track) => track.language ?? '', data.sourceLanguage);
+  const language = selectedSource ? selectedSource.language! : data.sourceLanguage;
+  const track = player?.known && selected?.language ? JSON.stringify([language, role]) : '';
+  cache.select(videoId, track, data.sourceLanguage);
   latest = { requestId: data.requestId, revision: data.revision };
+  if (!player && cache.state.mode !== 'model') {
+    cache.state.mode = 'model';
+    cache.revision++;
+  } else if (player?.known && !player.selected?.language && cache.state.source === null) {
+    cache.state.source = [];
+    cache.revision++;
+  }
   publish();
-  if (player?.known && player.selected?.language)
-    load(player.url, data.sourceLanguage, data.targetLanguage, player.selected);
+  if (player?.known && player.selected?.language) {
+    const url = player.url;
+    cache.load(
+      url,
+      async (signal) => {
+        const tracks = parseHboManifest(await resource(url, signal), url);
+        const preferred = [...tracks].sort(
+          (a, b) => Number(b.role === role) - Number(a.role === role),
+        );
+        const source = languageTrack(preferred, (track) => track.language, language);
+        return source ? loadTrack(source, signal) : [];
+      },
+      selectedSource ? null : [],
+    );
+  }
 });
 
-window.addEventListener('pagehide', clear);
+window.addEventListener('pagehide', () => {
+  latest = undefined;
+  cache.clear();
+});

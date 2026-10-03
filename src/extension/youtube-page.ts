@@ -1,4 +1,4 @@
-import type { SubtitleTimeline } from './timeline';
+import { pageVideoId, SourceCache } from './source-cache';
 import { parseYoutubeCaptions, type YoutubeCaptionKind } from './youtube-captions';
 import { languageTrack } from './languages';
 
@@ -17,21 +17,10 @@ interface YoutubePlayer extends HTMLElement {
 }
 
 interface Selection {
-  mode: 'checking' | 'model';
   sourceKind?: YoutubeCaptionKind | null;
-  source?: { url: string; kind: YoutubeCaptionKind };
+  source?: { id: string; url: string; kind: YoutubeCaptionKind };
 }
-interface Resource {
-  url: string;
-  kind: YoutubeCaptionKind;
-  pending: boolean;
-  retryAt: number;
-}
-let loadedKey = '';
-let state: SubtitleTimeline = { mode: 'checking', source: null, translation: null };
-let resource: Resource | undefined;
-let controller = new AbortController();
-let revision = 0;
+const cache = new SourceCache(publish);
 let latest: { requestId: number; revision: number } | undefined;
 
 const contextParameters = ['pot', 'potc', 'c', 'cver'] as const;
@@ -74,16 +63,6 @@ if (typeof PerformanceObserver !== 'undefined') {
   observer.observe({ type: 'resource', buffered: true });
 }
 
-function clear(): void {
-  controller.abort();
-  controller = new AbortController();
-  loadedKey = '';
-  resource = undefined;
-  latest = undefined;
-  state = { mode: 'checking', source: null, translation: null };
-  revision++;
-}
-
 function trackResource(track: Track | undefined): Selection['source'] {
   if (!track?.baseUrl) return;
   const url = timedtextUrl(track.baseUrl);
@@ -92,7 +71,16 @@ function trackResource(track: Track | undefined): Selection['source'] {
   if (context) for (const [name, value] of context.parameters) url.searchParams.set(name, value);
   url.searchParams.set('fmt', 'json3');
   url.searchParams.delete('tlang');
-  return { url: url.href, kind: captionKind(track)! };
+  return {
+    id: JSON.stringify([
+      track.vssId ?? null,
+      track.languageCode ?? url.searchParams.get('lang'),
+      captionKind(track),
+      url.searchParams.get('name'),
+    ]),
+    url: url.href,
+    kind: captionKind(track)!,
+  };
 }
 
 function captionKind(track: Track | undefined): YoutubeCaptionKind | null {
@@ -114,7 +102,7 @@ function select(videoId: string, sourceLanguage: string): Selection {
     response?.videoDetails?.videoId !== videoId ||
     !Array.isArray(tracks)
   )
-    return { mode: 'checking' };
+    return {};
   const selected = player.getOption?.('captions', 'track');
   const active =
     tracks.find((track) => selected?.vssId && track.vssId === selected.vssId) ??
@@ -130,7 +118,6 @@ function select(videoId: string, sourceLanguage: string): Selection {
     ) ??
     languageTrack(tracks, (track) => track.languageCode ?? '', sourceLanguage);
   return {
-    mode: 'model',
     sourceKind: captionKind(source),
     source: trackResource(source),
   };
@@ -142,84 +129,56 @@ function publish(): void {
     {
       type: 'subline:timeline-response',
       requestId: latest.requestId,
-      revision,
-      ...(latest.revision === revision ? { unchanged: true } : { state }),
+      revision: cache.revision,
+      ...(latest.revision === cache.revision ? { unchanged: true } : { state: cache.state }),
     },
     location.origin,
   );
 }
 
-function load(): void {
-  const selectedResource = resource;
-  if (
-    !selectedResource ||
-    selectedResource.pending ||
-    state.source !== null ||
-    Date.now() < selectedResource.retryAt
-  )
-    return;
-  const requestController = controller;
-  selectedResource.pending = true;
-  void (async () => {
-    try {
-      const response = await fetch(selectedResource.url, {
-        credentials: 'same-origin',
-        signal: AbortSignal.any([requestController.signal, AbortSignal.timeout(15000)]),
-      });
-      if (!response.ok) throw new Error('Caption track unavailable');
-      const cues = parseYoutubeCaptions(await response.json(), selectedResource.kind);
-      if (!cues.length) throw new Error('Empty caption track');
-      if (requestController.signal.aborted) return;
-      state.source = cues;
-      revision++;
-      publish();
-    } catch {
-      selectedResource.retryAt = Date.now() + 15000;
-    } finally {
-      selectedResource.pending = false;
-    }
-  })();
-}
-
 window.addEventListener('message', (event: MessageEvent) => {
   const data = event.data;
+  if (event.source !== window || event.origin !== location.origin) return;
+  if (data?.type === 'subline:timeline-stop' && data.requestId === latest?.requestId) {
+    latest = undefined;
+    cache.stop();
+    return;
+  }
   if (
-    event.source !== window ||
-    event.origin !== location.origin ||
     data?.type !== 'subline:timeline-request' ||
     !Number.isSafeInteger(data.requestId) ||
     typeof data.videoId !== 'string' ||
     data.videoId.length > 200 ||
+    data.videoId !== pageVideoId() ||
     typeof data.sourceLanguage !== 'string' ||
-    data.sourceLanguage.length > 40 ||
-    typeof data.targetLanguage !== 'string' ||
-    data.targetLanguage.length > 40
+    data.sourceLanguage.length > 40
   )
     return;
   let selection: Selection;
   try {
     selection = select(data.videoId, data.sourceLanguage);
   } catch {
-    selection = { mode: 'checking' };
+    selection = {};
   }
-  const key = JSON.stringify([data.videoId, data.sourceLanguage, data.targetLanguage, selection]);
-  if (loadedKey !== key) {
-    clear();
-    loadedKey = key;
-    state = {
-      mode: selection.mode,
-      sourceKind: selection.sourceKind ?? null,
-      source: null,
-      translation: null,
-    };
-    if (selection.source) resource = { ...selection.source, pending: false, retryAt: 0 };
-  }
+  cache.select(data.videoId, selection.source?.id ?? '', data.sourceLanguage, selection.sourceKind);
   latest = { requestId: data.requestId, revision: data.revision };
   publish();
-  load();
+  const source = selection.source;
+  if (source)
+    cache.load(source.url, async (signal) => {
+      const response = await fetch(source.url, {
+        credentials: 'same-origin',
+        signal: AbortSignal.any([signal, AbortSignal.timeout(15000)]),
+      });
+      if (!response.ok) throw new Error('Caption track unavailable');
+      const cues = parseYoutubeCaptions(await response.json(), source.kind);
+      if (!cues.length) throw new Error('Empty caption track');
+      return cues;
+    });
 });
 
 window.addEventListener('pagehide', () => {
-  clear();
+  latest = undefined;
+  cache.clear();
   requestContexts.clear();
 });

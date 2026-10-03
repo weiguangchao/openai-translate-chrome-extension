@@ -31,6 +31,7 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, respond) => {
     texts?: unknown;
     segments?: unknown;
     pause?: unknown;
+    cacheOnly?: unknown;
   };
   const trusted =
     sender.id === chrome.runtime.id && sender.url?.startsWith(chrome.runtime.getURL(''));
@@ -81,7 +82,9 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, respond) => {
       }
       if (typeof data.text !== 'string' || !data.text.trim() || data.text.length > 5000)
         throw new Error('字幕内容无效。');
-      return queue.request(consumer, settings, data.text);
+      return data.cacheOnly === true
+        ? queue.lookup(settings, data.text)
+        : queue.request(consumer, settings, data.text);
     }
     throw new Error('不支持的请求。');
   })().then(
