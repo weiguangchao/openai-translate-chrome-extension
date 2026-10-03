@@ -86,9 +86,7 @@ describe('OpenAI-compatible provider contract', () => {
       expect(body.model).toBe('subtitle-model');
       const instructions: string =
         apiFormat === 'chat' ? body.messages[0].content : body.prompt.split('\n\nInput:\n')[0];
-      expect(instructions).toMatch(
-        /^You are a professional translator, fluent in both English and Simplified Chinese\./,
-      );
+      expect(instructions).toMatch(/^Translate the given English into Simplified Chinese\./);
       expect(instructions).toContain('Output only the translation');
       expect(instructions).not.toMatch(/subtitle|film|movie/i);
       expect(instructions).toMatch(/^[\x20-\x7E\n]+$/);
@@ -124,7 +122,7 @@ describe('OpenAI-compatible provider contract', () => {
       const body = JSON.parse(fetch.mock.calls[0][1].body);
       const instructions: string =
         apiFormat === 'chat' ? body.messages[0].content : body.prompt.split('\n\nInput:\n')[0];
-      expect(instructions).toMatch(/^You are a professional translator/);
+      expect(instructions).toMatch(/^Translate the given English into Simplified Chinese\./);
       expect(instructions).toContain('exactly 3 strings');
       expect(apiFormat === 'chat' ? body.messages[1].content : body.prompt).toContain(
         JSON.stringify(texts),
