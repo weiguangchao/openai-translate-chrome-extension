@@ -18,7 +18,7 @@ export function hboMediaUrl(value: string, base?: string): string | undefined {
       url.protocol === 'https:' &&
       !url.username &&
       !url.password &&
-      /(^|\.)(h264\.io|hbomax\.com|max\.com|hbo\.com)$/.test(url.hostname)
+      /(^|\.)(h264\.io|e\.hbo|hbomax\.com|max\.com|hbo\.com)$/.test(url.hostname)
     )
       return url.href;
   } catch {}
@@ -45,6 +45,7 @@ export function parseHboManifest(xml: string, url: string): HboSubtitleTrack[] {
   const root = document.documentElement;
   if (root.localName !== 'MPD' || root.getAttribute('type') === 'dynamic') return [];
   const tracks = new Map<string, HboSubtitleTrack>();
+  const preferred = new Map<string, string>();
   const rootBase = baseUrl(root, url);
   const periods = children(root, 'Period');
   let nextStart = 0;
@@ -59,6 +60,7 @@ export function parseHboManifest(xml: string, url: string): HboSubtitleTrack[] {
     nextStart = end;
     if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) continue;
     const periodBase = baseUrl(period, rootBase);
+    const periodTracks = new Map<string, HboSubtitleTrack & { id: string }>();
     for (const adaptation of children(period, 'AdaptationSet')) {
       const role = children(adaptation, 'Role')[0]?.getAttribute('value') ?? 'subtitle';
       const language = adaptation.getAttribute('lang') ?? '';
@@ -131,10 +133,21 @@ export function parseHboManifest(xml: string, url: string): HboSubtitleTrack[] {
       }
       if (!files.length) continue;
       const key = JSON.stringify([language, role]);
-      const track = tracks.get(key) ?? { language, role, files: [] };
-      track.files.push(...files);
+      const id = JSON.stringify([adaptation.getAttribute('id'), representation.getAttribute('id')]);
+      const candidate = periodTracks.get(key);
+      if (!candidate || (id === preferred.get(key) && candidate.id !== id))
+        periodTracks.set(key, { id, language, role, files });
+    }
+    for (const [key, candidate] of periodTracks) {
+      const track = tracks.get(key) ?? {
+        language: candidate.language,
+        role: candidate.role,
+        files: [],
+      };
+      track.files.push(...candidate.files);
       if (track.files.length > 256) return [];
       tracks.set(key, track);
+      preferred.set(key, candidate.id);
     }
   }
   return [...tracks.values()];

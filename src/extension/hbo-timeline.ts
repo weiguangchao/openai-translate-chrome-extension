@@ -1,5 +1,6 @@
 import type { SubtitleTimeline, TimedCue } from './timeline';
 import { pageVideoId } from './source-cache';
+import { authoredSubtitleSentences } from './subtitle-sentences';
 
 function validCues(value: unknown): value is TimedCue[] | null {
   return (
@@ -79,9 +80,10 @@ export class HboTimeline {
       cues
         ?.map(({ startTime, endTime, text }) => ({ startTime, endTime, text }))
         .sort((a, b) => a.startTime - b.startTime) ?? null;
+    const source = copy(state.source);
     this.state = {
       mode: state.mode,
-      source: copy(state.source),
+      source: source === null ? null : authoredSubtitleSentences(source),
       sourceId: typeof state.sourceId === 'string' ? state.sourceId : undefined,
     };
     this.revision = data.revision;

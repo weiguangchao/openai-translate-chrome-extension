@@ -32,7 +32,9 @@ function visible(element: HTMLElement): boolean {
   if (element.hidden || element.closest('[hidden], [aria-hidden="true"]')) return false;
   for (let node: HTMLElement | null = element; node; node = ancestor(node)) {
     const style = getComputedStyle(node);
-    const replaced = node.matches('.subline-youtube .ytp-caption-window-container');
+    const replaced = node.matches(
+      '[data-subline-caption], .subline-youtube .ytp-caption-window-container',
+    );
     if (
       style.display === 'none' ||
       style.visibility === 'hidden' ||
@@ -53,6 +55,18 @@ function within(node: Node, ancestorNode: Node): boolean {
 function flatText(element: HTMLElement): string {
   return (element.textContent ?? '').replace(/\s+/g, ' ').trim();
 }
+function domCaptionText(element: HTMLElement): string {
+  const read = (node: Node): string => {
+    if (node.nodeType === Node.TEXT_NODE) return node.textContent ?? '';
+    if (!(node instanceof HTMLElement) || !visible(node)) return '';
+    if (node.tagName === 'BR') return ' ';
+    const text = [...node.childNodes].map(read).join('');
+    return /^(block|flex|grid|list-item|table)/.test(getComputedStyle(node).display)
+      ? ` ${text} `
+      : text;
+  };
+  return read(element).replace(/\s+/g, ' ').trim();
+}
 function playerElements(root: ParentNode): HTMLElement[] {
   const elements = [...root.querySelectorAll<HTMLElement>('*')].filter(
     (element) => !element.closest('[data-subline-overlay]'),
@@ -63,31 +77,6 @@ function playerElements(root: ParentNode): HTMLElement[] {
       element.shadowRoot ? playerElements(element.shadowRoot) : [],
     ),
   ];
-}
-function textRect(element: HTMLElement, playerRect: DOMRect): DOMRect | null {
-  if (playerRect.height <= 1 || typeof Range.prototype.getClientRects !== 'function') return null;
-  const range = document.createRange();
-  const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
-  const textRects: DOMRect[] = [];
-  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-    if (!node.textContent?.trim() || !node.parentElement || !visible(node.parentElement)) continue;
-    range.selectNodeContents(node);
-    textRects.push(...range.getClientRects());
-  }
-  const rects = textRects.filter(
-    (rect) =>
-      rect.width > 1 &&
-      rect.height > 1 &&
-      rect.height <= playerRect.height * 0.5 &&
-      rect.bottom > playerRect.top + 1 &&
-      rect.top < playerRect.bottom - 1,
-  );
-  if (!rects.length) return null;
-  const top = Math.min(...rects.map((rect) => rect.top));
-  const bottom = Math.max(...rects.map((rect) => rect.bottom));
-  const left = Math.min(...rects.map((rect) => rect.left));
-  const right = Math.max(...rects.map((rect) => rect.right));
-  return new DOMRect(left, top, Math.max(0, right - left), Math.max(0, bottom - top));
 }
 function cueBoxes(nodes: HTMLElement[], playerRect: DOMRect): HTMLElement[] {
   const limit = playerRect.height * 0.5;
@@ -152,10 +141,10 @@ export function readCaption(
     ).trim();
     if (text) return { text, element: root, nativeTrack: false };
   }
-  const hbo = [...player.querySelectorAll<HTMLElement>(HBO_CAPTIONS)].find(
-    (element) => visible(element) && element.textContent?.trim(),
-  );
-  if (hbo) return { text: (hbo.textContent ?? '').trim(), element: hbo, nativeTrack: false };
+  for (const element of player.querySelectorAll<HTMLElement>(HBO_CAPTIONS)) {
+    const text = domCaptionText(element);
+    if (text) return { text, element, nativeTrack: false };
+  }
   const track = selectedTrack(video, sourceLanguage);
   const text = track?.activeCues ? [...track.activeCues].map(captionText).join('\n').trim() : '';
   return { text, element: null, nativeTrack: Boolean(text) };
@@ -185,12 +174,8 @@ const SEEK_JUMP_SECONDS = 1;
 const SEEK_JUMP_TOLERANCE = 1e-3;
 const SEEK_PREVIEW_CUES = 4;
 const STYLE = `
-.subline-player:not(.subline-youtube) [data-subline-caption] { translate: 0 calc(-1 * var(--subline-reserve)) !important; }
-.subline-player:not(.subline-youtube) [data-subline-caption], .subline-player:not(.subline-youtube) [data-subline-caption] * {
-  color: var(--subline-source-color) !important; font-size: var(--subline-source-size) !important;
-}
 video.subline-native::cue { color: transparent !important; background: transparent !important; text-shadow: none !important; }
-.subline-player [data-subline-timeline] { visibility: hidden !important; }
+.subline-player [data-subline-caption] { opacity: 0 !important; pointer-events: none !important; }
 .subline-player.subline-youtube .ytp-caption-window-container { opacity: 0 !important; pointer-events: none !important; }
 `;
 const LOADING_TRANSLATION = '翻译中';
@@ -207,8 +192,6 @@ export class CaptionController {
   private captionMarks: HTMLElement[] = [];
   private style: HTMLStyleElement;
   private interval: ReturnType<typeof setInterval>;
-  private resizeObserver =
-    typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(() => this.tick());
   private currentText = '';
   private currentNeedsSplit = false;
   private changedAt = 0;
@@ -279,12 +262,11 @@ export class CaptionController {
   }
 
   private unmount(): void {
-    this.resizeObserver?.disconnect();
     this.prefetch([], Boolean(this.video));
     this.translationMode = null;
     for (const event of this.mediaEvents)
       this.video?.removeEventListener(event, this.onMediaChange);
-    this.setCaptionMarks([], false);
+    this.setCaptionMarks([]);
     this.source = '';
     this.nativeTrack = undefined;
     this.version++;
@@ -296,8 +278,6 @@ export class CaptionController {
     this.video?.classList.remove('subline-native');
     if (this.player) {
       this.player.classList.remove('subline-player', 'subline-youtube');
-      for (const name of ['--subline-source-color', '--subline-source-size', '--subline-reserve'])
-        this.player.style.removeProperty(name);
       if (this.positionedPlayer && this.player.style.position === 'relative')
         this.player.style.removeProperty('position');
     }
@@ -335,12 +315,6 @@ export class CaptionController {
     if (this.positionedPlayer) player.style.position = 'relative';
     player.classList.add('subline-player');
     player.classList.toggle('subline-youtube', Boolean(video.closest('.html5-video-player')));
-    player.style.setProperty('--subline-source-color', this.settings.original.color);
-    player.style.setProperty('--subline-source-size', `${this.settings.original.size}px`);
-    player.style.setProperty(
-      '--subline-reserve',
-      `${this.settings.translation.size * 1.4 + this.settings.subtitleGap}px`,
-    );
     this.host = document.createElement('div');
     this.host.dataset.sublineOverlay = '';
     this.host.style.cssText =
@@ -348,9 +322,10 @@ export class CaptionController {
     const shadow = this.host.attachShadow({ mode: 'open' });
     const css = document.createElement('style');
     css.textContent =
-      ':host{all:initial}.stack{position:absolute;left:4%;width:92%;text-align:center;font-family:Arial,"PingFang SC",sans-serif;line-height:1.4;pointer-events:none}.line{width:fit-content;max-width:100%;margin-inline:auto;padding:1px 8px;border-radius:3px;white-space:pre-line;overflow-wrap:anywhere;text-shadow:0 1px 3px #000;box-sizing:border-box}.error{font-size:13px!important;color:#ffe3b0!important}';
+      ':host{all:initial}.stack{position:absolute;left:4%;width:92%;text-align:center;font-family:Arial,"PingFang SC",sans-serif;line-height:1.4;pointer-events:none}.line{width:fit-content;max-width:100%;margin-inline:auto;padding:1px 8px;border-radius:3px;white-space:normal;overflow-wrap:anywhere;text-shadow:0 1px 3px #000;box-sizing:border-box}.error{font-size:13px!important;color:#ffe3b0!important}';
     this.stack = document.createElement('div');
     this.stack.className = 'stack';
+    this.stack.style.bottom = '9%';
     this.original = document.createElement('div');
     this.original.className = 'line original';
     this.translated = document.createElement('div');
@@ -370,7 +345,6 @@ export class CaptionController {
     this.stack.append(this.original, this.translated);
     shadow.append(css, this.stack);
     player.append(this.host);
-    this.resizeObserver?.observe(this.stack);
   }
 
   private tick(): void {
@@ -456,7 +430,6 @@ export class CaptionController {
       this.settings.configured &&
       subtitles.mode === 'model' &&
       (!youtubeTimeline || Boolean(timeline));
-    const youtube = this.player.classList.contains('subline-youtube');
     const siteElement = timeline
       ? this.player.querySelector<HTMLElement>(`.ytp-caption-window-container, ${HBO_CAPTIONS}`)
       : null;
@@ -476,20 +449,13 @@ export class CaptionController {
     if (!video.paused)
       this.prefetch(texts, false, translationWindow?.segments, translationWindow?.needsSplit);
     const captionSource = caption.element;
-    const domPlaced = Boolean(captionSource && !timeline && !youtube);
-    if (domPlaced) {
-      this.player.style.setProperty(
-        '--subline-reserve',
-        `${Math.max(this.settings.translation.size * 1.4 + this.settings.subtitleGap, this.stack.offsetHeight + 8)}px`,
-      );
-    }
-    const found = captionSource && domPlaced ? captionBoxes(this.player, captionSource) : [];
-    this.setCaptionMarks(
-      found.length ? found : captionSource ? [captionSource] : [],
-      Boolean(timeline) && !youtube,
-    );
+    const found = captionSource && !timeline ? captionBoxes(this.player, captionSource) : [];
+    this.setCaptionMarks([
+      ...(captionSource ? [captionSource] : []),
+      ...found,
+      ...(timeline ? this.player.querySelectorAll<HTMLElement>(HBO_CAPTIONS) : []),
+    ]);
     video.classList.toggle('subline-native', caption.nativeTrack);
-    const customOriginal = youtube || caption.nativeTrack;
     const timedCaption = captions?.find(
       (cue) =>
         cue.startTime <= video.currentTime &&
@@ -500,40 +466,6 @@ export class CaptionController {
     if (!caption.text) {
       this.clearCaption();
       return;
-    }
-    if (domPlaced && caption.element) {
-      const playerRect = this.player.getBoundingClientRect();
-      const glyphBottoms = this.captionMarks
-        .map((node) => textRect(node, playerRect))
-        .filter((rect): rect is DOMRect => rect !== null)
-        .map((rect) => rect.bottom);
-      if (!glyphBottoms.length) {
-        const sourceRect = textRect(caption.element, playerRect);
-        if (sourceRect) glyphBottoms.push(sourceRect.bottom);
-      }
-      const markBottoms = this.captionMarks
-        .map((node) => node.getBoundingClientRect())
-        .filter(
-          (rect) =>
-            rect.width > 1 &&
-            rect.height > 1 &&
-            rect.height <= playerRect.height * 0.5 &&
-            rect.bottom > playerRect.top &&
-            rect.top < playerRect.bottom,
-        )
-        .map((rect) => rect.bottom);
-      const bottoms = glyphBottoms.length ? glyphBottoms : markBottoms;
-      if (playerRect.height <= 1 || !bottoms.length) {
-        this.stack.style.top = 'auto';
-        this.stack.style.bottom = '9%';
-      } else {
-        const anchor = Math.max(...bottoms) - playerRect.top;
-        this.stack.style.bottom = 'auto';
-        this.stack.style.top = `${Math.max(0, Math.min(playerRect.height - this.stack.offsetHeight - 8, anchor))}px`;
-      }
-    } else {
-      this.stack.style.top = 'auto';
-      this.stack.style.bottom = '9%';
     }
     if (!usesModel) {
       if (this.currentText) this.version++;
@@ -575,7 +507,7 @@ export class CaptionController {
           (needsSplit ? null : parts.map((part) => part.translation).join(' '));
       }
     }
-    const visibleSource = customOriginal ? sourceText : '';
+    const visibleSource = sourceText;
     if (this.original.textContent !== visibleSource) this.original.textContent = visibleSource;
     this.original.hidden = !visibleSource;
     if (!usesModel) return;
@@ -736,16 +668,14 @@ export class CaptionController {
     this.translated.hidden = true;
   }
 
-  private setCaptionMarks(elements: HTMLElement[], hide: boolean): void {
+  private setCaptionMarks(elements: HTMLElement[]): void {
     const next = new Set(elements);
     for (const element of this.captionMarks) {
       if (next.has(element)) continue;
       element.removeAttribute('data-subline-caption');
-      element.removeAttribute('data-subline-timeline');
     }
     for (const element of next) {
       element.setAttribute('data-subline-caption', '');
-      element.toggleAttribute('data-subline-timeline', hide);
     }
     this.captionMarks = [...next];
   }

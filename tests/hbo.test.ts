@@ -1,12 +1,13 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { CaptionController } from '../src/extension/captions';
-import { parseHboManifest, parseHboVtt } from '../src/extension/hbo-captions';
+import { hboMediaUrl, parseHboManifest, parseHboVtt } from '../src/extension/hbo-captions';
 import { HboTimeline } from '../src/extension/hbo-timeline';
 import { TranslationQueue } from '../src/extension/queue';
 import { DEFAULT_SETTINGS, publicSettings } from '../src/shared/settings';
 import { providerReply, requestedTexts } from './fixtures/provider';
 
 const mediaUrl = 'https://cdn.prd.media.h264.io/episode/manifest.mpd';
+const edgeMediaUrl = 'https://v4-e-cebcc-lax-csla2-01-wm.e.hbo/episode/manifest.mpd';
 const settings = { ...DEFAULT_SETTINGS, apiKey: 'test', model: 'model' };
 let controller: CaptionController | undefined;
 let video: HTMLVideoElement;
@@ -36,6 +37,34 @@ function manifest(languages = ['en-US', ...(targetLanguage ? [targetLanguage] : 
     </Period>`,
       )
       .join('')}
+  </MPD>`;
+}
+
+function alternateTrackManifest(
+  periodTracks = [
+    ['t3', 't6'],
+    ['t6', 't3'],
+    ['t3', 't6'],
+  ],
+): string {
+  return `<MPD type="static" mediaPresentationDuration="PT90S">${periodTracks
+    .map(
+      (tracks, period) => `
+    <Period start="PT${period * 30}S" duration="PT30S">${tracks
+      .map(
+        (id) => `
+      <AdaptationSet id="${id}" contentType="text" lang="en-US"><Role value="caption"/>
+        <Representation id="${id}" mimeType="text/vtt">
+          <SegmentTemplate media="${id}/$Number$.vtt" startNumber="${period + 1}" timescale="1000" presentationTimeOffset="${period * 30000}">
+            <SegmentTimeline><S t="${period * 30000}" d="30000"/></SegmentTimeline>
+          </SegmentTemplate>
+        </Representation>
+      </AdaptationSet>`,
+      )
+      .join('')}
+    </Period>`,
+    )
+    .join('')}
   </MPD>`;
 }
 
@@ -188,25 +217,130 @@ async function playTo(time: number): Promise<void> {
   }
 }
 
-it('prefetches two segments without TextTrack or visible cues, hiding the two-second provider latency', async () => {
+it.each([mediaUrl, edgeMediaUrl])(
+  'prefetches two segments from %s without TextTrack or visible cues, hiding the two-second provider latency',
+  async (url) => {
+    stream.url = url;
+    controller = new CaptionController(publicSettings(settings));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(requested.map((request) => request.texts)).toEqual([
+      Array.from({ length: 10 }, (_, i) => `Cue ${i + 1}`),
+      Array.from({ length: 10 }, (_, i) => `Cue ${i + 11}`),
+    ]);
+    expect(requested.every((request) => request.at === 0)).toBe(true);
+    await playTo(3);
+    expect(lines()?.[0].textContent).toBe('Cue 1');
+    expect(lines()?.[1].textContent).toBe('译文 Cue 1');
+    expect(lines()?.[1].hidden).toBe(false);
+    await playTo(33);
+    expect(lines()?.[1].textContent).toBe('译文 Cue 11');
+    expect(requested[2].texts).toEqual(Array.from({ length: 10 }, (_, i) => `Cue ${i + 21}`));
+    expect(requested[2].at).toBeLessThan(63);
+    await playTo(63);
+    expect(lines()?.[1].textContent).toBe('译文 Cue 21');
+    expect(requested).toHaveLength(3);
+  },
+);
+
+it('displays streamed HBO translations before either prefetched segment finishes', async () => {
+  stream.url = edgeMediaUrl;
+  const originalFetch = fetch;
+  const batches: { texts: string[]; control: ReadableStreamDefaultController<Uint8Array> }[] = [];
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (url: string, init: RequestInit) => {
+      if (!new URL(url).pathname.endsWith('/chat/completions')) return originalFetch(url, init);
+      expect(JSON.parse(init.body as string).stream).toBe(true);
+      const body = new ReadableStream<Uint8Array>({
+        start(control) {
+          batches.push({ texts: requestedTexts(init), control });
+          init.signal?.addEventListener('abort', () =>
+            control.error(new DOMException('Aborted', 'AbortError')),
+          );
+        },
+      });
+      return new Response(body, { headers: { 'Content-Type': 'text/event-stream' } });
+    }),
+  );
+  const delta = (content: string) =>
+    `data: ${JSON.stringify({ choices: [{ delta: { content } }] })}\n\n`;
+  const push = (index: number, content: string) =>
+    batches[index].control.enqueue(new TextEncoder().encode(delta(content)));
   controller = new CaptionController(publicSettings(settings));
   await vi.advanceTimersByTimeAsync(0);
-  expect(requested.map((request) => request.texts)).toEqual([
+  expect(batches.map(({ texts }) => texts)).toEqual([
     Array.from({ length: 10 }, (_, i) => `Cue ${i + 1}`),
     Array.from({ length: 10 }, (_, i) => `Cue ${i + 11}`),
   ]);
-  expect(requested.every((request) => request.at === 0)).toBe(true);
   await playTo(3);
-  expect(lines()?.[0].textContent).toBe('Cue 1');
+  await vi.advanceTimersByTimeAsync(300);
+  expect(lines()?.[1].textContent).toBe('翻译中');
+  push(0, '{"translations":["译文 Cue 1",');
+  await vi.advanceTimersByTimeAsync(0);
   expect(lines()?.[1].textContent).toBe('译文 Cue 1');
-  expect(lines()?.[1].hidden).toBe(false);
-  await playTo(33);
-  expect(lines()?.[1].textContent).toBe('译文 Cue 11');
-  expect(requested[2].texts).toEqual(Array.from({ length: 10 }, (_, i) => `Cue ${i + 21}`));
-  expect(requested[2].at).toBeLessThan(63);
-  await playTo(63);
-  expect(lines()?.[1].textContent).toBe('译文 Cue 21');
-  expect(requested).toHaveLength(3);
+  expect(lines()?.[0].textContent).toBe('Cue 1');
+  push(
+    0,
+    `${batches[0].texts
+      .slice(1)
+      .map((text) => JSON.stringify(`译文 ${text}`))
+      .join(',')}]}`,
+  );
+  push(1, JSON.stringify({ translations: batches[1].texts.map((text) => `译文 ${text}`) }));
+  for (const { control } of batches) {
+    control.enqueue(new TextEncoder().encode('data: [DONE]\n\n'));
+    control.close();
+  }
+  await vi.advanceTimersByTimeAsync(0);
+});
+
+it('displays and translates one HBO track when alternate tracks have overlapping dialogue', async () => {
+  const originalFetch = fetch;
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (url: string, init: RequestInit) => {
+      if (new URL(url).pathname.endsWith('.mpd')) return new Response(alternateTrackManifest());
+      if (url.endsWith('.vtt')) {
+        const text = vtt(Number(url.match(/\/(\d)\.vtt/)![1]), 'en-US');
+        return new Response(url.includes('/t6/') ? text.replaceAll('.000', '.200') : text);
+      }
+      return originalFetch(url, init);
+    }),
+  );
+  controller = new CaptionController(publicSettings(settings));
+  for (const [time, cue] of [
+    [4, 1],
+    [34, 11],
+    [64, 21],
+  ]) {
+    await playTo(time);
+    expect(document.querySelectorAll('[data-subline-overlay]')).toHaveLength(1);
+    expect(lines()?.[0].textContent).toBe(`Cue ${cue}`);
+    expect(lines()?.[1].textContent).toBe(`译文 Cue ${cue}`);
+  }
+  expect(requested.map(({ texts }) => texts)).toEqual(
+    [0, 1, 2].map((segment) => Array.from({ length: 10 }, (_, i) => `Cue ${segment * 10 + i + 1}`)),
+  );
+  const subtitles = vi
+    .mocked(fetch)
+    .mock.calls.map(([url]) => String(url))
+    .filter((url) => url.endsWith('.vtt'));
+  expect(subtitles).toEqual([1, 2, 3].map((part) => new URL(`t3/${part}.vtt`, mediaUrl).href));
+});
+
+it('accepts HBO edge subtitle URLs while rejecting lookalike hosts and unsafe URLs', () => {
+  expect(hboMediaUrl(edgeMediaUrl)).toBe(edgeMediaUrl);
+  expect(hboMediaUrl('subtitles/en.vtt', edgeMediaUrl)).toBe(
+    'https://v4-e-cebcc-lax-csla2-01-wm.e.hbo/episode/subtitles/en.vtt',
+  );
+  for (const url of [
+    'https://fake.hbo/manifest.mpd',
+    'https://fake-e.hbo/manifest.mpd',
+    'https://e.hbo.untrusted.example/manifest.mpd',
+    'https://user:password@cdn.e.hbo/manifest.mpd',
+    edgeMediaUrl.replace('https:', 'http:'),
+  ])
+    expect(hboMediaUrl(url)).toBeUndefined();
 });
 
 it('cancels old model requests after seeking and ignores their late results', async () => {
@@ -299,7 +433,45 @@ it('keeps DOM translation available when the HBO player adapter is unavailable',
   controller = new CaptionController(publicSettings(settings));
   await vi.advanceTimersByTimeAsync(3000);
   expect(requested.map((request) => request.texts)).toEqual([['DOM cue']]);
+  expect(lines()?.[0].textContent).toBe('DOM cue');
+  expect(
+    getComputedStyle(document.querySelector('[data-testid="caption_renderer_overlay"]')!).opacity,
+  ).toBe('0');
   expect(lines()?.[1].textContent).toBe('译文 DOM cue');
+});
+
+it('renders HBO multiline captions as timed sentences in the plugin overlay', async () => {
+  const originalFetch = fetch;
+  const text = "Oh, thank you.\nI've got to talk to that\nmailman.";
+  const native = document.querySelector<HTMLElement>('[data-testid="caption_renderer_overlay"]')!;
+  native.textContent = text;
+  native.style.cssText = 'font:italic bold 48px serif;line-height:3;white-space:pre-wrap';
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (url: string, init: RequestInit) => {
+      if (url.endsWith('.vtt'))
+        return new Response(
+          url.endsWith('/1.vtt') ? `WEBVTT\n\n00:03.000 --> 00:09.000\n${text}\n\n` : 'WEBVTT\n\n',
+        );
+      return originalFetch(url, init);
+    }),
+  );
+  controller = new CaptionController(publicSettings(settings));
+  await playTo(3);
+  expect(requested.map(({ texts }) => texts)).toEqual([
+    ['Oh, thank you.', "I've got to talk to that mailman."],
+  ]);
+  expect(lines()?.[0].textContent).toBe('Oh, thank you.');
+  expect(lines()?.[1].textContent).toBe('译文 Oh, thank you.');
+  expect(getComputedStyle(native).opacity).toBe('0');
+  expect(native.textContent).toBe(text);
+  await playTo(6);
+  expect(lines()?.[0].textContent).toBe("I've got to talk to that mailman.");
+  expect(lines()?.[1].textContent).toBe("译文 I've got to talk to that mailman.");
+  expect(lines()?.[0].style.fontSize).toBe(`${settings.original.size}px`);
+  controller.update({ ...publicSettings(settings), enabled: false });
+  expect(getComputedStyle(native).opacity).not.toBe('0');
+  expect(native.textContent).toBe(text);
 });
 
 it('reads the committed React branch instead of an old episode retained on the DOM node', async () => {
@@ -373,6 +545,40 @@ it('parses multiperiod HBO WebVTT templates without adding the period offset twi
     endTime: 35,
     text: 'Cue 11',
   });
+});
+
+it('chooses one same-language/role track and keeps its identity when later Periods reorder alternatives', () => {
+  expect(parseHboManifest(alternateTrackManifest(), mediaUrl)).toEqual([
+    {
+      language: 'en-US',
+      role: 'caption',
+      files: [1, 2, 3].map((part) => ({
+        url: new URL(`t3/${part}.vtt`, mediaUrl).href,
+        offset: 0,
+      })),
+    },
+  ]);
+});
+
+it('continues the timeline with one available alternative when track IDs change between Periods', () => {
+  const tracks = parseHboManifest(
+    alternateTrackManifest([
+      ['t3', 't6'],
+      ['t9', 't12'],
+      ['t12', 't9'],
+    ]),
+    mediaUrl,
+  );
+  expect(tracks).toEqual([
+    {
+      language: 'en-US',
+      role: 'caption',
+      files: ['t3/1.vtt', 't9/2.vtt', 't9/3.vtt'].map((path) => ({
+        url: new URL(path, mediaUrl).href,
+        offset: 0,
+      })),
+    },
+  ]);
 });
 
 it('resolves BaseURL, repeated templates, presentation offsets, and ignores video and forced tracks', () => {

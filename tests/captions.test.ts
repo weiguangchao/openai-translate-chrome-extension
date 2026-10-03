@@ -143,7 +143,7 @@ it.each([
   ['collapsed', 0],
   ['full screen', 450],
 ])(
-  'places the Max translation under the visible cue when the overlay is %s',
+  'replaces the Max original and uses the shared layout when its overlay is %s',
   async (_label, overlayHeight) => {
     const sendMessage = await playMax(
       '<div id="player" data-testid="playerContainer"><video></video><div id="overlay" data-testid="caption_renderer_overlay"><div id="cue">[chuckles] It is?</div></div></div>',
@@ -156,40 +156,16 @@ it.each([
     stubBox(cue, box(360, 28));
     await vi.advanceTimersByTimeAsync(150);
     expect(sendMessage).toHaveBeenCalledWith({ type: 'translate', text: '[chuckles] It is?' });
-    const top = Number.parseFloat(stackNode()?.style.top ?? '');
-    expect(top).toBeGreaterThan(360);
-    expect(top).toBeLessThan(420);
-    expect(stackNode()?.style.bottom).toBe('auto');
-    expect(cue.hasAttribute('data-subline-caption')).toBe(true);
-    expect(overlay.hasAttribute('data-subline-caption')).toBe(false);
+    expect(stackNode()?.querySelector('.original')?.textContent).toBe('[chuckles] It is?');
+    expect(translationNode()?.textContent).toBe('是吗?');
+    expect(stackNode()?.style.bottom).toBe('9%');
+    expect(stackNode()?.style.top).toBe('');
+    expect(getComputedStyle(overlay).opacity).toBe('0');
+    expect(player.style.getPropertyValue('--subline-reserve')).toBe('');
   },
 );
 
-it('places the Max translation under the cue glyphs when the overlay box stays at the top', async () => {
-  await playMax(
-    '<div id="player" data-testid="playerContainer"><video></video><div id="overlay" data-testid="caption_renderer_overlay">[chuckles] It is?</div></div>',
-  );
-  const player = document.getElementById('player')!;
-  const overlay = document.getElementById('overlay')!;
-  stubBox(player, box(0, 450, 800));
-  stubBox(overlay, box(8, 24, 800));
-  const glyphs = box(360, 28);
-  const previous = Range.prototype.getClientRects;
-  Range.prototype.getClientRects = function getClientRects() {
-    return [glyphs] as unknown as DOMRectList;
-  };
-  try {
-    await vi.advanceTimersByTimeAsync(150);
-    const top = Number.parseFloat(stackNode()?.style.top ?? '');
-    expect(top).toBeGreaterThan(360);
-    expect(top).toBeLessThan(420);
-  } finally {
-    if (previous) Range.prototype.getClientRects = previous;
-    else delete (Range.prototype as { getClientRects?: () => DOMRectList }).getClientRects;
-  }
-});
-
-it('places the Max translation under a bottom cue when the matched overlay sits at the top', async () => {
+it('hides both Max source and mirrored cue when they are outside each other', async () => {
   await playMax(
     '<div id="player" data-testid="playerContainer"><video></video><div id="overlay" data-testid="caption_renderer_overlay">[chuckles] It is?</div><div id="cue">[chuckles] It is?</div></div>',
   );
@@ -200,74 +176,83 @@ it('places the Max translation under a bottom cue when the matched overlay sits 
   stubBox(overlay, box(8, 24, 800));
   stubBox(cue, box(360, 28));
   await vi.advanceTimersByTimeAsync(150);
-  const top = Number.parseFloat(stackNode()?.style.top ?? '');
-  expect(top).toBeGreaterThan(360);
-  expect(top).toBeLessThan(420);
-  expect(cue.hasAttribute('data-subline-caption')).toBe(true);
-  expect(overlay.hasAttribute('data-subline-caption')).toBe(false);
+  expect(getComputedStyle(overlay).opacity).toBe('0');
+  expect(getComputedStyle(cue).opacity).toBe('0');
+  expect(stackNode()?.querySelector('.original')?.textContent).toBe('[chuckles] It is?');
+  expect(stackNode()?.style.bottom).toBe('9%');
+  controller!.destroy();
+  expect(getComputedStyle(overlay).opacity).not.toBe('0');
+  expect(getComputedStyle(cue).opacity).not.toBe('0');
 });
 
-it('anchors Max translations to visible glyphs instead of padding or hidden old cues', async () => {
-  await playMax(
-    '<div id="player" data-testid="playerContainer"><video></video><div id="overlay" data-testid="caption_renderer_overlay"><div id="cue"><span>Current cue</span><span style="visibility:hidden">Old cue</span></div></div></div>',
+it('reads Max text without hidden old cues or platform line breaks after taking over its layer', async () => {
+  const sendMessage = await playMax(
+    '<div data-testid="playerContainer"><video></video><div data-testid="caption_renderer_overlay"><div>Oh, thank you.</div><div>I\'ve got to talk to that<br>mailman.</div><span style="visibility:hidden">Old cue</span></div></div>',
   );
-  stubBox(document.getElementById('player')!, box(0, 450, 800));
-  stubBox(document.getElementById('overlay')!, box(0, 450, 800));
-  stubBox(document.getElementById('cue')!, box(360, 80));
-  const previous = Range.prototype.getClientRects;
-  Range.prototype.getClientRects = function getClientRects() {
-    const glyphs = this.startContainer.textContent === 'Current cue' ? box(360, 28) : box(420, 20);
-    return [glyphs] as unknown as DOMRectList;
-  };
-  try {
-    await vi.advanceTimersByTimeAsync(150);
-    expect(stackNode()?.style.top).toBe('388px');
-  } finally {
-    if (previous) Range.prototype.getClientRects = previous;
-    else delete (Range.prototype as { getClientRects?: () => DOMRectList }).getClientRects;
-  }
+  const text = "Oh, thank you. I've got to talk to that mailman.";
+  expect(sendMessage).toHaveBeenCalledWith({ type: 'translate', text });
+  expect(stackNode()?.querySelector('.original')?.textContent).toBe(text);
+  await vi.advanceTimersByTimeAsync(1500);
+  expect(stackNode()?.querySelector('.original')?.textContent).toBe(text);
+  expect(sendMessage.mock.calls.filter(([message]) => message.type === 'translate')).toHaveLength(
+    1,
+  );
 });
 
-it('follows a replaced Max cue and resized player, and restores the original when disabled', async () => {
+it('follows a replaced Max source while keeping plugin placement and restores site styles when disabled', async () => {
   await playMax(
-    '<div id="player" data-testid="playerContainer"><video></video><div id="overlay" data-testid="caption_renderer_overlay"><div id="cue">First cue</div></div></div>',
+    '<div id="player" data-testid="playerContainer"><video></video><div id="overlay" data-testid="caption_renderer_overlay" style="color:red;font-size:40px;background:blue">First cue</div></div>',
   );
   const player = document.getElementById('player')!;
   const overlay = document.getElementById('overlay')!;
-  const cue = document.getElementById('cue')!;
-  stubBox(player, box(50, 450, 800));
-  stubBox(overlay, box(50, 450, 800));
-  stubBox(cue, box(410, 28));
-  await vi.advanceTimersByTimeAsync(150);
-  expect(stackNode()?.style.top).toBe('388px');
-  const replacement = document.createElement('div');
+  const originalStyle = overlay.style.cssText;
+  const replacement = overlay.cloneNode() as HTMLElement;
   replacement.textContent = 'Second cue';
-  cue.replaceWith(replacement);
+  overlay.replaceWith(replacement);
   stubBox(player, box(0, 900, 1600));
-  stubBox(overlay, box(0, 900, 1600));
   stubBox(replacement, box(750, 40));
   await vi.advanceTimersByTimeAsync(450);
-  expect(stackNode()?.style.top).toBe('790px');
-  expect(cue.hasAttribute('data-subline-caption')).toBe(false);
-  expect(replacement.hasAttribute('data-subline-caption')).toBe(true);
+  expect(stackNode()?.style.bottom).toBe('9%');
+  expect(stackNode()?.querySelector('.original')?.textContent).toBe('Second cue');
+  expect(overlay.hasAttribute('data-subline-caption')).toBe(false);
+  expect(getComputedStyle(replacement).opacity).toBe('0');
+  expect(replacement.style.cssText).toBe(originalStyle);
+  replacement.style.display = 'none';
+  await vi.advanceTimersByTimeAsync(150);
+  expect(stackNode()?.querySelector<HTMLElement>('.original')?.hidden).toBe(true);
+  replacement.style.display = '';
+  await vi.advanceTimersByTimeAsync(450);
+  expect(stackNode()?.querySelector<HTMLElement>('.original')?.hidden).toBe(false);
   controller!.update({ ...settings(), enabled: false });
   expect(replacement.hasAttribute('data-subline-caption')).toBe(false);
+  expect(getComputedStyle(replacement).opacity).not.toBe('0');
+  expect(replacement.style.cssText).toBe(originalStyle);
   expect(document.querySelector('[data-subline-overlay]')).toBeNull();
 });
 
-it('reserves enough space below the Max original when the translation wraps', async () => {
-  await playMax(
-    '<div id="player" data-testid="playerContainer"><video></video><div id="overlay" data-testid="caption_renderer_overlay"><div id="cue">Bottom cue</div></div></div>',
-  );
-  const player = document.getElementById('player')!;
-  stubBox(player, box(0, 450, 800));
-  stubBox(document.getElementById('overlay')!, box(0, 450, 800));
-  document.getElementById('cue')!.getBoundingClientRect = () =>
-    box(412 - Number.parseFloat(player.style.getPropertyValue('--subline-reserve')), 28);
-  Object.defineProperty(stackNode(), 'offsetHeight', { value: 120 });
-  await vi.advanceTimersByTimeAsync(150);
-  expect(player.style.getPropertyValue('--subline-reserve')).toBe('128px');
-  expect(stackNode()?.style.top).toBe('312px');
+it('uses identical rendering and settings for YouTube and Max DOM sources', async () => {
+  const sources = [
+    '<div class="html5-video-player"><video></video><div class="ytp-caption-window-container"><span class="ytp-caption-segment">Shared text</span></div></div>',
+    '<div data-testid="playerContainer" style="font:bold italic 60px serif;letter-spacing:8px;text-transform:uppercase"><video></video><div data-testid="caption_renderer_overlay">Shared text</div></div>',
+  ];
+  const snapshots = [];
+  for (const html of sources) {
+    await playMax(html);
+    controller!.update({
+      ...settings(),
+      original: { color: '#AABBCC', size: 32 },
+      translation: { color: '#CCDDEE', size: 28 },
+      backgroundOpacity: 60,
+      subtitleGap: 12,
+    });
+    await vi.advanceTimersByTimeAsync(450);
+    const shadow = document.querySelector('[data-subline-overlay]')!.shadowRoot!;
+    snapshots.push(shadow.innerHTML);
+    expect(shadow.querySelector<HTMLElement>('.original')?.style.fontSize).toBe('32px');
+    expect(shadow.querySelector<HTMLElement>('.translation')?.style.marginTop).toBe('12px');
+    controller!.destroy();
+  }
+  expect(snapshots[0]).toBe(snapshots[1]);
 });
 
 it('reads the current Max caption overlay even when it sits outside the video root', async () => {
