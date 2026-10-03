@@ -23,6 +23,168 @@ export function parseModelJson(response: string): unknown {
   return JSON.parse(response.trim().replace(/^```(?:json)?\s*\n?([\s\S]*?)\n?```$/i, '$1'));
 }
 
+export function scanTranslationStrings(source: string): { values: string[]; closed: boolean } {
+  const text = stripOpeningFence(source);
+  const start = findTranslationsArray(text);
+  if (start < 0) return { values: [], closed: false };
+  const values: string[] = [];
+  let index = start + 1;
+  while (index < text.length) {
+    index = skipSpace(text, index);
+    if (index >= text.length) return { values, closed: false };
+    const character = text[index];
+    if (character === ']') return { values, closed: true };
+    if (character === ',') {
+      index++;
+      continue;
+    }
+    if (character === '"') {
+      const parsed = readString(text, index);
+      if (!parsed) return { values, closed: false };
+      values.push(parsed.value);
+      index = parsed.end;
+      continue;
+    }
+    const next = skipValue(text, index);
+    if (next < 0) return { values, closed: false };
+    values.push('');
+    index = next;
+  }
+  return { values, closed: false };
+}
+
+function stripOpeningFence(source: string): string {
+  const text = source.replace(/^\uFEFF/, '').trimStart();
+  const line = /^```(?:json)?[^\S\r\n]*\r?\n/i.exec(text);
+  if (line) return text.slice(line[0].length);
+  const inline = /^```(?:json)?(?=\s*[{\[])/i.exec(text);
+  if (inline) return text.slice(inline[0].length).trimStart();
+  if (/^```(?:json)?\s*$/i.test(text)) return '';
+  return text;
+}
+
+function skipSpace(text: string, index: number): number {
+  let cursor = index;
+  while (cursor < text.length) {
+    const character = text[cursor];
+    if (character === ' ' || character === '\n' || character === '\r' || character === '\t') {
+      cursor++;
+      continue;
+    }
+    if (text.startsWith('```', cursor)) {
+      const lineEnd = text.indexOf('\n', cursor);
+      cursor = lineEnd < 0 ? text.length : lineEnd + 1;
+      continue;
+    }
+    break;
+  }
+  return cursor;
+}
+
+function findTranslationsArray(text: string): number {
+  let index = skipSpace(text, 0);
+  if (index >= text.length) return -1;
+  if (text[index] === '[') return index;
+  if (text[index] !== '{') return -1;
+  index++;
+  while (index < text.length) {
+    index = skipSpace(text, index);
+    if (index >= text.length || text[index] === '}') return -1;
+    if (text[index] !== '"') return -1;
+    const key = readString(text, index);
+    if (!key) return -1;
+    index = skipSpace(text, key.end);
+    if (text[index] !== ':') return -1;
+    index = skipSpace(text, index + 1);
+    if (key.value === 'translations') return text[index] === '[' ? index : -1;
+    const next = skipValue(text, index);
+    if (next < 0) return -1;
+    index = skipSpace(text, next);
+    if (text[index] === ',') index++;
+  }
+  return -1;
+}
+
+function readString(text: string, index: number): { value: string; end: number } | null {
+  if (text[index] !== '"') return null;
+  let value = '';
+  let cursor = index + 1;
+  while (cursor < text.length) {
+    const character = text[cursor];
+    if (character === '"') return { value, end: cursor + 1 };
+    if (character === '\\') {
+      if (cursor + 1 >= text.length) return null;
+      const escaped = text[cursor + 1];
+      const simple: Record<string, string> = {
+        '"': '"',
+        '\\': '\\',
+        '/': '/',
+        b: '\b',
+        f: '\f',
+        n: '\n',
+        r: '\r',
+        t: '\t',
+      };
+      if (Object.hasOwn(simple, escaped)) {
+        value += simple[escaped];
+        cursor += 2;
+        continue;
+      }
+      if (escaped === 'u') {
+        if (cursor + 6 > text.length) return null;
+        const hex = text.slice(cursor + 2, cursor + 6);
+        if (!/^[0-9a-fA-F]{4}$/.test(hex)) return null;
+        value += String.fromCharCode(Number.parseInt(hex, 16));
+        cursor += 6;
+        continue;
+      }
+      return null;
+    }
+    if (character === '\n' || character === '\r') return null;
+    value += character;
+    cursor++;
+  }
+  return null;
+}
+
+function skipValue(text: string, index: number): number {
+  const start = skipSpace(text, index);
+  if (start >= text.length) return -1;
+  const character = text[start];
+  if (character === '"') return readString(text, start)?.end ?? -1;
+  if (character === '{') return skipContainer(text, start, '{', '}');
+  if (character === '[') return skipContainer(text, start, '[', ']');
+  if (character === '-' || (character >= '0' && character <= '9')) {
+    let cursor = start + 1;
+    while (cursor < text.length && /[0-9eE+.-]/.test(text[cursor])) cursor++;
+    return cursor > start + (character === '-' ? 1 : 0) ? cursor : -1;
+  }
+  for (const literal of ['true', 'false', 'null'])
+    if (text.startsWith(literal, start)) return start + literal.length;
+  return -1;
+}
+
+function skipContainer(text: string, index: number, open: string, close: string): number {
+  let depth = 0;
+  let cursor = index;
+  while (cursor < text.length) {
+    const character = text[cursor];
+    if (character === '"') {
+      const parsed = readString(text, cursor);
+      if (!parsed) return -1;
+      cursor = parsed.end;
+      continue;
+    }
+    if (character === open) depth++;
+    else if (character === close) {
+      depth--;
+      if (depth === 0) return cursor + 1;
+    }
+    cursor++;
+  }
+  return -1;
+}
+
 function isComma(character: string): boolean {
   return character === ',' || character === '，';
 }

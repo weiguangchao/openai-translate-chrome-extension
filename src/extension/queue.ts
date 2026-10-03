@@ -279,6 +279,16 @@ export class TranslationQueue {
   private run(batch: Job[]): void {
     const controller = new AbortController();
     for (const job of batch) Object.assign(job, { controller, batch });
+    const deliver = (index: number, translation: string) => {
+      if (controller.signal.aborted) return;
+      const job = batch[index];
+      if (!job) return;
+      this.remember(job.key, translation);
+      if (this.jobs.get(job.key) !== job) return;
+      this.jobs.delete(job.key);
+      job.resolve(translation);
+      this.drain();
+    };
     const [first] = batch;
     const work: Promise<string[] | null> =
       batch.length > 1
@@ -286,21 +296,25 @@ export class TranslationQueue {
             first.settings,
             batch.map((job) => job.text),
             controller.signal,
+            deliver,
           )
         : translate(first.settings, first.text, controller.signal).then((result) => [result]);
     void work.then(
       (results) => {
         if (controller.signal.aborted) return;
         if (!results) {
-          for (const job of batch)
+          for (const job of batch) {
+            if (this.jobs.get(job.key) !== job) continue;
             Object.assign(job, { controller: undefined, batch: undefined, solo: true });
+          }
           this.drain();
           return;
         }
         batch.forEach((job, index) => {
           const result = results[index];
           this.remember(job.key, result);
-          if (this.jobs.get(job.key) === job) this.jobs.delete(job.key);
+          if (this.jobs.get(job.key) !== job) return;
+          this.jobs.delete(job.key);
           job.resolve(result);
         });
         this.drain();
@@ -309,7 +323,8 @@ export class TranslationQueue {
         if (controller.signal.aborted) return;
         this.backoffUntil = Date.now() + 15000;
         for (const job of batch) {
-          if (this.jobs.get(job.key) === job) this.jobs.delete(job.key);
+          if (this.jobs.get(job.key) !== job) continue;
+          this.jobs.delete(job.key);
           job.reject(error instanceof Error ? error : new Error('翻译失败。'));
         }
         this.drain();

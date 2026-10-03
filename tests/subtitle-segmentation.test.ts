@@ -1,10 +1,27 @@
 import { expect, it } from 'vitest';
 import {
+  scanTranslationStrings,
   splitSubtitleAtCommas,
   subtitleDisplayLength,
   subtitleDisplayLimit,
 } from '../src/shared/subtitle-segmentation';
 import { githubCaption, githubCommaParts } from './fixtures/github-caption';
+
+it('reads each closed translation without parsing a partial JSON document', () => {
+  expect(scanTranslationStrings('{"translations":["第一')).toEqual({ values: [], closed: false });
+  expect(scanTranslationStrings('{"translations":["第一句","第二')).toEqual({
+    values: ['第一句'],
+    closed: false,
+  });
+  expect(
+    scanTranslationStrings('```json\n{"translations":["他说\\"你好\\"\\n中\\/\\u6587"]}\n```'),
+  ).toEqual({ values: ['他说"你好"\n中/文'], closed: true });
+  expect(scanTranslationStrings('["甲","乙"]')).toEqual({ values: ['甲', '乙'], closed: true });
+  expect(scanTranslationStrings('{"note":"skip","translations":["甲"]}')).toEqual({
+    values: ['甲'],
+    closed: true,
+  });
+});
 
 it('packs comma-separated clauses into as few parts as the display limit allows', () => {
   const clause = 'a'.repeat(40);

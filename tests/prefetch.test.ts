@@ -471,6 +471,51 @@ it('moves a long sentence that does not fit in the rest of a segment to the next
   expect(requested).toEqual([short.map((cue) => cue.text), [...parts, 'After']]);
 });
 
+it('shows the first closed translation before the rest of the segment is written', async () => {
+  const cues = [
+    { startTime: 0, endTime: 3, text: 'Opening line' },
+    { startTime: 3, endTime: 6, text: 'Following line' },
+  ];
+  Object.defineProperty(video, 'textTracks', {
+    value: [{ mode: 'showing', kind: 'subtitles', language: 'en', cues, activeCues: [] }],
+  });
+  let control!: ReadableStreamDefaultController<Uint8Array>;
+  vi.stubGlobal(
+    'fetch',
+    vi.fn((_url: string, init: RequestInit) => {
+      requested.push(requestedTexts(init));
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          control = controller;
+        },
+      });
+      init.signal?.addEventListener('abort', () => {
+        try {
+          control.error(new DOMException('Aborted', 'AbortError'));
+        } catch {
+          return;
+        }
+      });
+      return Promise.resolve(
+        new Response(stream, { headers: { 'Content-Type': 'text/event-stream' } }),
+      );
+    }),
+  );
+  const delta = (content: string) =>
+    `data: ${JSON.stringify({ choices: [{ delta: { content } }] })}\n\n`;
+  controller = new CaptionController(publicSettings(saved));
+  await vi.advanceTimersByTimeAsync(0);
+  expect(requested).toEqual([['Opening line', 'Following line']]);
+  control.enqueue(new TextEncoder().encode(delta('{"translations":["开场字幕","')));
+  for (let attempt = 0; attempt < 8; attempt++) await vi.advanceTimersByTimeAsync(0);
+  expect(translated()?.textContent).toBe('开场字幕');
+  expect(translated()?.hidden).toBe(false);
+  control.enqueue(new TextEncoder().encode(`${delta('后续字幕"]}')}data: [DONE]\n\n`));
+  control.close();
+  for (let attempt = 0; attempt < 8; attempt++) await vi.advanceTimersByTimeAsync(0);
+  expect(requested).toEqual([['Opening line', 'Following line']]);
+});
+
 it('reuses the cues read from a track until the track changes', () => {
   const timeline = new NativeTimeline();
   const read = () => timeline.read(video, 'en', 'zh-CN').source;
