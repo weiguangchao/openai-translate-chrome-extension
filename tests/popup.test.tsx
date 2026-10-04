@@ -3,6 +3,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { DEFAULT_SETTINGS, type Settings } from '../src/shared/settings';
 import { loadSettings, saveSettings } from '../src/shared/storage';
+import { TOKEN_USAGE_KEY } from '../src/shared/token-usage';
 import { Popup } from '../src/ui/Popup';
 
 vi.mock('../src/shared/storage', () => ({
@@ -14,8 +15,15 @@ vi.mock('../src/shared/storage', () => ({
 let root: Root;
 let stored: Settings;
 const openOptionsPage = vi.fn();
+const pageValues = new Map<string, string>();
 
 beforeEach(() => {
+  pageValues.clear();
+  vi.stubGlobal('localStorage', {
+    getItem: (key: string) => pageValues.get(key) ?? null,
+    setItem: (key: string, value: string) => pageValues.set(key, value),
+    removeItem: (key: string) => pageValues.delete(key),
+  });
   stored = { ...structuredClone(DEFAULT_SETTINGS), apiKey: 'test-key', model: 'provider/model-id' };
   vi.mocked(loadSettings)
     .mockReset()
@@ -143,6 +151,54 @@ it('restores the saved language after a write failure and clears the error after
   await choose('source', 'fr');
   expect(stored.sourceLanguage).toBe('fr');
   expect(document.querySelector('[role="alert"]')).toBeNull();
+});
+
+it('shows cumulative input, output, and cache tokens with compact units', async () => {
+  localStorage.setItem(
+    TOKEN_USAGE_KEY,
+    JSON.stringify({ input: 1_500_000, output: 250_000, cache: 800_000 }),
+  );
+  await render();
+  expect(document.querySelector('.popup-usage-total')?.textContent).toBe('1.8M');
+  expect(document.querySelector('.popup-usage-total')?.getAttribute('title')).toBe('1,750,000');
+  expect(document.querySelector('.popup-usage-input')?.textContent).toBe('1.5M');
+  expect(document.querySelector('.popup-usage-output')?.textContent).toBe('250K');
+  expect(document.querySelector('.popup-usage-cache')?.textContent).toBe('800K');
+  expect(document.querySelector('.popup-usage-cache')?.getAttribute('title')).toBe('800,000');
+});
+
+it('updates the popup total when recorded tokens change', async () => {
+  let listener!: (changes: Record<string, { newValue?: unknown }>, area: string) => void;
+  const removeListener = vi.fn();
+  vi.stubGlobal('chrome', {
+    runtime: { id: 'extension-id', openOptionsPage },
+    storage: {
+      local: {
+        get: vi.fn(async (key: string) =>
+          key === TOKEN_USAGE_KEY ? { [key]: { input: 1000, output: 0, cache: 200 } } : {},
+        ),
+      },
+      onChanged: {
+        addListener: (callback: typeof listener) => {
+          listener = callback;
+        },
+        removeListener,
+      },
+    },
+  });
+  await render();
+  expect(document.querySelector('.popup-usage-total')?.textContent).toBe('1K');
+  expect(document.querySelector('.popup-usage-cache')?.textContent).toBe('200');
+  await act(async () => {
+    listener(
+      { [TOKEN_USAGE_KEY]: { newValue: { input: 2_500_000, output: 500_000, cache: 1_000_000 } } },
+      'local',
+    );
+  });
+  expect(document.querySelector('.popup-usage-total')?.textContent).toBe('3M');
+  expect(document.querySelector('.popup-usage-input')?.textContent).toBe('2.5M');
+  expect(document.querySelector('.popup-usage-output')?.textContent).toBe('500K');
+  expect(document.querySelector('.popup-usage-cache')?.textContent).toBe('1M');
 });
 
 it('keeps controls disabled after a load failure and leaves settings accessible', async () => {

@@ -2,6 +2,14 @@ import { useEffect, useState } from 'react';
 import { ArrowLeftRight, Check, LockKeyhole, Settings2, Subtitles } from 'lucide-react';
 import { DEFAULT_SETTINGS, LANGUAGES, type Settings } from '../shared/settings';
 import { isExtension, loadSettings, saveSettings } from '../shared/storage';
+import {
+  formatExactTokens,
+  formatTokenCount,
+  loadTokenUsage,
+  tokenTotal,
+  watchTokenUsage,
+  type TokenUsage,
+} from '../shared/token-usage';
 import { Logo, Select, Toggle } from './components';
 
 function PopupLanguage({
@@ -38,8 +46,44 @@ function PopupLanguage({
   );
 }
 
+function PopupTokens({ usage, ready }: { usage: TokenUsage; ready: boolean }) {
+  const total = tokenTotal(usage);
+  const parts = [
+    ['输入', usage.input, 'popup-usage-input'],
+    ['输出', usage.output, 'popup-usage-output'],
+    ['缓存', usage.cache, 'popup-usage-cache'],
+  ] as const;
+  return (
+    <section className="popup-usage" aria-labelledby="popup-usage-label">
+      <h2 id="popup-usage-label">Token 消耗</h2>
+      <p
+        className="popup-usage-total"
+        title={ready ? formatExactTokens(total) : undefined}
+        aria-label={ready ? `总共 ${formatExactTokens(total)}` : '读取中'}
+      >
+        {ready ? formatTokenCount(total) : '读取中…'}
+      </p>
+      <dl className="popup-usage-parts">
+        {parts.map(([label, value, className]) => (
+          <div key={label}>
+            <dt>{label}</dt>
+            <dd
+              className={className}
+              title={ready ? formatExactTokens(value) : undefined}
+              aria-label={ready ? formatExactTokens(value) : '读取中'}
+            >
+              {ready ? formatTokenCount(value) : '—'}
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </section>
+  );
+}
+
 export function Popup() {
   const [settings, setSettings] = useState<Settings>(structuredClone(DEFAULT_SETTINGS));
+  const [usage, setUsage] = useState<TokenUsage>({ input: 0, output: 0, cache: 0 });
   const [ready, setReady] = useState(false);
   const [error, setError] = useState('');
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
@@ -47,11 +91,18 @@ export function Popup() {
 
   useEffect(() => {
     let active = true;
+    let seen = false;
     document.body.classList.add('popup-body');
-    void loadSettings()
-      .then((value) => {
+    const stop = watchTokenUsage((value) => {
+      if (!active) return;
+      seen = true;
+      setUsage(value);
+    });
+    void Promise.all([loadSettings(), loadTokenUsage()])
+      .then(([value, tokens]) => {
         if (!active) return;
         setSettings(value);
+        if (!seen) setUsage(tokens);
         setReady(true);
       })
       .catch(() => {
@@ -59,6 +110,7 @@ export function Popup() {
       });
     return () => {
       active = false;
+      stop();
       document.body.classList.remove('popup-body');
     };
   }, []);
@@ -180,6 +232,8 @@ export function Popup() {
           </p>
         )}
       </section>
+
+      <PopupTokens usage={usage} ready={ready} />
 
       <div className="popup-feedback" role="status">
         {busy ? (
