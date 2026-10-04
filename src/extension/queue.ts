@@ -1,9 +1,4 @@
-import {
-  translate,
-  translateBatch,
-  translateCaptionBatch,
-  translationBatchLimit,
-} from '../shared/api';
+import { translateCaptionBatch, translationBatchLimit } from '../shared/api';
 import { translationInput, type CaptionTranslation } from '../shared/caption-translation';
 import type { Settings } from '../shared/settings';
 
@@ -327,21 +322,12 @@ export class TranslationQueue {
       this.drain();
     };
     const [first] = batch;
-    const work: Promise<CaptionTranslation[] | null> = batch.some((job) => job.needsSplit)
-      ? translateCaptionBatch(
-          first.settings,
-          batch.map((job) => translationInput(job.text, job.needsSplit)),
-          controller.signal,
-          deliver,
-        )
-      : batch.length > 1
-        ? translateBatch(
-            first.settings,
-            batch.map((job) => job.text),
-            controller.signal,
-            deliver,
-          )
-        : translate(first.settings, first.text, controller.signal).then((result) => [result]);
+    const work = translateCaptionBatch(
+      first.settings,
+      batch.map((job) => translationInput(job.text, job.needsSplit)),
+      controller.signal,
+      deliver,
+    );
     void work.then(
       (results) => {
         if (controller.signal.aborted) return;

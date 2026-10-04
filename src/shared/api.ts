@@ -1,9 +1,9 @@
 import { translationBatchLimit } from './limits';
 import { englishLanguageName, validateBaseUrl, validateSettings, type Settings } from './settings';
 import {
+  modelAnswer,
   parseModelJson,
   scanTranslationResults,
-  scanTranslationStrings,
   subtitleDisplayLimit,
 } from './subtitle-segmentation';
 import {
@@ -32,8 +32,8 @@ function invalidJson(): Error {
 }
 function withDeadline(signal?: AbortSignal): AbortSignal {
   return signal
-    ? AbortSignal.any([signal, AbortSignal.timeout(20000)])
-    : AbortSignal.timeout(20000);
+    ? AbortSignal.any([signal, AbortSignal.timeout(60000)])
+    : AbortSignal.timeout(60000);
 }
 async function fetchApi(
   settings: Settings,
@@ -121,14 +121,14 @@ function checkText(text: string): void {
   if (!text.trim() || text.length > 5000) throw new Error('字幕内容为空或过长。');
 }
 
-const streamRejected = new Set<string>();
 const reasoningRejected = new Set<string>();
 const maxTokensRejected = new Set<string>();
-type Dropped = 'stream' | 'reasoning' | 'maxTokens' | null;
+const jsonObjectRejected = new Set<string>();
+type Dropped = 'reasoning' | 'maxTokens' | 'jsonObject' | null;
 interface Probe {
-  stream: boolean;
   reasoning: boolean;
   maxTokens: boolean;
+  jsonObject: boolean;
   dropped: Dropped;
 }
 
@@ -136,17 +136,18 @@ function providerKey(settings: Settings): string {
   return JSON.stringify([settings.baseUrl.trim(), settings.model.trim()]);
 }
 
-function probes(settings: Settings, batch: boolean): Probe[] {
+function probes(settings: Settings, jsonObject: boolean): Probe[] {
   const key = providerKey(settings);
   const steps: Probe[] = [];
-  let stream = batch && !streamRejected.has(key);
   let reasoning = !reasoningRejected.has(key);
   let maxTokens = !maxTokensRejected.has(key);
-  const push = (dropped: Dropped) => steps.push({ stream, reasoning, maxTokens, dropped });
+  let object = jsonObject && !jsonObjectRejected.has(key);
+  const push = (dropped: Dropped) =>
+    steps.push({ reasoning, maxTokens, jsonObject: object, dropped });
   push(null);
-  if (stream) {
-    stream = false;
-    push('stream');
+  if (object) {
+    object = false;
+    push('jsonObject');
   }
   if (reasoning) {
     reasoning = false;
@@ -162,9 +163,9 @@ function probes(settings: Settings, batch: boolean): Probe[] {
 function rememberRejection(settings: Settings, dropped: Dropped): void {
   if (!dropped) return;
   const key = providerKey(settings);
-  if (dropped === 'stream') streamRejected.add(key);
   if (dropped === 'reasoning') reasoningRejected.add(key);
   if (dropped === 'maxTokens') maxTokensRejected.add(key);
+  if (dropped === 'jsonObject') jsonObjectRejected.add(key);
 }
 
 function completionBody(
@@ -180,7 +181,8 @@ function completionBody(
       { role: 'system', content: instructions },
       { role: 'user', content: input },
     ],
-    stream: probe.stream,
+    stream: false,
+    ...(probe.jsonObject ? { response_format: { type: 'json_object' as const } } : {}),
     ...(probe.maxTokens ? { max_tokens: maxTokens } : {}),
     ...(probe.reasoning ? { reasoning_effort: 'low' as const } : {}),
   };
@@ -192,19 +194,20 @@ async function complete(
   input: string,
   maxTokens: number,
   signal: AbortSignal | undefined,
-  batch: boolean,
   onText?: (text: string) => void,
+  caption = false,
 ): Promise<string> {
   validateSettings(settings, true);
   const instructions = translatorInstructions(settings, task);
   let lastError: unknown;
-  for (const probe of probes(settings, batch)) {
+  for (const probe of probes(settings, caption)) {
     try {
       const text = await postModel(
         settings,
         completionBody(settings, instructions, input, maxTokens, probe),
         signal,
         onText,
+        caption,
       );
       rememberRejection(settings, probe.dropped);
       if (!text.trim()) throw new Error('模型未返回译文，请确认该模型支持 /chat/completions。');
@@ -222,10 +225,11 @@ async function postModel(
   body: object,
   signal: AbortSignal | undefined,
   onText?: (text: string) => void,
+  caption = false,
 ): Promise<string> {
   const deadline = withDeadline(signal);
   const response = await fetchApi(settings, '/chat/completions', body, deadline);
-  return readModelText(response, deadline, onText);
+  return readModelText(response, deadline, onText, caption);
 }
 
 export async function translate(
@@ -238,43 +242,9 @@ export async function translate(
     settings,
     'Output only the translation, with no quotes, labels, or source text.',
     text,
-    1024,
+    65536,
     signal,
-    false,
   );
-}
-
-export async function translateBatch(
-  settings: Settings,
-  texts: string[],
-  signal?: AbortSignal,
-  onTranslation?: (index: number, translation: string) => void,
-): Promise<string[] | null> {
-  texts.forEach(checkText);
-  if (texts.length > translationBatchLimit) throw new Error('单次翻译的字幕过多。');
-  const submitted = new Set<number>();
-  const submit = (index: number, translation: string) => {
-    if (!Number.isInteger(index) || index < 0 || index >= texts.length || submitted.has(index))
-      return;
-    const value = translation.trim();
-    if (!value || value.length > 5000) return;
-    submitted.add(index);
-    onTranslation?.(index, value);
-  };
-  const response = await complete(
-    settings,
-    `Translate each of the ${texts.length} ordered captions independently, using neighbors only as context; never move content between captions. Return only {"translations":["..."]}: exactly ${texts.length} strings, one per caption in input order.`,
-    JSON.stringify(texts),
-    Math.min(16384, Math.max(2048, texts.join('').length * 4)),
-    signal,
-    true,
-    (text) => {
-      scanTranslationStrings(text).values.forEach((translation, index) =>
-        submit(index, translation),
-      );
-    },
-  );
-  return finalizedBatch(response, texts.length, submit);
 }
 
 export async function translateCaptionBatch(
@@ -289,19 +259,12 @@ export async function translateCaptionBatch(
   const accepted = new Map<number, CaptionTranslation>();
   const submit = (values: unknown[]) => {
     const seen = new Set<number>();
-    for (const value of values) {
-      const id = (value as { id?: unknown } | null)?.id;
-      if (
-        typeof id !== 'number' ||
-        !Number.isSafeInteger(id) ||
-        id < 0 ||
-        id >= inputs.length ||
-        seen.has(id)
-      )
-        continue;
+    for (const value of alignResultIds(values, inputs.length)) {
+      const id = resultId(value);
+      if (id === null || id < 0 || id >= inputs.length || seen.has(id)) continue;
       seen.add(id);
       if (accepted.has(id)) continue;
-      const translation = readCaptionTranslation(inputs[id], value);
+      const translation = readCaptionTranslation(inputs[id], normalizeResult(value));
       if (translation === null) continue;
       accepted.set(id, translation);
       onTranslation?.(id, translation);
@@ -309,7 +272,7 @@ export async function translateCaptionBatch(
   };
   const response = await complete(
     settings,
-    `The input is an array of ordered captions from one passage. Use neighbors only as context; never move content between captions. Return only {"results":[{"id":0,"parts":[{"translation":"..."}]}]} with one result per input id, in input order.
+    `The input is an array of ordered captions from one passage. Use neighbors only as context; never move content between captions. Return only JSON {"results":[{"id":0,"parts":[{"translation":"..."}]}]} with one result per input id, in input order.
 needsSplit=false: return one part translating the whole caption.
 needsSplit=true: split AND translate using the caption's units ([index, source text] pairs). Return at least two parts, or one for a single unit, as {"endExclusive":number,"translation":"..."}. Each part spans from the previous endExclusive (initially 0) to its own, excluding the end. End values must be strictly increasing integers, with the last equal to units.length, covering every unit exactly once. Use natural clause boundaries, keep related words together, and avoid tiny fragments. Aim for at most ${subtitleDisplayLimit} display columns in each part's source and translation (CJK characters count as two); allow slight overflow to preserve meaning. Translate each span in full-caption context, preserving its content, spoken order, repetitions, and self-corrections.`,
     JSON.stringify(
@@ -326,98 +289,100 @@ needsSplit=true: split AND translate using the caption's units ([index, source t
           : {}),
       })),
     ),
-    Math.min(
-      16384,
-      Math.max(2048, inputs.reduce((length, input) => length + input.text.length, 0) * 4),
-    ),
+    65536,
     signal,
-    true,
     (text) => submit(scanTranslationResults(text)),
+    true,
   );
   try {
-    const results = (parseModelJson(response) as { results?: unknown } | null)?.results;
-    if (Array.isArray(results)) submit(results);
+    submit(translationPayloads(parseModelJson(response)));
   } catch {
-    return null;
+    return accepted.size === inputs.length ? inputs.map((_, index) => accepted.get(index)!) : null;
   }
   return accepted.size === inputs.length ? inputs.map((_, index) => accepted.get(index)!) : null;
 }
 
-function finalizedBatch(
-  response: string,
-  count: number,
-  submit: (index: number, translation: string) => void,
-): string[] | null {
-  let value: unknown;
-  try {
-    value = parseModelJson(response);
-  } catch {
-    return null;
-  }
-  const translations = Array.isArray(value)
-    ? value
-    : (value as { translations?: unknown } | null)?.translations;
-  if (!Array.isArray(translations)) return null;
-  const accepted = translations.map((translation) =>
-    typeof translation === 'string' && translation.trim() && translation.length <= 5000
-      ? translation.trim()
-      : '',
+function resultId(value: unknown): number | null {
+  const id = (value as { id?: unknown } | null)?.id;
+  if (typeof id === 'number' && Number.isSafeInteger(id)) return id;
+  if (typeof id === 'string' && /^(0|[1-9]\d*)$/.test(id.trim())) return Number(id.trim());
+  return null;
+}
+
+function alignResultIds(values: unknown[], count: number): unknown[] {
+  const ids = values.map(resultId);
+  const missing = values.length === 1 && count === 1 && ids[0] === null;
+  if (missing && values[0] && typeof values[0] === 'object') return [{ ...values[0], id: 0 }];
+  if (ids.includes(0) || ids.length !== count || ids.some((id) => id === null)) return values;
+  if (!ids.every((id, index) => id === index + 1)) return values;
+  return values.map((value) =>
+    value && typeof value === 'object' ? { ...value, id: resultId(value)! - 1 } : value,
   );
-  accepted.forEach((translation, index) => {
-    if (index < count && translation) submit(index, translation);
-  });
-  if (translations.length !== count || accepted.some((translation) => !translation)) return null;
-  return accepted;
+}
+
+function normalizeResult(value: unknown): unknown {
+  if (!value || typeof value !== 'object') return value;
+  const record = value as { parts?: unknown; translation?: unknown; text?: unknown };
+  if (!Array.isArray(record.parts)) {
+    const translation = typeof record.translation === 'string' ? record.translation : record.text;
+    return typeof translation === 'string' ? { ...record, parts: [{ translation }] } : value;
+  }
+  return {
+    ...record,
+    parts: record.parts.map((part) => (typeof part === 'string' ? { translation: part } : part)),
+  };
+}
+
+function translationPayloads(value: unknown): unknown[] {
+  if (Array.isArray(value)) {
+    if (
+      value.every(
+        (item) =>
+          !!item &&
+          typeof item === 'object' &&
+          ('parts' in item || 'translation' in item || 'text' in item || 'id' in item),
+      )
+    )
+      return value;
+    return value.map((translation, id) => ({ id, translation }));
+  }
+  if (!value || typeof value !== 'object') return [];
+  const record = value as { results?: unknown; translations?: unknown };
+  if (Array.isArray(record.results)) return record.results;
+  if (Array.isArray(record.translations))
+    return record.translations.map((translation, id) => ({ id, translation }));
+  if ('parts' in record || 'translation' in record || 'text' in record) return [record];
+  return [];
 }
 
 async function readModelText(
   response: Response,
   signal: AbortSignal,
   onText?: (text: string) => void,
+  caption = false,
 ): Promise<string> {
-  if (!response.body) return modelTextFromBuffer(await response.text(), true, onText);
+  const text = jsonModelText(await readBody(response, signal), caption);
+  if (text) onText?.(text);
+  return text;
+}
+
+async function readBody(response: Response, signal: AbortSignal): Promise<string> {
+  if (!response.body) return response.text();
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let pending = '';
-  let mode: 'unknown' | 'sse' | 'json' = 'unknown';
-  let generated = '';
   const onAbort = () => {
     void reader.cancel(signal.reason).catch(() => undefined);
   };
   signal.addEventListener('abort', onAbort, { once: true });
   try {
-    while (true) {
+    for (;;) {
       if (signal.aborted) throw timeoutError();
       const { done, value } = await reader.read();
       if (signal.aborted) throw timeoutError();
       if (value) pending += decoder.decode(value, { stream: !done });
-      if (done) pending += decoder.decode();
-      if (pending.charCodeAt(0) === 0xfeff) pending = pending.slice(1);
-      if (mode === 'unknown') {
-        const sniffed = sniffBody(pending, done);
-        if (sniffed === 'wait') continue;
-        if (sniffed === 'invalid') throw invalidJson();
-        mode = sniffed;
-      }
-      if (mode === 'json') {
-        if (!done) continue;
-        const text = jsonModelText(pending);
-        if (text) onText?.(text);
-        return text;
-      }
-      const split = splitEvents(pending);
-      pending = split.rest;
-      let piece = '';
-      for (const event of split.events) piece += eventModelText(event) ?? '';
-      if (done && pending.trim()) {
-        piece += eventModelText(pending) ?? '';
-        pending = '';
-      }
-      if (piece) {
-        generated += piece;
-        onText?.(generated);
-      }
-      if (done) return generated;
+      if (!done) continue;
+      return pending + decoder.decode();
     }
   } catch (error) {
     if (signal.aborted) throw timeoutError();
@@ -429,80 +394,44 @@ async function readModelText(
   }
 }
 
-function modelTextFromBuffer(raw: string, done: boolean, onText?: (text: string) => void): string {
-  const sniffed = sniffBody(raw, done);
-  if (sniffed === 'json') {
-    const text = jsonModelText(raw);
-    if (text) onText?.(text);
-    return text;
-  }
-  if (sniffed !== 'sse') throw invalidJson();
-  const split = splitEvents(raw);
-  let generated = '';
-  for (const event of split.events) generated += eventModelText(event) ?? '';
-  if (split.rest.trim()) generated += eventModelText(split.rest) ?? '';
-  if (generated) onText?.(generated);
-  return generated;
-}
-
-function sniffBody(buffer: string, done: boolean): 'sse' | 'json' | 'wait' | 'invalid' {
-  const head = buffer.trimStart();
-  if (!head) return done ? 'invalid' : 'wait';
-  if (head.startsWith('{') || head.startsWith('[')) return 'json';
-  if (
-    head.startsWith('data:') ||
-    head.startsWith('event:') ||
-    head.startsWith('id:') ||
-    head.startsWith(':')
-  )
-    return 'sse';
-  const partial = ['data:', 'event:', 'id:', '{', '[', ':'];
-  if (!done && partial.some((prefix) => prefix.startsWith(head))) return 'wait';
-  return 'invalid';
-}
-
-function splitEvents(buffer: string): { events: string[]; rest: string } {
-  const events: string[] = [];
-  let start = 0;
-  for (let index = 0; index < buffer.length; index++) {
-    const crlf = buffer.startsWith('\r\n\r\n', index);
-    const lf = !crlf && buffer.startsWith('\n\n', index);
-    if (!crlf && !lf) continue;
-    events.push(buffer.slice(start, index));
-    start = index + (crlf ? 4 : 2);
-    index = start - 1;
-  }
-  return { events, rest: buffer.slice(start) };
-}
-
-function eventModelText(event: string): string | null {
-  const data = event
-    .split(/\r?\n/)
-    .filter((line) => line.startsWith('data:'))
-    .map((line) => line.slice(5).replace(/^ /, ''))
-    .join('\n')
-    .trim();
-  if (!data || data === '[DONE]') return null;
-  try {
-    return choiceText(JSON.parse(data) as unknown, true);
-  } catch {
-    return null;
-  }
-}
-
-function jsonModelText(raw: string): string {
+function jsonModelText(raw: string, caption: boolean): string {
+  const source = raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw;
   let payload: unknown;
   try {
-    payload = JSON.parse(raw);
+    payload = JSON.parse(source);
   } catch {
     throw invalidJson();
   }
-  return choiceText(payload, false) ?? '';
+  return choiceText(payload, caption) ?? '';
 }
 
-function choiceText(payload: unknown, streamed: boolean): string | null {
-  const choice = (payload as { choices?: unknown[] } | null)?.choices?.[0] as
-    { delta?: { content?: unknown }; message?: { content?: unknown } } | undefined;
-  const value = streamed ? choice?.delta?.content : choice?.message?.content;
-  return typeof value === 'string' ? value : null;
+function messageText(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (!Array.isArray(value)) return '';
+  return value
+    .map((part) => {
+      if (typeof part === 'string') return part;
+      if (!part || typeof part !== 'object') return '';
+      const record = part as { type?: unknown; text?: unknown };
+      if (record.type === 'reasoning' || record.type === 'thinking') return '';
+      return typeof record.text === 'string' ? record.text : '';
+    })
+    .join('');
+}
+
+function choiceText(payload: unknown, caption: boolean): string | null {
+  const message = (
+    payload as {
+      choices?: {
+        message?: { content?: unknown; reasoning_content?: unknown; reasoning?: unknown };
+      }[];
+    } | null
+  )?.choices?.[0]?.message;
+  const content = modelAnswer(messageText(message?.content)).trim();
+  if (content) return content;
+  if (!caption) return null;
+  const reasoning = modelAnswer(
+    messageText(message?.reasoning_content ?? message?.reasoning),
+  ).trim();
+  return /"(?:results|translations)"\s*:/.test(reasoning) ? reasoning : null;
 }

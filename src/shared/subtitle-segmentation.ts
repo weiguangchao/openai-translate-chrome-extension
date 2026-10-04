@@ -19,38 +19,72 @@ export function needsSubtitleSegmentation(text: string): boolean {
   return subtitleDisplayLength(text) > subtitleDisplayLimit;
 }
 
-export function parseModelJson(response: string): unknown {
-  return JSON.parse(response.trim().replace(/^```(?:json)?\s*\n?([\s\S]*?)\n?```$/i, '$1'));
+export function modelAnswer(source: string): string {
+  const text = source.replace(/^\uFEFF/, '');
+  const marker = '</think>';
+  const end = text.toLowerCase().lastIndexOf(marker);
+  if (end >= 0) {
+    const after = text.slice(end + marker.length).trim();
+    if (after) return after;
+    return text
+      .slice(0, end)
+      .replace(/<think>/gi, '')
+      .trimStart();
+  }
+  return text.replace(/<think>/gi, '').trimStart();
 }
 
-export function scanTranslationStrings(source: string): { values: string[]; closed: boolean } {
-  const text = stripOpeningFence(source);
-  const start = findArray(text, 'translations');
-  if (start < 0) return { values: [], closed: false };
-  const values: string[] = [];
-  let index = start + 1;
+function hasTranslationPayload(value: unknown): boolean {
+  if (Array.isArray(value))
+    return value.some(
+      (item) =>
+        typeof item === 'string' ||
+        (!!item &&
+          typeof item === 'object' &&
+          ('parts' in item || 'translation' in item || 'text' in item)),
+    );
+  if (!value || typeof value !== 'object') return false;
+  const record = value as { results?: unknown; translations?: unknown };
+  return Array.isArray(record.results) || Array.isArray(record.translations);
+}
+
+function lastTranslationPayload(text: string): unknown {
+  let payload: unknown;
+  let index = 0;
   while (index < text.length) {
-    index = skipSpace(text, index);
-    if (index >= text.length) return { values, closed: false };
-    const character = text[index];
-    if (character === ']') return { values, closed: true };
-    if (character === ',') {
-      index++;
+    const objectAt = text.indexOf('{', index);
+    const arrayAt = text.indexOf('[', index);
+    const start = objectAt < 0 ? arrayAt : arrayAt < 0 ? objectAt : Math.min(objectAt, arrayAt);
+    if (start < 0) break;
+    const end = skipValue(text, start);
+    if (end < 0) {
+      index = start + 1;
       continue;
     }
-    if (character === '"') {
-      const parsed = readString(text, index);
-      if (!parsed) return { values, closed: false };
-      values.push(parsed.value);
-      index = parsed.end;
+    try {
+      const value = JSON.parse(text.slice(start, end));
+      if (hasTranslationPayload(value)) payload = value;
+    } catch {
+      index = start + 1;
       continue;
     }
-    const next = skipValue(text, index);
-    if (next < 0) return { values, closed: false };
-    values.push('');
-    index = next;
+    index = end;
   }
-  return { values, closed: false };
+  return payload;
+}
+
+export function parseModelJson(response: string): unknown {
+  const text = modelAnswer(response).trim();
+  const fenced = text.replace(/^```(?:json)?\s*\n?([\s\S]*?)\n?```$/i, '$1');
+  try {
+    const value = JSON.parse(fenced);
+    if (typeof value !== 'string') return value;
+    return JSON.parse(value);
+  } catch {
+    const payload = lastTranslationPayload(stripOpeningFence(text));
+    if (payload === undefined) throw new SyntaxError('Invalid model JSON');
+    return payload;
+  }
 }
 
 function stripOpeningFence(source: string): string {
@@ -82,7 +116,12 @@ function skipSpace(text: string, index: number): number {
 }
 
 export function scanTranslationResults(source: string): unknown[] {
-  const text = stripOpeningFence(source);
+  let text = stripOpeningFence(modelAnswer(source));
+  if (!text.trimStart().startsWith('{')) {
+    const objectAt = text.indexOf('{');
+    if (objectAt < 0) return [];
+    text = text.slice(objectAt);
+  }
   const start = findArray(text, 'results');
   if (start < 0) return [];
   const values: unknown[] = [];
@@ -104,9 +143,7 @@ export function scanTranslationResults(source: string): unknown[] {
 
 function findArray(text: string, name: string): number {
   let index = skipSpace(text, 0);
-  if (index >= text.length) return -1;
-  if (text[index] === '[') return index;
-  if (text[index] !== '{') return -1;
+  if (index >= text.length || text[index] !== '{') return -1;
   index++;
   while (index < text.length) {
     index = skipSpace(text, index);

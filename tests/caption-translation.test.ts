@@ -5,7 +5,11 @@ import {
   translationInput,
 } from '../src/shared/caption-translation';
 import { captionWindow, timedCaptions, translatedCaptions } from '../src/core/timeline';
-import { scanTranslationResults } from '../src/shared/subtitle-segmentation';
+import {
+  scanTranslationResults,
+  subtitleDisplayLength,
+  subtitleDisplayLimit,
+} from '../src/shared/subtitle-segmentation';
 
 const text =
   'The most budget option by far is to talk to your friends and family and find somebody with an old laptop or desktop that they will give you for free.';
@@ -36,6 +40,17 @@ it.each([
   ).toBe(true);
 });
 
+it('accepts string unit indexes and a text field from a model split', () => {
+  expect(
+    readCaptionTranslation(input, {
+      parts: [
+        { end: '14', translation: parts[0].translation },
+        { endExclusive: String(count), text: parts[1].translation },
+      ],
+    }),
+  ).toEqual(readCaptionTranslation(input, { parts }));
+});
+
 it('accepts a complete split and reconstructs source spans without relying on model-written source text', () => {
   expect(readCaptionTranslation(input, { parts })).toEqual({
     parts: [
@@ -63,10 +78,33 @@ it.each(
     [{ endExclusive: -1, translation: '负数' }, parts[1]],
     [{ endExclusive: 1.5, translation: '小数' }, parts[1]],
     [parts[0], { endExclusive: count, translation: ' ' }],
-    [parts[0], { endExclusive: count, translation: '字'.repeat(100) }],
+    [parts[0], { endExclusive: count, translation: '字'.repeat(200) }],
   ].map((invalid) => ({ invalid })),
 )('rejects incomplete, overlapping, out-of-range or unusable splits %#', ({ invalid }) => {
   expect(readCaptionTranslation(input, { parts: invalid })).toBeNull();
+});
+
+it('accepts a complete split whose clauses run past two lines', () => {
+  const clause = `${'word '.repeat(50).trim()} `;
+  const source = `${clause}${clause.trim()}`;
+  const units = subtitleUnits(source);
+  const mid = subtitleUnits(clause).length;
+  const first = source.slice(units[0].from, units[mid - 1].to);
+  expect(subtitleDisplayLength(first)).toBeGreaterThan(subtitleDisplayLimit * 1.5);
+  expect(subtitleDisplayLength(first)).toBeLessThanOrEqual(subtitleDisplayLimit * 4);
+  expect(
+    readCaptionTranslation(translationInput(source, true), {
+      parts: [
+        { endExclusive: mid, translation: '前半句。' },
+        { endExclusive: units.length, translation: '后半句。' },
+      ],
+    }),
+  ).toEqual({
+    parts: [
+      { from: units[0].from, to: units[mid - 1].to, translation: '前半句。' },
+      { from: units[mid].from, to: units.at(-1)!.to, translation: '后半句。' },
+    ],
+  });
 });
 
 it('rejects a split that leaves a large multi-word source block and keeps an indivisible word intact', () => {
