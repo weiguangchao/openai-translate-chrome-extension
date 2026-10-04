@@ -262,19 +262,7 @@ it('displays a finished HBO segment while the other prefetched segment is still 
   await playTo(3);
   await vi.advanceTimersByTimeAsync(300);
   expect(lines()?.[1].textContent).toBe('翻译中');
-  batches[0].resolve(
-    Response.json({
-      choices: [
-        {
-          message: {
-            content: JSON.stringify({
-              translations: batches[0].texts.map((text) => `译文 ${text}`),
-            }),
-          },
-        },
-      ],
-    }),
-  );
+  batches[0].resolve(providerReply(batches[0].texts, (text) => `译文 ${text}`));
   await vi.advanceTimersByTimeAsync(0);
   expect(lines()?.[1].textContent).toBe('译文 Cue 1');
   expect(lines()?.[0].textContent).toBe('Cue 1');

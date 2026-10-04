@@ -615,11 +615,9 @@ it('shows the segment translation only after the JSON response is complete', asy
   expect(requested).toEqual([['Opening line', 'Following line']]);
   expect(translated()?.textContent).toBe('翻译中');
   resolveResponse(
-    Response.json({
-      choices: [
-        { message: { content: JSON.stringify({ translations: ['开场字幕', '后续字幕'] }) } },
-      ],
-    }),
+    providerReply(['Opening line', 'Following line'], (text) =>
+      text === 'Opening line' ? '开场字幕' : '后续字幕',
+    ),
   );
   for (let attempt = 0; attempt < 8; attempt++) await vi.advanceTimersByTimeAsync(0);
   expect(translated()?.textContent).toBe('开场字幕');

@@ -400,9 +400,7 @@ it('resolves a batch together when the response arrives and serves a cue from th
   await flush();
   expect(secondSettled).toBe(false);
   requests[0].resolve(
-    Response.json({
-      choices: [{ message: { content: JSON.stringify({ translations: ['第一句', '第二句'] }) } }],
-    }),
+    providerReply(['First', 'Second'], (text) => (text === 'First' ? '第一句' : '第二句')),
   );
   await flush();
   await expect(first).resolves.toBe('第一句');
@@ -438,7 +436,15 @@ it('retries only the cue that was not committed when the batch reply is short', 
   await flush();
   requests[0].resolve(
     Response.json({
-      choices: [{ message: { content: '{"translations":["第一句"]}' } }],
+      choices: [
+        {
+          message: {
+            content: JSON.stringify({
+              results: [{ id: 0, parts: [{ translation: '第一句' }] }],
+            }),
+          },
+        },
+      ],
     }),
   );
   await flush();

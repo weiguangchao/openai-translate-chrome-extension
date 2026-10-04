@@ -3,7 +3,6 @@ import { englishLanguageName, validateBaseUrl, validateSettings, type Settings }
 import {
   parseModelJson,
   scanTranslationResults,
-  scanTranslationStrings,
   subtitleDisplayLimit,
 } from './subtitle-segmentation';
 import {
@@ -234,38 +233,6 @@ export async function translate(
   );
 }
 
-export async function translateBatch(
-  settings: Settings,
-  texts: string[],
-  signal?: AbortSignal,
-  onTranslation?: (index: number, translation: string) => void,
-): Promise<string[] | null> {
-  texts.forEach(checkText);
-  if (texts.length > translationBatchLimit) throw new Error('单次翻译的字幕过多。');
-  const submitted = new Set<number>();
-  const submit = (index: number, translation: string) => {
-    if (!Number.isInteger(index) || index < 0 || index >= texts.length || submitted.has(index))
-      return;
-    const value = translation.trim();
-    if (!value || value.length > 5000) return;
-    submitted.add(index);
-    onTranslation?.(index, value);
-  };
-  const response = await complete(
-    settings,
-    `Translate each of the ${texts.length} ordered captions independently, using neighbors only as context; never move content between captions. Return only {"translations":["..."]}: exactly ${texts.length} strings, one per caption in input order.`,
-    JSON.stringify(texts),
-    65536,
-    signal,
-    (text) => {
-      scanTranslationStrings(text).values.forEach((translation, index) =>
-        submit(index, translation),
-      );
-    },
-  );
-  return finalizedBatch(response, texts.length, submit);
-}
-
 export async function translateCaptionBatch(
   settings: Settings,
   inputs: TranslationInput[],
@@ -326,33 +293,6 @@ needsSplit=true: split AND translate using the caption's units ([index, source t
     return null;
   }
   return accepted.size === inputs.length ? inputs.map((_, index) => accepted.get(index)!) : null;
-}
-
-function finalizedBatch(
-  response: string,
-  count: number,
-  submit: (index: number, translation: string) => void,
-): string[] | null {
-  let value: unknown;
-  try {
-    value = parseModelJson(response);
-  } catch {
-    return null;
-  }
-  const translations = Array.isArray(value)
-    ? value
-    : (value as { translations?: unknown } | null)?.translations;
-  if (!Array.isArray(translations)) return null;
-  const accepted = translations.map((translation) =>
-    typeof translation === 'string' && translation.trim() && translation.length <= 5000
-      ? translation.trim()
-      : '',
-  );
-  accepted.forEach((translation, index) => {
-    if (index < count && translation) submit(index, translation);
-  });
-  if (translations.length !== count || accepted.some((translation) => !translation)) return null;
-  return accepted;
 }
 
 async function readModelText(

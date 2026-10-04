@@ -65,9 +65,7 @@ async function loadBackground(saved: object) {
 }
 
 it('keeps credentials in the background and rejects content-script requests to use draft API settings', async () => {
-  const fetch = vi
-    .fn()
-    .mockResolvedValue(Response.json({ choices: [{ message: { content: '你好' } }] }));
+  const fetch = vi.fn().mockResolvedValue(providerReply(['Hello'], () => '你好'));
   vi.stubGlobal('fetch', fetch);
   const send = await loadBackground({
     ...structuredClone(DEFAULT_SETTINGS),

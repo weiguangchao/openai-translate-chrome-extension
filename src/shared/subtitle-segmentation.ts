@@ -23,36 +23,6 @@ export function parseModelJson(response: string): unknown {
   return JSON.parse(response.trim().replace(/^```(?:json)?\s*\n?([\s\S]*?)\n?```$/i, '$1'));
 }
 
-export function scanTranslationStrings(source: string): { values: string[]; closed: boolean } {
-  const text = stripOpeningFence(source);
-  const start = findArray(text, 'translations');
-  if (start < 0) return { values: [], closed: false };
-  const values: string[] = [];
-  let index = start + 1;
-  while (index < text.length) {
-    index = skipSpace(text, index);
-    if (index >= text.length) return { values, closed: false };
-    const character = text[index];
-    if (character === ']') return { values, closed: true };
-    if (character === ',') {
-      index++;
-      continue;
-    }
-    if (character === '"') {
-      const parsed = readString(text, index);
-      if (!parsed) return { values, closed: false };
-      values.push(parsed.value);
-      index = parsed.end;
-      continue;
-    }
-    const next = skipValue(text, index);
-    if (next < 0) return { values, closed: false };
-    values.push('');
-    index = next;
-  }
-  return { values, closed: false };
-}
-
 function stripOpeningFence(source: string): string {
   const text = source.replace(/^\uFEFF/, '').trimStart();
   const line = /^```(?:json)?[^\S\r\n]*\r?\n/i.exec(text);
@@ -104,9 +74,7 @@ export function scanTranslationResults(source: string): unknown[] {
 
 function findArray(text: string, name: string): number {
   let index = skipSpace(text, 0);
-  if (index >= text.length) return -1;
-  if (text[index] === '[') return index;
-  if (text[index] !== '{') return -1;
+  if (index >= text.length || text[index] !== '{') return -1;
   index++;
   while (index < text.length) {
     index = skipSpace(text, index);

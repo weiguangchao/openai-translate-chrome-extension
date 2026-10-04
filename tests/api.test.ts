@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { fetchModels, translate, translateBatch } from '../src/shared/api';
+import { fetchModels, translate, translateCaptionBatch } from '../src/shared/api';
 import {
   DEFAULT_SETTINGS,
   normalizeSettings,
@@ -14,6 +14,11 @@ const config = (): Settings => ({
   apiKey: 'private-test-key',
   model: 'subtitle-model',
 });
+const ordinary = (texts: string[]) => texts.map((text) => ({ text, needsSplit: false }));
+const resultsContent = (translations: string[]) =>
+  JSON.stringify({
+    results: translations.map((translation, id) => ({ id, parts: [{ translation }] })),
+  });
 afterEach(() => vi.unstubAllGlobals());
 
 describe('OpenAI-compatible provider contract', () => {
@@ -100,7 +105,8 @@ describe('OpenAI-compatible provider contract', () => {
   it.each([undefined, 'chat', 'completions'])(
     'translates batches through chat completions with saved apiFormat=%s and preserves cue order',
     async (apiFormat) => {
-      const content = '```json\n{"translations":[" 第一句 ","第二句","第三句"]}\n```';
+      const content =
+        '```json\n{"results":[{"id":2,"parts":[{"translation":"第三句"}]},{"id":0,"parts":[{"translation":" 第一句 "}]},{"id":1,"parts":[{"translation":"第二句"}]}]}\n```';
       const fetch = vi.fn().mockResolvedValue(
         Response.json({
           choices: [{ message: { content } }],
@@ -109,15 +115,17 @@ describe('OpenAI-compatible provider contract', () => {
       vi.stubGlobal('fetch', fetch);
       const texts = ['One.', 'Two "quoted"\nlines.', 'Three.'];
       await expect(
-        translateBatch(normalizeSettings({ ...config(), apiFormat }), texts),
+        translateCaptionBatch(normalizeSettings({ ...config(), apiFormat }), ordinary(texts)),
       ).resolves.toEqual(['第一句', '第二句', '第三句']);
       expect(fetch).toHaveBeenCalledTimes(1);
       expect(fetch.mock.calls[0][0]).toBe('https://provider.example/api/v1/chat/completions');
       const body = JSON.parse(fetch.mock.calls[0][1].body);
       const instructions: string = body.messages[0].content;
       expect(instructions).toMatch(/^Translate the given English into Simplified Chinese\./);
-      expect(instructions).toContain('exactly 3 strings');
-      expect(body.messages[1].content).toBe(JSON.stringify(texts));
+      expect(instructions).toContain('{"results":[{"id":0,"parts":[{"translation":"..."}]}]}');
+      expect(JSON.parse(body.messages[1].content)).toEqual(
+        texts.map((text, id) => ({ id, text, needsSplit: false })),
+      );
       expect(body).not.toHaveProperty('prompt');
       expect(body.stream).toBe(false);
       expect(body.max_tokens).toBe(65536);
@@ -127,13 +135,16 @@ describe('OpenAI-compatible provider contract', () => {
 
   it.each([
     ['plain text', '第一句\n第二句'],
-    ['too few translations', '{"translations":["第一句"]}'],
-    ['an empty translation', '{"translations":["第一句","  "]}'],
+    ['too few results', '{"results":[{"id":0,"parts":[{"translation":"第一句"}]}]}'],
+    [
+      'an empty translation',
+      '{"results":[{"id":0,"parts":[{"translation":"第一句"}]},{"id":1,"parts":[{"translation":"  "}]}]}',
+    ],
     ['the wrong shape', '{"segments":["第一句","第二句"]}'],
   ])('reports an unusable batch reply with %s', async (_, content) => {
     const fetch = vi.fn().mockResolvedValue(Response.json({ choices: [{ message: { content } }] }));
     vi.stubGlobal('fetch', fetch);
-    await expect(translateBatch(config(), ['One.', 'Two.'])).resolves.toBeNull();
+    await expect(translateCaptionBatch(config(), ordinary(['One.', 'Two.']))).resolves.toBeNull();
     expect(JSON.parse(fetch.mock.calls[0][1].body).max_tokens).toBe(65536);
   });
 
@@ -141,9 +152,9 @@ describe('OpenAI-compatible provider contract', () => {
     const fetch = vi.fn();
     vi.stubGlobal('fetch', fetch);
     await expect(
-      translateBatch(
+      translateCaptionBatch(
         config(),
-        Array.from({ length: 11 }, (_, index) => `${index}`),
+        ordinary(Array.from({ length: 11 }, (_, index) => `${index}`)),
       ),
     ).rejects.toThrow();
     expect(fetch).not.toHaveBeenCalled();
@@ -222,16 +233,19 @@ describe('OpenAI-compatible provider contract', () => {
 
 describe('batch replies', () => {
   it('submits each translation from a complete fenced JSON body', async () => {
-    const content = '```json\n{"translations":["第一句","他说\\"你好\\"\\n中\\/\\u6587"]}\n```';
+    const content =
+      '```json\n{"results":[{"id":0,"parts":[{"translation":"第一句"}]},{"id":1,"parts":[{"translation":"他说\\"你好\\"\\n中\\/\\u6587"}]}]}\n```';
     const fetch = vi.fn().mockResolvedValue(Response.json({ choices: [{ message: { content } }] }));
     vi.stubGlobal('fetch', fetch);
     const seen: [number, string][] = [];
     await expect(
-      translateBatch(
+      translateCaptionBatch(
         { ...config(), model: 'json-batch' },
-        ['One.', 'Two.'],
+        ordinary(['One.', 'Two.']),
         undefined,
-        (index, translation) => seen.push([index, translation]),
+        (index, translation) => {
+          if (typeof translation === 'string') seen.push([index, translation]);
+        },
       ),
     ).resolves.toEqual(['第一句', '他说"你好"\n中/文']);
     expect(seen).toEqual([
@@ -248,17 +262,19 @@ describe('batch replies', () => {
   it('reads a chat completion when upgrading a legacy completions setting', async () => {
     const fetch = vi.fn().mockResolvedValue(
       Response.json({
-        choices: [{ message: { content: '{"translations":["甲","乙"]}' } }],
+        choices: [{ message: { content: resultsContent(['甲', '乙']) } }],
       }),
     );
     vi.stubGlobal('fetch', fetch);
     const seen: string[] = [];
     await expect(
-      translateBatch(
+      translateCaptionBatch(
         normalizeSettings({ ...config(), apiFormat: 'completions', model: 'legacy-json' }),
-        ['One.', 'Two.'],
+        ordinary(['One.', 'Two.']),
         undefined,
-        (index, translation) => seen.splice(index, 1, translation),
+        (index, translation) => {
+          if (typeof translation === 'string') seen.splice(index, 1, translation);
+        },
       ),
     ).resolves.toEqual(['甲', '乙']);
     expect(seen).toEqual(['甲', '乙']);
@@ -269,17 +285,19 @@ describe('batch replies', () => {
   it('keeps qualified strings from a JSON body when a later string is empty', async () => {
     const fetch = vi.fn().mockResolvedValue(
       Response.json({
-        choices: [{ message: { content: '{"translations":["第一句","  "]}' } }],
+        choices: [{ message: { content: resultsContent(['第一句', '  ']) } }],
       }),
     );
     vi.stubGlobal('fetch', fetch);
     const seen: [number, string][] = [];
     await expect(
-      translateBatch(
+      translateCaptionBatch(
         { ...config(), model: 'partial-json' },
-        ['One.', 'Two.'],
+        ordinary(['One.', 'Two.']),
         undefined,
-        (index, translation) => seen.push([index, translation]),
+        (index, translation) => {
+          if (typeof translation === 'string') seen.push([index, translation]);
+        },
       ),
     ).resolves.toBeNull();
     expect(seen).toEqual([[0, '第一句']]);
@@ -297,8 +315,11 @@ describe('batch replies', () => {
     );
     const seen: number[] = [];
     await expect(
-      translateBatch({ ...config(), model: 'unparsed-batch' }, ['One.', 'Two.'], undefined, () =>
-        seen.push(1),
+      translateCaptionBatch(
+        { ...config(), model: 'unparsed-batch' },
+        ordinary(['One.', 'Two.']),
+        undefined,
+        () => seen.push(1),
       ),
     ).resolves.toBeNull();
     expect(seen).toEqual([]);
@@ -309,12 +330,18 @@ describe('batch replies', () => {
       .fn()
       .mockResolvedValueOnce(new Response('', { status: 400 }))
       .mockImplementation(async () =>
-        Response.json({ choices: [{ message: { content: '{"translations":["甲","乙"]}' } }] }),
+        Response.json({ choices: [{ message: { content: resultsContent(['甲', '乙']) } }] }),
       );
     vi.stubGlobal('fetch', fetch);
     const settings = { ...config(), model: 'no-reasoning-batch' };
-    await expect(translateBatch(settings, ['A', 'B'])).resolves.toEqual(['甲', '乙']);
-    await expect(translateBatch(settings, ['C', 'D'])).resolves.toEqual(['甲', '乙']);
+    await expect(translateCaptionBatch(settings, ordinary(['A', 'B']))).resolves.toEqual([
+      '甲',
+      '乙',
+    ]);
+    await expect(translateCaptionBatch(settings, ordinary(['C', 'D']))).resolves.toEqual([
+      '甲',
+      '乙',
+    ]);
     const bodies = fetch.mock.calls.map((call) => JSON.parse(call[1].body));
     expect(bodies.map((body) => body.stream)).toEqual([false, false, false]);
     expect(bodies.map((body) => body.reasoning_effort)).toEqual(['low', undefined, undefined]);
@@ -372,9 +399,9 @@ describe('batch replies', () => {
     const fetch = vi.fn().mockImplementation(async () => new Response('', { status: 400 }));
     vi.stubGlobal('fetch', fetch);
     await expect(
-      translateBatch(
+      translateCaptionBatch(
         normalizeSettings({ ...config(), apiFormat: 'completions', model: 'legacy-400' }),
-        ['A', 'B'],
+        ordinary(['A', 'B']),
       ),
     ).rejects.toThrow('HTTP 400');
     expect(fetch).toHaveBeenCalledTimes(3);
