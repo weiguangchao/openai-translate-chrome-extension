@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fetchModels, translate, translateCaptionBatch } from '../src/shared/api';
+import { TOKEN_USAGE_KEY } from '../src/shared/token-usage';
 import {
   DEFAULT_SETTINGS,
   normalizeSettings,
@@ -203,6 +204,60 @@ describe('OpenAI-compatible provider contract', () => {
       expect(body.stream).toBe(false);
     },
   );
+
+  it('records input, output, and cache tokens for each provider response', async () => {
+    const values: Record<string, unknown> = {};
+    vi.stubGlobal('chrome', {
+      runtime: { id: 'extension-id' },
+      storage: {
+        local: {
+          get: vi.fn(async (key: string) => ({ [key]: values[key] })),
+          set: vi.fn(async (items: Record<string, unknown>) => Object.assign(values, items)),
+        },
+      },
+    });
+    const usage = {
+      prompt_tokens: 1800,
+      completion_tokens: 260,
+      total_tokens: 2060,
+      prompt_tokens_details: { cached_tokens: 900 },
+    };
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(new Response('<html>login</html>'))
+      .mockResolvedValueOnce(
+        Response.json({
+          choices: [{ message: { content: '   ' } }],
+          usage: {
+            ...usage,
+            prompt_tokens: 11,
+            completion_tokens: 1,
+            prompt_tokens_details: { cached_tokens: 4 },
+          },
+        }),
+      )
+      .mockResolvedValueOnce(
+        Response.json({ choices: [{ message: { content: '  第一句  ' } }], usage }),
+      )
+      .mockResolvedValueOnce(
+        Response.json({
+          choices: [{ message: { content: '第二句' } }],
+          usage: {
+            prompt_tokens: 20,
+            completion_tokens: 5,
+            prompt_tokens_details: { cached_tokens: 2 },
+          },
+        }),
+      );
+    vi.stubGlobal('fetch', fetch);
+    await expect(translate(config(), 'Hello')).rejects.toThrow('有效的 JSON');
+    expect(values[TOKEN_USAGE_KEY]).toBeUndefined();
+    await expect(translate(config(), 'Hello')).rejects.toThrow('模型未返回译文');
+    await expect(translate(config(), 'Hello')).resolves.toBe('第一句');
+    await expect(translate(config(), 'Next')).resolves.toBe('第二句');
+    expect(values[TOKEN_USAGE_KEY]).toEqual({ input: 1831, output: 266, cache: 906 });
+    expect(chrome.storage.local.set).toHaveBeenCalledTimes(3);
+  });
 
   it('rejects non-JSON and empty completions instead of painting an undefined translation', async () => {
     vi.stubGlobal(

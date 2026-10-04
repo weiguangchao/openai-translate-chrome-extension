@@ -1,5 +1,6 @@
 import { translationBatchLimit } from './limits';
 import { englishLanguageName, validateBaseUrl, validateSettings, type Settings } from './settings';
+import { addTokenUsage, readProviderUsage } from './token-usage';
 import {
   modelAnswer,
   parseModelJson,
@@ -361,8 +362,15 @@ async function readModelText(
   onText?: (text: string) => void,
   caption = false,
 ): Promise<string> {
-  const text = jsonModelText(await readBody(response, signal), caption);
-  if (text) onText?.(text);
+  const payload = parseModelPayload(await readBody(response, signal));
+  const text = choiceText(payload, caption) ?? '';
+  const usage = readProviderUsage(payload);
+  const saved = usage ? addTokenUsage(usage) : Promise.resolve();
+  try {
+    if (text) onText?.(text);
+  } finally {
+    await saved;
+  }
   return text;
 }
 
@@ -394,15 +402,13 @@ async function readBody(response: Response, signal: AbortSignal): Promise<string
   }
 }
 
-function jsonModelText(raw: string, caption: boolean): string {
+function parseModelPayload(raw: string): unknown {
   const source = raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw;
-  let payload: unknown;
   try {
-    payload = JSON.parse(source);
+    return JSON.parse(source);
   } catch {
     throw invalidJson();
   }
-  return choiceText(payload, caption) ?? '';
 }
 
 function messageText(value: unknown): string {

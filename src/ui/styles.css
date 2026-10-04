@@ -1293,6 +1293,49 @@ button:hover:not(:disabled) {
   line-height: 1.6;
   color: #916a31;
 }
+.popup-usage {
+  margin-top: 12px;
+  padding: 13px 14px 12px;
+  border: 1px solid #eeeff3;
+  border-radius: 10px;
+  background: #f9fafb;
+}
+.popup-usage h2 {
+  font-size: 11px;
+  font-weight: 500;
+  color: #656a7e;
+}
+.popup-usage-total {
+  margin-top: 4px;
+  color: #25293d;
+  font-size: 18px;
+  font-weight: 650;
+  letter-spacing: -0.3px;
+  line-height: 1.3;
+  font-variant-numeric: tabular-nums;
+}
+.popup-usage-parts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 10px 0 0;
+}
+.popup-usage-parts dt {
+  margin: 0;
+  font-size: 10px;
+  font-weight: 500;
+  color: #797e90;
+}
+.popup-usage-parts dd {
+  margin: 1px 0 0;
+  overflow-wrap: anywhere;
+  color: #3c4154;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+  user-select: text;
+}
 .popup-feedback {
   display: flex;
   align-items: center;
