@@ -372,121 +372,83 @@ it('does not send a batch that leaves the window before a send slot opens', asyn
   expect(fetch).toHaveBeenCalledTimes(translationSendsPerSecond);
 });
 
-function chatDelta(content: string): string {
-  return `data: ${JSON.stringify({ choices: [{ delta: { content } }] })}\n\n`;
-}
-
-it('keeps streamed neighbors but discards an incomplete split when playback leaves the request', async () => {
-  const provider = streamingProvider();
+it('cancels an in-flight batch when playback leaves and does not retry it', async () => {
+  const { fetch, requests } = pendingProvider();
   const queue = new TranslationQueue();
   const pending = queue.prefetch('tab', settings, ['First', longCaption], [0, 0], [false, true]);
   await flush();
-  provider.push(
-    chatDelta(
-      '{"results":[{"id":0,"parts":[{"translation":"第一句"}]},{"id":1,"parts":[' +
-        JSON.stringify(longResult().parts[0]),
-    ),
-  );
-  await flush();
-  await expect(queue.lookup(settings, 'First')).resolves.toBe('第一句');
+  expect(fetch).toHaveBeenCalledTimes(1);
   queue.prefetch('tab', settings, []);
-  await expect(pending).resolves.toEqual(['第一句', null]);
+  expect(requests[0].signal.aborted).toBe(true);
+  await expect(pending).resolves.toEqual([null, null]);
+  await expect(queue.lookup(settings, 'First')).resolves.toBeNull();
   await expect(queue.lookup(settings, longCaption, true)).resolves.toBeNull();
   await vi.advanceTimersByTimeAsync(1000);
-  expect(provider.fetch).toHaveBeenCalledTimes(1);
+  expect(fetch).toHaveBeenCalledTimes(1);
 });
-function streamingProvider() {
-  let control!: ReadableStreamDefaultController<Uint8Array>;
-  const fetch = vi.fn((_url: string, init: RequestInit) => {
-    const body = JSON.parse(init.body as string) as { stream?: boolean };
-    if (body.stream !== true)
-      return Promise.resolve(providerReply(requestedTexts(init), (text) => `${text} 译文`));
-    const stream = new ReadableStream<Uint8Array>({
-      start(controller) {
-        control = controller;
-      },
-    });
-    init.signal?.addEventListener('abort', () => {
-      try {
-        control.error(new DOMException('Aborted', 'AbortError'));
-      } catch {
-        return;
-      }
-    });
-    return Promise.resolve(
-      new Response(stream, { headers: { 'Content-Type': 'text/event-stream' } }),
-    );
-  });
-  vi.stubGlobal('fetch', fetch);
-  return {
-    fetch,
-    push(chunk: string) {
-      control.enqueue(new TextEncoder().encode(chunk));
-    },
-    close() {
-      control.close();
-    },
-  };
-}
 
-it('resolves the first streamed cue before the second event and serves it from the cache', async () => {
-  const provider = streamingProvider();
+it('resolves a batch together when the response arrives and serves a cue from the cache', async () => {
+  const { fetch, requests } = pendingProvider();
   const queue = new TranslationQueue();
   const pending = queue.prefetch('tab', settings, ['First', 'Second']);
   const first = queue.request('tab', settings, 'First');
   await flush();
-  provider.push(chatDelta('{"translations":["第一句","'));
-  await flush();
-  await expect(first).resolves.toBe('第一句');
-  await expect(queue.request('tab', settings, 'First')).resolves.toBe('第一句');
   let secondSettled = false;
   void queue.request('tab', settings, 'Second').then(() => {
     secondSettled = true;
   });
   await flush();
   expect(secondSettled).toBe(false);
-  provider.push(chatDelta('第二句"]}'));
-  provider.push('data: [DONE]\n\n');
-  provider.close();
+  requests[0].resolve(
+    Response.json({
+      choices: [{ message: { content: JSON.stringify({ translations: ['第一句', '第二句'] }) } }],
+    }),
+  );
   await flush();
+  await expect(first).resolves.toBe('第一句');
   await expect(pending).resolves.toEqual(['第一句', '第二句']);
   expect(secondSettled).toBe(true);
-  expect(provider.fetch).toHaveBeenCalledTimes(1);
+  await expect(queue.request('tab', settings, 'First')).resolves.toBe('第一句');
+  expect(fetch).toHaveBeenCalledTimes(1);
+  expect(JSON.parse(fetch.mock.calls[0][1].body as string).stream).toBe(false);
 });
 
-it('keeps a committed cue when the rest of the stream is aborted and does not retry one by one', async () => {
-  const provider = streamingProvider();
+it('does not cache either cue when the batch is aborted before the response', async () => {
+  const { fetch, requests } = pendingProvider();
   const queue = new TranslationQueue();
   const pending = queue.prefetch('tab', settings, ['First', 'Second']);
   const first = queue.request('tab', settings, 'First');
   const second = queue.request('tab', settings, 'Second');
   await flush();
-  provider.push(chatDelta('{"translations":["第一句","'));
-  await flush();
-  await expect(first).resolves.toBe('第一句');
   queue.prefetch('tab', settings, []);
+  await expect(first).rejects.toThrow('字幕已更新');
   await expect(second).rejects.toThrow('字幕已更新');
-  await expect(pending).resolves.toEqual(['第一句', null]);
+  await expect(pending).resolves.toEqual([null, null]);
   await vi.advanceTimersByTimeAsync(1000);
-  expect(provider.fetch).toHaveBeenCalledTimes(1);
-  await expect(queue.request('tab', settings, 'First')).resolves.toBe('第一句');
+  expect(fetch).toHaveBeenCalledTimes(1);
+  expect(requests[0].signal.aborted).toBe(true);
+  await expect(queue.lookup(settings, 'First')).resolves.toBeNull();
 });
 
-it('retries only the cue that was not committed when the streamed batch does not line up', async () => {
-  const provider = streamingProvider();
+it('retries only the cue that was not committed when the batch reply is short', async () => {
+  const { fetch, requests } = pendingProvider();
   const queue = new TranslationQueue();
   const pending = queue.prefetch('tab', settings, ['First', 'Second']);
   const first = queue.request('tab', settings, 'First');
   await flush();
-  provider.push(chatDelta('{"translations":["第一句"]}'));
-  provider.push('data: [DONE]\n\n');
-  provider.close();
+  requests[0].resolve(
+    Response.json({
+      choices: [{ message: { content: '{"translations":["第一句"]}' } }],
+    }),
+  );
   await flush();
   await expect(first).resolves.toBe('第一句');
+  expect(requestedTexts(fetch.mock.calls[1][1])).toEqual(['Second']);
+  requests[1].resolve(providerReply(['Second'], () => 'Second 译文'));
   await expect(pending).resolves.toEqual(['第一句', 'Second 译文']);
-  expect(provider.fetch).toHaveBeenCalledTimes(2);
-  expect(requestedTexts(provider.fetch.mock.calls[1][1])).toEqual(['Second']);
-  expect(JSON.parse(provider.fetch.mock.calls[1][1].body as string).stream).toBe(false);
+  expect(fetch).toHaveBeenCalledTimes(2);
+  expect(JSON.parse(fetch.mock.calls[0][1].body as string).stream).toBe(false);
+  expect(JSON.parse(fetch.mock.calls[1][1].body as string).stream).toBe(false);
 });
 
 it('sends each segment as its own request, even with fewer than ten captions, and never mixes tabs', () => {

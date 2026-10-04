@@ -90,7 +90,7 @@ describe('OpenAI-compatible provider contract', () => {
       expect(body.messages[1]).toEqual({ role: 'user', content: text });
       expect(body).not.toHaveProperty('prompt');
       expect(body.stream).toBe(false);
-      expect(body.max_tokens).toBe(1024);
+      expect(body.max_tokens).toBe(65536);
       expect(body.reasoning_effort).toBe('low');
       expect(init.redirect).toBe('error');
       expect(init.credentials).toBe('omit');
@@ -119,8 +119,8 @@ describe('OpenAI-compatible provider contract', () => {
       expect(instructions).toContain('exactly 3 strings');
       expect(body.messages[1].content).toBe(JSON.stringify(texts));
       expect(body).not.toHaveProperty('prompt');
-      expect(body.stream).toBe(true);
-      expect(body.max_tokens).toBe(Math.min(16384, Math.max(2048, texts.join('').length * 4)));
+      expect(body.stream).toBe(false);
+      expect(body.max_tokens).toBe(65536);
       expect(body.reasoning_effort).toBe('low');
     },
   );
@@ -134,7 +134,7 @@ describe('OpenAI-compatible provider contract', () => {
     const fetch = vi.fn().mockResolvedValue(Response.json({ choices: [{ message: { content } }] }));
     vi.stubGlobal('fetch', fetch);
     await expect(translateBatch(config(), ['One.', 'Two.'])).resolves.toBeNull();
-    expect(JSON.parse(fetch.mock.calls[0][1].body).max_tokens).toBe(2048);
+    expect(JSON.parse(fetch.mock.calls[0][1].body).max_tokens).toBe(65536);
   });
 
   it('refuses batches larger than ten cues before contacting the provider', async () => {
@@ -172,10 +172,10 @@ describe('OpenAI-compatible provider contract', () => {
         return [body.model, body.reasoning_effort, body.max_tokens, body.stream];
       }),
     ).toEqual([
-      ['non-reasoning-model', 'low', 1024, false],
-      ['non-reasoning-model', undefined, 1024, false],
-      ['non-reasoning-model', undefined, 1024, false],
-      ['reasoning-model', 'low', 1024, false],
+      ['non-reasoning-model', 'low', 65536, false],
+      ['non-reasoning-model', undefined, 65536, false],
+      ['non-reasoning-model', undefined, 65536, false],
+      ['reasoning-model', 'low', 65536, false],
     ]);
   });
 
@@ -187,7 +187,7 @@ describe('OpenAI-compatible provider contract', () => {
       await expect(translate({ ...config(), model: `model-${status}` }, 'Hello')).rejects.toThrow();
       expect(fetch).toHaveBeenCalledTimes(1);
       const body = JSON.parse(fetch.mock.calls[0][1].body as string);
-      expect(body.max_tokens).toBe(1024);
+      expect(body.max_tokens).toBe(65536);
       expect(body.stream).toBe(false);
     },
   );
@@ -220,98 +220,53 @@ describe('OpenAI-compatible provider contract', () => {
   });
 });
 
-function sseControl() {
-  let control!: ReadableStreamDefaultController<Uint8Array>;
-  const body = new ReadableStream<Uint8Array>({
-    start(controller) {
-      control = controller;
-    },
-  });
-  return {
-    response: new Response(body, { headers: { 'Content-Type': 'text/event-stream' } }),
-    push(chunk: string) {
-      control.enqueue(new TextEncoder().encode(chunk));
-    },
-    close() {
-      control.close();
-    },
-  };
-}
-function chatEvent(content: string, reasoning?: string): string {
-  const delta = reasoning
-    ? { reasoning_content: reasoning, ...(content ? { content } : {}) }
-    : { content };
-  return `data: ${JSON.stringify({ choices: [{ delta }] })}\n\n`;
-}
-const pause = () => new Promise((resolve) => setTimeout(resolve, 30));
-
-describe('streaming batch replies', () => {
-  it('submits each translation when its string closes, including a chunk cut through the string', async () => {
-    const gate = sseControl();
-    const fetch = vi.fn().mockImplementation(async () => gate.response);
+describe('batch replies', () => {
+  it('submits each translation from a complete fenced JSON body', async () => {
+    const content = '```json\n{"translations":["第一句","他说\\"你好\\"\\n中\\/\\u6587"]}\n```';
+    const fetch = vi.fn().mockResolvedValue(Response.json({ choices: [{ message: { content } }] }));
     vi.stubGlobal('fetch', fetch);
     const seen: [number, string][] = [];
-    let open = true;
-    const model = '```json\n{"translations":["第一句","他说\\"你好\\"\\n中\\/\\u6587"]}\n```';
-    const cut = model.indexOf('第一句') + 2;
-    const pending = translateBatch(
-      { ...config(), model: 'sse-batch' },
-      ['One.', 'Two.'],
-      undefined,
-      (index, translation) => {
-        expect(open).toBe(true);
-        seen.push([index, translation]);
-      },
-    );
-    await vi.waitFor(() => expect(fetch).toHaveBeenCalled());
-    gate.push(chatEvent(model.slice(0, cut)));
-    await pause();
-    expect(seen).toEqual([]);
-    gate.push(chatEvent('', '思考过程，不是译文'));
-    await pause();
-    expect(seen).toEqual([]);
-    gate.push(chatEvent(model.slice(cut)));
-    await vi.waitFor(() =>
-      expect(seen).toEqual([
-        [0, '第一句'],
-        [1, '他说"你好"\n中/文'],
-      ]),
-    );
-    open = false;
-    gate.push('data: [DONE]\n\n');
-    gate.close();
-    await expect(pending).resolves.toEqual(['第一句', '他说"你好"\n中/文']);
+    await expect(
+      translateBatch(
+        { ...config(), model: 'json-batch' },
+        ['One.', 'Two.'],
+        undefined,
+        (index, translation) => seen.push([index, translation]),
+      ),
+    ).resolves.toEqual(['第一句', '他说"你好"\n中/文']);
+    expect(seen).toEqual([
+      [0, '第一句'],
+      [1, '他说"你好"\n中/文'],
+    ]);
     expect(fetch).toHaveBeenCalledTimes(1);
     const body = JSON.parse(fetch.mock.calls[0][1].body);
-    expect(body.stream).toBe(true);
+    expect(body.stream).toBe(false);
     expect(body.max_tokens).toBeGreaterThan(0);
     expect(body.reasoning_effort).toBe('low');
   });
 
-  it('reads a chat stream when upgrading a legacy completions setting', async () => {
-    const gate = sseControl();
-    const fetch = vi.fn().mockImplementation(async () => gate.response);
+  it('reads a chat completion when upgrading a legacy completions setting', async () => {
+    const fetch = vi.fn().mockResolvedValue(
+      Response.json({
+        choices: [{ message: { content: '{"translations":["甲","乙"]}' } }],
+      }),
+    );
     vi.stubGlobal('fetch', fetch);
     const seen: string[] = [];
-    const pending = translateBatch(
-      normalizeSettings({ ...config(), apiFormat: 'completions', model: 'legacy-sse' }),
-      ['One.', 'Two.'],
-      undefined,
-      (index, translation) => seen.splice(index, 1, translation),
-    );
-    await vi.waitFor(() => expect(fetch).toHaveBeenCalled());
-    gate.push(chatEvent('{"translations":["甲'));
-    await pause();
-    expect(seen).toEqual([]);
-    gate.push(chatEvent('","乙"]}'));
-    await vi.waitFor(() => expect(seen).toEqual(['甲', '乙']));
-    gate.close();
-    await expect(pending).resolves.toEqual(['甲', '乙']);
+    await expect(
+      translateBatch(
+        normalizeSettings({ ...config(), apiFormat: 'completions', model: 'legacy-json' }),
+        ['One.', 'Two.'],
+        undefined,
+        (index, translation) => seen.splice(index, 1, translation),
+      ),
+    ).resolves.toEqual(['甲', '乙']);
+    expect(seen).toEqual(['甲', '乙']);
     expect(fetch.mock.calls[0][0]).toBe('https://provider.example/api/v1/chat/completions');
-    expect(JSON.parse(fetch.mock.calls[0][1].body).stream).toBe(true);
+    expect(JSON.parse(fetch.mock.calls[0][1].body).stream).toBe(false);
   });
 
-  it('keeps qualified strings from a non-stream JSON body when a later string is empty', async () => {
+  it('keeps qualified strings from a JSON body when a later string is empty', async () => {
     const fetch = vi.fn().mockResolvedValue(
       Response.json({
         choices: [{ message: { content: '{"translations":["第一句","  "]}' } }],
@@ -328,7 +283,7 @@ describe('streaming batch replies', () => {
       ),
     ).resolves.toBeNull();
     expect(seen).toEqual([[0, '第一句']]);
-    expect(JSON.parse(fetch.mock.calls[0][1].body).stream).toBe(true);
+    expect(JSON.parse(fetch.mock.calls[0][1].body).stream).toBe(false);
   });
 
   it('does not submit anything when the whole JSON body cannot be parsed', async () => {
@@ -349,7 +304,7 @@ describe('streaming batch replies', () => {
     expect(seen).toEqual([]);
   });
 
-  it('drops stream after a 400 and keeps max_tokens and reasoning_effort on the retry', async () => {
+  it('drops reasoning_effort after a 400 and keeps max_tokens on the batch retry', async () => {
     const fetch = vi
       .fn()
       .mockResolvedValueOnce(new Response('', { status: 400 }))
@@ -357,34 +312,15 @@ describe('streaming batch replies', () => {
         Response.json({ choices: [{ message: { content: '{"translations":["甲","乙"]}' } }] }),
       );
     vi.stubGlobal('fetch', fetch);
-    const settings = { ...config(), model: 'no-stream-model' };
+    const settings = { ...config(), model: 'no-reasoning-batch' };
     await expect(translateBatch(settings, ['A', 'B'])).resolves.toEqual(['甲', '乙']);
     await expect(translateBatch(settings, ['C', 'D'])).resolves.toEqual(['甲', '乙']);
     const bodies = fetch.mock.calls.map((call) => JSON.parse(call[1].body));
-    expect(bodies.map((body) => body.stream)).toEqual([true, false, false]);
-    expect(bodies[1]).toMatchObject({ reasoning_effort: 'low' });
-    expect(bodies[1].max_tokens).toBeGreaterThan(0);
+    expect(bodies.map((body) => body.stream)).toEqual([false, false, false]);
+    expect(bodies.map((body) => body.reasoning_effort)).toEqual(['low', undefined, undefined]);
+    expect(bodies[0].max_tokens).toBeGreaterThan(0);
+    expect(bodies[1].max_tokens).toBe(bodies[0].max_tokens);
     expect(bodies[2].max_tokens).toBe(bodies[1].max_tokens);
-    expect(bodies[2].reasoning_effort).toBe('low');
-  });
-
-  it('does not remember a stream rejection when removing reasoning_effort is what succeeds', async () => {
-    const fetch = vi.fn(async (_url: string, init: RequestInit) => {
-      const body = JSON.parse(init.body as string) as {
-        stream?: boolean;
-        reasoning_effort?: string;
-      };
-      if (body.stream === true || body.reasoning_effort) return new Response('', { status: 400 });
-      return Response.json({ choices: [{ message: { content: '{"translations":["甲","乙"]}' } }] });
-    });
-    vi.stubGlobal('fetch', fetch);
-    const settings = { ...config(), model: 'reasoning-not-stream' };
-    await expect(translateBatch(settings, ['A', 'B'])).resolves.toEqual(['甲', '乙']);
-    const first = fetch.mock.calls.map((call) => JSON.parse(call[1].body as string).stream);
-    expect(first).toEqual([true, false, false]);
-    await expect(translateBatch(settings, ['C', 'D'])).resolves.toEqual(['甲', '乙']);
-    expect(JSON.parse(fetch.mock.calls[3][1].body as string).stream).toBe(true);
-    expect(JSON.parse(fetch.mock.calls[3][1].body as string).reasoning_effort).toBeUndefined();
   });
 
   it('remembers a chat max_tokens rejection only after the bare request succeeds', async () => {
@@ -405,8 +341,8 @@ describe('streaming batch replies', () => {
         return [body.reasoning_effort, body.max_tokens];
       }),
     ).toEqual([
-      ['low', 1024],
-      [undefined, 1024],
+      ['low', 65536],
+      [undefined, 65536],
       [undefined, undefined],
     ]);
     await expect(translate(settings, 'Hi')).resolves.toBe('你好');
@@ -429,7 +365,7 @@ describe('streaming batch replies', () => {
     expect(fetch).toHaveBeenCalledTimes(3);
     await expect(translate(settings, 'Hello')).rejects.toThrow('HTTP 422');
     expect(fetch).toHaveBeenCalledTimes(6);
-    expect(JSON.parse(fetch.mock.calls[3][1].body).max_tokens).toBe(1024);
+    expect(JSON.parse(fetch.mock.calls[3][1].body).max_tokens).toBe(65536);
   });
 
   it('keeps every batch retry on chat completions for a legacy completions setting', async () => {
@@ -441,19 +377,14 @@ describe('streaming batch replies', () => {
         ['A', 'B'],
       ),
     ).rejects.toThrow('HTTP 400');
-    expect(fetch).toHaveBeenCalledTimes(4);
+    expect(fetch).toHaveBeenCalledTimes(3);
     expect(fetch.mock.calls.map((call) => call[0])).toEqual(
-      Array(4).fill('https://provider.example/api/v1/chat/completions'),
+      Array(3).fill('https://provider.example/api/v1/chat/completions'),
     );
     const bodies = fetch.mock.calls.map((call) => JSON.parse(call[1].body));
-    expect(bodies.map((body) => body.stream)).toEqual([true, false, false, false]);
-    expect(bodies.map((body) => body.reasoning_effort)).toEqual([
-      'low',
-      'low',
-      undefined,
-      undefined,
-    ]);
-    expect(bodies.map((body) => body.max_tokens)).toEqual([2048, 2048, 2048, undefined]);
+    expect(bodies.map((body) => body.stream)).toEqual([false, false, false]);
+    expect(bodies.map((body) => body.reasoning_effort)).toEqual(['low', undefined, undefined]);
+    expect(bodies.map((body) => body.max_tokens)).toEqual([65536, 65536, undefined]);
     expect(bodies.every((body) => Array.isArray(body.messages) && !('prompt' in body))).toBe(true);
   });
 });

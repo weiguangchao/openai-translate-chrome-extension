@@ -32,8 +32,8 @@ function invalidJson(): Error {
 }
 function withDeadline(signal?: AbortSignal): AbortSignal {
   return signal
-    ? AbortSignal.any([signal, AbortSignal.timeout(20000)])
-    : AbortSignal.timeout(20000);
+    ? AbortSignal.any([signal, AbortSignal.timeout(60000)])
+    : AbortSignal.timeout(60000);
 }
 async function fetchApi(
   settings: Settings,
@@ -121,12 +121,10 @@ function checkText(text: string): void {
   if (!text.trim() || text.length > 5000) throw new Error('字幕内容为空或过长。');
 }
 
-const streamRejected = new Set<string>();
 const reasoningRejected = new Set<string>();
 const maxTokensRejected = new Set<string>();
-type Dropped = 'stream' | 'reasoning' | 'maxTokens' | null;
+type Dropped = 'reasoning' | 'maxTokens' | null;
 interface Probe {
-  stream: boolean;
   reasoning: boolean;
   maxTokens: boolean;
   dropped: Dropped;
@@ -136,18 +134,13 @@ function providerKey(settings: Settings): string {
   return JSON.stringify([settings.baseUrl.trim(), settings.model.trim()]);
 }
 
-function probes(settings: Settings, batch: boolean): Probe[] {
+function probes(settings: Settings): Probe[] {
   const key = providerKey(settings);
   const steps: Probe[] = [];
-  let stream = batch && !streamRejected.has(key);
   let reasoning = !reasoningRejected.has(key);
   let maxTokens = !maxTokensRejected.has(key);
-  const push = (dropped: Dropped) => steps.push({ stream, reasoning, maxTokens, dropped });
+  const push = (dropped: Dropped) => steps.push({ reasoning, maxTokens, dropped });
   push(null);
-  if (stream) {
-    stream = false;
-    push('stream');
-  }
   if (reasoning) {
     reasoning = false;
     push('reasoning');
@@ -162,7 +155,6 @@ function probes(settings: Settings, batch: boolean): Probe[] {
 function rememberRejection(settings: Settings, dropped: Dropped): void {
   if (!dropped) return;
   const key = providerKey(settings);
-  if (dropped === 'stream') streamRejected.add(key);
   if (dropped === 'reasoning') reasoningRejected.add(key);
   if (dropped === 'maxTokens') maxTokensRejected.add(key);
 }
@@ -180,7 +172,7 @@ function completionBody(
       { role: 'system', content: instructions },
       { role: 'user', content: input },
     ],
-    stream: probe.stream,
+    stream: false,
     ...(probe.maxTokens ? { max_tokens: maxTokens } : {}),
     ...(probe.reasoning ? { reasoning_effort: 'low' as const } : {}),
   };
@@ -192,13 +184,12 @@ async function complete(
   input: string,
   maxTokens: number,
   signal: AbortSignal | undefined,
-  batch: boolean,
   onText?: (text: string) => void,
 ): Promise<string> {
   validateSettings(settings, true);
   const instructions = translatorInstructions(settings, task);
   let lastError: unknown;
-  for (const probe of probes(settings, batch)) {
+  for (const probe of probes(settings)) {
     try {
       const text = await postModel(
         settings,
@@ -238,9 +229,8 @@ export async function translate(
     settings,
     'Output only the translation, with no quotes, labels, or source text.',
     text,
-    1024,
+    65536,
     signal,
-    false,
   );
 }
 
@@ -265,9 +255,8 @@ export async function translateBatch(
     settings,
     `Translate each of the ${texts.length} ordered captions independently, using neighbors only as context; never move content between captions. Return only {"translations":["..."]}: exactly ${texts.length} strings, one per caption in input order.`,
     JSON.stringify(texts),
-    Math.min(16384, Math.max(2048, texts.join('').length * 4)),
+    65536,
     signal,
-    true,
     (text) => {
       scanTranslationStrings(text).values.forEach((translation, index) =>
         submit(index, translation),
@@ -326,12 +315,8 @@ needsSplit=true: split AND translate using the caption's units ([index, source t
           : {}),
       })),
     ),
-    Math.min(
-      16384,
-      Math.max(2048, inputs.reduce((length, input) => length + input.text.length, 0) * 4),
-    ),
+    65536,
     signal,
-    true,
     (text) => submit(scanTranslationResults(text)),
   );
   try {
@@ -375,49 +360,28 @@ async function readModelText(
   signal: AbortSignal,
   onText?: (text: string) => void,
 ): Promise<string> {
-  if (!response.body) return modelTextFromBuffer(await response.text(), true, onText);
+  const text = jsonModelText(await readBody(response, signal));
+  if (text) onText?.(text);
+  return text;
+}
+
+async function readBody(response: Response, signal: AbortSignal): Promise<string> {
+  if (!response.body) return response.text();
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let pending = '';
-  let mode: 'unknown' | 'sse' | 'json' = 'unknown';
-  let generated = '';
   const onAbort = () => {
     void reader.cancel(signal.reason).catch(() => undefined);
   };
   signal.addEventListener('abort', onAbort, { once: true });
   try {
-    while (true) {
+    for (;;) {
       if (signal.aborted) throw timeoutError();
       const { done, value } = await reader.read();
       if (signal.aborted) throw timeoutError();
       if (value) pending += decoder.decode(value, { stream: !done });
-      if (done) pending += decoder.decode();
-      if (pending.charCodeAt(0) === 0xfeff) pending = pending.slice(1);
-      if (mode === 'unknown') {
-        const sniffed = sniffBody(pending, done);
-        if (sniffed === 'wait') continue;
-        if (sniffed === 'invalid') throw invalidJson();
-        mode = sniffed;
-      }
-      if (mode === 'json') {
-        if (!done) continue;
-        const text = jsonModelText(pending);
-        if (text) onText?.(text);
-        return text;
-      }
-      const split = splitEvents(pending);
-      pending = split.rest;
-      let piece = '';
-      for (const event of split.events) piece += eventModelText(event) ?? '';
-      if (done && pending.trim()) {
-        piece += eventModelText(pending) ?? '';
-        pending = '';
-      }
-      if (piece) {
-        generated += piece;
-        onText?.(generated);
-      }
-      if (done) return generated;
+      if (!done) continue;
+      return pending + decoder.decode();
     }
   } catch (error) {
     if (signal.aborted) throw timeoutError();
@@ -429,80 +393,20 @@ async function readModelText(
   }
 }
 
-function modelTextFromBuffer(raw: string, done: boolean, onText?: (text: string) => void): string {
-  const sniffed = sniffBody(raw, done);
-  if (sniffed === 'json') {
-    const text = jsonModelText(raw);
-    if (text) onText?.(text);
-    return text;
-  }
-  if (sniffed !== 'sse') throw invalidJson();
-  const split = splitEvents(raw);
-  let generated = '';
-  for (const event of split.events) generated += eventModelText(event) ?? '';
-  if (split.rest.trim()) generated += eventModelText(split.rest) ?? '';
-  if (generated) onText?.(generated);
-  return generated;
-}
-
-function sniffBody(buffer: string, done: boolean): 'sse' | 'json' | 'wait' | 'invalid' {
-  const head = buffer.trimStart();
-  if (!head) return done ? 'invalid' : 'wait';
-  if (head.startsWith('{') || head.startsWith('[')) return 'json';
-  if (
-    head.startsWith('data:') ||
-    head.startsWith('event:') ||
-    head.startsWith('id:') ||
-    head.startsWith(':')
-  )
-    return 'sse';
-  const partial = ['data:', 'event:', 'id:', '{', '[', ':'];
-  if (!done && partial.some((prefix) => prefix.startsWith(head))) return 'wait';
-  return 'invalid';
-}
-
-function splitEvents(buffer: string): { events: string[]; rest: string } {
-  const events: string[] = [];
-  let start = 0;
-  for (let index = 0; index < buffer.length; index++) {
-    const crlf = buffer.startsWith('\r\n\r\n', index);
-    const lf = !crlf && buffer.startsWith('\n\n', index);
-    if (!crlf && !lf) continue;
-    events.push(buffer.slice(start, index));
-    start = index + (crlf ? 4 : 2);
-    index = start - 1;
-  }
-  return { events, rest: buffer.slice(start) };
-}
-
-function eventModelText(event: string): string | null {
-  const data = event
-    .split(/\r?\n/)
-    .filter((line) => line.startsWith('data:'))
-    .map((line) => line.slice(5).replace(/^ /, ''))
-    .join('\n')
-    .trim();
-  if (!data || data === '[DONE]') return null;
-  try {
-    return choiceText(JSON.parse(data) as unknown, true);
-  } catch {
-    return null;
-  }
-}
-
 function jsonModelText(raw: string): string {
+  const source = raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw;
   let payload: unknown;
   try {
-    payload = JSON.parse(raw);
+    payload = JSON.parse(source);
   } catch {
     throw invalidJson();
   }
-  return choiceText(payload, false) ?? '';
+  return choiceText(payload) ?? '';
 }
 
-function choiceText(payload: unknown, streamed: boolean): string | null {
+function choiceText(payload: unknown): string | null {
   const choice = (payload as { choices?: unknown[] } | null)?.choices?.[0] as
-    { delta?: { content?: unknown }; message?: { content?: unknown } } | undefined;
-  const value = streamed ? choice?.delta?.content : choice?.message?.content;
+    { message?: { content?: unknown } } | undefined;
+  const value = choice?.message?.content;
   return typeof value === 'string' ? value : null;
 }

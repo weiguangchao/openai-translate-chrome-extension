@@ -42,7 +42,7 @@ it('translates ordinary captions and splits only flagged captions in one request
   ]);
   expect(payload[0]).not.toHaveProperty('units');
   expect(payload[1].units).toHaveLength(46);
-  expect(body.stream).toBe(true);
+  expect(body.stream).toBe(false);
   expect(body.messages[0].content).toContain('split AND translate');
   const split = result![1];
   if (typeof split === 'string') throw new Error('Expected split result');
@@ -51,45 +51,30 @@ it('translates ordinary captions and splits only flagged captions in one request
   );
 });
 
-it('streams ordinary results immediately but publishes a split only after all of its parts close', async () => {
-  let control!: ReadableStreamDefaultController<Uint8Array>;
-  const response = new Response(
-    new ReadableStream<Uint8Array>({
-      start(controller) {
-        control = controller;
-      },
-    }),
-    { headers: { 'Content-Type': 'text/event-stream' } },
-  );
-  const fetch = vi.fn().mockResolvedValue(response);
+it('publishes ordinary and split results together once the JSON response is complete', async () => {
+  const fetch = vi
+    .fn()
+    .mockResolvedValue(
+      structuredReply([{ id: 0, parts: [{ translation: '之前。' }] }, longResult(1)]),
+    );
   vi.stubGlobal('fetch', fetch);
   const delivered = vi.fn();
-  const pending = translateCaptionBatch(
-    settings,
-    [translationInput('Before.', false), translationInput(longCaption, true)],
-    undefined,
-    delivered,
-  );
-  const push = (text: string) =>
-    control.enqueue(
-      new TextEncoder().encode(
-        `data: ${JSON.stringify({ choices: [{ delta: { content: text } }] })}\n\n`,
-      ),
-    );
-  await vi.waitFor(() => expect(fetch).toHaveBeenCalled());
-  const result = JSON.stringify(longResult(1));
-  push('{"results":[{"id":0,"parts":[{"translation":"之前。"}]},' + result.slice(0, -1));
-  await vi.waitFor(() => expect(delivered).toHaveBeenCalledTimes(1));
-  expect(delivered).toHaveBeenCalledWith(0, '之前。');
-  push('}');
-  await vi.waitFor(() => expect(delivered).toHaveBeenCalledTimes(2));
-  push(']}');
-  control.close();
-  await expect(pending).resolves.toEqual([
+  await expect(
+    translateCaptionBatch(
+      settings,
+      [translationInput('Before.', false), translationInput(longCaption, true)],
+      undefined,
+      delivered,
+    ),
+  ).resolves.toEqual([
     '之前。',
     readCaptionTranslation(translationInput(longCaption, true), longResult()),
   ]);
-  expect(delivered).toHaveBeenCalledTimes(2);
+  expect(delivered.mock.calls).toEqual([
+    [0, '之前。'],
+    [1, readCaptionTranslation(translationInput(longCaption, true), longResult())],
+  ]);
+  expect(JSON.parse(fetch.mock.calls[0][1].body).stream).toBe(false);
 });
 
 it('retains valid neighbors while an incomplete split and unknown id remain unusable', async () => {

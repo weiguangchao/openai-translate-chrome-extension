@@ -239,30 +239,20 @@ it.each([mediaUrl, edgeMediaUrl])(
   },
 );
 
-it('displays streamed HBO translations before either prefetched segment finishes', async () => {
+it('displays a finished HBO segment while the other prefetched segment is still pending', async () => {
   stream.url = edgeMediaUrl;
   const originalFetch = fetch;
-  const batches: { texts: string[]; control: ReadableStreamDefaultController<Uint8Array> }[] = [];
+  const batches: { texts: string[]; resolve: (value: Response) => void }[] = [];
   vi.stubGlobal(
     'fetch',
     vi.fn(async (url: string, init: RequestInit) => {
       if (!new URL(url).pathname.endsWith('/chat/completions')) return originalFetch(url, init);
-      expect(JSON.parse(init.body as string).stream).toBe(true);
-      const body = new ReadableStream<Uint8Array>({
-        start(control) {
-          batches.push({ texts: requestedTexts(init), control });
-          init.signal?.addEventListener('abort', () =>
-            control.error(new DOMException('Aborted', 'AbortError')),
-          );
-        },
+      expect(JSON.parse(init.body as string).stream).toBe(false);
+      return new Promise<Response>((resolve) => {
+        batches.push({ texts: requestedTexts(init), resolve });
       });
-      return new Response(body, { headers: { 'Content-Type': 'text/event-stream' } });
     }),
   );
-  const delta = (content: string) =>
-    `data: ${JSON.stringify({ choices: [{ delta: { content } }] })}\n\n`;
-  const push = (index: number, content: string) =>
-    batches[index].control.enqueue(new TextEncoder().encode(delta(content)));
   controller = new CaptionController(createHboPlatform, publicSettings(settings));
   await vi.advanceTimersByTimeAsync(0);
   expect(batches.map(({ texts }) => texts)).toEqual([
@@ -272,23 +262,23 @@ it('displays streamed HBO translations before either prefetched segment finishes
   await playTo(3);
   await vi.advanceTimersByTimeAsync(300);
   expect(lines()?.[1].textContent).toBe('翻译中');
-  push(0, '{"translations":["译文 Cue 1",');
+  batches[0].resolve(
+    Response.json({
+      choices: [
+        {
+          message: {
+            content: JSON.stringify({
+              translations: batches[0].texts.map((text) => `译文 ${text}`),
+            }),
+          },
+        },
+      ],
+    }),
+  );
   await vi.advanceTimersByTimeAsync(0);
   expect(lines()?.[1].textContent).toBe('译文 Cue 1');
   expect(lines()?.[0].textContent).toBe('Cue 1');
-  push(
-    0,
-    `${batches[0].texts
-      .slice(1)
-      .map((text) => JSON.stringify(`译文 ${text}`))
-      .join(',')}]}`,
-  );
-  push(1, JSON.stringify({ translations: batches[1].texts.map((text) => `译文 ${text}`) }));
-  for (const { control } of batches) {
-    control.enqueue(new TextEncoder().encode('data: [DONE]\n\n'));
-    control.close();
-  }
-  await vi.advanceTimersByTimeAsync(0);
+  expect(batches).toHaveLength(2);
 });
 
 it('displays and translates one HBO track when alternate tracks have overlapping dialogue', async () => {
