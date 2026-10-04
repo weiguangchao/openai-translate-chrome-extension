@@ -19,8 +19,72 @@ export function needsSubtitleSegmentation(text: string): boolean {
   return subtitleDisplayLength(text) > subtitleDisplayLimit;
 }
 
+export function modelAnswer(source: string): string {
+  const text = source.replace(/^\uFEFF/, '');
+  const marker = '</think>';
+  const end = text.toLowerCase().lastIndexOf(marker);
+  if (end >= 0) {
+    const after = text.slice(end + marker.length).trim();
+    if (after) return after;
+    return text
+      .slice(0, end)
+      .replace(/<think>/gi, '')
+      .trimStart();
+  }
+  return text.replace(/<think>/gi, '').trimStart();
+}
+
+function hasTranslationPayload(value: unknown): boolean {
+  if (Array.isArray(value))
+    return value.some(
+      (item) =>
+        typeof item === 'string' ||
+        (!!item &&
+          typeof item === 'object' &&
+          ('parts' in item || 'translation' in item || 'text' in item)),
+    );
+  if (!value || typeof value !== 'object') return false;
+  const record = value as { results?: unknown; translations?: unknown };
+  return Array.isArray(record.results) || Array.isArray(record.translations);
+}
+
+function lastTranslationPayload(text: string): unknown {
+  let payload: unknown;
+  let index = 0;
+  while (index < text.length) {
+    const objectAt = text.indexOf('{', index);
+    const arrayAt = text.indexOf('[', index);
+    const start = objectAt < 0 ? arrayAt : arrayAt < 0 ? objectAt : Math.min(objectAt, arrayAt);
+    if (start < 0) break;
+    const end = skipValue(text, start);
+    if (end < 0) {
+      index = start + 1;
+      continue;
+    }
+    try {
+      const value = JSON.parse(text.slice(start, end));
+      if (hasTranslationPayload(value)) payload = value;
+    } catch {
+      index = start + 1;
+      continue;
+    }
+    index = end;
+  }
+  return payload;
+}
+
 export function parseModelJson(response: string): unknown {
-  return JSON.parse(response.trim().replace(/^```(?:json)?\s*\n?([\s\S]*?)\n?```$/i, '$1'));
+  const text = modelAnswer(response).trim();
+  const fenced = text.replace(/^```(?:json)?\s*\n?([\s\S]*?)\n?```$/i, '$1');
+  try {
+    const value = JSON.parse(fenced);
+    if (typeof value !== 'string') return value;
+    return JSON.parse(value);
+  } catch {
+    const payload = lastTranslationPayload(stripOpeningFence(text));
+    if (payload === undefined) throw new SyntaxError('Invalid model JSON');
+    return payload;
+  }
 }
 
 function stripOpeningFence(source: string): string {
@@ -52,7 +116,12 @@ function skipSpace(text: string, index: number): number {
 }
 
 export function scanTranslationResults(source: string): unknown[] {
-  const text = stripOpeningFence(source);
+  let text = stripOpeningFence(modelAnswer(source));
+  if (!text.trimStart().startsWith('{')) {
+    const objectAt = text.indexOf('{');
+    if (objectAt < 0) return [];
+    text = text.slice(objectAt);
+  }
   const start = findArray(text, 'results');
   if (start < 0) return [];
   const values: unknown[] = [];

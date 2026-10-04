@@ -1,6 +1,7 @@
 import { translationBatchLimit } from './limits';
 import { englishLanguageName, validateBaseUrl, validateSettings, type Settings } from './settings';
 import {
+  modelAnswer,
   parseModelJson,
   scanTranslationResults,
   subtitleDisplayLimit,
@@ -122,10 +123,12 @@ function checkText(text: string): void {
 
 const reasoningRejected = new Set<string>();
 const maxTokensRejected = new Set<string>();
-type Dropped = 'reasoning' | 'maxTokens' | null;
+const jsonObjectRejected = new Set<string>();
+type Dropped = 'reasoning' | 'maxTokens' | 'jsonObject' | null;
 interface Probe {
   reasoning: boolean;
   maxTokens: boolean;
+  jsonObject: boolean;
   dropped: Dropped;
 }
 
@@ -133,13 +136,19 @@ function providerKey(settings: Settings): string {
   return JSON.stringify([settings.baseUrl.trim(), settings.model.trim()]);
 }
 
-function probes(settings: Settings): Probe[] {
+function probes(settings: Settings, jsonObject: boolean): Probe[] {
   const key = providerKey(settings);
   const steps: Probe[] = [];
   let reasoning = !reasoningRejected.has(key);
   let maxTokens = !maxTokensRejected.has(key);
-  const push = (dropped: Dropped) => steps.push({ reasoning, maxTokens, dropped });
+  let object = jsonObject && !jsonObjectRejected.has(key);
+  const push = (dropped: Dropped) =>
+    steps.push({ reasoning, maxTokens, jsonObject: object, dropped });
   push(null);
+  if (object) {
+    object = false;
+    push('jsonObject');
+  }
   if (reasoning) {
     reasoning = false;
     push('reasoning');
@@ -156,6 +165,7 @@ function rememberRejection(settings: Settings, dropped: Dropped): void {
   const key = providerKey(settings);
   if (dropped === 'reasoning') reasoningRejected.add(key);
   if (dropped === 'maxTokens') maxTokensRejected.add(key);
+  if (dropped === 'jsonObject') jsonObjectRejected.add(key);
 }
 
 function completionBody(
@@ -172,6 +182,7 @@ function completionBody(
       { role: 'user', content: input },
     ],
     stream: false,
+    ...(probe.jsonObject ? { response_format: { type: 'json_object' as const } } : {}),
     ...(probe.maxTokens ? { max_tokens: maxTokens } : {}),
     ...(probe.reasoning ? { reasoning_effort: 'low' as const } : {}),
   };
@@ -184,17 +195,19 @@ async function complete(
   maxTokens: number,
   signal: AbortSignal | undefined,
   onText?: (text: string) => void,
+  caption = false,
 ): Promise<string> {
   validateSettings(settings, true);
   const instructions = translatorInstructions(settings, task);
   let lastError: unknown;
-  for (const probe of probes(settings)) {
+  for (const probe of probes(settings, caption)) {
     try {
       const text = await postModel(
         settings,
         completionBody(settings, instructions, input, maxTokens, probe),
         signal,
         onText,
+        caption,
       );
       rememberRejection(settings, probe.dropped);
       if (!text.trim()) throw new Error('模型未返回译文，请确认该模型支持 /chat/completions。');
@@ -212,10 +225,11 @@ async function postModel(
   body: object,
   signal: AbortSignal | undefined,
   onText?: (text: string) => void,
+  caption = false,
 ): Promise<string> {
   const deadline = withDeadline(signal);
   const response = await fetchApi(settings, '/chat/completions', body, deadline);
-  return readModelText(response, deadline, onText);
+  return readModelText(response, deadline, onText, caption);
 }
 
 export async function translate(
@@ -245,19 +259,12 @@ export async function translateCaptionBatch(
   const accepted = new Map<number, CaptionTranslation>();
   const submit = (values: unknown[]) => {
     const seen = new Set<number>();
-    for (const value of values) {
-      const id = (value as { id?: unknown } | null)?.id;
-      if (
-        typeof id !== 'number' ||
-        !Number.isSafeInteger(id) ||
-        id < 0 ||
-        id >= inputs.length ||
-        seen.has(id)
-      )
-        continue;
+    for (const value of alignResultIds(values, inputs.length)) {
+      const id = resultId(value);
+      if (id === null || id < 0 || id >= inputs.length || seen.has(id)) continue;
       seen.add(id);
       if (accepted.has(id)) continue;
-      const translation = readCaptionTranslation(inputs[id], value);
+      const translation = readCaptionTranslation(inputs[id], normalizeResult(value));
       if (translation === null) continue;
       accepted.set(id, translation);
       onTranslation?.(id, translation);
@@ -265,7 +272,7 @@ export async function translateCaptionBatch(
   };
   const response = await complete(
     settings,
-    `The input is an array of ordered captions from one passage. Use neighbors only as context; never move content between captions. Return only {"results":[{"id":0,"parts":[{"translation":"..."}]}]} with one result per input id, in input order.
+    `The input is an array of ordered captions from one passage. Use neighbors only as context; never move content between captions. Return only JSON {"results":[{"id":0,"parts":[{"translation":"..."}]}]} with one result per input id, in input order.
 needsSplit=false: return one part translating the whole caption.
 needsSplit=true: split AND translate using the caption's units ([index, source text] pairs). Return at least two parts, or one for a single unit, as {"endExclusive":number,"translation":"..."}. Each part spans from the previous endExclusive (initially 0) to its own, excluding the end. End values must be strictly increasing integers, with the last equal to units.length, covering every unit exactly once. Use natural clause boundaries, keep related words together, and avoid tiny fragments. Aim for at most ${subtitleDisplayLimit} display columns in each part's source and translation (CJK characters count as two); allow slight overflow to preserve meaning. Translate each span in full-caption context, preserving its content, spoken order, repetitions, and self-corrections.`,
     JSON.stringify(
@@ -285,22 +292,76 @@ needsSplit=true: split AND translate using the caption's units ([index, source t
     65536,
     signal,
     (text) => submit(scanTranslationResults(text)),
+    true,
   );
   try {
-    const results = (parseModelJson(response) as { results?: unknown } | null)?.results;
-    if (Array.isArray(results)) submit(results);
+    submit(translationPayloads(parseModelJson(response)));
   } catch {
-    return null;
+    return accepted.size === inputs.length ? inputs.map((_, index) => accepted.get(index)!) : null;
   }
   return accepted.size === inputs.length ? inputs.map((_, index) => accepted.get(index)!) : null;
+}
+
+function resultId(value: unknown): number | null {
+  const id = (value as { id?: unknown } | null)?.id;
+  if (typeof id === 'number' && Number.isSafeInteger(id)) return id;
+  if (typeof id === 'string' && /^(0|[1-9]\d*)$/.test(id.trim())) return Number(id.trim());
+  return null;
+}
+
+function alignResultIds(values: unknown[], count: number): unknown[] {
+  const ids = values.map(resultId);
+  const missing = values.length === 1 && count === 1 && ids[0] === null;
+  if (missing && values[0] && typeof values[0] === 'object') return [{ ...values[0], id: 0 }];
+  if (ids.includes(0) || ids.length !== count || ids.some((id) => id === null)) return values;
+  if (!ids.every((id, index) => id === index + 1)) return values;
+  return values.map((value) =>
+    value && typeof value === 'object' ? { ...value, id: resultId(value)! - 1 } : value,
+  );
+}
+
+function normalizeResult(value: unknown): unknown {
+  if (!value || typeof value !== 'object') return value;
+  const record = value as { parts?: unknown; translation?: unknown; text?: unknown };
+  if (!Array.isArray(record.parts)) {
+    const translation = typeof record.translation === 'string' ? record.translation : record.text;
+    return typeof translation === 'string' ? { ...record, parts: [{ translation }] } : value;
+  }
+  return {
+    ...record,
+    parts: record.parts.map((part) => (typeof part === 'string' ? { translation: part } : part)),
+  };
+}
+
+function translationPayloads(value: unknown): unknown[] {
+  if (Array.isArray(value)) {
+    if (
+      value.every(
+        (item) =>
+          !!item &&
+          typeof item === 'object' &&
+          ('parts' in item || 'translation' in item || 'text' in item || 'id' in item),
+      )
+    )
+      return value;
+    return value.map((translation, id) => ({ id, translation }));
+  }
+  if (!value || typeof value !== 'object') return [];
+  const record = value as { results?: unknown; translations?: unknown };
+  if (Array.isArray(record.results)) return record.results;
+  if (Array.isArray(record.translations))
+    return record.translations.map((translation, id) => ({ id, translation }));
+  if ('parts' in record || 'translation' in record || 'text' in record) return [record];
+  return [];
 }
 
 async function readModelText(
   response: Response,
   signal: AbortSignal,
   onText?: (text: string) => void,
+  caption = false,
 ): Promise<string> {
-  const text = jsonModelText(await readBody(response, signal));
+  const text = jsonModelText(await readBody(response, signal), caption);
   if (text) onText?.(text);
   return text;
 }
@@ -333,7 +394,7 @@ async function readBody(response: Response, signal: AbortSignal): Promise<string
   }
 }
 
-function jsonModelText(raw: string): string {
+function jsonModelText(raw: string, caption: boolean): string {
   const source = raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw;
   let payload: unknown;
   try {
@@ -341,12 +402,36 @@ function jsonModelText(raw: string): string {
   } catch {
     throw invalidJson();
   }
-  return choiceText(payload) ?? '';
+  return choiceText(payload, caption) ?? '';
 }
 
-function choiceText(payload: unknown): string | null {
-  const choice = (payload as { choices?: unknown[] } | null)?.choices?.[0] as
-    { message?: { content?: unknown } } | undefined;
-  const value = choice?.message?.content;
-  return typeof value === 'string' ? value : null;
+function messageText(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (!Array.isArray(value)) return '';
+  return value
+    .map((part) => {
+      if (typeof part === 'string') return part;
+      if (!part || typeof part !== 'object') return '';
+      const record = part as { type?: unknown; text?: unknown };
+      if (record.type === 'reasoning' || record.type === 'thinking') return '';
+      return typeof record.text === 'string' ? record.text : '';
+    })
+    .join('');
+}
+
+function choiceText(payload: unknown, caption: boolean): string | null {
+  const message = (
+    payload as {
+      choices?: {
+        message?: { content?: unknown; reasoning_content?: unknown; reasoning?: unknown };
+      }[];
+    } | null
+  )?.choices?.[0]?.message;
+  const content = modelAnswer(messageText(message?.content)).trim();
+  if (content) return content;
+  if (!caption) return null;
+  const reasoning = modelAnswer(
+    messageText(message?.reasoning_content ?? message?.reasoning),
+  ).trim();
+  return /"(?:results|translations)"\s*:/.test(reasoning) ? reasoning : null;
 }

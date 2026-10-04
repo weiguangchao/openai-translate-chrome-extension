@@ -37,6 +37,17 @@ export function translationInput(text: string, needsSplit: boolean): Translation
   return { text, needsSplit: needsSplit && needsSubtitleSegmentation(text) };
 }
 
+function partTranslation(part: { translation?: unknown; text?: unknown } | null): string {
+  const value = typeof part?.translation === 'string' ? part.translation : part?.text;
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function integerValue(value: unknown): number {
+  if (typeof value === 'number') return value;
+  if (typeof value === 'string' && /^(0|[1-9]\d*)$/.test(value.trim())) return Number(value.trim());
+  return Number.NaN;
+}
+
 export function readCaptionTranslation(
   input: TranslationInput,
   value: unknown,
@@ -50,8 +61,14 @@ export function readCaptionTranslation(
   const accepted: TranslationPart[] = [];
   let previous = 0;
   for (const part of parts) {
-    const translation = typeof part?.translation === 'string' ? part.translation.trim() : '';
-    const end = input.needsSplit ? part?.endExclusive : units.length;
+    const item = part as {
+      translation?: unknown;
+      text?: unknown;
+      endExclusive?: unknown;
+      end?: unknown;
+    } | null;
+    const translation = partTranslation(item);
+    const end = input.needsSplit ? integerValue(item?.endExclusive ?? item?.end) : units.length;
     if (
       !translation ||
       translation.length > 5000 ||
@@ -64,7 +81,7 @@ export function readCaptionTranslation(
     const to = units[end - 1].to;
     if (input.needsSplit) {
       const source = input.text.slice(from, to);
-      const limit = subtitleDisplayLimit * 1.5;
+      const limit = subtitleDisplayLimit * 4;
       if (end - previous > 1 && subtitleDisplayLength(source) > limit) return null;
       if (subtitleDisplayLength(translation) > limit && translation !== source) return null;
     }
