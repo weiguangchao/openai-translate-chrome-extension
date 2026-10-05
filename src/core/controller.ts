@@ -217,12 +217,8 @@ export class CaptionController {
     const cue = captions?.find(
       (item) => item.startTime <= time && time < item.endTime && item.text === caption.text,
     );
-    if (!caption.text) {
+    if (!caption.text || !usesModel) {
       this.clearCaption();
-      return;
-    }
-    if (!usesModel) {
-      this.translator.passThrough(caption.text);
       return;
     }
     this.translator.show({

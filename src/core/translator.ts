@@ -73,12 +73,6 @@ export class CaptionTranslator {
     this.playbackHeld = false;
   }
 
-  passThrough(text: string): void {
-    this.clear();
-    this.overlay.hideTranslation();
-    this.overlay.showOriginal(text);
-  }
-
   show(frame: CaptionFrame): void {
     const text = frame.kind === 'split' ? frame.cue.text : frame.text;
     const needsSplit = frame.kind === 'split';

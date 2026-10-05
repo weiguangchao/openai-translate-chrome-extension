@@ -353,3 +353,27 @@ for (const platform of ['youtube', 'hbo'] as const) {
     });
   });
 }
+
+test('hbo: website captions read before the timeline loads never show untranslated', async ({}, info) => {
+  await withPlayer(
+    'hbo',
+    info,
+    async (p) => {
+      await p.page.evaluate((text) => window.fixture.native(text), source);
+      await p.play();
+      await expect.poll(() => p.downloads.length, 'Manifest requested and held').toBe(1);
+      await p.page.waitForTimeout(1000);
+      expect((await p.frames()).filter((f) => f.original)).toEqual([]);
+      expect(p.posts).toEqual([]);
+      p.releaseTimeline();
+      await p.pair(source, translation);
+      expect(
+        (await p.frames()).filter(
+          (f) => f.original && (!f.translation || f.translation === '翻译中'),
+        ),
+        'The source never appears before its translation',
+      ).toEqual([]);
+    },
+    { holdTimeline: true },
+  );
+});

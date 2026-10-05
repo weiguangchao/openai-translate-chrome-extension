@@ -94,6 +94,37 @@ it('drives any platform through the waiting, live and timeline caption sources',
   expect(getComputedStyle(layer).opacity).not.toBe('0');
 });
 
+it('shows no source while the caption source is still being checked', async () => {
+  const layer = document.getElementById('layer')!;
+  const checking: CaptionSource[] = [
+    {
+      kind: 'live',
+      mode: 'checking',
+      read: () => ({ text: 'Live cue', layers: [layer], nativeTrack: false }),
+    },
+    {
+      kind: 'timeline',
+      mode: 'checking',
+      cues: [{ startTime: 0, endTime: 10, text: 'Timed cue.' }],
+      layers: () => [layer],
+    },
+  ];
+  controller = new CaptionController(
+    () => platform,
+    publicSettings({ ...DEFAULT_SETTINGS, apiKey: 'key', model: 'model' }),
+  );
+  for (const next of checking) {
+    source = next;
+    await vi.advanceTimersByTimeAsync(450);
+    expect(lines()).toEqual([null, null]);
+    expect(layer.hasAttribute('data-subline-caption')).toBe(true);
+  }
+  expect(sendMessage).not.toHaveBeenCalled();
+  source = { ...checking[0], mode: 'model' };
+  await vi.advanceTimersByTimeAsync(450);
+  expect(lines()).toEqual(['Live cue', '译文 Live cue']);
+});
+
 it('updates styles in place while a translation is pending and shows its original result', async () => {
   const settings = { ...DEFAULT_SETTINGS, apiKey: 'key', model: 'model' };
   let finish!: (value: { ok: boolean; data: string }) => void;

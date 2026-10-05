@@ -70,6 +70,7 @@ interface Options {
   retry?: boolean;
   draft?: boolean;
   unavailable?: number;
+  holdTimeline?: boolean;
 }
 
 export class Player {
@@ -82,12 +83,17 @@ export class Player {
   errors: string[] = [];
   failed: { url: string; error: string | null }[] = [];
   hold: boolean;
+  releaseTimeline = () => {};
+  private timeline: Promise<void>;
   constructor(
     readonly context: BrowserContext,
     readonly platform: Platform,
     readonly options: Options,
   ) {
     this.hold = options.hold ?? false;
+    this.timeline = options.holdTimeline
+      ? new Promise((resolve) => (this.releaseTimeline = resolve))
+      : Promise.resolve();
   }
   get origin() {
     return this.platform === 'youtube' ? 'https://www.youtube.com' : 'https://play.hbomax.com';
@@ -292,11 +298,13 @@ export class Player {
     );
     if (this.platform === 'hbo' && url.origin === this.origin && resource) {
       const [, id, file] = resource;
-      if (file === 'manifest.mpd')
+      if (file === 'manifest.mpd') {
+        await this.timeline;
         return route.fulfill({
           contentType: 'application/dash+xml',
           body: `<MPD type="static" mediaPresentationDuration="PT90S"><Period start="PT0S" duration="PT90S">${['en', 'en-asr', 'fr', 'zh-CN'].map((lang) => `<AdaptationSet contentType="text" lang="${lang === 'en-asr' ? 'en' : lang}"><Role value="${lang === 'en-asr' ? 'caption' : 'subtitle'}"/><Representation id="${lang}" mimeType="text/vtt"><BaseURL>${lang}.vtt</BaseURL></Representation></AdaptationSet>`).join('')}</Period></MPD>`,
         });
+      }
       const stamp = (seconds: number) =>
         `00:${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}.000`;
       const cues = this.cues(
