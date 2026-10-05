@@ -74,7 +74,7 @@ it('retries only an invalid split with the split flag intact, keeping ordinary n
   ]);
   expect(
     JSON.parse(JSON.parse(fetch.mock.calls[1][1].body as string).messages[1].content)[0],
-  ).toMatchObject({ id: 0, needsSplit: true });
+  ).toMatchObject({ id: 0, split: true });
   await expect(queue.lookup(settings, 'Before.')).resolves.toBe('之前。');
   requests[1].resolve(structuredReply([longResult()]));
   await expect(pending).resolves.toEqual([
@@ -90,7 +90,7 @@ it('stops after one corrective retry for a persistently invalid split and never 
   vi.stubGlobal('fetch', fetch);
   const queue = new TranslationQueue();
   await expect(queue.request('tab', settings, longCaption, true)).rejects.toThrow(
-    '字幕断句结果无效',
+    '模型返回的译文无效',
   );
   await vi.advanceTimersByTimeAsync(3000);
   expect(fetch).toHaveBeenCalledTimes(2);

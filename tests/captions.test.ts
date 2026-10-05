@@ -33,6 +33,11 @@ afterEach(() => {
   vi.unstubAllGlobals();
   document.body.innerHTML = '';
 });
+function originalNode() {
+  return document
+    .querySelector('[data-subline-overlay]')
+    ?.shadowRoot?.querySelector<HTMLElement>('.original');
+}
 function translationNode() {
   return document
     .querySelector('[data-subline-overlay]')
@@ -49,9 +54,10 @@ it('shows the current translation, ignores a late reply, clears a missing cue an
   expect(translationNode()?.textContent).toBe('翻译中');
   expect(translationNode()?.hidden).toBe(false);
   expect(
-    document.querySelector('[data-subline-overlay]')?.shadowRoot?.querySelector('.original')
-      ?.textContent,
-  ).toBe('First cue');
+    document
+      .querySelector('[data-subline-overlay]')
+      ?.shadowRoot?.querySelector<HTMLElement>('.original')?.hidden,
+  ).toBe(true);
   document.getElementById('cue')!.textContent = 'Second cue';
   await vi.advanceTimersByTimeAsync(450);
   replies[0]({ ok: true, data: '过时译文' });
@@ -400,10 +406,7 @@ it('cleans up when prefetch throws during teardown and ignores an in-flight tran
   vi.stubGlobal('chrome', { runtime: { id: 'extension-id', sendMessage } });
   controller = new CaptionController(createHboPlatform, settings());
   await vi.advanceTimersByTimeAsync(450);
-  expect(
-    document.querySelector('[data-subline-overlay]')?.shadowRoot?.querySelector('.original')
-      ?.textContent,
-  ).toBe('First cue');
+  expect(translationNode()?.textContent).toBe('翻译中');
   invalidated = true;
   controller.destroy();
   finish({ ok: true, data: '迟到的译文' });
@@ -414,7 +417,7 @@ it('cleans up when prefetch throws during teardown and ignores an in-flight tran
   expect(vi.getTimerCount()).toBe(0);
 });
 
-it('keeps the controller alive for recoverable messaging errors and retries the current caption', async () => {
+it('shows the original with the error, keeps the controller alive and retries the current caption', async () => {
   const sendMessage = vi
     .fn()
     .mockRejectedValueOnce(new Error('Receiving end does not exist.'))
@@ -423,9 +426,12 @@ it('keeps the controller alive for recoverable messaging errors and retries the 
   controller = new CaptionController(createHboPlatform, settings());
   await vi.advanceTimersByTimeAsync(450);
   expect(translationNode()?.textContent).toBe('Subline：Receiving end does not exist.');
+  expect(originalNode()?.hidden).toBe(false);
+  expect(originalNode()?.textContent).toBe('First cue');
   await vi.advanceTimersByTimeAsync(16000);
   expect(translationNode()?.textContent).toBe('恢复后的译文');
   expect(translationNode()?.hidden).toBe(false);
+  expect(originalNode()?.textContent).toBe('First cue');
 });
 
 it('finishes an in-flight translation while paused and does not start another until playback resumes', async () => {

@@ -23,16 +23,25 @@ const errorsShown = async (p: Player) =>
 for (const platform of ['youtube', 'hbo'] as const) {
   test(`${platform}: packaged extension translates a source track through its worker`, async ({}, info) => {
     await withPlayer(platform, info, async (p) => {
-      await expect(p.original, 'Source timeline must reach the overlay').toHaveText(source);
+      await expect
+        .poll(() => p.downloads.length, 'Source timeline must be downloaded')
+        .toBe(platform === 'youtube' ? 1 : 2);
+      await expect(p.original, 'Paused uncached captions stay hidden').toBeHidden();
       await p.play();
       await p.pair(source, translation);
+      const shown = (await p.frames()).filter((f) => f.original);
+      expect(shown.length).toBeGreaterThan(0);
+      expect(
+        shown.filter((f) => !f.translation || f.translation === '翻译中'),
+        'The source never appears before its translation',
+      ).toEqual([]);
       expect(p.downloads).toHaveLength(platform === 'youtube' ? 1 : 2);
       expect(p.posts).toHaveLength(1);
       expect(p.posts[0].body).toMatchObject({ model: 'e2e-fixed-model', stream: false });
       expect(p.posts[0].inputs).toEqual([
-        { id: 0, text: source, needsSplit: false },
-        { id: 1, text: nextSource, needsSplit: false },
-        { id: 2, text: 'The garden is quiet.', needsSplit: false },
+        { id: 0, text: source },
+        { id: 1, text: nextSource },
+        { id: 2, text: 'The garden is quiet.' },
       ]);
     });
   });
@@ -45,7 +54,7 @@ for (const platform of ['youtube', 'hbo'] as const) {
         await p.seek(40);
         await p.play();
         await expect.poll(() => p.posts.length).toBe(1);
-        expect(p.posts[0].inputs).toMatchObject([{ id: 0, text: longCaption, needsSplit: true }]);
+        expect(p.posts[0].inputs).toMatchObject([{ id: 0, text: longCaption, split: true }]);
         await p.pause();
         const host = await p.overlay.elementHandle();
         const downloads = p.downloads.length;
@@ -111,9 +120,9 @@ for (const platform of ['youtube', 'hbo'] as const) {
         await p.play();
         await expect.poll(() => p.posts.length).toBe(1);
         await p.page.evaluate(() => window.fixture.switchVideo('second'));
-        await expect(p.original).toHaveText(nextSource);
         await expect.poll(() => p.posts.length).toBe(2);
         expect(p.posts[1].inputs.map((i) => i.text)).toEqual([nextSource]);
+        await expect(p.original).toBeHidden();
         await p.release(1);
         await p.pair(nextSource, nextTranslation);
         await p.release(0);
@@ -159,11 +168,14 @@ for (const platform of ['youtube', 'hbo'] as const) {
 
   test(`${platform}: paused uncached content waits for resume`, async ({}, info) => {
     await withPlayer(platform, info, async (p) => {
-      await expect(p.original).toHaveText(source);
+      await expect.poll(() => p.downloads.length).toBeGreaterThan(0);
+      const downloads = p.downloads.length;
       expect(p.posts).toHaveLength(0);
       await p.page.evaluate(() => window.fixture.switchVideo('second'));
-      await expect(p.original).toHaveText(nextSource);
+      await expect.poll(() => p.downloads.length).toBeGreaterThan(downloads);
       await p.page.waitForTimeout(1500);
+      await expect(p.original).toBeHidden();
+      await expect(p.translated).toBeHidden();
       expect(p.posts).toHaveLength(0);
       await p.play();
       await p.pair(nextSource, nextTranslation);
@@ -301,10 +313,13 @@ for (const platform of ['youtube', 'hbo'] as const) {
       platform,
       info,
       async (p) => {
+        await expect.poll(() => p.downloads.length).toBeGreaterThan(0);
+        const downloads = p.downloads.length;
         await p.page.evaluate(() => window.fixture.switchVideo('second'));
-        await expect(p.original).toHaveText(nextSource);
+        await expect.poll(() => p.downloads.length).toBeGreaterThan(downloads);
         await p.play();
         await expect(p.translated).toHaveText('Subline：接口返回 HTTP 503，请稍后重试。');
+        await expect(p.original, 'A failed caption shows its source').toHaveText(nextSource);
         const failedAt = Date.now();
         expect(p.posts.map((post) => post.status)).toEqual([503]);
         await expect(p.translated).toHaveText(nextTranslation, { timeout: 25_000 });

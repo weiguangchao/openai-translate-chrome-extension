@@ -1,56 +1,21 @@
 import { expect, it } from 'vitest';
 import {
-  splitSubtitleAtCommas,
+  needsSubtitleSegmentation,
   subtitleDisplayLength,
   subtitleDisplayLimit,
 } from '../src/shared/subtitle-segmentation';
-import { githubCaption, githubCommaParts } from './fixtures/github-caption';
+import { githubCaption } from './fixtures/github-caption';
 
-it('packs comma-separated clauses into as few parts as the display limit allows', () => {
-  const clause = 'a'.repeat(Math.floor((subtitleDisplayLimit - 3) / 2));
-  const text = `${clause}, ${clause}, ${clause}`;
-  expect(splitSubtitleAtCommas(text).map((part) => text.slice(part.from, part.to))).toEqual([
-    `${clause}, ${clause},`,
-    clause,
-  ]);
-  expect(subtitleDisplayLength(`${clause}, ${clause},`)).toBeLessThanOrEqual(subtitleDisplayLimit);
-  expect(subtitleDisplayLength(text)).toBeGreaterThan(subtitleDisplayLimit);
+it('counts CJK characters and full-width punctuation as two columns and combining marks as none', () => {
+  expect(subtitleDisplayLength('Hello, world.')).toBe(13);
+  expect(subtitleDisplayLength('你好，世界')).toBe(10);
+  expect(subtitleDisplayLength('cafe\u0301')).toBe(4);
 });
 
-it('cuts a long sentence once when one comma leaves both sides on screen', () => {
-  const text =
-    "I didn't realize how bad things were because I, like most people, thought a bicycle was probably a good idea, but just didn't bother.";
-  expect(splitSubtitleAtCommas(text).map((part) => text.slice(part.from, part.to))).toEqual([
-    "I didn't realize how bad things were because I, like most people,",
-    "thought a bicycle was probably a good idea, but just didn't bother.",
-  ]);
-  for (const part of splitSubtitleAtCommas(text))
-    expect(subtitleDisplayLength(text.slice(part.from, part.to))).toBeLessThanOrEqual(
-      subtitleDisplayLimit,
-    );
-});
-
-it('does not split a caption that already fits', () => {
-  const text = 'Hello, world, again.';
-  expect(splitSubtitleAtCommas(text)).toEqual([{ from: 0, to: text.length }]);
-});
-
-it('splits on a Chinese comma and keeps an overlong clause without one intact', () => {
-  const head = '甲'.repeat(40);
-  const tail = '乙'.repeat(20);
-  const chinese = `${head}，${tail}`;
-  expect(splitSubtitleAtCommas(chinese).map((part) => chinese.slice(part.from, part.to))).toEqual([
-    `${head}，`,
-    tail,
-  ]);
-  const unbroken = `${'a'.repeat(120)}, tail`;
-  expect(splitSubtitleAtCommas(unbroken).map((part) => unbroken.slice(part.from, part.to))).toEqual(
-    [`${'a'.repeat(120)},`, 'tail'],
-  );
-});
-
-it('splits the sample caption only at the comma that keeps the first clause on screen', () => {
-  expect(
-    splitSubtitleAtCommas(githubCaption).map((part) => githubCaption.slice(part.from, part.to)),
-  ).toEqual(githubCommaParts);
+it('flags only captions wider than the display limit for a Provider split', () => {
+  expect(needsSubtitleSegmentation('a'.repeat(subtitleDisplayLimit))).toBe(false);
+  expect(needsSubtitleSegmentation('a'.repeat(subtitleDisplayLimit + 1))).toBe(true);
+  expect(needsSubtitleSegmentation('甲'.repeat(subtitleDisplayLimit / 2))).toBe(false);
+  expect(needsSubtitleSegmentation('甲'.repeat(subtitleDisplayLimit / 2 + 1))).toBe(true);
+  expect(needsSubtitleSegmentation(githubCaption)).toBe(true);
 });

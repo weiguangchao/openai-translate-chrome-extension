@@ -202,7 +202,7 @@ it('retries a paused cache lookup invalidated by a later seek event', async () =
   expect(replies).toHaveLength(2);
   replies[0]({ ok: true, data: '旧查询' });
   await vi.advanceTimersByTimeAsync(0);
-  expect(lines()).toEqual(['Cached source.', null]);
+  expect(lines()).toEqual([null, null]);
   replies[1]({ ok: true, data: '缓存译文' });
   await vi.advanceTimersByTimeAsync(450);
   expect(lines()).toEqual(['Cached source.', '缓存译文']);
