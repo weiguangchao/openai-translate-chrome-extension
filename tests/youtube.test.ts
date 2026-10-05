@@ -1,3 +1,4 @@
+import type { PrefetchItem } from '../src/shared/caption-translation';
 import { afterEach, expect, it, vi } from 'vitest';
 import { CaptionController } from '../src/core/controller';
 import { createYoutubePlatform } from '../src/platforms/youtube/platform';
@@ -55,10 +56,9 @@ function setup() {
     (message: {
       type: string;
       text?: string;
-      texts?: string[];
-      segments?: number[];
+      items?: readonly PrefetchItem[];
       cacheOnly?: boolean;
-      needsSplit?: boolean | boolean[];
+      needsSplit?: boolean;
     }): Promise<{ ok: boolean; data?: CaptionTranslation | null }> =>
       Promise.resolve(
         message.type === 'translate' ? { ok: true, data: `译文：${message.text}` } : { ok: true },
@@ -128,14 +128,7 @@ it('prefetches the comma parts of a long subtitle in one request and shows each 
           ? queue.lookup(saved, message.text!, message.needsSplit === true)
           : queue.request('video', saved, message.text!, message.needsSplit === true)),
       };
-    if (message.type === 'prefetch')
-      queue.prefetch(
-        'video',
-        saved,
-        message.texts!,
-        message.segments,
-        message.needsSplit as boolean[],
-      );
+    if (message.type === 'prefetch') queue.prefetch('video', saved, message.items!);
     return { ok: true };
   });
   await import('../src/platforms/youtube/page');
@@ -235,8 +228,10 @@ it('translates and displays complete ASR sentences across rolling events', async
   await vi.advanceTimersByTimeAsync(0);
   expect(sendMessage).toHaveBeenCalledWith({
     type: 'prefetch',
-    texts: ['This field behind me will become a city.', 'Let’s build it.'],
-    segments: [0, 0],
+    items: [
+      { text: 'This field behind me will become a city.', segment: 0, needsSplit: false },
+      { text: 'Let’s build it.', segment: 0, needsSplit: false },
+    ],
   });
   await playTo(video, 1.2);
   expect([...lines()].map((line) => line.textContent)).toEqual([
@@ -316,8 +311,10 @@ it('loads the selected YouTube track before playback, aligns rolling captions, a
   await vi.advanceTimersByTimeAsync(16000);
   expect(sendMessage).toHaveBeenCalledWith({
     type: 'prefetch',
-    texts: ['First phrase.', 'Second phrase.'],
-    segments: [0, 0],
+    items: [
+      { text: 'First phrase.', segment: 0, needsSplit: false },
+      { text: 'Second phrase.', segment: 0, needsSplit: false },
+    ],
   });
   expect(lines()[1].hidden).toBe(true);
   await playTo(video, 4);
@@ -500,8 +497,10 @@ it('translates authored English sentences even when authored, automatic and brow
   ]);
   expect(sendMessage).toHaveBeenCalledWith({
     type: 'prefetch',
-    texts: ['This field behind me will become a city.', 'Go.'],
-    segments: [0, 0],
+    items: [
+      { text: 'This field behind me will become a city.', segment: 0, needsSplit: false },
+      { text: 'Go.', segment: 0, needsSplit: false },
+    ],
   });
   expect(fetch.mock.calls.map(([url]) => new URL(url).searchParams.get('track'))).toEqual(['.en']);
   expect(targetTrack.mode).toBe('showing');
@@ -777,8 +776,7 @@ it('sends complete English sentences to the Provider and displays its translatio
           ? queue.lookup(saved, message.text!)
           : queue.request('video', saved, message.text!)),
       };
-    if (message.type === 'prefetch')
-      queue.prefetch('video', saved, (message as unknown as { texts: string[] }).texts);
+    if (message.type === 'prefetch') queue.prefetch('video', saved, message.items!);
     return { ok: true };
   });
   await import('../src/platforms/youtube/page');

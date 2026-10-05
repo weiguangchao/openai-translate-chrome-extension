@@ -102,7 +102,7 @@ it('retains valid neighbors while an incomplete split and unknown id remain unus
   expect(delivered.mock.calls).toEqual([[0, '之前。']]);
 });
 
-it('does not overwrite an already published result with a duplicate id', async () => {
+it('rejects conflicting results with a duplicate id before publishing', async () => {
   vi.stubGlobal(
     'fetch',
     vi
@@ -114,6 +114,6 @@ it('does not overwrite an already published result with a duplicate id', async (
   const delivered = vi.fn();
   await expect(
     translateCaptionBatch(settings, [translationInput(longCaption, true)], undefined, delivered),
-  ).resolves.toEqual([readCaptionTranslation(translationInput(longCaption, true), longResult())]);
-  expect(delivered).toHaveBeenCalledTimes(1);
+  ).resolves.toBeNull();
+  expect(delivered).not.toHaveBeenCalled();
 });

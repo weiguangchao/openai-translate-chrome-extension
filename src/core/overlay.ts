@@ -44,20 +44,27 @@ export class SubtitleOverlay {
     this.original.className = 'line original';
     this.translation = document.createElement('div');
     this.translation.className = 'line translation';
+    for (const node of [this.original, this.translation]) {
+      node.setAttribute('dir', 'auto');
+      node.hidden = true;
+    }
+    this.updateStyle(settings);
+    stack.append(this.original, this.translation);
+    shadow.append(css, stack);
+    player.append(this.host);
+  }
+
+  updateStyle(settings: PublicSettings): void {
     for (const [node, style] of [
       [this.original, settings.original],
       [this.translation, settings.translation],
     ] as const) {
-      node.setAttribute('dir', 'auto');
+      if (!node) continue;
       node.style.color = style.color;
       node.style.fontSize = `${style.size}px`;
       node.style.backgroundColor = `rgba(0,0,0,${settings.backgroundOpacity / 100})`;
-      node.hidden = true;
     }
-    this.translation.style.marginTop = `${settings.subtitleGap}px`;
-    stack.append(this.original, this.translation);
-    shadow.append(css, stack);
-    player.append(this.host);
+    if (this.translation) this.translation.style.marginTop = `${settings.subtitleGap}px`;
   }
 
   unmount(): void {

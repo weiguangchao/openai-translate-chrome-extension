@@ -1,3 +1,13 @@
+import type { PrefetchItem } from '../../src/shared/caption-translation';
+
+export function prefetchItems(
+  texts: readonly string[],
+  segment = 0,
+  needsSplit = false,
+): PrefetchItem[] {
+  return texts.map((text) => ({ text, segment, needsSplit }));
+}
+
 export function requestedTexts(init: RequestInit): string[] {
   const { messages } = JSON.parse(init.body as string) as {
     messages: { role: string; content: string }[];

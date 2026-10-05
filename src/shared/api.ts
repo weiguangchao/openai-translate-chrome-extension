@@ -1,3 +1,4 @@
+import { providerFetch, type ProviderSendPolicy } from './provider/transport';
 import { translationBatchLimit } from './limits';
 import { englishLanguageName, validateBaseUrl, validateSettings, type Settings } from './settings';
 import { addTokenUsage, readProviderUsage } from './token-usage';
@@ -31,32 +32,32 @@ function timeoutError(): Error {
 function invalidJson(): Error {
   return new Error('接口没有返回有效的 JSON，请检查 Base URL 是否为 API 地址。');
 }
-function withDeadline(signal?: AbortSignal): AbortSignal {
-  return signal
-    ? AbortSignal.any([signal, AbortSignal.timeout(60000)])
-    : AbortSignal.timeout(60000);
-}
 async function fetchApi(
   settings: Settings,
   path: string,
   body: unknown,
-  signal: AbortSignal,
-): Promise<Response> {
+  signal?: AbortSignal,
+  policy?: ProviderSendPolicy,
+): Promise<{ response: Response; signal: AbortSignal }> {
   if (!settings.apiKey.trim()) throw new Error('请先填写 API Key。');
-  let response: Response;
+  let result: { response: Response; signal: AbortSignal };
   try {
-    response = await fetch(endpoint(settings, path), {
-      method: body ? 'POST' : 'GET',
-      headers: {
-        Authorization: `Bearer ${settings.apiKey.trim()}`,
-        ...(body ? { 'Content-Type': 'application/json' } : {}),
+    result = await providerFetch(
+      endpoint(settings, path),
+      {
+        method: body ? 'POST' : 'GET',
+        headers: {
+          Authorization: `Bearer ${settings.apiKey.trim()}`,
+          ...(body ? { 'Content-Type': 'application/json' } : {}),
+        },
+        body: body ? JSON.stringify(body) : undefined,
+        credentials: 'omit',
+        redirect: 'error',
+        cache: 'no-store',
       },
-      body: body ? JSON.stringify(body) : undefined,
       signal,
-      credentials: 'omit',
-      redirect: 'error',
-      cache: 'no-store',
-    });
+      policy,
+    );
   } catch (error) {
     if (error instanceof Error && ['TimeoutError', 'AbortError'].includes(error.name))
       throw timeoutError();
@@ -64,6 +65,7 @@ async function fetchApi(
       '无法连接接口。请检查 Base URL、网络和网站访问权限；浏览器预览还需要接口允许 CORS。',
     );
   }
+  const { response } = result;
   if (!response.ok) {
     const errors: Record<number, string> = {
       401: 'API Key 无效或已过期。',
@@ -76,7 +78,7 @@ async function fetchApi(
       response.status,
     );
   }
-  return response;
+  return result;
 }
 async function request(
   settings: Settings,
@@ -84,7 +86,7 @@ async function request(
   body?: unknown,
   signal?: AbortSignal,
 ): Promise<unknown> {
-  const response = await fetchApi(settings, path, body, withDeadline(signal));
+  const { response } = await fetchApi(settings, path, body, signal);
   try {
     return await response.json();
   } catch {
@@ -195,8 +197,8 @@ async function complete(
   input: string,
   maxTokens: number,
   signal: AbortSignal | undefined,
-  onText?: (text: string) => void,
   caption = false,
+  policy?: ProviderSendPolicy,
 ): Promise<string> {
   validateSettings(settings, true);
   const instructions = translatorInstructions(settings, task);
@@ -207,8 +209,8 @@ async function complete(
         settings,
         completionBody(settings, instructions, input, maxTokens, probe),
         signal,
-        onText,
         caption,
+        policy,
       );
       rememberRejection(settings, probe.dropped);
       if (!text.trim()) throw new Error('模型未返回译文，请确认该模型支持 /chat/completions。');
@@ -225,12 +227,17 @@ async function postModel(
   settings: Settings,
   body: object,
   signal: AbortSignal | undefined,
-  onText?: (text: string) => void,
   caption = false,
+  policy?: ProviderSendPolicy,
 ): Promise<string> {
-  const deadline = withDeadline(signal);
-  const response = await fetchApi(settings, '/chat/completions', body, deadline);
-  return readModelText(response, deadline, onText, caption);
+  const { response, signal: deadline } = await fetchApi(
+    settings,
+    '/chat/completions',
+    body,
+    signal,
+    policy,
+  );
+  return readModelText(response, deadline, caption);
 }
 
 export async function translate(
@@ -250,27 +257,14 @@ export async function translate(
 
 export async function translateCaptionBatch(
   settings: Settings,
-  inputs: TranslationInput[],
+  inputs: readonly TranslationInput[],
   signal?: AbortSignal,
   onTranslation?: (index: number, translation: CaptionTranslation) => void,
+  policy?: ProviderSendPolicy,
 ): Promise<CaptionTranslation[] | null> {
   inputs.forEach((input) => checkText(input.text));
   if (!inputs.length || inputs.length > translationBatchLimit)
     throw new Error('单次翻译的字幕过多。');
-  const accepted = new Map<number, CaptionTranslation>();
-  const submit = (values: unknown[]) => {
-    const seen = new Set<number>();
-    for (const value of alignResultIds(values, inputs.length)) {
-      const id = resultId(value);
-      if (id === null || id < 0 || id >= inputs.length || seen.has(id)) continue;
-      seen.add(id);
-      if (accepted.has(id)) continue;
-      const translation = readCaptionTranslation(inputs[id], normalizeResult(value));
-      if (translation === null) continue;
-      accepted.set(id, translation);
-      onTranslation?.(id, translation);
-    }
-  };
   const response = await complete(
     settings,
     `The input is an array of ordered captions from one passage. Use neighbors only as context; never move content between captions. Return only JSON {"results":[{"id":0,"parts":[{"translation":"..."}]}]} with one result per input id, in input order.
@@ -279,7 +273,8 @@ needsSplit=true: split AND translate using the caption's units ([index, source t
     JSON.stringify(
       inputs.map((input, id) => ({
         id,
-        ...input,
+        text: input.text,
+        needsSplit: input.needsSplit,
         ...(input.needsSplit
           ? {
               units: subtitleUnits(input.text).map((unit, index) => [
@@ -292,30 +287,56 @@ needsSplit=true: split AND translate using the caption's units ([index, source t
     ),
     65536,
     signal,
-    (text) => submit(scanTranslationResults(text)),
     true,
+    policy,
   );
+  signal?.throwIfAborted();
+  let values: unknown[];
   try {
-    submit(translationPayloads(parseModelJson(response)));
+    values = translationPayloads(parseModelJson(response));
   } catch {
-    return accepted.size === inputs.length ? inputs.map((_, index) => accepted.get(index)!) : null;
+    values = scanTranslationResults(response);
+  }
+  const aligned = alignResultIds(values, inputs.length);
+  const ids = aligned.map(resultId);
+  const accepted = new Map<number, CaptionTranslation>();
+  for (const value of aligned) {
+    signal?.throwIfAborted();
+    const id = resultId(value);
+    if (
+      id === null ||
+      id < 0 ||
+      id >= inputs.length ||
+      ids.filter((other) => other === id).length !== 1
+    )
+      continue;
+    const translation = readCaptionTranslation(inputs[id], normalizeResult(value));
+    if (translation === null) continue;
+    accepted.set(id, translation);
+    onTranslation?.(id, translation);
   }
   return accepted.size === inputs.length ? inputs.map((_, index) => accepted.get(index)!) : null;
 }
 
 function resultId(value: unknown): number | null {
   const id = (value as { id?: unknown } | null)?.id;
-  if (typeof id === 'number' && Number.isSafeInteger(id)) return id;
-  if (typeof id === 'string' && /^(0|[1-9]\d*)$/.test(id.trim())) return Number(id.trim());
-  return null;
+  const numeric =
+    typeof id === 'string' && /^(0|[1-9]\d*)$/.test(id.trim()) ? Number(id.trim()) : id;
+  return typeof numeric === 'number' && Number.isSafeInteger(numeric) ? numeric : null;
 }
 
 function alignResultIds(values: unknown[], count: number): unknown[] {
   const ids = values.map(resultId);
-  const missing = values.length === 1 && count === 1 && ids[0] === null;
-  if (missing && values[0] && typeof values[0] === 'object') return [{ ...values[0], id: 0 }];
-  if (ids.includes(0) || ids.length !== count || ids.some((id) => id === null)) return values;
-  if (!ids.every((id, index) => id === index + 1)) return values;
+  const only = values[0];
+  if (values.length === 1 && count === 1 && only && typeof only === 'object' && !('id' in only))
+    return [{ ...only, id: 0 }];
+  if (ids.includes(0)) return values;
+  if (
+    ids.length !== count ||
+    new Set(ids).size !== count ||
+    !ids.every((id) => id !== null && id >= 1 && id <= count)
+  )
+    return [];
   return values.map((value) =>
     value && typeof value === 'object' ? { ...value, id: resultId(value)! - 1 } : value,
   );
@@ -359,18 +380,12 @@ function translationPayloads(value: unknown): unknown[] {
 async function readModelText(
   response: Response,
   signal: AbortSignal,
-  onText?: (text: string) => void,
   caption = false,
 ): Promise<string> {
   const payload = parseModelPayload(await readBody(response, signal));
   const text = choiceText(payload, caption) ?? '';
   const usage = readProviderUsage(payload);
-  const saved = usage ? addTokenUsage(usage) : Promise.resolve();
-  try {
-    if (text) onText?.(text);
-  } finally {
-    await saved;
-  }
+  if (usage) await addTokenUsage(usage);
   return text;
 }
 

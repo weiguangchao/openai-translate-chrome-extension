@@ -1,4 +1,4 @@
-import type { PublicSettings } from '../shared/settings';
+import { classifySettingsChange, type PublicSettings } from '../shared/settings';
 import type { SourceMode } from './bridge/protocol';
 import { ExtensionConnection } from './connection';
 import { visible } from './dom';
@@ -86,8 +86,10 @@ export class CaptionController {
 
   update(settings: PublicSettings): void {
     if (this.destroyed) return;
+    const change = classifySettingsChange(this.settings, settings);
     this.settings = settings;
-    this.unmount();
+    if (change.source || change.translation) this.unmount();
+    else if (change.style) this.overlay.updateStyle(settings);
     this.tick();
   }
 
@@ -190,13 +192,10 @@ export class CaptionController {
     const usesModel = source.mode === 'model';
     const caption = currentCaption(source, current?.current ?? '');
     this.translator.notePlayback(video.paused);
-    const texts = usesModel && !video.paused ? (upcoming?.texts ?? []) : [];
+    const items = usesModel && !video.paused ? (upcoming?.items ?? []) : [];
     if (!video.paused)
       this.translator.prefetch(
-        this.gate.settling ? [] : this.gate.previewing ? texts.slice(0, SEEK_PREVIEW_CUES) : texts,
-        false,
-        upcoming?.segments,
-        upcoming?.needsSplit,
+        this.gate.settling ? [] : this.gate.previewing ? items.slice(0, SEEK_PREVIEW_CUES) : items,
       );
     this.overlay.hide(caption.layers);
     video.classList.toggle('subline-native', caption.nativeTrack);
@@ -212,9 +211,7 @@ export class CaptionController {
       return;
     }
     this.translator.show({
-      text: caption.text,
-      needsSplit: cue?.needsSplit === true,
-      cue,
+      ...(cue?.needsSplit ? { kind: 'split', cue } : { kind: 'ordinary', text: caption.text }),
       time,
       cacheOnly:
         video.paused ||

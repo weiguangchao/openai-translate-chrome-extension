@@ -1,9 +1,12 @@
 import { translateCaptionBatch, translationBatchLimit } from '../shared/api';
-import { translationInput, type CaptionTranslation } from '../shared/caption-translation';
+import {
+  translationInput,
+  type CaptionTranslation,
+  type PrefetchItem,
+} from '../shared/caption-translation';
 import type { Settings } from '../shared/settings';
 
-const sendWindowMs = 1000;
-export const translationSendsPerSecond = 3;
+import { wakeProviderRequests } from '../shared/provider/transport';
 export const translationCacheLimit = 5000;
 
 interface Job {
@@ -19,6 +22,7 @@ interface Job {
   reject: (error: Error) => void;
   controller?: AbortController;
   batch?: Job[];
+  sent?: boolean;
 }
 interface Consumer {
   current?: string;
@@ -26,9 +30,7 @@ interface Consumer {
   paused?: boolean;
   held?: {
     settings: Settings;
-    texts: string[];
-    segments: number[];
-    needsSplit: boolean[];
+    items: readonly PrefetchItem[];
     keys: string[];
   };
 }
@@ -38,7 +40,6 @@ export class TranslationQueue {
   private finished = new Map<string, CaptionTranslation>();
   private consumers = new Map<string, Consumer>();
   private backoffUntil = 0;
-  private sentAt: number[] = [];
   private sendTimer: ReturnType<typeof setTimeout> | undefined;
   private promoting = false;
 
@@ -94,11 +95,9 @@ export class TranslationQueue {
   prefetch(
     consumer: string,
     settings: Settings,
-    texts: string[],
-    segments: number[] = [],
-    needsSplit: boolean[] = [],
+    items: readonly PrefetchItem[],
   ): Promise<(CaptionTranslation | null)[]> {
-    const keys = texts.map((text, index) => this.key(settings, text, needsSplit[index]));
+    const keys = items.map((item) => this.key(settings, item.text, item.needsSplit));
     const state = this.consumers.get(consumer);
     if (
       keys.length &&
@@ -106,7 +105,7 @@ export class TranslationQueue {
       this.windowAwaitingReply(state) &&
       !keys.some((key) => state.window.includes(key))
     ) {
-      state.held = { settings, texts, segments, needsSplit, keys };
+      state.held = { settings, items, keys };
       return this.results(keys);
     }
     if (state) state.held = undefined;
@@ -120,18 +119,24 @@ export class TranslationQueue {
     else this.consumers.delete(consumer);
     this.prune(true);
     if (Date.now() >= this.backoffUntil)
-      texts.forEach((text, index) => {
+      items.forEach((item, index) => {
         if (!this.finished.has(keys[index]))
           this.enqueue(
             keys[index],
             settings,
-            text,
-            needsSplit[index],
-            JSON.stringify([consumer, segments[index] ?? 0]),
+            item.text,
+            item.needsSplit,
+            JSON.stringify([consumer, item.segment]),
           );
       });
     this.drain();
     return this.results(keys);
+  }
+
+  release(consumers: readonly string[]): void {
+    for (const consumer of consumers) this.consumers.delete(consumer);
+    this.prune(true);
+    this.drain();
   }
 
   pause(consumer: string): void {
@@ -152,7 +157,6 @@ export class TranslationQueue {
     this.consumers.clear();
     this.prune(true);
     this.backoffUntil = 0;
-    this.sentAt = [];
     clearTimeout(this.sendTimer);
     this.sendTimer = undefined;
   }
@@ -215,7 +219,7 @@ export class TranslationQueue {
       ),
     );
     for (const [key, job] of this.jobs) {
-      if (wanted.has(key) || (job.controller && !abortUnused)) continue;
+      if (wanted.has(key) || (job.sent && !abortUnused)) continue;
       this.jobs.delete(key);
       job.reject(new Error('字幕已更新。'));
       if (!job.batch?.some((other) => this.jobs.get(other.key) === other)) job.controller?.abort();
@@ -225,7 +229,9 @@ export class TranslationQueue {
   private windowAwaitingReply(state: Consumer): boolean {
     return state.window.some((key) => {
       const job = this.jobs.get(key);
-      return Boolean(job && (job.solo || (job.controller && !job.controller.signal.aborted)));
+      return Boolean(
+        job && (job.solo || (job.sent && job.controller && !job.controller.signal.aborted)),
+      );
     });
   }
 
@@ -245,7 +251,7 @@ export class TranslationQueue {
         if (!state.held || this.windowAwaitingReply(state)) continue;
         const held = state.held;
         state.held = undefined;
-        void this.prefetch(consumer, held.settings, held.texts, held.segments, held.needsSplit);
+        void this.prefetch(consumer, held.settings, held.items);
       }
     } finally {
       this.promoting = false;
@@ -264,7 +270,7 @@ export class TranslationQueue {
       return job && !job.controller && !this.parked(key) ? [job] : [];
     });
     const now = Date.now();
-    while (waiting.length && this.delayUntilSend(now) === 0) {
+    while (waiting.length && now >= this.backoffUntil) {
       const [first] = waiting;
       const batch = first.solo
         ? [first]
@@ -274,33 +280,23 @@ export class TranslationQueue {
             )
             .slice(0, translationBatchLimit);
       for (const job of batch) waiting.splice(waiting.indexOf(job), 1);
-      this.sentAt.push(now);
       this.run(batch);
     }
     const heldReady = [...this.consumers.values()].some(
       (state) => state.held && !this.windowAwaitingReply(state),
     );
-    this.scheduleSend(now, waiting.length > 0 || heldReady);
-  }
-
-  private recentSends(now: number): number[] {
-    const recent = this.sentAt.filter((time) => now - time < sendWindowMs);
-    this.sentAt = recent;
-    return recent;
-  }
-
-  private delayUntilSend(now: number): number {
-    const recent = this.recentSends(now);
-    const windowDelay =
-      recent.length < translationSendsPerSecond ? 0 : sendWindowMs - (now - recent[0]);
-    return Math.max(windowDelay, this.backoffUntil - now, 0);
+    this.scheduleSend(
+      now,
+      waiting.length > 0 || heldReady || [...this.jobs.values()].some((job) => !job.sent),
+    );
+    wakeProviderRequests();
   }
 
   private scheduleSend(now: number, waiting: boolean): void {
     clearTimeout(this.sendTimer);
     this.sendTimer = undefined;
     if (!waiting) return;
-    const delay = this.delayUntilSend(now);
+    const delay = Math.max(0, this.backoffUntil - now);
     if (delay === 0) return;
     this.sendTimer = setTimeout(() => {
       this.sendTimer = undefined;
@@ -327,6 +323,37 @@ export class TranslationQueue {
       batch.map((job) => translationInput(job.text, job.needsSplit)),
       controller.signal,
       deliver,
+      {
+        canSend: () => {
+          if (batch.some((job) => job.sent)) return true;
+          if (Date.now() < this.backoffUntil) return false;
+          const wanted = [...this.consumers.values()].some(
+            (state) =>
+              !state.paused &&
+              batch.some((job) => state.current === job.key || state.window.includes(job.key)),
+          );
+          if (wanted)
+            batch.forEach((job) => {
+              job.sent = true;
+            });
+          return wanted;
+        },
+        priority: () => {
+          const consumers = [...this.consumers.values()].filter((state) => !state.paused);
+          if (consumers.some((state) => batch.some((job) => job.key === state.current))) return 0;
+          return (
+            1 +
+            Math.min(
+              ...consumers.flatMap((state) =>
+                batch.map((job) => {
+                  const index = state.window.indexOf(job.key);
+                  return index < 0 ? Infinity : index;
+                }),
+              ),
+            )
+          );
+        },
+      },
     );
     void work.then(
       (results) => {
@@ -339,7 +366,12 @@ export class TranslationQueue {
               job.reject(new Error('字幕断句结果无效，请稍后重试。'));
               continue;
             }
-            Object.assign(job, { controller: undefined, batch: undefined, solo: true });
+            Object.assign(job, {
+              controller: undefined,
+              batch: undefined,
+              sent: false,
+              solo: true,
+            });
           }
           this.drain();
           return;

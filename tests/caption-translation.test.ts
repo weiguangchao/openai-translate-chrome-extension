@@ -1,6 +1,7 @@
 import { expect, it } from 'vitest';
 import {
   readCaptionTranslation,
+  readStoredTranslation,
   subtitleUnits,
   translationInput,
 } from '../src/shared/caption-translation';
@@ -144,7 +145,13 @@ it('marks only residual long captions after local comma splitting and excludes o
     false,
     false,
   ]);
-  expect(captionWindow(captions, 0).needsSplit).toEqual([false, true, false, false, false]);
+  expect(captionWindow(captions, 0).items.map((item) => item.needsSplit)).toEqual([
+    false,
+    true,
+    false,
+    false,
+    false,
+  ]);
 });
 
 it('uses retained word timings after local splitting and estimates untimed boundaries', () => {
@@ -187,4 +194,46 @@ it('preserves display parts when invalid word timings require proportional timin
   expect(
     captions.every((caption) => caption.text !== text && caption.endTime > caption.startTime),
   ).toBe(true);
+});
+
+it('keeps segments based on input captions when one provider result has more than ten display parts', () => {
+  const source = Array.from({ length: 12 }, (_, index) => `longword${index}`).join(' ');
+  const captions = timedCaptions([
+    { text: source, startTime: 0, endTime: 12 },
+    ...Array.from({ length: 9 }, (_, index) => ({
+      text: `Next ${index}.`,
+      startTime: 12 + index,
+      endTime: 13 + index,
+    })),
+  ]);
+  const result = readCaptionTranslation(translationInput(source, true), {
+    parts: Array.from({ length: 12 }, (_, index) => ({
+      endExclusive: index + 1,
+      translation: `词${index}`,
+    })),
+  });
+  if (!result || typeof result === 'string') throw new Error('Expected split result');
+  const display = translatedCaptions(captions[0], result.parts);
+  expect(display).toHaveLength(12);
+  expect(display.every((part) => part.kind === 'display')).toBe(true);
+  expect(captionWindow(captions, 0).items).toHaveLength(10);
+  expect(captions.map((caption) => caption.segment)).toEqual(Array(10).fill(0));
+});
+
+it('revalidates serialized translations before constructing display captions', () => {
+  const valid = readCaptionTranslation(input, { parts });
+  expect(readStoredTranslation(input, JSON.parse(JSON.stringify(valid)))).toEqual(valid);
+  if (!valid || typeof valid === 'string') throw new Error('Expected split result');
+  const first = valid.parts[0];
+  const second = valid.parts[1];
+  for (const invalid of [
+    'Whole translation without split spans',
+    { parts: [first] },
+    { parts: [{ ...first, from: first.from + 1 }, second] },
+    { parts: [first, { ...second, from: first.to - 1 }] },
+    { parts: [first, { ...second, translation: '字'.repeat(200) }] },
+  ])
+    expect(readStoredTranslation(input, invalid)).toBeNull();
+  expect(readStoredTranslation(translationInput('Short.', false), ' 短句 ')).toBe('短句');
+  expect(readStoredTranslation(translationInput('Short.', false), valid)).toBeNull();
 });

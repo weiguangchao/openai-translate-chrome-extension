@@ -1,3 +1,4 @@
+import type { PrefetchItem } from './caption-translation';
 import { prefetchWindowLimit } from './limits';
 import type { PublicSettings } from './settings';
 
@@ -16,9 +17,7 @@ export interface TranslateRequest {
 
 export interface PrefetchRequest {
   type: 'prefetch';
-  texts: string[];
-  segments?: number[];
-  needsSplit?: boolean[];
+  items: readonly PrefetchItem[];
 }
 
 export type ContentRequest =
@@ -47,17 +46,6 @@ function validText(value: unknown): value is string {
   return typeof value === 'string' && Boolean(value.trim()) && value.length <= 5000;
 }
 
-function optionalList(value: unknown, length: number, valid: (item: unknown) => boolean): boolean {
-  return (
-    value === undefined || (Array.isArray(value) && value.length === length && value.every(valid))
-  );
-}
-
-export function emptyPrefetch(message: object): boolean {
-  const texts = (message as { texts?: unknown }).texts;
-  return Array.isArray(texts) && !texts.length;
-}
-
 export function readTranslateRequest(message: object): Required<TranslateRequest> {
   const { text, needsSplit, cacheOnly } = message as Record<string, unknown>;
   if (!validText(text) || (needsSplit !== undefined && typeof needsSplit !== 'boolean'))
@@ -70,24 +58,24 @@ export function readTranslateRequest(message: object): Required<TranslateRequest
   };
 }
 
-export function readPrefetchRequest(message: object): Required<PrefetchRequest> {
-  const { texts, segments, needsSplit } = message as Record<string, unknown>;
-  if (
-    !Array.isArray(texts) ||
-    texts.length > prefetchWindowLimit ||
-    !texts.every(validText) ||
-    !optionalList(
-      segments,
-      texts.length,
-      (segment) => Number.isSafeInteger(segment) && (segment as number) >= 0,
-    ) ||
-    !optionalList(needsSplit, texts.length, (flag) => typeof flag === 'boolean')
-  )
+export function readPrefetchRequest(message: object): PrefetchRequest {
+  const { items } = message as Record<string, unknown>;
+  if (!Array.isArray(items) || items.length > prefetchWindowLimit)
     throw new Error('预加载字幕内容无效。');
   return {
     type: 'prefetch',
-    texts,
-    segments: (segments as number[] | undefined) ?? texts.map(() => 0),
-    needsSplit: (needsSplit as boolean[] | undefined) ?? texts.map(() => false),
+    items: items.map((item: unknown): PrefetchItem => {
+      if (!item || typeof item !== 'object') throw new Error('预加载字幕内容无效。');
+      const { text, segment, needsSplit } = item as Record<string, unknown>;
+      if (
+        !validText(text) ||
+        typeof segment !== 'number' ||
+        !Number.isSafeInteger(segment) ||
+        segment < 0 ||
+        typeof needsSplit !== 'boolean'
+      )
+        throw new Error('预加载字幕内容无效。');
+      return { text, segment, needsSplit };
+    }),
   };
 }

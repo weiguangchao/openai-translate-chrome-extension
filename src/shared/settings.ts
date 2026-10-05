@@ -18,6 +18,7 @@ export interface Settings {
 }
 export type PublicSettings = Omit<Settings, 'apiKey' | 'baseUrl' | 'model'> & {
   configured: boolean;
+  translationRevision: string;
 };
 export const LANGUAGES = [
   { value: 'en', label: '英语', native: 'English', english: 'English' },
@@ -71,9 +72,13 @@ export function normalizeSettings(value: unknown): Settings {
     result.subtitleGap = Math.min(24, Math.max(0, input.subtitleGap!));
   return result;
 }
-export function publicSettings(settings: Settings): PublicSettings {
+export function publicSettings(settings: Settings, translationRevision = ''): PublicSettings {
   const { apiKey: _key, baseUrl: _url, model: _model, ...rest } = settings;
-  return { ...rest, configured: Boolean(settings.apiKey.trim() && settings.model.trim()) };
+  return {
+    ...rest,
+    translationRevision,
+    configured: Boolean(settings.apiKey.trim() && settings.model.trim()),
+  };
 }
 export function validateBaseUrl(raw: string): URL {
   let url: URL;
@@ -102,4 +107,33 @@ export function languageName(value: string): string {
 }
 export function englishLanguageName(value: string): string {
   return LANGUAGES.find((l) => l.value === value)?.english ?? value;
+}
+
+export interface SettingsChange {
+  style: boolean;
+  source: boolean;
+  translation: boolean;
+  availability: boolean;
+}
+
+export function classifySettingsChange(
+  previous: Settings | PublicSettings,
+  next: Settings | PublicSettings,
+): SettingsChange {
+  const changed = <Key extends keyof Settings & keyof PublicSettings>(key: Key) =>
+    JSON.stringify(previous[key]) !== JSON.stringify(next[key]);
+  const providerChanged =
+    'apiKey' in previous && 'apiKey' in next
+      ? (['baseUrl', 'apiKey', 'model'] as const).some((key) => previous[key] !== next[key])
+      : 'translationRevision' in previous &&
+        'translationRevision' in next &&
+        previous.translationRevision !== next.translationRevision;
+  return {
+    style: (['original', 'translation', 'backgroundOpacity', 'subtitleGap'] as const).some(changed),
+    source: changed('sourceLanguage'),
+    translation: changed('targetLanguage') || providerChanged,
+    availability:
+      (['enabled', 'youtube', 'hbo'] as const).some(changed) ||
+      ('configured' in previous && 'configured' in next && previous.configured !== next.configured),
+  };
 }
