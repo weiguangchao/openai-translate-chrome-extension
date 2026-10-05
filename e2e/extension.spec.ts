@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { longCaption, longCaptionParts, longTranslations } from '../tests/fixtures/long-caption';
 import {
+  apiKey,
   asrSource,
   asrTranslation,
   draftPrefix,
@@ -268,6 +269,47 @@ for (const platform of ['youtube', 'hbo'] as const) {
         expect(frames.filter((f) => f.translation.startsWith(draftPrefix))).toEqual([]);
       },
       { draft: true },
+    );
+  });
+
+  test(`${platform}: an invalid key shows a safe error and recovers once fixed`, async ({}, info) => {
+    await withPlayer(platform, info, async (p) => {
+      await p.settings({ apiKey: 'e2e-invalid-key' });
+      await p.play();
+      await expect(p.translated).toHaveText('Subline：API Key 无效或已过期。');
+      await expect(p.translated).toHaveClass(/error/);
+      await expect(p.original).toHaveText(source);
+      expect(p.posts.map((post) => post.status)).toContain(401);
+      expect(p.posts.every((post) => post.status === 401)).toBe(true);
+      await p.settings({ apiKey });
+      await p.pair(source, translation);
+      await expect(p.translated).not.toHaveClass(/error/);
+      expect(p.posts.at(-1)!.status).toBe(200);
+      const frames = await p.frames();
+      expect(frames.filter((f) => /e2e-invalid-key|Incorrect API key/.test(f.translation))).toEqual(
+        [],
+      );
+    });
+  });
+
+  test(`${platform}: a transient Provider failure recovers after backoff without extra requests`, async ({}, info) => {
+    test.setTimeout(60_000);
+    await withPlayer(
+      platform,
+      info,
+      async (p) => {
+        await p.page.evaluate(() => window.fixture.switchVideo('second'));
+        await expect(p.original).toHaveText(nextSource);
+        await p.play();
+        await expect(p.translated).toHaveText('Subline：接口返回 HTTP 503，请稍后重试。');
+        const failedAt = Date.now();
+        expect(p.posts.map((post) => post.status)).toEqual([503]);
+        await expect(p.translated).toHaveText(nextTranslation, { timeout: 25_000 });
+        expect(Date.now() - failedAt).toBeGreaterThan(14_000);
+        expect(p.posts.map((post) => post.status)).toEqual([503, 200]);
+        await p.pair(nextSource, nextTranslation);
+      },
+      { unavailable: 1 },
     );
   });
 

@@ -16,6 +16,7 @@ import { longCaption, longResult } from '../tests/fixtures/long-caption';
 
 export type Platform = 'youtube' | 'hbo';
 export const providerUrl = 'https://www.youtube.com/__e2e_provider__/v1/chat/completions';
+export const apiKey = 'e2e-fake-key';
 export const source = 'The moon is bright tonight.';
 export const translation = '今晚的月亮很明亮。';
 export const nextSource = 'We will meet at the station.';
@@ -60,6 +61,7 @@ interface Post {
   body: Record<string, unknown>;
   worker: string;
   released: boolean;
+  status: number;
   route: Route;
 }
 interface Options {
@@ -67,6 +69,7 @@ interface Options {
   hold?: boolean;
   retry?: boolean;
   draft?: boolean;
+  unavailable?: number;
 }
 
 export class Player {
@@ -123,7 +126,7 @@ export class Player {
       youtube: true,
       hbo: true,
       baseUrl: providerUrl.replace('/chat/completions', ''),
-      apiKey: 'e2e-fake-key',
+      apiKey,
       model: 'e2e-fixed-model',
       sourceLanguage: 'en',
       targetLanguage: 'zh-CN',
@@ -315,13 +318,21 @@ export class Player {
       const inputs = JSON.parse(
         body.messages.find((m: { role: string }) => m.role === 'user').content,
       );
-      this.posts.push({ inputs, body, worker, route, released: false });
-      if (this.options.retry && this.posts.length === 1) {
-        this.posts[0].released = true;
-        return route.fulfill({
-          status: 400,
-          json: { error: { message: 'response_format is not supported' } },
-        });
+      const key = request.headers().authorization?.replace(/^Bearer /, '');
+      const post: Post = { inputs, body, worker, route, released: false, status: 200 };
+      const unavailable = this.posts.filter((p) => p.status === 503).length;
+      this.posts.push(post);
+      if (key !== apiKey) post.status = 401;
+      else if (unavailable < (this.options.unavailable ?? 0)) post.status = 503;
+      else if (this.options.retry && this.posts.length === 1) post.status = 400;
+      if (post.status !== 200) {
+        post.released = true;
+        const message = {
+          400: 'response_format is not supported',
+          401: `Incorrect API key provided: ${key}`,
+          503: 'Service temporarily unavailable',
+        }[post.status];
+        return route.fulfill({ status: post.status, json: { error: { message } } });
       }
       if (!this.hold) await this.release(this.posts.length - 1);
       return;
