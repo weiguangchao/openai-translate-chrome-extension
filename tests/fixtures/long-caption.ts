@@ -11,8 +11,8 @@ export const longTranslations = [
 ];
 export const longResult = (id = 0) => ({
   id,
-  parts: [14, 29, 46].map((endExclusive, index) => ({
-    endExclusive,
+  parts: longCaptionParts.map((source, index) => ({
+    source,
     translation: longTranslations[index],
   })),
 });

@@ -145,7 +145,9 @@ export class CaptionTranslator {
         ? { kind: 'ready', original: frame.text, translation: this.result }
         : { kind: 'source', original: frame.text };
     }
-    if (!this.result || typeof this.result === 'string') return { kind: 'waiting' };
+    if (!this.result) return { kind: 'waiting' };
+    if (typeof this.result === 'string')
+      return { kind: 'ready', original: frame.cue.text, translation: this.result };
     const active = translatedCaptions(frame.cue, this.result.parts).find(
       (part) => part.startTime <= frame.time && frame.time < part.endTime,
     );

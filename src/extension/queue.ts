@@ -365,7 +365,7 @@ export class TranslationQueue {
             if (this.jobs.get(job.key) !== job) continue;
             if (job.solo) {
               this.jobs.delete(job.key);
-              job.reject(new Error('字幕断句结果无效，请稍后重试。'));
+              job.reject(new Error('模型返回的译文无效，请稍后重试。'));
               continue;
             }
             Object.assign(job, {

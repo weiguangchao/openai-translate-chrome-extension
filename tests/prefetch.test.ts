@@ -208,6 +208,46 @@ it('renders a late split at the current time, follows estimated boundaries, and 
   expect(requested).toEqual([[longCaption, 'After.']]);
 });
 
+it('shows the whole long sentence for its full duration when the Provider split does not match the source', async () => {
+  Object.defineProperty(video, 'textTracks', {
+    value: [
+      {
+        mode: 'showing',
+        kind: 'subtitles',
+        language: 'en',
+        activeCues: [],
+        cues: [
+          { text: longCaption, startTime: 2, endTime: 14 },
+          { text: 'After.', startTime: 14, endTime: 16 },
+        ],
+      },
+    ],
+  });
+  controller = new CaptionController(createHboPlatform, publicSettings(saved));
+  await advance(3);
+  pending[0].resolve(
+    structuredReply([
+      {
+        id: 0,
+        parts: longCaptionParts.map((source, index) => ({
+          source: source.replace(' old', ''),
+          translation: longTranslations[index],
+        })),
+      },
+      { id: 1, parts: [{ translation: '之后。' }] },
+    ]),
+  );
+  await vi.advanceTimersByTimeAsync(0);
+  expect(original()?.textContent).toBe(longCaption);
+  expect(translated()?.textContent).toBe(longTranslations.join(''));
+  await advance(13);
+  expect(original()?.textContent).toBe(longCaption);
+  expect(translated()?.textContent).toBe(longTranslations.join(''));
+  await advance(15);
+  expect(translated()?.textContent).toBe('之后。');
+  expect(requested).toEqual([[longCaption, 'After.']]);
+});
+
 it.each(['playing', 'paused', 'seeking'])(
   'does not paint a long input while a cached split travels from the background (%s)',
   async (state) => {

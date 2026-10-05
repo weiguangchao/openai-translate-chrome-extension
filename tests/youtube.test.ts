@@ -150,10 +150,7 @@ it('prefetches the comma parts of a long subtitle in one request and shows each 
       { id: 0, parts: [{ translation: `译文：${githubCommaParts[0]}` }] },
       {
         id: 1,
-        parts: [6, 21, 30, 38].map((endExclusive, index) => ({
-          endExclusive,
-          translation: `译文：${split[index]}`,
-        })),
+        parts: split.map((source) => ({ source, translation: `译文：${source}` })),
       },
     ]),
   );

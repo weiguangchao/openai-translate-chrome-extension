@@ -15,11 +15,15 @@ import {
 const text =
   'The most budget option by far is to talk to your friends and family and find somebody with an old laptop or desktop that they will give you for free.';
 const input = translationInput(text, true);
-const count = subtitleUnits(text).length;
-const parts = [
-  { endExclusive: 14, translation: '最省钱的办法就是问问你的亲朋好友，' },
-  { endExclusive: count, translation: '找个愿意免费送你旧电脑的人。' },
+const sources = [
+  'The most budget option by far is to talk to your friends and family',
+  'and find somebody with an old laptop or desktop that they will give you for free.',
 ];
+const parts = [
+  { source: sources[0], translation: '最省钱的办法就是问问你的亲朋好友，' },
+  { source: sources[1], translation: '找个愿意免费送你旧电脑的人。' },
+];
+const whole = '最省钱的办法就是问问你的亲朋好友，找个愿意免费送你旧电脑的人。';
 
 it.each([
   'Hello, world! Again.',
@@ -41,47 +45,110 @@ it.each([
   ).toBe(true);
 });
 
-it('accepts string unit indexes and a text field from a model split', () => {
-  expect(
-    readCaptionTranslation(input, {
-      parts: [
-        { end: '14', translation: parts[0].translation },
-        { endExclusive: String(count), text: parts[1].translation },
-      ],
-    }),
-  ).toEqual(readCaptionTranslation(input, { parts }));
-});
-
-it('accepts a complete split and reconstructs source spans without relying on model-written source text', () => {
-  expect(readCaptionTranslation(input, { parts })).toEqual({
+it('maps quoted sources onto the original text and ignores case, punctuation, quotes and accents', () => {
+  const expected = {
     parts: [
       { from: 0, to: text.indexOf(' and find'), translation: parts[0].translation },
       { from: text.indexOf('and find'), to: text.length, translation: parts[1].translation },
     ],
+  };
+  expect(readCaptionTranslation(input, { parts })).toEqual(expected);
+  expect(
+    readCaptionTranslation(input, {
+      parts: [
+        {
+          source: 'the most budget option, by far, is to talk to your friends and family —',
+          text: parts[0].translation,
+        },
+        {
+          source:
+            '"And find somebody with an old laptop or desktop that they will give you for free"',
+          translation: parts[1].translation,
+        },
+      ],
+    }),
+  ).toEqual(expected);
+  const accented =
+    'Le café coûte trois euros, et le thé coûte deux euros quand on le commande au comptoir.';
+  const split = readCaptionTranslation(translationInput(accented, true), {
+    parts: [
+      { source: 'Le cafe\u0301 coute trois euros,', translation: '咖啡三欧元，' },
+      {
+        source: 'et le the coute deux euros quand on le commande au comptoir.',
+        translation: '在柜台点茶两欧元。',
+      },
+    ],
   });
+  if (!split || typeof split === 'string') throw new Error('Expected split result');
+  expect(split.parts.map((part) => accented.slice(part.from, part.to))).toEqual([
+    'Le café coûte trois euros,',
+    'et le thé coûte deux euros quand on le commande au comptoir.',
+  ]);
+});
+
+it('joins every part of a caption that does not need a split into one translation', () => {
+  const short = translationInput('Short.', false);
   expect(translationInput(text, false).needsSplit).toBe(false);
   expect(translationInput('Short.', true).needsSplit).toBe(false);
+  expect(readCaptionTranslation(short, { parts: [{ translation: ' 短句。 ' }] })).toBe('短句。');
+  expect(readCaptionTranslation(short, { parts })).toBe(whole);
   expect(
-    readCaptionTranslation(translationInput('Short.', false), {
-      parts: [{ translation: '短句。' }],
+    readCaptionTranslation(short, { parts: [{ translation: '你好' }, { translation: '世界' }] }),
+  ).toBe('你好世界');
+  expect(
+    readCaptionTranslation(short, {
+      parts: [{ translation: 'Hello,' }, { translation: 'world.' }],
     }),
-  ).toBe('短句。');
-  expect(readCaptionTranslation(translationInput('Short.', false), { parts })).toBeNull();
+  ).toBe('Hello, world.');
+  expect(
+    readCaptionTranslation(short, { parts: [{ translation: '他说：' }, { translation: 'OK.' }] }),
+  ).toBe('他说：OK.');
 });
 
 it.each(
   [
-    [],
-    [{ endExclusive: count, translation: '未切分' }],
-    [parts[0]],
-    [parts[0], { endExclusive: count + 1, translation: '越界' }],
-    [parts[0], { endExclusive: 14, translation: '重复' }],
-    [{ endExclusive: -1, translation: '负数' }, parts[1]],
-    [{ endExclusive: 1.5, translation: '小数' }, parts[1]],
-    [parts[0], { endExclusive: count, translation: ' ' }],
-    [parts[0], { endExclusive: count, translation: '字'.repeat(200) }],
-  ].map((invalid) => ({ invalid })),
-)('rejects incomplete, overlapping, out-of-range or unusable splits %#', ({ invalid }) => {
+    ['one part', [{ source: text, translation: whole }]],
+    ['a part without a quoted source', [parts[0], { translation: parts[1].translation }]],
+    [
+      'a dropped filler word',
+      [{ ...parts[0], source: sources[0].replace('by far ', '') }, parts[1]],
+    ],
+    [
+      'a break inside a word',
+      [
+        { ...parts[0], source: `${sources[0]} an` },
+        { ...parts[1], source: sources[1].slice(4) },
+      ],
+    ],
+    [
+      'an empty quoted source',
+      [
+        { ...parts[0], source: text },
+        { ...parts[1], source: '' },
+      ],
+    ],
+    ['a part too wide to show', [parts[0], { ...parts[1], translation: '字'.repeat(200) }]],
+  ].map(([label, invalid]) => ({ label, invalid })),
+)('shows the whole sentence when a split has $label', ({ invalid }) => {
+  const result = readCaptionTranslation(input, { parts: invalid });
+  expect(typeof result).toBe('string');
+  expect(result).toBe(
+    (invalid as { translation: string }[]).map((part) => part.translation).join(''),
+  );
+});
+
+it.each(
+  [
+    ['no parts', []],
+    ['an empty translation', [parts[0], { ...parts[1], translation: ' ' }]],
+    ['a missing part', [parts[0]]],
+    ['extra content', [parts[0], { ...parts[1], source: `${sources[1]} ${sources[0]}` }]],
+    [
+      'a translation longer than any caption',
+      [parts[0], { ...parts[1], translation: '字'.repeat(5001) }],
+    ],
+  ].map(([label, invalid]) => ({ label, invalid })),
+)('treats a split with $label as unusable', ({ invalid }) => {
   expect(readCaptionTranslation(input, { parts: invalid })).toBeNull();
 });
 
@@ -96,8 +163,8 @@ it('accepts a complete split whose clauses run past two lines', () => {
   expect(
     readCaptionTranslation(translationInput(source, true), {
       parts: [
-        { endExclusive: mid, translation: '前半句。' },
-        { endExclusive: units.length, translation: '后半句。' },
+        { source: clause, translation: '前半句。' },
+        { source: clause, translation: '后半句。' },
       ],
     }),
   ).toEqual({
@@ -108,22 +175,22 @@ it('accepts a complete split whose clauses run past two lines', () => {
   });
 });
 
-it('rejects a split that leaves a large multi-word source block and keeps an indivisible word intact', () => {
+it('shows a large multi-word source block or an indivisible word as a whole sentence', () => {
   const huge = 'word '.repeat(100).trim();
   expect(
     readCaptionTranslation(translationInput(huge, true), {
       parts: [
-        { endExclusive: 1, translation: '词' },
-        { endExclusive: 100, translation: '长句' },
+        { source: 'word', translation: '词' },
+        { source: 'word '.repeat(99).trim(), translation: '长句' },
       ],
     }),
-  ).toBeNull();
+  ).toBe('词长句');
   const word = 'x'.repeat(150);
   expect(
     readCaptionTranslation(translationInput(word, true), {
-      parts: [{ endExclusive: 1, translation: word }],
+      parts: [{ source: word, translation: word }],
     }),
-  ).toEqual({ parts: [{ from: 0, to: 150, translation: word }] });
+  ).toBe(word);
 });
 
 it('waits for a whole result object in a fragmented stream, including escaped braces and quotes', () => {
@@ -208,7 +275,7 @@ it('keeps segments based on input captions when one provider result has more tha
   ]);
   const result = readCaptionTranslation(translationInput(source, true), {
     parts: Array.from({ length: 12 }, (_, index) => ({
-      endExclusive: index + 1,
+      source: `longword${index}`,
       translation: `词${index}`,
     })),
   });
@@ -226,9 +293,11 @@ it('revalidates serialized translations before constructing display captions', (
   if (!valid || typeof valid === 'string') throw new Error('Expected split result');
   const first = valid.parts[0];
   const second = valid.parts[1];
+  expect(readStoredTranslation(input, ' 整句译文 ')).toBe('整句译文');
   for (const invalid of [
-    'Whole translation without split spans',
+    ' ',
     { parts: [first] },
+    { parts: [first, { ...second, to: second.to - 1 }] },
     { parts: [{ ...first, from: first.from + 1 }, second] },
     { parts: [first, { ...second, from: first.to - 1 }] },
     { parts: [first, { ...second, translation: '字'.repeat(200) }] },

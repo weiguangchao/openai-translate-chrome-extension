@@ -33,17 +33,13 @@ it('translates ordinary captions and splits only flagged captions in one request
   expect(fetch).toHaveBeenCalledTimes(1);
   const body = JSON.parse(fetch.mock.calls[0][1].body);
   const payload = JSON.parse(body.messages[1].content);
-  expect(
-    payload.map((item: { id: number; needsSplit: boolean }) => [item.id, item.needsSplit]),
-  ).toEqual([
-    [0, false],
-    [1, true],
-    [2, false],
+  expect(payload).toEqual([
+    { id: 0, text: 'Before.' },
+    { id: 1, text: longCaption, split: true },
+    { id: 2, text: 'After.' },
   ]);
-  expect(payload[0]).not.toHaveProperty('units');
-  expect(payload[1].units).toHaveLength(46);
   expect(body.stream).toBe(false);
-  expect(body.messages[0].content).toContain('split AND translate');
+  expect(body.messages[0].content).toContain('With "split":true');
   const split = result![1];
   if (typeof split === 'string') throw new Error('Expected split result');
   expect(split.parts.map((part) => longCaption.slice(part.from, part.to))).toEqual(

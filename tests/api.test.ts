@@ -123,10 +123,8 @@ describe('OpenAI-compatible provider contract', () => {
       const body = JSON.parse(fetch.mock.calls[0][1].body);
       const instructions: string = body.messages[0].content;
       expect(instructions).toMatch(/^Translate the given English into Simplified Chinese\./);
-      expect(instructions).toContain('{"results":[{"id":0,"parts":[{"translation":"..."}]}]}');
-      expect(JSON.parse(body.messages[1].content)).toEqual(
-        texts.map((text, id) => ({ id, text, needsSplit: false })),
-      );
+      expect(instructions).toContain('{"results":[{"id":0,"parts":[...]}]}');
+      expect(JSON.parse(body.messages[1].content)).toEqual(texts.map((text, id) => ({ id, text })));
       expect(body).not.toHaveProperty('prompt');
       expect(body.stream).toBe(false);
       expect(body.max_tokens).toBe(65536);
