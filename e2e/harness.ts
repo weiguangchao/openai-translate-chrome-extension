@@ -16,6 +16,7 @@ import { longCaption, longResult } from '../tests/fixtures/long-caption';
 
 export type Platform = 'youtube' | 'hbo';
 export const providerUrl = 'https://www.youtube.com/__e2e_provider__/v1/chat/completions';
+export const elsewhereUrl = 'https://example.org/';
 export const apiKey = 'e2e-fake-key';
 export const source = 'The moon is bright tonight.';
 export const translation = '今晚的月亮很明亮。';
@@ -25,12 +26,15 @@ export const frenchSource = 'Le train arrive demain.';
 export const frenchTranslation = '火车明天到达。';
 export const asrSource = 'This is the automatic caption.';
 export const asrTranslation = '这是自动字幕。';
+export const thirdSource = 'The ferry leaves at noon.';
+export const thirdTranslation = '渡轮中午出发。';
 export const draftPrefix = '草稿：';
 const translations: Record<string, string> = {
   [source]: translation,
   [nextSource]: nextTranslation,
   [frenchSource]: frenchTranslation,
   [asrSource]: asrTranslation,
+  [thirdSource]: thirdTranslation,
   'The garden is quiet.': '花园很安静。',
 };
 export interface Frame {
@@ -99,9 +103,12 @@ export class Player {
     return this.platform === 'youtube' ? 'https://www.youtube.com' : 'https://play.hbomax.com';
   }
   get url() {
+    return this.urlFor('first');
+  }
+  urlFor(id: string) {
     return this.platform === 'youtube'
-      ? `${this.origin}/watch?v=first`
-      : `${this.origin}/video/watch/first`;
+      ? `${this.origin}/watch?v=${id}`
+      : `${this.origin}/video/watch/${id}`;
   }
   get overlay() {
     return this.page.locator('[data-subline-overlay]');
@@ -236,6 +243,7 @@ export class Player {
     if (language === 'fr') return [{ start: 0, end: 90, text: frenchSource }];
     if (kind === 'asr') return [{ start: 0, end: 90, text: asrSource }];
     if (id === 'second') return [{ start: 0, end: 90, text: nextSource }];
+    if (id === 'third') return [{ start: 0, end: 90, text: thirdSource }];
     if (this.options.long) return [{ start: 0, end: 90, text: longCaption }];
     return [
       { start: 0, end: 20, text: source },
@@ -253,9 +261,17 @@ export class Player {
       return route.continue();
     const worker = request.serviceWorker()?.url() ?? null;
     this.requests.push({ url: url.href, method: request.method(), worker });
-    if (url.href === this.url && request.isNavigationRequest())
+    if (
+      request.isNavigationRequest() &&
+      ['first', 'second', 'third'].some((id) => url.href === this.urlFor(id))
+    )
       return route.fulfill({
         path: path.resolve('e2e/fixtures/player.html'),
+        contentType: 'text/html',
+      });
+    if (url.href === elsewhereUrl && request.isNavigationRequest())
+      return route.fulfill({
+        body: '<!doctype html><title>Elsewhere</title>',
         contentType: 'text/html',
       });
     if (url.origin === this.origin && url.pathname === '/e2e/player.webm') {
@@ -294,7 +310,7 @@ export class Player {
       });
     }
     const resource = url.pathname.match(
-      /^\/e2e\/(first|second)\/(manifest\.mpd|en\.vtt|en-asr\.vtt|fr\.vtt|zh-CN\.vtt)$/,
+      /^\/e2e\/(first|second|third)\/(manifest\.mpd|en\.vtt|en-asr\.vtt|fr\.vtt|zh-CN\.vtt)$/,
     );
     if (this.platform === 'hbo' && url.origin === this.origin && resource) {
       const [, id, file] = resource;

@@ -62,7 +62,14 @@
       const native = document.querySelector('#native');
       const video = document.querySelector('video');
       const youtube = location.hostname === 'www.youtube.com';
-      const state = { id: 'first', language: 'en', kind: 'authored' };
+      const state = {
+        id:
+          (youtube
+            ? new URLSearchParams(location.search).get('v')
+            : location.pathname.split('/').pop()) || 'first',
+        language: 'en',
+        kind: 'authored',
+      };
       const track = (language, kind = 'authored') => ({
         languageCode: language,
         vssId: `${kind === 'asr' ? 'a' : ''}.${language}`,

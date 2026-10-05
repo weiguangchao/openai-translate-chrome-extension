@@ -147,6 +147,27 @@ it('answers a prefetch with translations in the order asked, settling cues a lat
   expect(fetch).toHaveBeenCalledTimes(2);
 });
 
+it('starts a new page in the same tab without the pause the previous page left', async () => {
+  const fetch = vi.fn(async (_url: string, init: RequestInit) =>
+    providerReply(requestedTexts(init), (text) => `${text} 译文`),
+  );
+  vi.stubGlobal('fetch', fetch);
+  const send = await loadBackground({
+    ...structuredClone(DEFAULT_SETTINGS),
+    apiKey: 'key',
+    model: 'model',
+  });
+  const first = { documentId: 'first-page' };
+  await send({ type: 'prefetch', items: [{ text: 'Old.', segment: 0, needsSplit: false }] }, first);
+  await expect(send({ type: 'prefetch-pause' }, first)).resolves.toEqual({ ok: true });
+  const next = send(
+    { type: 'prefetch', items: [{ text: 'New.', segment: 0, needsSplit: false }] },
+    { url: 'https://www.youtube.com/watch?v=next', documentId: 'next-page' },
+  );
+  await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
+  await expect(next).resolves.toEqual({ ok: true, data: ['New. 译文'] });
+});
+
 it('batches a prefetch by the segment of each caption and rejects malformed segment numbers', async () => {
   const pending: string[][] = [];
   const fetch = vi.fn((_url: string, init: RequestInit) => {

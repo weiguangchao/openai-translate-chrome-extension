@@ -5,11 +5,14 @@ import {
   asrSource,
   asrTranslation,
   draftPrefix,
+  elsewhereUrl,
   frenchSource,
   frenchTranslation,
   nextSource,
   nextTranslation,
   source,
+  thirdSource,
+  thirdTranslation,
   translation,
   withPlayer,
   type Player,
@@ -330,6 +333,28 @@ for (const platform of ['youtube', 'hbo'] as const) {
       },
       { unavailable: 1 },
     );
+  });
+
+  test(`${platform}: returning to the same tab from another site still translates after a pause`, async ({}, info) => {
+    await withPlayer(platform, info, async (p) => {
+      await p.play();
+      await p.pair(source, translation);
+      await p.pause();
+      await p.page.waitForTimeout(500);
+      await p.page.goto(elsewhereUrl);
+      await p.page.goto(p.urlFor('third'));
+      await expect
+        .poll(() =>
+          p.page
+            .locator('video')
+            .evaluate((v: HTMLVideoElement) => v.seekable.length && v.duration),
+        )
+        .toBe(90);
+      await p.play();
+      await p.pair(thirdSource, thirdTranslation);
+      expect(p.posts).toHaveLength(2);
+      expect(p.posts[1].inputs).toEqual([{ id: 0, text: thirdSource }]);
+    });
   });
 
   test(`${platform}: a stopped worker restarts on new page demand`, async ({}, info) => {
