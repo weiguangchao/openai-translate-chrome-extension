@@ -200,20 +200,18 @@ it('waits for a whole result object in a fragmented stream, including escaped br
   expect(scanTranslationResults(head + ',{"id":0,"parts":[')).toEqual([first]);
 });
 
-it('marks only residual long captions after local comma splitting and excludes overlapping cues', () => {
+it('flags whole long sentences for a Provider split and excludes overlapping cues', () => {
   const captions = timedCaptions([
     { text: 'Before, ' + text, startTime: 0, endTime: 10 },
     { text, startTime: 11, endTime: 20 },
     { text: 'Overlap.', startTime: 15, endTime: 21 },
   ]);
-  expect(captions.map((caption) => caption.needsSplit === true)).toEqual([
-    false,
-    true,
-    false,
-    false,
+  expect(captions.map((caption) => [caption.text, caption.needsSplit])).toEqual([
+    ['Before, ' + text, true],
+    [text, false],
+    ['Overlap.', false],
   ]);
   expect(captionWindow(captions, 0).items.map((item) => item.needsSplit)).toEqual([
-    false,
     true,
     false,
     false,
@@ -221,7 +219,7 @@ it('marks only residual long captions after local comma splitting and excludes o
   ]);
 });
 
-it('uses retained word timings after local splitting and estimates untimed boundaries', () => {
+it('times Provider parts from retained word timings and estimates untimed boundaries', () => {
   const source = 'Before, ' + text;
   const boundary = source.indexOf('and find');
   const cue = {
@@ -234,15 +232,20 @@ it('uses retained word timings after local splitting and estimates untimed bound
       { from: boundary, to: source.length, startTime: 11, endTime: 20 },
     ],
   };
-  const parent = timedCaptions([cue])[1];
-  const result = readCaptionTranslation(input, { parts });
-  if (!result || typeof result === 'string') throw new Error('Expected split result');
-  const captions = translatedCaptions(parent, result.parts);
+  const [parent] = timedCaptions([cue]);
+  const timed = readCaptionTranslation(translationInput(source, true), {
+    parts: [{ source: 'Before,', translation: '之前，' }, ...parts],
+  });
+  if (!timed || typeof timed === 'string') throw new Error('Expected split result');
+  const captions = translatedCaptions(parent, timed.parts);
   expect(captions.map(({ startTime, endTime }) => [startTime, endTime])).toEqual([
+    [2, 3],
     [3, 11],
     [11, 20],
   ]);
-  expect(captions.map((caption) => caption.text).join(' ')).toBe(text);
+  expect(captions.map((caption) => caption.text).join(' ')).toBe(source);
+  const result = readCaptionTranslation(input, { parts });
+  if (!result || typeof result === 'string') throw new Error('Expected split result');
   const estimated = translatedCaptions({ text, startTime: 0, endTime: 10 }, result.parts);
   expect(estimated[1].startTime).toBeCloseTo((10 * text.indexOf('and find')) / text.length);
   expect(estimated[0].endTime).toBe(estimated[1].startTime);

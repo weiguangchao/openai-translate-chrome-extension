@@ -22,7 +22,7 @@ export type CaptionFrame = {
 
 type CaptionView =
   | { kind: 'waiting' }
-  | { kind: 'source'; original: string }
+  | { kind: 'failed'; original: string }
   | { kind: 'ready'; original: string; translation: string };
 
 export class CaptionTranslator {
@@ -140,14 +140,12 @@ export class CaptionTranslator {
   }
 
   private view(frame: CaptionFrame): CaptionView {
-    if (frame.kind === 'ordinary') {
-      return typeof this.result === 'string'
-        ? { kind: 'ready', original: frame.text, translation: this.result }
-        : { kind: 'source', original: frame.text };
-    }
-    if (!this.result) return { kind: 'waiting' };
+    const text = frame.kind === 'split' ? frame.cue.text : frame.text;
+    if (!this.result)
+      return this.overlay.failed ? { kind: 'failed', original: text } : { kind: 'waiting' };
     if (typeof this.result === 'string')
-      return { kind: 'ready', original: frame.cue.text, translation: this.result };
+      return { kind: 'ready', original: text, translation: this.result };
+    if (frame.kind === 'ordinary') return { kind: 'waiting' };
     const active = translatedCaptions(frame.cue, this.result.parts).find(
       (part) => part.startTime <= frame.time && frame.time < part.endTime,
     );
@@ -186,11 +184,12 @@ export class CaptionTranslator {
         this.changed();
       })
       .catch((error) => {
+        if (this.version === version && this.overlay.mounted) {
+          this.overlay.showError(error instanceof Error ? error.message : '翻译失败，请检查配置。');
+          this.requested = '';
+          this.changedAt = Date.now() + 15000;
+        }
         this.changed();
-        if (this.version !== version || !this.overlay.mounted) return;
-        this.overlay.showError(error instanceof Error ? error.message : '翻译失败，请检查配置。');
-        this.requested = '';
-        this.changedAt = Date.now() + 15000;
       });
   }
 }

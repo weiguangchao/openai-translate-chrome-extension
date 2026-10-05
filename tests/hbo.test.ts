@@ -635,7 +635,7 @@ it('replaces the HBO source for source-language, track-role and episode changes'
   controller.update(publicSettings({ ...settings, sourceLanguage: 'es' }));
   await vi.advanceTimersByTimeAsync(1200);
   expect(manifests()).toHaveLength(2);
-  expect(lines()?.[0].textContent).toBe('已有字幕 1');
+  expect(requested.some((request) => request.texts.includes('已有字幕 1'))).toBe(true);
   selected = { language: 'es', role: 'subtitle' };
   await vi.advanceTimersByTimeAsync(1200);
   expect(manifests()).toHaveLength(3);

@@ -1,5 +1,5 @@
 import { prefetchSegmentCount, translationBatchLimit } from '../shared/limits';
-import { needsSubtitleSegmentation, splitSubtitleAtCommas } from '../shared/subtitle-segmentation';
+import { needsSubtitleSegmentation } from '../shared/subtitle-segmentation';
 import type { PrefetchItem, TranslationPart } from '../shared/caption-translation';
 import type { TimedCue } from './cues';
 
@@ -26,44 +26,12 @@ function boundaryTime(cue: TimedCue, position: number): number {
   return span.startTime + (span.endTime - span.startTime) * ratio;
 }
 
-function splitSentence(
-  cue: TimedCue,
-  overlapping: boolean,
-): (TimedCue & { needsSplit: boolean })[] {
-  const parts =
-    !overlapping && needsSubtitleSegmentation(cue.text) ? splitSubtitleAtCommas(cue.text) : [];
-  const captions = parts.length < 2 ? [cue] : splitTimedCue(cue, parts);
-  return captions.map((caption) => ({
-    ...caption,
-    needsSplit: !overlapping && needsSubtitleSegmentation(caption.text),
-  }));
-}
-
 function splitTimedCue(cue: TimedCue, parts: readonly { from: number; to: number }[]): TimedCue[] {
   const starts = parts.map((part, index) => (index ? boundaryTime(cue, part.from) : cue.startTime));
   return parts.map((part, index) => ({
     startTime: starts[index],
     endTime: starts[index + 1] ?? cue.endTime,
     text: cue.text.slice(part.from, part.to),
-    ...(cue.timing
-      ? {
-          timing: cue.timing
-            .filter((span) => span.to > part.from && span.from < part.to)
-            .map((span) => {
-              const from = Math.max(span.from, part.from);
-              const to = Math.min(span.to, part.to);
-              const at = (position: number) =>
-                span.startTime +
-                ((span.endTime - span.startTime) * (position - span.from)) / (span.to - span.from);
-              return {
-                from: from - part.from,
-                to: to - part.from,
-                startTime: at(from),
-                endTime: at(to),
-              };
-            }),
-        }
-      : {}),
   }));
 }
 
@@ -95,27 +63,18 @@ export function timedCaptions(cues: readonly SourceSentence[]): readonly TimedCa
   if (cached) return cached;
   const sentences = cues.filter((cue) => cue.text);
   const captions: TimedCaption[] = [];
-  let segment = 0;
-  let size = 0;
   let latestEnd = -Infinity;
   sentences.forEach((sentence, index) => {
     const overlapping =
       latestEnd > sentence.startTime ||
       (sentences[index + 1]?.startTime ?? Infinity) < sentence.endTime;
     latestEnd = Math.max(latestEnd, sentence.endTime);
-    const parts = splitSentence(sentence, overlapping);
-    if (size && size + parts.length > translationBatchLimit) {
-      segment++;
-      size = 0;
-    }
-    for (const part of parts) {
-      if (size === translationBatchLimit) {
-        segment++;
-        size = 0;
-      }
-      captions.push({ ...part, kind: 'input', segment });
-      size++;
-    }
+    captions.push({
+      ...sentence,
+      kind: 'input',
+      segment: Math.floor(index / translationBatchLimit),
+      needsSplit: !overlapping && needsSubtitleSegmentation(sentence.text),
+    });
   });
   captionCache.set(cues, captions);
   return captions;

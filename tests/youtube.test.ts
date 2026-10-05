@@ -4,7 +4,7 @@ import { CaptionController } from '../src/core/controller';
 import { createYoutubePlatform } from '../src/platforms/youtube/platform';
 import { DEFAULT_SETTINGS, publicSettings } from '../src/shared/settings';
 import { TranslationQueue } from '../src/extension/queue';
-import { githubCaptionTrack, githubCommaParts } from './fixtures/github-caption';
+import { githubCaption, githubCaptionTrack, githubCommaParts } from './fixtures/github-caption';
 import { providerReply, requestedTexts } from './fixtures/provider';
 import type { CaptionTranslation } from '../src/shared/caption-translation';
 import { structuredReply } from './fixtures/long-caption';
@@ -86,7 +86,7 @@ async function playTo(video: HTMLVideoElement, time: number) {
   await vi.advanceTimersByTimeAsync(0);
 }
 
-it('prefetches the comma parts of a long subtitle in one request and shows each part on time after a seek', async () => {
+it('prefetches a long subtitle whole, has the Provider split it, and shows each part on time after a seek', async () => {
   const { video, player, sendMessage, lines } = setup();
   Object.assign(player, {
     getOption: () => ({ vssId: 'a.en' }),
@@ -135,11 +135,12 @@ it('prefetches the comma parts of a long subtitle in one request and shows each 
   controller = new CaptionController(createYoutubePlatform, publicSettings(saved));
   await vi.advanceTimersByTimeAsync(0);
   expect([...lines()].map((line) => [line.hidden, line.textContent])).toEqual([
-    [false, githubCommaParts[0]],
+    [true, ''],
     [false, '翻译中'],
   ]);
-  expect(requests).toEqual([githubCommaParts]);
+  expect(requests).toEqual([[githubCaption]]);
   const split = [
+    githubCommaParts[0],
     'and many other people are realizing',
     'that GitHub might not be the safest place for us to be leaving our code',
     "now that they're randomly reverting merges and having downtime",
@@ -147,22 +148,15 @@ it('prefetches the comma parts of a long subtitle in one request and shows each 
   ];
   finish(
     structuredReply([
-      { id: 0, parts: [{ translation: `译文：${githubCommaParts[0]}` }] },
-      {
-        id: 1,
-        parts: split.map((source) => ({ source, translation: `译文：${source}` })),
-      },
+      { id: 0, parts: split.map((source) => ({ source, translation: `译文：${source}` })) },
     ]),
   );
   await vi.advanceTimersByTimeAsync(0);
-  expect([...lines()].map((line) => line.textContent)).toEqual([
-    githubCommaParts[0],
-    `译文：${githubCommaParts[0]}`,
-  ]);
+  expect([...lines()].map((line) => line.textContent)).toEqual([split[0], `译文：${split[0]}`]);
   video.currentTime = 6.75;
   video.dispatchEvent(new Event('seeked'));
   await vi.advanceTimersByTimeAsync(400);
-  expect([...lines()].map((line) => line.textContent)).toEqual([split[2], `译文：${split[2]}`]);
+  expect([...lines()].map((line) => line.textContent)).toEqual([split[3], `译文：${split[3]}`]);
   const snapshots: string[][] = [];
   for (const time of [0, 3, 8.25, 2]) {
     video.currentTime = time;
@@ -171,12 +165,12 @@ it('prefetches the comma parts of a long subtitle in one request and shows each 
     snapshots.push([...lines()].map((line) => line.textContent ?? ''));
   }
   expect(snapshots).toEqual([
-    [githubCommaParts[0], `译文：${githubCommaParts[0]}`],
-    [split[1], `译文：${split[1]}`],
-    [split[2], `译文：${split[2]}`],
     [split[0], `译文：${split[0]}`],
+    [split[2], `译文：${split[2]}`],
+    [split[3], `译文：${split[3]}`],
+    [split[1], `译文：${split[1]}`],
   ]);
-  expect(requests).toEqual([githubCommaParts]);
+  expect(requests).toEqual([[githubCaption]]);
   video.currentTime = 11;
   video.dispatchEvent(new Event('timeupdate'));
   expect([...lines()].map((line) => line.hidden)).toEqual([true, true]);

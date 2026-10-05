@@ -1,7 +1,8 @@
 import { expect, it } from 'vitest';
 import { authoredSubtitleSentences } from '../src/core/sentences';
 import { parseYoutubeCaptions } from '../src/platforms/youtube/captions';
-import { captionAt, timedCaptions } from '../src/core/timeline';
+import { captionAt, timedCaptions, translatedCaptions } from '../src/core/timeline';
+import { readCaptionTranslation, translationInput } from '../src/shared/caption-translation';
 
 it('uses YouTube sentence boundaries and timing for multiline authored subtitles', () => {
   const text = "Oh, thank you.\nI've got to talk to that\nmailman.";
@@ -29,10 +30,19 @@ it('rejoins fragmented authored sentences and retains source block timings for l
     { startTime: 5.2, endTime: 9, text: second },
   ]);
   expect(cues.map((cue) => cue.text)).toEqual([`${first} ${second}`]);
-  const captions = timedCaptions(cues);
-  expect(captions.map((caption) => caption.text)).toEqual([first, second]);
-  expect(captions[1].startTime).toBe(5.2);
-  expect(captionAt(captions, 6)).toBe(second);
+  const [caption] = timedCaptions(cues);
+  expect(caption).toMatchObject({ text: `${first} ${second}`, needsSplit: true });
+  const split = readCaptionTranslation(translationInput(caption.text, true), {
+    parts: [
+      { source: first, translation: '刚搬到这座城市时，我谁也不认识，' },
+      { source: second, translation: '每晚沿着河边散步，想着自己为什么要来。' },
+    ],
+  });
+  if (!split || typeof split === 'string') throw new Error('Expected split result');
+  const display = translatedCaptions(caption, split.parts);
+  expect(display.map((part) => part.text)).toEqual([first, second]);
+  expect(display[1].startTime).toBe(5.2);
+  expect(captionAt(display, 6)).toBe(second);
 });
 
 it('preserves simultaneous speech and repeated dialogue instead of retiming overlapping cues', () => {
