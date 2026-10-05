@@ -124,8 +124,22 @@ it('backs off after a rate limit so subsequent cues do not repeatedly bill or hi
   vi.stubGlobal('fetch', fetch);
   const queue = new TranslationQueue();
   await expect(queue.request('tab', settings, 'First')).rejects.toThrow('请求过于频繁');
-  await expect(queue.request('tab', settings, 'Second')).rejects.toThrow('稍后将自动重试');
+  await expect(queue.request('tab', settings, 'Second')).rejects.toThrow('请求过于频繁');
   expect(fetch).toHaveBeenCalledTimes(1);
+});
+
+it('keeps reporting why the provider failed while it backs off after a prefetch', async () => {
+  const fetch = vi.fn().mockResolvedValue(new Response('', { status: 401 }));
+  vi.stubGlobal('fetch', fetch);
+  const queue = new TranslationQueue();
+  await expect(queue.prefetch('tab', settings, prefetchItems(['Ahead']))).resolves.toEqual([null]);
+  await expect(queue.request('tab', settings, 'Visible')).rejects.toThrow(
+    new Error('API Key 无效或已过期。'),
+  );
+  expect(fetch).toHaveBeenCalledTimes(1);
+  queue.reset();
+  fetch.mockResolvedValue(providerReply(['Visible'], () => '可见'));
+  await expect(queue.request('tab', settings, 'Visible')).resolves.toBe('可见');
 });
 
 it('does not cache a failed request, but still serves cached cues while the provider backs off', async () => {

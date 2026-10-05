@@ -7,11 +7,16 @@
     "dev": "vite --host 0.0.0.0",
     "build": "tsc --noEmit && vite build && node scripts/build-extension.mjs",
     "test": "vitest run",
+    "test:discovery": "node scripts/check-test-discovery.mjs",
+    "test:e2e": "playwright test",
+    "test:e2e:detection": "node scripts/check-e2e-detection.mjs",
+    "test:e2e:lifecycle": "node scripts/check-worker-lifecycle.mjs",
+    "verify": "npm run check && npm run test:discovery && npm test && npm run build && npm run test:e2e",
     "lint": "eslint . --max-warnings 0",
     "check": "npm run lint && tsc --noEmit",
     "preview": "vite preview --host 0.0.0.0",
-    "format": "prettier --write src tests scripts *.json *.ts *.mjs *.html README.md public/manifest.json",
-    "format:check": "prettier --check src tests scripts *.json *.ts *.mjs *.html README.md public/manifest.json"
+    "format": "prettier --write src tests scripts e2e .github *.json *.ts *.mjs *.html README.md public/manifest.json",
+    "format:check": "prettier --check src tests scripts e2e .github *.json *.ts *.mjs *.html README.md public/manifest.json"
   },
   "dependencies": {
     "lucide-react": "^0.468.0",
@@ -19,7 +24,9 @@
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
+    "@playwright/test": "1.63.0",
     "@types/chrome": "^0.0.287",
+    "@types/node": "24.19.1",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@typescript-eslint/parser": "^8.71.0",

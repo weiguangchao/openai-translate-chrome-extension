@@ -40,6 +40,7 @@ export class TranslationQueue {
   private finished = new Map<string, CaptionTranslation>();
   private consumers = new Map<string, Consumer>();
   private backoffUntil = 0;
+  private backoffReason = '';
   private sendTimer: ReturnType<typeof setTimeout> | undefined;
   private promoting = false;
 
@@ -157,6 +158,7 @@ export class TranslationQueue {
     this.consumers.clear();
     this.prune(true);
     this.backoffUntil = 0;
+    this.backoffReason = '';
     clearTimeout(this.sendTimer);
     this.sendTimer = undefined;
   }
@@ -189,7 +191,7 @@ export class TranslationQueue {
       if (!existing.controller) existing.segment ??= segment;
       return existing;
     }
-    if (Date.now() < this.backoffUntil) throw new Error('接口暂不可用，稍后将自动重试。');
+    if (Date.now() < this.backoffUntil) throw new Error(this.backoffReason);
     let resolve!: Job['resolve'], reject!: Job['reject'];
     const promise = new Promise<CaptionTranslation>((yes, no) => {
       resolve = yes;
@@ -387,11 +389,13 @@ export class TranslationQueue {
       },
       (error) => {
         if (controller.signal.aborted) return;
+        const failure = error instanceof Error ? error : new Error('翻译失败。');
         this.backoffUntil = Date.now() + 15000;
+        this.backoffReason = failure.message || '翻译失败。';
         for (const job of batch) {
           if (this.jobs.get(job.key) !== job) continue;
           this.jobs.delete(job.key);
-          job.reject(error instanceof Error ? error : new Error('翻译失败。'));
+          job.reject(failure);
         }
         this.drain();
       },

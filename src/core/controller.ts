@@ -28,7 +28,13 @@ const MEDIA_EVENTS = [
 function playerFor(video: HTMLVideoElement, platform: Platform): HTMLElement | null {
   const fullscreen = document.fullscreenElement;
   if (fullscreen === video) return null;
-  if (fullscreen instanceof HTMLElement && fullscreen.contains(video)) return fullscreen;
+  if (
+    fullscreen instanceof HTMLElement &&
+    fullscreen !== document.documentElement &&
+    fullscreen !== document.body &&
+    fullscreen.contains(video)
+  )
+    return fullscreen;
   return platform.findPlayer(video);
 }
 

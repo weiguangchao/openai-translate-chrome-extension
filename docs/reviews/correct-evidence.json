@@ -1,0 +1,200 @@
+{
+  "baseline": "774dd06f789f255eb4df4a5d5cdb071feb40d667",
+  "node": "v24.18.1",
+  "results": [
+    {
+      "id": "translation-cache",
+      "source": "162b9bbdd8203077794460b52c7b87dc7d1b4e2f",
+      "tests": "6a2922f",
+      "expected": "fail",
+      "passed": 0,
+      "failed": 1,
+      "matched": true,
+      "diagnostics": [],
+      "failure": [
+        "Error: promise rejected \"Error: 接口暂不可用，稍后将自动重试。\" instead of resolving"
+      ]
+    },
+    {
+      "id": "translation-cache",
+      "source": "6a2922fdc08bbf8351ea62af6f4360adaa90cdaa",
+      "tests": "6a2922f",
+      "expected": "pass",
+      "passed": 1,
+      "failed": 0,
+      "matched": true,
+      "diagnostics": [],
+      "failure": []
+    },
+    {
+      "id": "source-cache",
+      "source": "b53db6a6c677b9154217b82ac8fd7eafa0951291",
+      "tests": "d7a3d88",
+      "expected": "fail",
+      "passed": 0,
+      "failed": 1,
+      "matched": true,
+      "diagnostics": [],
+      "failure": ["AssertionError: expected \"vi.fn()\" to be called 1 times, but got 2 times"]
+    },
+    {
+      "id": "source-cache",
+      "source": "d7a3d8890f5df8b335cf05a7b41a1be5e25ae565",
+      "tests": "d7a3d88",
+      "expected": "pass",
+      "passed": 1,
+      "failed": 0,
+      "matched": true,
+      "diagnostics": [],
+      "failure": []
+    },
+    {
+      "id": "caption-segment",
+      "source": "a58620dfb2cfe36bd219668849eb08fcfbc3f3d4",
+      "tests": "477622e",
+      "expected": "fail",
+      "passed": 0,
+      "failed": 1,
+      "matched": true,
+      "diagnostics": [],
+      "failure": ["AssertionError: expected [ Array(2) ] to deeply equal [ Array(2) ]"]
+    },
+    {
+      "id": "caption-segment",
+      "source": "477622e28c7cf0b65f72ebdf81432f340e33e99d",
+      "tests": "477622e",
+      "expected": "pass",
+      "passed": 1,
+      "failed": 0,
+      "matched": true,
+      "diagnostics": [],
+      "failure": []
+    },
+    {
+      "id": "hbo-sentences",
+      "source": "1de4e38eb3bd94555124ed1958f9b6af5afbddbf",
+      "tests": "0e4aaaf",
+      "expected": "fail",
+      "passed": 0,
+      "failed": 1,
+      "matched": true,
+      "diagnostics": [],
+      "failure": [
+        "AssertionError: expected [ Array(1) ] to deeply equal [ [ 'Oh, thank you.', …(1) ] ]"
+      ]
+    },
+    {
+      "id": "hbo-sentences",
+      "source": "0e4aaafc96d404d130bdd2658fa908d1ea92a7e8",
+      "tests": "0e4aaaf",
+      "expected": "pass",
+      "passed": 1,
+      "failed": 0,
+      "matched": true,
+      "diagnostics": [],
+      "failure": []
+    },
+    {
+      "id": "provider-json",
+      "source": "2870488870bfe756f839a880bdb866f596a35afa",
+      "tests": "7a41406",
+      "expected": "fail",
+      "passed": 0,
+      "failed": 1,
+      "matched": true,
+      "diagnostics": [],
+      "failure": ["Error: expected null to deeply equal [ '第一句', '第二句' ]"]
+    },
+    {
+      "id": "provider-json",
+      "source": "7a4140648c66c719a7ec7344cfa70b45c1081daa",
+      "tests": "7a41406",
+      "expected": "pass",
+      "passed": 1,
+      "failed": 0,
+      "matched": true,
+      "diagnostics": [],
+      "failure": []
+    },
+    {
+      "id": "physical-request-budget",
+      "source": "162b9bbdd8203077794460b52c7b87dc7d1b4e2f",
+      "tests": "audit probe",
+      "expected": "fail",
+      "passed": 0,
+      "failed": 1,
+      "matched": true,
+      "diagnostics": [],
+      "failure": ["AssertionError: expected 15 to be less than or equal to 3"]
+    },
+    {
+      "id": "physical-request-budget",
+      "source": "94770892ab71c4df4e98e56a49fe2b3d77e1ab73",
+      "tests": "audit probe",
+      "expected": "fail",
+      "passed": 0,
+      "failed": 1,
+      "matched": true,
+      "diagnostics": [],
+      "failure": ["AssertionError: expected 9 to be less than or equal to 3"]
+    },
+    {
+      "id": "physical-request-budget",
+      "source": "774dd06f789f255eb4df4a5d5cdb071feb40d667",
+      "tests": "audit probe",
+      "expected": "fail",
+      "passed": 0,
+      "failed": 1,
+      "matched": true,
+      "diagnostics": [],
+      "failure": ["AssertionError: expected 12 to be less than or equal to 3"]
+    },
+    {
+      "id": "single-response-parser",
+      "source": "774dd06f789f255eb4df4a5d5cdb071feb40d667",
+      "tests": "audit probe",
+      "expected": "fail",
+      "passed": 0,
+      "failed": 1,
+      "matched": true,
+      "diagnostics": [],
+      "failure": [
+        "AssertionError: expected { result: [ '草稿' ], …(1) } to deeply equal { result: [ '最终译文' ], …(1) }"
+      ]
+    },
+    {
+      "id": "style-invalidates-work",
+      "source": "774dd06f789f255eb4df4a5d5cdb071feb40d667",
+      "tests": "audit probe",
+      "expected": "fail",
+      "passed": 0,
+      "failed": 1,
+      "matched": true,
+      "diagnostics": [],
+      "failure": ["AssertionError: expected true to be false // Object.is equality"]
+    }
+  ],
+  "boundaryProbes": [
+    {
+      "filePath": "src/core/audit-probe.ts",
+      "code": "import { createHboPlatform } from '../platforms/hbo/platform';\nvoid createHboPlatform;\n",
+      "errors": 1,
+      "expectedErrors": 1,
+      "matched": true
+    },
+    {
+      "filePath": "src/core/audit-probe.ts",
+      "code": "export async function loadPlatform() { return import('../platforms/hbo/platform'); }\n",
+      "errors": 0,
+      "expectedErrors": 0,
+      "matched": true
+    },
+    {
+      "filePath": "src/platforms/future/audit-probe.ts",
+      "code": "import { createHboPlatform } from '../hbo/platform';\nvoid createHboPlatform;\n",
+      "errors": 0,
+      "expectedErrors": 0,
+      "matched": true
+    }
+  ]
+}

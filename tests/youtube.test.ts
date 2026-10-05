@@ -720,6 +720,23 @@ it('keeps custom captions in a fullscreen ancestor and restores the website laye
   ).not.toBe('0');
 });
 
+it('keeps custom captions in the player when the whole document is fullscreen', async () => {
+  const { player } = setup();
+  controller = new CaptionController(
+    createYoutubePlatform,
+    publicSettings({ ...DEFAULT_SETTINGS, apiKey: 'key', model: 'model' }),
+  );
+  await vi.advanceTimersByTimeAsync(0);
+  const host = player.querySelector(':scope > [data-subline-overlay]');
+  expect(host).not.toBeNull();
+  for (const root of [document.documentElement, document.body]) {
+    Object.defineProperty(document, 'fullscreenElement', { configurable: true, value: root });
+    await vi.advanceTimersByTimeAsync(150);
+    expect([...document.querySelectorAll('[data-subline-overlay]')]).toEqual([host]);
+    expect(root.classList.contains('subline-player')).toBe(false);
+  }
+});
+
 it('sends complete English sentences to the Provider and displays its translations below the source', async () => {
   const { video, player, sendMessage, lines } = setup();
   Object.assign(player, {

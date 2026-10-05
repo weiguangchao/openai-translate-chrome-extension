@@ -47,19 +47,46 @@ npm run build
 
 ## 开发与验证
 
+完整验证使用 `.nvmrc` 固定的 Node 24，首次准备环境：
+
+```sh
+nvm use
+npm ci
+npx playwright install chromium
+npm run verify
+```
+
+`verify` 顺序执行 lint/类型检查、测试发现检查、Vitest、扩展构建和两平台的真实扩展浏览器回归；任一步失败都会非零退出。本地与 GitHub Actions 使用同一入口，CI 额外安装 Chromium 的系统依赖。
+
 ```sh
 npm run dev       # 设置页浏览器预览，默认 http://localhost:5173
 npm run lint      # 禁止 TypeScript 注释
 npm run check     # lint 与 TypeScript 类型检查
+npm run test:discovery # 正式测试完整且只分配到一个环境，排除本地实验
 npm test          # 接口、配置、翻译队列和字幕生命周期测试
 npm run build    # 输出完整扩展到 dist/
+npm run test:e2e  # 使用已构建的 dist/ 执行 YouTube/HBO 浏览器回归
+npm run test:e2e:detection # 临时移除页面脚本，确认浏览器用例因字幕断言失败
+npm run test:e2e:lifecycle # 不附着 worker，检查后台自然休眠、页面唤醒和 40 秒慢 Provider
 ```
 
 TypeScript 文件禁止任何注释，包括行注释、块注释、JSDoc 和工具指令注释。规则覆盖 `.ts`、`.tsx`、`.mts`、`.cts`，包括测试文件；测试环境在 `vite.config.ts` 中配置。
 
+Vitest 只发现 `tests/` 下的测试；DOM 与平台环境分配集中在 `scripts/test-projects.ts`。`test:discovery` 独立扫描正式文件、比对 Vitest 实际发现结果，并创建自己的临时实验文件验证排除规则，不删除已有 `.artifacts/` 内容。浏览器用例放在单独的 `e2e/`。
+
+浏览器回归使用固定版本的 Playwright Chromium，在每例独立的临时 profile 加载未经修改的 `dist/manifest.json`，并在 `chrome://extensions` 打开开发者模式，否则 Chromium 会在 `chrome.runtime.reload()` 后禁用未打包扩展。页面播放器接口、JSON3/DASH/WebVTT 和 Provider 响应是本地夹具；视频为支持 Range 请求、可 seek 的本地 WebM，MAIN 页面脚本、内容脚本、Chrome 消息、后台 fetch 和 Shadow DOM 渲染均为打包后的真实实现。两平台各 12 个场景覆盖完整链路、延迟长句切分、暂停与缓存、seek 和换视频晚到响应、轨道切换、全屏、开关、扩展重载、兼容重试、Provider 密钥无效和暂时不可用后的恢复、草稿/最终 JSON 和后台强制停止；页面夹具逐帧记录字幕层内容，用于发现中途闪错。HTTP 请求只允许明确的夹具路由，Provider 请求必须来自扩展 Service Worker；其他请求会被中止并使测试失败。不需要登录网站或提供真实 API Key。
+
+假 Provider 使用 manifest 已授权的 YouTube 域名路径，由 BrowserContext 完全拦截。这验证已授权配置下的翻译链路，不覆盖自定义 Provider 的首次域名授权弹窗。每次生成 `.artifacts/e2e/report/index.html` 和 JSON 报告，附请求记录、代码版本、浏览器版本及构建摘要；失败附截图与 trace。CI 上传这些结果。设置 `E2E_HEADED=1` 可观察测试窗口。
+
+`test:e2e:detection` 复制构建到临时目录，仅清空两平台页面脚本，然后运行两平台的完整链路用例；只有两例都因原文未到达字幕层而失败，检测检查才通过。原始 `dist/` 保持不变，诊断结果在 `.artifacts/e2e-detection/`。它不替代 `verify` 的产品通过结果。
+
 浏览器预览支持设置、样式预览和真实接口测试，不会注入视频网站。预览使用 localStorage 保存非敏感设置，API Key 仅存在当前页面内存中，刷新后需重新填写。真实接口测试还受服务端 CORS 配置约束。Chrome 扩展通过后台请求，并按需请求 API 域名权限。
 
 测试使用模拟 API 响应与字幕 DOM，不需要密钥，不产生 API 费用。它们不能替代真实平台验收。安装后建议检查 YouTube 字幕切换、拖动进度、全屏、开关、API 错误，以及登录后 HBO 的实际字幕层。
+
+实测 Playwright 1.63 会附着扩展 Service Worker，附着期间后台超过 120 秒仍不自然休眠，因此浏览器回归只验证强制停止后的恢复。`test:e2e:lifecycle` 直接启动同版本 Chromium，仅通过 CDP 观察目标出现与消失，用 `--host-resolver-rules` 把 YouTube 域名指向本地 HTTPS 夹具：先确认后台约 30 秒无事件后自然停止，再确认页面需求能唤醒它，最后让 Provider 延迟 40 秒，确认后台不中途终止且译文送达。它需要本机 `openssl` 生成临时证书，耗时约 75 秒，不进入 `verify`。
+
+真实平台验收优先连接用户现有、已登录的个人 Chrome profile，复用站点会话；独立 Chromium 不使用个人 profile。验收清单、触发规则和最近一次结果见 [浏览器回归与真实平台验收记录](docs/reviews/2026-10-04-e-acceptance.md)。
 
 ## 数据与权限
 

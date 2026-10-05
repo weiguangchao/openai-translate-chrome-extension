@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Subline controlled player</title>
+    <link rel="icon" href="data:," />
+    <style>
+      body {
+        margin: 24px;
+        background: #20232a;
+        color: white;
+        font-family: sans-serif;
+      }
+      #player {
+        position: relative;
+        width: 800px;
+        height: 450px;
+      }
+      #player:fullscreen {
+        width: 100vw;
+        height: 100vh;
+      }
+      html:fullscreen body {
+        margin: 0;
+      }
+      html:fullscreen #player {
+        position: fixed;
+        inset: 0;
+        width: 100vw;
+        height: 100vh;
+      }
+      html:fullscreen h1,
+      html:fullscreen button {
+        display: none;
+      }
+      video {
+        display: block;
+        width: 100%;
+        height: 100%;
+      }
+      #native {
+        position: absolute;
+        bottom: 10%;
+        left: 20%;
+      }
+      button {
+        margin-top: 16px;
+        padding: 12px 24px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Controlled player</h1>
+    <div id="player">
+      <video muted playsinline src="/e2e/player.webm" preload="auto"></video>
+      <div id="native"></div>
+    </div>
+    <button id="play">Play fixture</button>
+    <button id="fullscreen">Fullscreen fixture</button>
+    <script>
+      const player = document.querySelector('#player');
+      const native = document.querySelector('#native');
+      const video = document.querySelector('video');
+      const youtube = location.hostname === 'www.youtube.com';
+      const state = { id: 'first', language: 'en', kind: 'authored' };
+      const track = (language, kind = 'authored') => ({
+        languageCode: language,
+        vssId: `${kind === 'asr' ? 'a' : ''}.${language}`,
+        kind: kind === 'asr' ? 'asr' : undefined,
+        baseUrl: `${location.origin}/api/timedtext?v=${state.id}&lang=${language}&kind=${kind}`,
+      });
+      if (youtube) {
+        player.className = 'html5-video-player';
+        native.className = 'ytp-caption-window-container';
+        player.getOption = () => (state.language ? track(state.language, state.kind) : {});
+        player.getPlayerResponse = () => ({
+          videoDetails: { videoId: state.id },
+          captions: {
+            playerCaptionsTracklistRenderer: {
+              captionTracks: [track('en'), track('en', 'asr'), track('fr'), track('zh-CN')],
+            },
+          },
+        });
+      } else {
+        player.setAttribute('data-testid', 'playerContainer');
+        native.setAttribute('data-testid', 'caption_renderer_overlay');
+        native.__reactFiber$fixture = {
+          memoizedProps: {
+            eventConsumer: {
+              selectedTextTrack$: {
+                subscribe(callback) {
+                  callback({
+                    selectedTextTrack: state.language
+                      ? {
+                          language: state.language,
+                          role: state.kind === 'asr' ? 'closedcaptions' : 'subtitle',
+                        }
+                      : null,
+                  });
+                  return { unsubscribe() {} };
+                },
+              },
+            },
+          },
+          return: {
+            memoizedProps: {
+              value: {
+                get activeStreamInfo() {
+                  return {
+                    url: `${location.origin}/e2e/${state.id}/manifest.mpd`,
+                    streamMode: 'VOD',
+                  };
+                },
+              },
+            },
+          },
+        };
+      }
+      window.fixture = {
+        select(language, kind = 'authored') {
+          Object.assign(state, { language, kind });
+        },
+        switchVideo(id) {
+          state.id = id;
+          history.pushState({}, '', youtube ? `/watch?v=${id}` : `/video/watch/${id}`);
+          video.currentTime = 0;
+          document.dispatchEvent(new Event('yt-navigate-finish'));
+        },
+        native(text) {
+          native.textContent = text;
+        },
+      };
+      const frames = [];
+      const observed = new WeakSet();
+      let last = '';
+      function sample() {
+        const host = document.querySelector('[data-subline-overlay]');
+        const shadow = host?.shadowRoot;
+        if (shadow && !observed.has(shadow)) {
+          observed.add(shadow);
+          new MutationObserver(sample).observe(shadow, {
+            subtree: true,
+            childList: true,
+            characterData: true,
+            attributes: true,
+          });
+        }
+        const visible = (selector) => {
+          const node = shadow?.querySelector(selector);
+          return node && !node.hidden && node.getBoundingClientRect().height
+            ? node.textContent
+            : '';
+        };
+        const pair = { original: visible('.original'), translation: visible('.translation') };
+        const key = JSON.stringify([state.id, state.language, pair]);
+        if (last !== key) {
+          frames.push({
+            at: performance.now(),
+            time: video.currentTime,
+            id: state.id,
+            language: state.language,
+            ...pair,
+          });
+          last = key;
+        }
+      }
+      window.subtitleFrames = frames;
+      function frame() {
+        sample();
+        requestAnimationFrame(frame);
+      }
+      frame();
+      document.querySelector('#play').addEventListener('click', () => video.play());
+      document
+        .querySelector('#fullscreen')
+        .addEventListener('click', () =>
+          (youtube ? document.documentElement : player).requestFullscreen(),
+        );
+    </script>
+  </body>
+</html>
