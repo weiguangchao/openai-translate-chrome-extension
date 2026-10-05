@@ -470,6 +470,29 @@ it('resolves a batch together when the response arrives and serves a cue from th
   expect(JSON.parse(fetch.mock.calls[0][1].body as string).stream).toBe(false);
 });
 
+it('caches only the final reply after a truncated draft without retrying', async () => {
+  const { fetch, requests } = pendingProvider();
+  const queue = new TranslationQueue();
+  const pending = queue.prefetch('tab', settings, prefetchItems(['Original.']));
+  requests[0].resolve(
+    Response.json({
+      choices: [
+        {
+          message: {
+            content:
+              '{"results":[{"id":0,"parts":[{"translation":"草稿"}]}\nFinal\n' +
+              '{"results":[{"id":0,"parts":[{"translation":"最终"}]}]}',
+          },
+        },
+      ],
+    }),
+  );
+  await expect(pending).resolves.toEqual(['最终']);
+  await expect(queue.lookup(settings, 'Original.')).resolves.toBe('最终');
+  await expect(queue.request('other-tab', settings, 'Original.')).resolves.toBe('最终');
+  expect(fetch).toHaveBeenCalledTimes(1);
+});
+
 it('does not cache either cue when the batch is aborted before the response', async () => {
   const { fetch, requests } = pendingProvider();
   const queue = new TranslationQueue();

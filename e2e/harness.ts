@@ -72,7 +72,7 @@ interface Options {
   long?: boolean;
   hold?: boolean;
   retry?: boolean;
-  draft?: boolean;
+  draft?: 'complete' | 'truncated';
   unavailable?: number;
   holdTimeline?: boolean;
 }
@@ -233,7 +233,8 @@ export class Player {
         id: input.id,
         parts: [{ translation: `${draftPrefix}${input.text}` }],
       }));
-      content = `${JSON.stringify({ results: drafts })}\nFinal\n${content}`;
+      const draft = JSON.stringify({ results: drafts });
+      content = `${this.options.draft === 'truncated' ? draft.slice(0, -2) : draft}\nFinal\n${content}`;
     }
     await post.route.fulfill({ json: { choices: [{ message: { content } }] } });
   }

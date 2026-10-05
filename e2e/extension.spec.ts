@@ -273,25 +273,32 @@ for (const platform of ['youtube', 'hbo'] as const) {
     );
   });
 
-  test(`${platform}: a draft before the final JSON never reaches the overlay or cache`, async ({}, info) => {
-    await withPlayer(
-      platform,
-      info,
-      async (p) => {
-        await p.play();
-        await p.pair(source, translation);
-        await p.pause();
-        await p.seek(35);
-        await p.pair(nextSource, nextTranslation);
-        await p.seek(2);
-        await p.pair(source, translation);
-        expect(p.posts).toHaveLength(1);
-        const frames = await p.frames();
-        expect(frames.filter((f) => f.translation.startsWith(draftPrefix))).toEqual([]);
-      },
-      { draft: true },
-    );
-  });
+  for (const draft of ['complete', 'truncated'] as const) {
+    test(`${platform}: a ${draft} draft before the final JSON never reaches the overlay or cache`, async ({}, info) => {
+      await withPlayer(
+        platform,
+        info,
+        async (p) => {
+          await p.play();
+          await p.pair(source, translation);
+          await p.pause();
+          await p.seek(35);
+          await p.pair(nextSource, nextTranslation);
+          await p.seek(2);
+          await p.pair(source, translation);
+          expect(p.posts).toHaveLength(1);
+          const frames = await p.frames();
+          expect(frames.filter((f) => f.translation.startsWith(draftPrefix))).toEqual([]);
+          if (draft === 'truncated')
+            await info.attach('final-cached.png', {
+              body: await p.page.screenshot(),
+              contentType: 'image/png',
+            });
+        },
+        { draft },
+      );
+    });
+  }
 
   test(`${platform}: an invalid key shows a safe error and recovers once fixed`, async ({}, info) => {
     await withPlayer(platform, info, async (p) => {

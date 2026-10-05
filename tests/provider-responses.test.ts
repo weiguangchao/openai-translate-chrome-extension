@@ -32,6 +32,26 @@ it('selects the final JSON once for both its return value and publications', asy
 });
 
 it.each([
+  { label: 'unclosed array', suffix: '' },
+  { label: 'unclosed object', suffix: ']' },
+  { label: 'unfinished key', suffix: ',{"id":1,"parts":[{"transl' },
+  { label: 'unfinished string', suffix: ',{"id":1,"parts":[{"translation":"unfinished' },
+])('selects the final JSON after a draft with an $label', async ({ suffix }) => {
+  const draft = '{"results":[' + JSON.stringify(result(0, '草稿')) + suffix;
+  respond(`${draft}\nFinal\n${payload([result(0, '最终')])}`);
+  const published = vi.fn();
+  await expect(
+    translateCaptionBatch(
+      settings,
+      [{ text: 'Original.', needsSplit: false }],
+      undefined,
+      published,
+    ),
+  ).resolves.toEqual(['最终']);
+  expect(published.mock.calls).toEqual([[0, '最终']]);
+});
+
+it.each([
   { values: [result(0, '草稿'), result('0', '冲突'), result(1, '有效')] },
   { values: [result('bad', '无效'), result(0, '有效')] },
 ])(
@@ -110,36 +130,60 @@ it('recovers complete results from a truncated response only after parsing fails
   expect(published.mock.calls).toEqual([[0, '完整']]);
 });
 
-it.each([
-  {
-    label: 'malformed',
-    final:
-      '{"results":[{"id":0,"parts":[{"translation":"一"} stray]},' +
-      JSON.stringify(result(1, '二')) +
-      ']}',
-    published: [[1, '二']],
-  },
-  {
-    label: 'truncated',
-    final: '{"results":[' + JSON.stringify(result(0, '一')) + ',{"id":1,"parts":[{"transl',
-    published: [[0, '一']],
-  },
-])('never falls back to a draft when the final JSON is $label', async ({ final, published }) => {
-  respond(`${payload([result(0, '草稿一'), result(1, '草稿二')])}\nFinal\n${final}`);
-  const publish = vi.fn();
+it('does not publish a parts array from an incomplete result as a standalone reply', async () => {
+  respond('{"results":[{"id":0,"parts":[{"translation":"未完成"}]');
+  const published = vi.fn();
   await expect(
     translateCaptionBatch(
       settings,
-      [
-        { text: 'One.', needsSplit: false },
-        { text: 'Two.', needsSplit: false },
-      ],
+      [{ text: 'Original.', needsSplit: false }],
       undefined,
-      publish,
+      published,
     ),
   ).resolves.toBeNull();
-  expect(publish.mock.calls).toEqual(published);
+  expect(published).not.toHaveBeenCalled();
 });
+
+it.each(
+  [
+    {
+      label: 'malformed',
+      final:
+        '{"results":[{"id":0,"parts":[{"translation":"一"} stray]},' +
+        JSON.stringify(result(1, '二')) +
+        ']}',
+      published: [[1, '二']],
+    },
+    {
+      label: 'truncated',
+      final: '{"results":[' + JSON.stringify(result(0, '一')) + ',{"id":1,"parts":[{"transl',
+      published: [[0, '一']],
+    },
+  ].flatMap((test) =>
+    [
+      { draftLabel: 'complete', draft: payload([result(0, '草稿一'), result(1, '草稿二')]) },
+      { draftLabel: 'truncated', draft: '{"results":[' + JSON.stringify(result(0, '草稿一')) },
+    ].map((draft) => ({ ...test, ...draft })),
+  ),
+)(
+  'never falls back to a $draftLabel draft when the final JSON is $label',
+  async ({ draft, final, published }) => {
+    respond(`${draft}\nFinal\n${final}`);
+    const publish = vi.fn();
+    await expect(
+      translateCaptionBatch(
+        settings,
+        [
+          { text: 'One.', needsSplit: false },
+          { text: 'Two.', needsSplit: false },
+        ],
+        undefined,
+        publish,
+      ),
+    ).resolves.toBeNull();
+    expect(publish.mock.calls).toEqual(published);
+  },
+);
 
 it('discards a response that arrives after cancellation even if the provider ignores abort', async () => {
   let finish!: (response: Response) => void;

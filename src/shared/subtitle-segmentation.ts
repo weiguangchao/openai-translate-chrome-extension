@@ -53,13 +53,29 @@ interface ModelPayload {
   readonly parsed: { value: unknown } | null;
 }
 
+function nextPayloadStart(text: string, index: number): number {
+  while (index < text.length) {
+    const character = text[index];
+    if (character === '{' || character === '[') return index;
+    const quoted = character === '"' ? readString(text, index) : null;
+    if (!quoted) {
+      index++;
+      continue;
+    }
+    index = skipSpace(text, quoted.end);
+    if (text[index] !== ':') continue;
+    const start = skipSpace(text, index + 1);
+    const end = skipValue(text, start);
+    index = end < 0 ? start + 1 : end;
+  }
+  return -1;
+}
+
 function lastTranslationPayload(text: string): ModelPayload | undefined {
   let payload: ModelPayload | undefined;
   let index = 0;
   while (index < text.length) {
-    const objectAt = text.indexOf('{', index);
-    const arrayAt = text.indexOf('[', index);
-    const start = objectAt < 0 ? arrayAt : arrayAt < 0 ? objectAt : Math.min(objectAt, arrayAt);
+    const start = nextPayloadStart(text, index);
     if (start < 0) break;
     const end = skipValue(text, start);
     const json = end < 0 ? text.slice(start) : text.slice(start, end);
@@ -69,8 +85,7 @@ function lastTranslationPayload(text: string): ModelPayload | undefined {
       index = end;
     } else if (resultsArray(json) >= 0) {
       payload = { json, parsed: null };
-      if (end < 0) break;
-      index = end;
+      index = end < 0 ? start + 1 : end;
     } else index = start + 1;
   }
   return payload;
