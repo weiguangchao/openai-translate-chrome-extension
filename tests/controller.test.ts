@@ -173,3 +173,41 @@ it.each(['translation', 'source'])(
     );
   },
 );
+
+it('retries a paused cache lookup invalidated by a later seek event', async () => {
+  const replies: ((value: { ok: boolean; data: string }) => void)[] = [];
+  sendMessage.mockImplementation((message) =>
+    message.type === 'translate'
+      ? new Promise((resolve) => {
+          replies.push(resolve);
+        })
+      : Promise.resolve({ ok: true, data: null }),
+  );
+  const video = document.querySelector('video')!;
+  Object.defineProperty(video, 'paused', { value: true });
+  source = {
+    kind: 'timeline',
+    mode: 'model',
+    cues: [{ startTime: 0, endTime: 90, text: 'Cached source.' }],
+    layers: () => [],
+  };
+  controller = new CaptionController(
+    () => platform,
+    publicSettings({ ...DEFAULT_SETTINGS, apiKey: 'key', model: 'model' }),
+  );
+  await vi.advanceTimersByTimeAsync(0);
+  expect(replies).toHaveLength(1);
+  video.dispatchEvent(new Event('seeked'));
+  await vi.advanceTimersByTimeAsync(0);
+  expect(replies).toHaveLength(2);
+  replies[0]({ ok: true, data: '旧查询' });
+  await vi.advanceTimersByTimeAsync(0);
+  expect(lines()).toEqual(['Cached source.', null]);
+  replies[1]({ ok: true, data: '缓存译文' });
+  await vi.advanceTimersByTimeAsync(450);
+  expect(lines()).toEqual(['Cached source.', '缓存译文']);
+  expect(sendMessage.mock.calls.filter(([m]) => m.type === 'translate').map(([m]) => m)).toEqual([
+    { type: 'translate', text: 'Cached source.', cacheOnly: true },
+    { type: 'translate', text: 'Cached source.', cacheOnly: true },
+  ]);
+});

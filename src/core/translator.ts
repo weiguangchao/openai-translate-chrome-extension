@@ -55,6 +55,7 @@ export class CaptionTranslator {
     if (!this.requested) return;
     this.version++;
     this.requested = '';
+    this.checkedCache = false;
   }
 
   clear(): void {
