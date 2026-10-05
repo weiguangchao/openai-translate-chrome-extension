@@ -2,8 +2,18 @@ import type { TimedCue } from '../cues';
 import type { TimelineState } from './protocol';
 
 export class SourceCache {
-  state: TimelineState = { mode: 'checking', source: null };
-  revision = 0;
+  private current: TimelineState = { mode: 'checking', source: null };
+  private version = 0;
+
+  get state(): Readonly<Omit<TimelineState, 'source'>> & {
+    readonly source: readonly Readonly<TimedCue>[] | null;
+  } {
+    return this.current;
+  }
+
+  get revision(): number {
+    return this.version;
+  }
   private key = '';
   private resource = '';
   private controller = new AbortController();
@@ -18,12 +28,12 @@ export class SourceCache {
     if (key === this.key) return;
     this.clear();
     this.key = key;
-    this.state = { mode: 'checking', source: null, sourceId: key };
+    this.current = { mode: 'checking', source: null, sourceId: key };
   }
 
   update(patch: Partial<Pick<TimelineState, 'mode' | 'source'>>): void {
-    this.state = { ...this.state, ...patch };
-    this.revision++;
+    this.current = { ...this.current, ...patch };
+    this.version++;
   }
 
   load(
@@ -42,16 +52,16 @@ export class SourceCache {
     void read(active.signal)
       .then((source) => {
         if (active.signal.aborted) return;
-        this.state = { ...this.state, mode: 'model', source };
+        this.current = { ...this.current, mode: 'model', source };
         this.loaded = true;
-        this.revision++;
+        this.version++;
         this.changed();
       })
       .catch(() => {
         if (active.signal.aborted) return;
         this.retryAt = Date.now() + 15000;
-        this.state = { ...this.state, mode: 'model', source: fallback };
-        this.revision++;
+        this.current = { ...this.current, mode: 'model', source: fallback };
+        this.version++;
         this.changed();
       })
       .finally(() => {
@@ -71,8 +81,8 @@ export class SourceCache {
     this.key = '';
     this.resource = '';
     this.loaded = false;
-    this.state = { mode: 'checking', source: null };
-    this.revision++;
+    this.current = { mode: 'checking', source: null };
+    this.version++;
   }
 }
 

@@ -12,14 +12,21 @@ const sendMessage = vi.fn((message: { type: string; text?: string }) =>
 
 beforeEach(() => {
   vi.useFakeTimers();
-  sendMessage.mockClear();
+  sendMessage
+    .mockReset()
+    .mockImplementation((message) =>
+      Promise.resolve({
+        ok: true,
+        data: message.type === 'translate' ? `译文 ${message.text}` : null,
+      }),
+    );
   vi.stubGlobal('chrome', { runtime: { id: 'extension-id', sendMessage } });
   document.body.innerHTML = '<div id="player"><video></video><div id="layer">Native</div></div>';
   const video = document.querySelector('video')!;
   Object.defineProperties(video, {
     textTracks: { value: [] },
     readyState: { value: 1 },
-    paused: { value: false },
+    paused: { value: false, configurable: true },
   });
   source = { kind: 'waiting', mode: 'checking' };
   platform = {
@@ -89,3 +96,83 @@ it('drives any platform through the waiting, live and timeline caption sources',
   expect(document.querySelector('[data-subline-overlay]')).toBeNull();
   expect(getComputedStyle(layer).opacity).not.toBe('0');
 });
+
+it('updates styles in place while a translation is pending and shows its original result', async () => {
+  const settings = { ...DEFAULT_SETTINGS, apiKey: 'key', model: 'model' };
+  let finish!: (value: { ok: boolean; data: string }) => void;
+  sendMessage.mockImplementationOnce(() => Promise.resolve({ ok: true, data: null }));
+  sendMessage.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  source = {
+    kind: 'timeline',
+    mode: 'model',
+    cues: [{ startTime: 0, endTime: 10, text: 'Still waiting.' }],
+    layers: () => [],
+  };
+  controller = new CaptionController(() => platform, publicSettings(settings));
+  await vi.advanceTimersByTimeAsync(0);
+  const host = document.querySelector('[data-subline-overlay]');
+  const calls = sendMessage.mock.calls.length;
+  controller.update(
+    publicSettings({
+      ...settings,
+      original: { color: '#FF0000', size: 36 },
+      backgroundOpacity: 60,
+      subtitleGap: 16,
+    }),
+  );
+  expect(document.querySelector('[data-subline-overlay]')).toBe(host);
+  expect(sendMessage).toHaveBeenCalledTimes(calls);
+  expect(host?.shadowRoot?.querySelector<HTMLElement>('.original')?.style.fontSize).toBe('36px');
+  finish({ ok: true, data: '等待后的译文' });
+  await vi.advanceTimersByTimeAsync(0);
+  expect(lines()).toEqual(['Still waiting.', '等待后的译文']);
+});
+
+it.each(['translation', 'source'])(
+  'discards a late cached response after the %s identity changes',
+  async (change) => {
+    const settings = { ...DEFAULT_SETTINGS, apiKey: 'key', model: 'model' };
+    const replies: ((value: { ok: boolean; data: string }) => void)[] = [];
+    sendMessage.mockImplementation((message) =>
+      message.type === 'translate'
+        ? new Promise((resolve) => {
+            replies.push(resolve);
+          })
+        : Promise.resolve({ ok: true, data: null }),
+    );
+    const video = document.querySelector('video')!;
+    Object.defineProperty(video, 'paused', { value: true });
+    source = {
+      kind: 'timeline',
+      mode: 'model',
+      id: 'old-track',
+      cues: [{ startTime: 0, endTime: 10, text: 'Old source.' }],
+      layers: () => [],
+    };
+    controller = new CaptionController(() => platform, publicSettings(settings, 'old-version'));
+    await vi.advanceTimersByTimeAsync(0);
+    source = {
+      ...source,
+      id: change === 'source' ? 'new-track' : 'old-track',
+      cues: [{ startTime: 0, endTime: 10, text: 'New source.' }],
+    };
+    controller.update(
+      publicSettings(settings, change === 'translation' ? 'new-version' : 'old-version'),
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    replies[1]({ ok: true, data: '新的译文' });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(lines()).toEqual(['New source.', '新的译文']);
+    replies[0]({ ok: true, data: '旧的译文' });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(lines()).toEqual(['New source.', '新的译文']);
+    expect(sendMessage.mock.calls.filter(([message]) => message.type === 'translate')).toHaveLength(
+      2,
+    );
+  },
+);

@@ -133,6 +133,12 @@ export class TranslationQueue {
     return this.results(keys);
   }
 
+  release(consumer: string): void {
+    this.consumers.delete(consumer);
+    this.prune(true);
+    this.drain();
+  }
+
   pause(consumer: string): void {
     const state = this.consumers.get(consumer);
     if (!state) return;

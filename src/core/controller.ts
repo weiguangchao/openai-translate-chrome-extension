@@ -1,4 +1,4 @@
-import type { PublicSettings } from '../shared/settings';
+import { classifySettingsChange, type PublicSettings } from '../shared/settings';
 import type { SourceMode } from './bridge/protocol';
 import { ExtensionConnection } from './connection';
 import { visible } from './dom';
@@ -86,8 +86,10 @@ export class CaptionController {
 
   update(settings: PublicSettings): void {
     if (this.destroyed) return;
+    const change = classifySettingsChange(this.settings, settings);
     this.settings = settings;
-    this.unmount();
+    if (change.source || change.translation) this.unmount();
+    else if (change.style) this.overlay.updateStyle(settings);
     this.tick();
   }
 

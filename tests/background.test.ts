@@ -46,6 +46,10 @@ async function loadBackground(saved: object) {
         },
       },
     },
+    tabs: {
+      query: vi.fn().mockResolvedValue([{ id: 1 }]),
+      sendMessage: vi.fn().mockResolvedValue(undefined),
+    },
     storage: {
       local: {
         setAccessLevel: vi.fn().mockResolvedValue(undefined),
@@ -61,7 +65,8 @@ async function loadBackground(saved: object) {
     frameId: 0,
     tab: { id: 1 },
   } as chrome.runtime.MessageSender;
-  return (message: unknown) => new Promise<Reply>((resolve) => listener(message, sender, resolve));
+  return (message: unknown, override: Partial<chrome.runtime.MessageSender> = {}) =>
+    new Promise<Reply>((resolve) => listener(message, { ...sender, ...override }, resolve));
 }
 
 it('keeps credentials in the background and rejects content-script requests to use draft API settings', async () => {
@@ -173,4 +178,99 @@ it('validates split flags and keeps split and unsplit duplicates separate across
     send({ type: 'translate', text: longCaption, needsSplit: true, cacheOnly: true }),
   ).resolves.toEqual({ ok: true, data: data[1] });
   expect(fetch).toHaveBeenCalledTimes(1);
+});
+
+it.each([
+  { name: 'font size', patch: { original: { color: '#FFFFFF', size: 36 } }, abort: false },
+  { name: 'text color', patch: { translation: { color: '#000000', size: 20 } }, abort: false },
+  { name: 'background', patch: { backgroundOpacity: 70 }, abort: false },
+  { name: 'gap', patch: { subtitleGap: 16 }, abort: false },
+  { name: 'target language', patch: { targetLanguage: 'ja' }, abort: true },
+  { name: 'source language', patch: { sourceLanguage: 'es' }, abort: true },
+  { name: 'model', patch: { model: 'new-model' }, abort: true },
+  { name: 'credentials', patch: { apiKey: 'new-secret' }, abort: true },
+  { name: 'provider', patch: { baseUrl: 'https://other.example/v1' }, abort: true },
+  { name: 'extension disabled', patch: { enabled: false }, abort: true },
+  { name: 'active platform disabled', patch: { youtube: false }, abort: true },
+  { name: 'other platform disabled', patch: { hbo: false }, abort: false },
+])('updates $name with the correct in-flight lifetime', async ({ patch, abort }) => {
+  let signal!: AbortSignal;
+  let finish!: (response: Response) => void;
+  const fetch = vi.fn((_url: string, init: RequestInit) => {
+    signal = init.signal!;
+    return new Promise<Response>((resolve) => {
+      finish = resolve;
+    });
+  });
+  vi.stubGlobal('fetch', fetch);
+  const initial = { ...DEFAULT_SETTINGS, apiKey: 'old-secret', model: 'model' };
+  const send = await loadBackground(initial);
+  const pending = send({ type: 'translate', text: 'Original.' });
+  await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
+  const changed = vi.mocked(chrome.storage.onChanged.addListener).mock.calls[0][0];
+  changed({ [STORAGE_KEY]: { oldValue: initial, newValue: { ...initial, ...patch } } }, 'local');
+  await vi.waitFor(() => expect(chrome.tabs.sendMessage).toHaveBeenCalledTimes(1));
+  expect(signal.aborted).toBe(abort);
+  finish(providerReply(['Original.'], () => '原来的译文'));
+  if (abort) await expect(pending).resolves.toMatchObject({ ok: false });
+  else {
+    await expect(pending).resolves.toEqual({ ok: true, data: '原来的译文' });
+    await expect(send({ type: 'translate', text: 'Original.', cacheOnly: true })).resolves.toEqual({
+      ok: true,
+      data: '原来的译文',
+    });
+  }
+  expect(fetch).toHaveBeenCalledTimes(1);
+  const update = JSON.stringify(vi.mocked(chrome.tabs.sendMessage).mock.calls);
+  expect(update).not.toMatch(/old-secret|new-secret|other\.example|baseUrl|apiKey/);
+});
+
+it('retains shared work when only one consuming platform is disabled', async () => {
+  let signal!: AbortSignal;
+  let finish!: (response: Response) => void;
+  const fetch = vi.fn((_url: string, init: RequestInit) => {
+    signal = init.signal!;
+    return new Promise<Response>((resolve) => {
+      finish = resolve;
+    });
+  });
+  vi.stubGlobal('fetch', fetch);
+  const initial = { ...DEFAULT_SETTINGS, apiKey: 'key', model: 'model' };
+  const send = await loadBackground(initial);
+  const youtube = send({ type: 'translate', text: 'Shared.' });
+  const hbo = send(
+    { type: 'translate', text: 'Shared.' },
+    { url: 'https://play.hbomax.com/video/watch/episode', tab: { id: 2 } as chrome.tabs.Tab },
+  );
+  await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
+  vi.mocked(chrome.storage.onChanged.addListener).mock.calls[0][0](
+    { [STORAGE_KEY]: { newValue: { ...initial, youtube: false } } },
+    'local',
+  );
+  await vi.waitFor(() => expect(chrome.tabs.sendMessage).toHaveBeenCalledTimes(1));
+  expect(signal.aborted).toBe(false);
+  finish(providerReply(['Shared.'], () => '共享译文'));
+  await expect(hbo).resolves.toEqual({ ok: true, data: '共享译文' });
+  await youtube;
+  expect(fetch).toHaveBeenCalledTimes(1);
+});
+
+it('sends only an opaque translation revision, retaining it for style changes', async () => {
+  const initial = { ...DEFAULT_SETTINGS, apiKey: 'secret-key', model: 'private-model' };
+  const send = await loadBackground(initial);
+  const before = await send({ type: 'settings' });
+  const changed = vi.mocked(chrome.storage.onChanged.addListener).mock.calls[0][0];
+  changed({ [STORAGE_KEY]: { newValue: { ...initial, subtitleGap: 16 } } }, 'local');
+  await vi.waitFor(() => expect(chrome.tabs.sendMessage).toHaveBeenCalledTimes(1));
+  const style = await send({ type: 'settings' });
+  expect(style.data).toMatchObject({
+    translationRevision: (before.data as { translationRevision: string }).translationRevision,
+  });
+  changed({ [STORAGE_KEY]: { newValue: { ...initial, model: 'other-private-model' } } }, 'local');
+  await vi.waitFor(() => expect(chrome.tabs.sendMessage).toHaveBeenCalledTimes(2));
+  const provider = await send({ type: 'settings' });
+  expect(provider.data).not.toMatchObject({
+    translationRevision: (before.data as { translationRevision: string }).translationRevision,
+  });
+  expect(JSON.stringify(provider)).not.toMatch(/secret-key|private-model|api\.openai/);
 });

@@ -7,11 +7,20 @@ import {
   type SettingsUpdated,
 } from '../shared/messages';
 import { platformForUrl, platformMatches, type PlatformId } from '../shared/platforms';
-import { normalizeSettings, publicSettings, STORAGE_KEY, type Settings } from '../shared/settings';
+import {
+  classifySettingsChange,
+  normalizeSettings,
+  publicSettings,
+  STORAGE_KEY,
+  type Settings,
+} from '../shared/settings';
 import { TranslationQueue } from './queue';
 
 const queue = new TranslationQueue();
 let settings: Settings;
+let translationRevision = crypto.randomUUID();
+let updateSequence = 0;
+const consumers = new Map<string, PlatformId>();
 const ready = (async () => {
   await chrome.storage.local.setAccessLevel({ accessLevel: 'TRUSTED_CONTEXTS' });
   settings = normalizeSettings((await chrome.storage.local.get(STORAGE_KEY))[STORAGE_KEY]);
@@ -27,6 +36,7 @@ async function contentRequest(
   platform: PlatformId,
   consumer: string,
 ): Promise<unknown> {
+  consumers.set(consumer, platform);
   if (type === 'prefetch-pause' || type === 'prefetch-resume') {
     if (type === 'prefetch-pause') queue.pause(consumer);
     else queue.resume(consumer);
@@ -34,7 +44,8 @@ async function contentRequest(
   }
   if (type === 'prefetch') {
     if (emptyPrefetch(message)) {
-      void queue.prefetch(consumer, settings, []);
+      consumers.delete(consumer);
+      queue.release(consumer);
       return;
     }
     requireEnabled(platform);
@@ -69,7 +80,7 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, respond) => {
   if (!trusted && !platform) return;
   void (async () => {
     await ready;
-    if (type === 'settings') return publicSettings(settings);
+    if (type === 'settings') return publicSettings(settings, translationRevision);
     if (trusted && (type === 'models' || type === 'test')) {
       const draft = normalizeSettings((message as { settings?: unknown }).settings);
       return type === 'models'
@@ -95,13 +106,27 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local' || !changes[STORAGE_KEY]) return;
   void (async () => {
     await ready;
-    settings = normalizeSettings(changes[STORAGE_KEY].newValue);
-    queue.reset();
-    const tabs = await chrome.tabs.query({ url: [...platformMatches] });
+    const next = normalizeSettings(changes[STORAGE_KEY].newValue);
+    const change = classifySettingsChange(settings, next);
+    settings = next;
+    if (change.translation || change.source) translationRevision = crypto.randomUUID();
+    if (change.translation || change.source || !settings.enabled) {
+      queue.reset();
+      consumers.clear();
+    } else if (change.availability) {
+      for (const [consumer, platform] of consumers) {
+        if (settings[platform]) continue;
+        queue.release(consumer);
+        consumers.delete(consumer);
+      }
+    }
+    const sequence = ++updateSequence;
     const update: SettingsUpdated = {
       type: 'settings-updated',
-      settings: publicSettings(settings),
+      settings: publicSettings(settings, translationRevision),
     };
+    const tabs = await chrome.tabs.query({ url: [...platformMatches] });
+    if (sequence !== updateSequence) return;
     await Promise.allSettled(
       tabs
         .filter((tab) => tab.id !== undefined)
