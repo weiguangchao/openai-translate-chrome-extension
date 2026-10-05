@@ -129,9 +129,11 @@ it('joins ASR fragments, uses word timestamps within a cue and preserves the fin
   ]);
   expect(captionWindow(timedCaptions(cues), 1.5)).toEqual({
     current: 'We are ready.',
-    texts: ['We are ready.', 'Are you?', 'Let’s go'],
-    needsSplit: [false, false, false],
-    segments: [0, 0, 0],
+    items: [
+      { text: 'We are ready.', segment: 0, needsSplit: false },
+      { text: 'Are you?', segment: 0, needsSplit: false },
+      { text: 'Let’s go', segment: 0, needsSplit: false },
+    ],
   });
   expect(captionWindow(timedCaptions(cues), 2).current).toBe('Are you?');
 });
@@ -326,22 +328,19 @@ it('covers the rest of the current segment and the following segment, however fa
   }));
   const captions = timedCaptions(cues);
   const texts = (from: number, to: number) => cues.slice(from, to).map((cue) => cue.text);
-  expect(captionWindow(captions, 0).texts).toEqual(texts(0, 20));
+  expect(captionWindow(captions, 0).items.map((item) => item.text)).toEqual(texts(0, 20));
   expect(captionWindow(captions, 95)).toEqual({
     current: 'Cue 10',
-    texts: texts(9, 20),
-    segments: [0, ...texts(10, 20).map(() => 1)],
-    needsSplit: texts(9, 20).map(() => false),
+    items: texts(9, 20).map((text, index) => ({
+      text,
+      segment: [0, ...texts(10, 20).map(() => 1)][index] ?? 0,
+      needsSplit: texts(9, 20).map(() => false)[index] === true,
+    })),
   });
-  expect(captionWindow(captions, 105).texts).toEqual(texts(10, 30));
-  expect(captionWindow(captions, 165).texts).toEqual(texts(16, 30));
-  expect(captionWindow(captions, 205).texts).toEqual(texts(20, 30));
-  expect(captionWindow(captions, 9999)).toEqual({
-    current: '',
-    texts: [],
-    segments: [],
-    needsSplit: [],
-  });
+  expect(captionWindow(captions, 105).items.map((item) => item.text)).toEqual(texts(10, 30));
+  expect(captionWindow(captions, 165).items.map((item) => item.text)).toEqual(texts(16, 30));
+  expect(captionWindow(captions, 205).items.map((item) => item.text)).toEqual(texts(20, 30));
+  expect(captionWindow(captions, 9999)).toEqual({ current: '', items: [] });
 });
 
 it('splits a long cue shown on its own at commas, but not overlapping cues joined into one line', () => {
@@ -357,9 +356,20 @@ it('splits a long cue shown on its own at commas, but not overlapping cues joine
   ]);
   expect(captions.map((caption) => caption.text)).toEqual([first, second, ...parts]);
   const window = captionWindow(captions, 0);
-  expect(window.texts).toEqual([first, `${first}\n${second}`, second, ...parts]);
-  expect(window.texts.map(needsSubtitleSegmentation)).toEqual([false, true, false, false, false]);
-  expect(window.segments).toEqual([0, 0, 0, 0, 0]);
+  expect(window.items.map((item) => item.text)).toEqual([
+    first,
+    `${first}\n${second}`,
+    second,
+    ...parts,
+  ]);
+  expect(window.items.map((item) => item.text).map(needsSubtitleSegmentation)).toEqual([
+    false,
+    true,
+    false,
+    false,
+    false,
+  ]);
+  expect(window.items.map((item) => item.segment)).toEqual([0, 0, 0, 0, 0]);
 });
 
 it('keeps a long cue whole while it overlaps another cue', () => {
@@ -387,7 +397,9 @@ it('packs up to ten captions into a segment and starts the next one rather than 
   expect(captions.slice(8, 11).map((caption) => caption.text)).toEqual(
     splitSubtitleAtCommas(long).map((part) => long.slice(part.from, part.to)),
   );
-  expect(captionWindow(captions, 0).segments).toEqual(captions.map((caption) => caption.segment));
+  expect(captionWindow(captions, 0).items.map((item) => item.segment)).toEqual(
+    captions.map((caption) => caption.segment),
+  );
 });
 
 it('spreads a sentence with more than ten parts over consecutive segments', () => {

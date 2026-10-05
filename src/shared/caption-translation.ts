@@ -4,17 +4,23 @@ import {
   subtitleDisplayLimit,
 } from './subtitle-segmentation';
 
+declare const verifiedPart: unique symbol;
 export interface TranslationPart {
-  from: number;
-  to: number;
-  translation: string;
+  readonly [verifiedPart]: true;
+  readonly from: number;
+  readonly to: number;
+  readonly translation: string;
 }
 
-export type CaptionTranslation = string | { parts: TranslationPart[] };
+export type CaptionTranslation = string | { readonly parts: readonly TranslationPart[] };
 
 export interface TranslationInput {
-  text: string;
-  needsSplit: boolean;
+  readonly text: string;
+  readonly needsSplit: boolean;
+}
+
+export interface PrefetchItem extends TranslationInput {
+  readonly segment: number;
 }
 
 export function subtitleUnits(text: string): { from: number; to: number }[] {
@@ -85,9 +91,32 @@ export function readCaptionTranslation(
       if (end - previous > 1 && subtitleDisplayLength(source) > limit) return null;
       if (subtitleDisplayLength(translation) > limit && translation !== source) return null;
     }
-    accepted.push({ from, to, translation });
+    accepted.push({ from, to, translation } as TranslationPart);
     previous = end;
   }
   if (previous !== units.length) return null;
   return input.needsSplit ? { parts: accepted } : accepted[0].translation;
+}
+
+export function readStoredTranslation(
+  input: TranslationInput,
+  value: unknown,
+): CaptionTranslation | null {
+  if (!input.needsSplit)
+    return typeof value === 'string'
+      ? readCaptionTranslation(input, { parts: [{ translation: value }] })
+      : null;
+  const parts = (value as { parts?: unknown } | null)?.parts;
+  if (!Array.isArray(parts)) return null;
+  const units = subtitleUnits(input.text);
+  let start = 0;
+  const normalized: { endExclusive: number; translation: unknown }[] = [];
+  for (const part of parts) {
+    if (!part || typeof part !== 'object' || part.from !== units[start]?.from) return null;
+    const end = units.findIndex((unit) => unit.to === part.to) + 1;
+    if (end <= start) return null;
+    normalized.push({ endExclusive: end, translation: part.translation });
+    start = end;
+  }
+  return readCaptionTranslation(input, { parts: normalized });
 }

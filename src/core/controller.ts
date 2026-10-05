@@ -192,13 +192,10 @@ export class CaptionController {
     const usesModel = source.mode === 'model';
     const caption = currentCaption(source, current?.current ?? '');
     this.translator.notePlayback(video.paused);
-    const texts = usesModel && !video.paused ? (upcoming?.texts ?? []) : [];
+    const items = usesModel && !video.paused ? (upcoming?.items ?? []) : [];
     if (!video.paused)
       this.translator.prefetch(
-        this.gate.settling ? [] : this.gate.previewing ? texts.slice(0, SEEK_PREVIEW_CUES) : texts,
-        false,
-        upcoming?.segments,
-        upcoming?.needsSplit,
+        this.gate.settling ? [] : this.gate.previewing ? items.slice(0, SEEK_PREVIEW_CUES) : items,
       );
     this.overlay.hide(caption.layers);
     video.classList.toggle('subline-native', caption.nativeTrack);
@@ -214,9 +211,7 @@ export class CaptionController {
       return;
     }
     this.translator.show({
-      text: caption.text,
-      needsSplit: cue?.needsSplit === true,
-      cue,
+      ...(cue?.needsSplit ? { kind: 'split', cue } : { kind: 'ordinary', text: caption.text }),
       time,
       cacheOnly:
         video.paused ||

@@ -1,12 +1,19 @@
 import { prefetchSegmentCount, translationBatchLimit } from '../shared/limits';
 import { needsSubtitleSegmentation, splitSubtitleAtCommas } from '../shared/subtitle-segmentation';
-import type { TranslationPart } from '../shared/caption-translation';
+import type { PrefetchItem, TranslationPart } from '../shared/caption-translation';
 import type { TimedCue } from './cues';
 
-export interface TimedCaption extends TimedCue {
-  segment: number;
-  needsSplit?: boolean;
-}
+export type SourceSentence = TimedCue & { readonly kind?: never };
+
+export type TimedCaption = Readonly<TimedCue> & {
+  readonly kind: 'input';
+  readonly segment: number;
+} & ({ readonly needsSplit: true } | { readonly needsSplit: false });
+
+export type DisplayCaption = Readonly<TimedCue> & {
+  readonly kind: 'display';
+  readonly translation: string;
+};
 
 function boundaryTime(cue: TimedCue, position: number): number {
   const span = cue.timing?.find((part) => part.to > position) ?? {
@@ -19,17 +26,20 @@ function boundaryTime(cue: TimedCue, position: number): number {
   return span.startTime + (span.endTime - span.startTime) * ratio;
 }
 
-function splitSentence(cue: TimedCue, overlapping: boolean): Omit<TimedCaption, 'segment'>[] {
+function splitSentence(
+  cue: TimedCue,
+  overlapping: boolean,
+): (TimedCue & { needsSplit: boolean })[] {
   const parts =
     !overlapping && needsSubtitleSegmentation(cue.text) ? splitSubtitleAtCommas(cue.text) : [];
   const captions = parts.length < 2 ? [cue] : splitTimedCue(cue, parts);
   return captions.map((caption) => ({
     ...caption,
-    ...(!overlapping && needsSubtitleSegmentation(caption.text) ? { needsSplit: true } : {}),
+    needsSplit: !overlapping && needsSubtitleSegmentation(caption.text),
   }));
 }
 
-function splitTimedCue(cue: TimedCue, parts: { from: number; to: number }[]): TimedCue[] {
+function splitTimedCue(cue: TimedCue, parts: readonly { from: number; to: number }[]): TimedCue[] {
   const starts = parts.map((part, index) => (index ? boundaryTime(cue, part.from) : cue.startTime));
   return parts.map((part, index) => ({
     startTime: starts[index],
@@ -58,9 +68,9 @@ function splitTimedCue(cue: TimedCue, parts: { from: number; to: number }[]): Ti
 }
 
 export function translatedCaptions(
-  cue: TimedCue,
-  parts: TranslationPart[],
-): (TimedCue & { translation: string })[] {
+  cue: SourceSentence | TimedCaption,
+  parts: readonly TranslationPart[],
+): readonly DisplayCaption[] {
   let captions = splitTimedCue(cue, parts);
   if (
     captions.some(
@@ -71,12 +81,16 @@ export function translatedCaptions(
     )
   )
     captions = splitTimedCue({ ...cue, timing: undefined }, parts);
-  return captions.map((caption, index) => ({ ...caption, translation: parts[index].translation }));
+  return captions.map((caption, index) => ({
+    ...caption,
+    kind: 'display',
+    translation: parts[index].translation,
+  }));
 }
 
 const captionCache = new WeakMap<readonly TimedCue[], TimedCaption[]>();
 
-export function timedCaptions(cues: readonly TimedCue[]): TimedCaption[] {
+export function timedCaptions(cues: readonly SourceSentence[]): readonly TimedCaption[] {
   const cached = captionCache.get(cues);
   if (cached) return cached;
   const sentences = cues.filter((cue) => cue.text);
@@ -99,7 +113,7 @@ export function timedCaptions(cues: readonly TimedCue[]): TimedCaption[] {
         segment++;
         size = 0;
       }
-      captions.push({ ...part, segment });
+      captions.push({ ...part, kind: 'input', segment });
       size++;
     }
   });
@@ -122,7 +136,10 @@ export function captionAt(cues: readonly TimedCue[], time: number): string {
   return joinedText(activeAt(cues, time));
 }
 
-export function captionWindow(captions: readonly TimedCaption[], time: number) {
+export function captionWindow(
+  captions: readonly TimedCaption[],
+  time: number,
+): { current: string; items: readonly PrefetchItem[] } {
   const first = captions.findIndex((caption) => caption.endTime > time);
   let end = first;
   if (first >= 0)
@@ -135,18 +152,13 @@ export function captionWindow(captions: readonly TimedCaption[], time: number) {
   const boundaries = [...new Set(remaining.flatMap((cue) => [cue.startTime, cue.endTime]))]
     .filter((at) => at > time)
     .sort((a, b) => a - b);
-  const texts: string[] = [];
-  const segments: number[] = [];
-  const needsSplit: boolean[] = [];
+  const items: PrefetchItem[] = [];
   for (const at of [time, ...boundaries]) {
     const active = activeAt(remaining, at);
     const text = joinedText(active);
     const split = active.length === 1 && active[0].needsSplit === true;
-    if (!text || texts.some((item, index) => item === text && needsSplit[index] === split))
-      continue;
-    texts.push(text);
-    segments.push(active[0].segment);
-    needsSplit.push(split);
+    if (!text || items.some((item) => item.text === text && item.needsSplit === split)) continue;
+    items.push({ text, segment: active[0].segment, needsSplit: split });
   }
-  return { current: captionAt(remaining, time), texts, segments, needsSplit };
+  return { current: captionAt(remaining, time), items };
 }

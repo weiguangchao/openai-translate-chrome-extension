@@ -1,9 +1,14 @@
 export const translationSendsPerSecond = 3;
 const sendWindowMs = 1000;
 
+export interface ProviderSendPolicy {
+  canSend(): boolean;
+  priority(): number;
+}
+
 interface PendingSend {
   signal?: AbortSignal;
-  canSend: () => boolean;
+  policy?: ProviderSendPolicy;
   start: () => void;
   cancel: () => void;
 }
@@ -17,24 +22,27 @@ export function wakeProviderRequests(): void {
   timer = undefined;
   const now = Date.now();
   sentAt = sentAt.filter((at) => now - at < sendWindowMs);
-  for (const send of [...pending]) {
+  const ordered = [...pending].sort(
+    (a, b) => (a.policy?.priority() ?? 0) - (b.policy?.priority() ?? 0),
+  );
+  for (const send of ordered) {
     if (sentAt.length >= translationSendsPerSecond) break;
-    if (!send.canSend()) continue;
+    if (send.policy && !send.policy.canSend()) continue;
     pending.splice(pending.indexOf(send), 1);
     send.signal?.removeEventListener('abort', send.cancel);
-    sentAt.push(now);
     send.start();
   }
   if (pending.length && sentAt.length >= translationSendsPerSecond)
-    timer = setTimeout(wakeProviderRequests, sendWindowMs - (now - sentAt[0]));
+    timer = setTimeout(wakeProviderRequests, Math.max(0, sendWindowMs - (Date.now() - sentAt[0])));
 }
 
 export function providerFetch(
   url: string,
   init: Omit<RequestInit, 'signal'>,
   signal?: AbortSignal,
-  canSend: () => boolean = () => true,
+  policy?: ProviderSendPolicy,
 ): Promise<{ response: Response; signal: AbortSignal }> {
+  const post = init.method?.toUpperCase() === 'POST';
   return new Promise((resolve, reject) => {
     const start = () => {
       try {
@@ -42,6 +50,7 @@ export function providerFetch(
         const deadline = signal
           ? AbortSignal.any([signal, AbortSignal.timeout(60000)])
           : AbortSignal.timeout(60000);
+        if (post) sentAt.push(Date.now());
         void fetch(url, { ...init, signal: deadline }).then(
           (response) => resolve({ response, signal: deadline }),
           reject,
@@ -54,13 +63,13 @@ export function providerFetch(
       reject(signal.reason);
       return;
     }
-    if (init.method !== 'POST') {
+    if (!post) {
       start();
       return;
     }
     const send: PendingSend = {
       signal,
-      canSend,
+      policy,
       start,
       cancel: () => {
         const index = pending.indexOf(send);

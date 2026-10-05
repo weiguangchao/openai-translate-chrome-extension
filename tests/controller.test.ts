@@ -12,14 +12,12 @@ const sendMessage = vi.fn((message: { type: string; text?: string }) =>
 
 beforeEach(() => {
   vi.useFakeTimers();
-  sendMessage
-    .mockReset()
-    .mockImplementation((message) =>
-      Promise.resolve({
-        ok: true,
-        data: message.type === 'translate' ? `译文 ${message.text}` : null,
-      }),
-    );
+  sendMessage.mockReset().mockImplementation((message) =>
+    Promise.resolve({
+      ok: true,
+      data: message.type === 'translate' ? `译文 ${message.text}` : null,
+    }),
+  );
   vi.stubGlobal('chrome', { runtime: { id: 'extension-id', sendMessage } });
   document.body.innerHTML = '<div id="player"><video></video><div id="layer">Native</div></div>';
   const video = document.querySelector('video')!;
@@ -87,8 +85,7 @@ it('drives any platform through the waiting, live and timeline caption sources',
   expect(layer.hasAttribute('data-subline-caption')).toBe(false);
   expect(sendMessage).toHaveBeenCalledWith({
     type: 'prefetch',
-    texts: ['Timed cue.'],
-    segments: [0],
+    items: [{ text: 'Timed cue.', segment: 0, needsSplit: false }],
   });
 
   controller.destroy();

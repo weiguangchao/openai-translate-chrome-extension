@@ -1,6 +1,6 @@
+import type { PrefetchItem } from '../shared/caption-translation';
 import { fetchModels, translate } from '../shared/api';
 import {
-  emptyPrefetch,
   readPrefetchRequest,
   readTranslateRequest,
   requestType,
@@ -43,23 +43,26 @@ async function contentRequest(
     return;
   }
   if (type === 'prefetch') {
-    if (emptyPrefetch(message)) {
+    const { items } = readPrefetchRequest(message);
+    if (!items.length) {
       consumers.delete(consumer);
-      queue.release(consumer);
+      queue.release([consumer]);
       return;
     }
     requireEnabled(platform);
-    const { texts, segments, needsSplit } = readPrefetchRequest(message);
-    const keys = texts.map((text, index) => JSON.stringify([text, needsSplit[index]]));
-    const unique = [...new Set(keys)].map((key) => keys.indexOf(key));
-    const results = await queue.prefetch(
-      consumer,
-      settings,
-      unique.map((index) => texts[index]),
-      unique.map((index) => segments[index]),
-      unique.map((index) => needsSplit[index]),
-    );
-    return keys.map((key) => results[unique.indexOf(keys.indexOf(key))]);
+    const positions = new Map<string, number>();
+    const unique: PrefetchItem[] = [];
+    const indices = items.map((item) => {
+      const key = JSON.stringify([item.text, item.needsSplit]);
+      const existing = positions.get(key);
+      if (existing !== undefined) return existing;
+      const index = unique.length;
+      positions.set(key, index);
+      unique.push(item);
+      return index;
+    });
+    const results = await queue.prefetch(consumer, settings, unique);
+    return indices.map((index) => results[index]);
   }
   if (type === 'translate') {
     requireEnabled(platform);
@@ -114,11 +117,11 @@ chrome.storage.onChanged.addListener((changes, area) => {
       queue.reset();
       consumers.clear();
     } else if (change.availability) {
-      for (const [consumer, platform] of consumers) {
-        if (settings[platform]) continue;
-        queue.release(consumer);
-        consumers.delete(consumer);
-      }
+      const disabled = [...consumers]
+        .filter(([, platform]) => !settings[platform])
+        .map(([consumer]) => consumer);
+      for (const consumer of disabled) consumers.delete(consumer);
+      queue.release(disabled);
     }
     const sequence = ++updateSequence;
     const update: SettingsUpdated = {

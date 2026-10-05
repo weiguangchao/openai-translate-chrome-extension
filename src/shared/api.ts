@@ -1,4 +1,4 @@
-import { providerFetch } from './provider/transport';
+import { providerFetch, type ProviderSendPolicy } from './provider/transport';
 import { translationBatchLimit } from './limits';
 import { englishLanguageName, validateBaseUrl, validateSettings, type Settings } from './settings';
 import { addTokenUsage, readProviderUsage } from './token-usage';
@@ -37,7 +37,7 @@ async function fetchApi(
   path: string,
   body: unknown,
   signal?: AbortSignal,
-  canSend?: () => boolean,
+  policy?: ProviderSendPolicy,
 ): Promise<{ response: Response; signal: AbortSignal }> {
   if (!settings.apiKey.trim()) throw new Error('请先填写 API Key。');
   let result: { response: Response; signal: AbortSignal };
@@ -56,7 +56,7 @@ async function fetchApi(
         cache: 'no-store',
       },
       signal,
-      canSend,
+      policy,
     );
   } catch (error) {
     if (error instanceof Error && ['TimeoutError', 'AbortError'].includes(error.name))
@@ -198,7 +198,7 @@ async function complete(
   maxTokens: number,
   signal: AbortSignal | undefined,
   caption = false,
-  canSend?: () => boolean,
+  policy?: ProviderSendPolicy,
 ): Promise<string> {
   validateSettings(settings, true);
   const instructions = translatorInstructions(settings, task);
@@ -210,7 +210,7 @@ async function complete(
         completionBody(settings, instructions, input, maxTokens, probe),
         signal,
         caption,
-        canSend,
+        policy,
       );
       rememberRejection(settings, probe.dropped);
       if (!text.trim()) throw new Error('模型未返回译文，请确认该模型支持 /chat/completions。');
@@ -228,14 +228,14 @@ async function postModel(
   body: object,
   signal: AbortSignal | undefined,
   caption = false,
-  canSend?: () => boolean,
+  policy?: ProviderSendPolicy,
 ): Promise<string> {
   const { response, signal: deadline } = await fetchApi(
     settings,
     '/chat/completions',
     body,
     signal,
-    canSend,
+    policy,
   );
   return readModelText(response, deadline, caption);
 }
@@ -257,10 +257,10 @@ export async function translate(
 
 export async function translateCaptionBatch(
   settings: Settings,
-  inputs: TranslationInput[],
+  inputs: readonly TranslationInput[],
   signal?: AbortSignal,
   onTranslation?: (index: number, translation: CaptionTranslation) => void,
-  canSend?: () => boolean,
+  policy?: ProviderSendPolicy,
 ): Promise<CaptionTranslation[] | null> {
   inputs.forEach((input) => checkText(input.text));
   if (!inputs.length || inputs.length > translationBatchLimit)
@@ -273,7 +273,8 @@ needsSplit=true: split AND translate using the caption's units ([index, source t
     JSON.stringify(
       inputs.map((input, id) => ({
         id,
-        ...input,
+        text: input.text,
+        needsSplit: input.needsSplit,
         ...(input.needsSplit
           ? {
               units: subtitleUnits(input.text).map((unit, index) => [
@@ -287,7 +288,7 @@ needsSplit=true: split AND translate using the caption's units ([index, source t
     65536,
     signal,
     true,
-    canSend,
+    policy,
   );
   signal?.throwIfAborted();
   let values: unknown[];

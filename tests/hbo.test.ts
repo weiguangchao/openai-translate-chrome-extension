@@ -1,3 +1,4 @@
+import type { PrefetchItem } from '../src/shared/caption-translation';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { CaptionController } from '../src/core/controller';
 import { createHboPlatform } from '../src/platforms/hbo/platform';
@@ -165,8 +166,7 @@ beforeEach(async () => {
       sendMessage: async (message: {
         type: string;
         text: string;
-        texts: string[];
-        segments?: number[];
+        items: readonly PrefetchItem[];
         cacheOnly?: boolean;
       }) => {
         if (message.type === 'prefetch-pause') queue.pause('hbo');
@@ -174,7 +174,7 @@ beforeEach(async () => {
         if (message.type === 'prefetch') {
           return {
             ok: true,
-            data: await queue.prefetch('hbo', settings, message.texts, message.segments),
+            data: await queue.prefetch('hbo', settings, message.items),
           };
         }
         if (message.type === 'translate')

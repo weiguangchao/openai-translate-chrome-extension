@@ -103,3 +103,88 @@ it('starts each 60-second deadline only when its HTTP request is sent', async ()
   await expect(Promise.all(work)).resolves.toEqual([['完成'], ['完成'], ['完成'], ['完成']]);
   expect(timeout.mock.calls).toEqual([[60000], [60000], [60000], [60000]]);
 });
+
+it('prioritizes the visible caption when the next send window opens', async () => {
+  const sent: string[] = [];
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (_url: string, init: RequestInit) => {
+      const texts = requestedTexts(init);
+      sent.push(...texts);
+      return providerReply(texts, () => '完成');
+    }),
+  );
+  const queue = new TranslationQueue();
+  await Promise.all(['A', 'B', 'C'].map((text) => queue.request(text, settings, text)));
+  const prefetch = queue.prefetch(
+    'window',
+    settings,
+    Array.from({ length: 4 }, (_, segment) => ({
+      text: `Future ${segment}`,
+      segment,
+      needsSplit: false,
+    })),
+  );
+  const current = queue.request('current', settings, 'Visible');
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(sent.slice(3)).toEqual(['Visible', 'Future 0', 'Future 1']);
+  await expect(current).resolves.toBe('完成');
+  await vi.advanceTimersByTimeAsync(1000);
+  await expect(prefetch).resolves.toEqual(['完成', '完成', '完成', '完成']);
+});
+
+it('replaces unsent work when a consumer moves to a disjoint window', async () => {
+  const sent: string[] = [];
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (_url: string, init: RequestInit) => {
+      const texts = requestedTexts(init);
+      sent.push(...texts);
+      return providerReply(texts, () => '完成');
+    }),
+  );
+  const queue = new TranslationQueue();
+  await Promise.all(['A', 'B', 'C'].map((text) => queue.request(text, settings, text)));
+  const old = queue.prefetch('window', settings, [
+    { text: 'Obsolete', segment: 0, needsSplit: false },
+  ]);
+  const next = queue.prefetch('window', settings, [
+    { text: 'Needed', segment: 1, needsSplit: false },
+  ]);
+  await vi.advanceTimersByTimeAsync(1000);
+  await expect(old).resolves.toEqual([null]);
+  await expect(next).resolves.toEqual(['完成']);
+  expect(sent).toEqual(['A', 'B', 'C', 'Needed']);
+});
+
+it('keeps the shared send budget across queue resets and configuration changes', async () => {
+  const fetch = vi.fn(async (_url: string, init: RequestInit) =>
+    providerReply(requestedTexts(init), () => '完成'),
+  );
+  vi.stubGlobal('fetch', fetch);
+  const queue = new TranslationQueue();
+  await Promise.all(['A', 'B', 'C'].map((text) => queue.request(text, settings, text)));
+  queue.reset();
+  const changed = queue.request('next', { ...settings, model: 'new-model' }, 'D');
+  await vi.advanceTimersByTimeAsync(999);
+  expect(fetch).toHaveBeenCalledTimes(3);
+  await vi.advanceTimersByTimeAsync(1);
+  await expect(changed).resolves.toBe('完成');
+  expect(fetch).toHaveBeenCalledTimes(4);
+});
+
+it('releases all disabled consumers before waking any pending provider sends', async () => {
+  const fetch = vi.fn(async (_url: string, init: RequestInit) =>
+    providerReply(requestedTexts(init), () => '完成'),
+  );
+  vi.stubGlobal('fetch', fetch);
+  const queue = new TranslationQueue();
+  await Promise.all(['A', 'B', 'C'].map((text) => queue.request(text, settings, text)));
+  const waiting = ['one', 'two'].map((consumer) =>
+    queue.request(consumer, settings, consumer).catch((error: Error) => error.message),
+  );
+  vi.setSystemTime(Date.now() + 1000);
+  queue.release(['one', 'two']);
+  await expect(Promise.all(waiting)).resolves.toEqual(['字幕已更新。', '字幕已更新。']);
+  expect(fetch).toHaveBeenCalledTimes(3);
+});

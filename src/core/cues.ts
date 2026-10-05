@@ -1,15 +1,15 @@
 export interface CueTiming {
-  from: number;
-  to: number;
-  startTime: number;
-  endTime: number;
+  readonly from: number;
+  readonly to: number;
+  readonly startTime: number;
+  readonly endTime: number;
 }
 
 export interface TimedCue {
   startTime: number;
   endTime: number;
   text: string;
-  timing?: CueTiming[];
+  timing?: readonly CueTiming[];
 }
 
 export const cueLimit = 30000;
