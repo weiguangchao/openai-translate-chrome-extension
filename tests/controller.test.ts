@@ -211,3 +211,43 @@ it('retries a paused cache lookup invalidated by a later seek event', async () =
     { type: 'translate', text: 'Cached source.', cacheOnly: true },
   ]);
 });
+
+it('keeps a displayed translation when playback resumes through a rebuffer seek', async () => {
+  let translated = false;
+  sendMessage.mockImplementation((message: { type: string; text?: string }) => {
+    if (message.type !== 'translate') return Promise.resolve({ ok: true, data: null });
+    if (!translated) {
+      translated = true;
+      return Promise.resolve({ ok: true, data: `译文 ${message.text}` });
+    }
+    return new Promise(() => {});
+  });
+  const video = document.querySelector('video')!;
+  video.currentTime = 2;
+  source = {
+    kind: 'timeline',
+    mode: 'model',
+    id: 'track',
+    cues: [{ startTime: 0, endTime: 10, text: 'Already translated.' }],
+    layers: () => [],
+  };
+  controller = new CaptionController(
+    () => platform,
+    publicSettings({ ...DEFAULT_SETTINGS, apiKey: 'key', model: 'model' }),
+  );
+  await vi.advanceTimersByTimeAsync(0);
+  expect(lines()).toEqual(['Already translated.', '译文 Already translated.']);
+  const translates = () =>
+    sendMessage.mock.calls.filter(([message]) => message.type === 'translate');
+  expect(translates()).toHaveLength(1);
+  Object.defineProperty(video, 'paused', { value: true });
+  video.dispatchEvent(new Event('pause'));
+  Object.defineProperty(video, 'paused', { value: false });
+  Object.defineProperty(video, 'seeking', { configurable: true, value: true });
+  video.dispatchEvent(new Event('seeking'));
+  Object.defineProperty(video, 'seeking', { value: false });
+  video.dispatchEvent(new Event('seeked'));
+  await vi.advanceTimersByTimeAsync(450);
+  expect(lines()).toEqual(['Already translated.', '译文 Already translated.']);
+  expect(translates()).toHaveLength(1);
+});

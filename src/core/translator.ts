@@ -47,6 +47,10 @@ export class CaptionTranslator {
     return this.requested !== '';
   }
 
+  hasTranslation(text: string, needsSplit: boolean): boolean {
+    return this.result !== null && this.text === text && this.needsSplit === needsSplit;
+  }
+
   invalidate(): void {
     this.version++;
   }

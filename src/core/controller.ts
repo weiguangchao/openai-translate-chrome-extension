@@ -138,6 +138,15 @@ export class CaptionController {
     this.overlay.clear();
   }
 
+  private hasReadyCaption(source: CaptionSource, time: number): boolean {
+    const captions = source.kind === 'timeline' ? timedCaptions(source.cues) : null;
+    const caption = currentCaption(source, captions ? captionWindow(captions, time).current : '');
+    const cue = captions?.find(
+      (item) => item.startTime <= time && time < item.endTime && item.text === caption.text,
+    );
+    return this.translator.hasTranslation(caption.text, cue?.needsSplit === true);
+  }
+
   private tick(): void {
     if (this.destroyed) return;
     if (!this.connection.active) {
@@ -176,7 +185,7 @@ export class CaptionController {
     if (video.seeking) {
       this.gate.observe(time);
       this.gate.hold();
-      this.clearCaption();
+      if (!this.hasReadyCaption(source, time)) this.clearCaption();
       return;
     }
     this.gate.observe(time);
