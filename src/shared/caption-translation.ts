@@ -23,19 +23,22 @@ export interface PrefetchItem extends TranslationInput {
   readonly segment: number;
 }
 
-export function subtitleUnits(text: string): { from: number; to: number }[] {
-  const units: { from: number; to: number }[] = [];
-  let prefix = 0;
+const letterLike = /[\p{L}\p{N}]/u;
+
+interface SubtitleUnit {
+  readonly from: number;
+  readonly to: number;
+  readonly word: boolean;
+}
+
+export function subtitleUnits(text: string): SubtitleUnit[] {
+  const units: SubtitleUnit[] = [];
   for (const part of new Intl.Segmenter(undefined, { granularity: 'word' }).segment(text)) {
     if (!part.segment.trim()) continue;
-    const to = part.index + part.segment.length;
-    if (part.isWordLike) {
-      units.push({ from: units.length ? part.index : prefix, to });
-    } else if (units.length) units[units.length - 1].to = to;
-    else if (!text.slice(prefix, part.index).trim()) prefix = part.index;
+    const from = part.index;
+    const to = from + part.segment.length;
+    units.push({ from, to, word: letterLike.test(part.segment.normalize('NFKD')) });
   }
-  if (!units.length && text.trim())
-    units.push({ from: text.length - text.trimStart().length, to: text.trimEnd().length });
   return units;
 }
 
@@ -67,7 +70,7 @@ function comparable(text: string): { letters: string[]; offsets: number[] } {
   let offset = 0;
   for (const point of text) {
     for (const letter of point.normalize('NFKD').toLowerCase())
-      if (/[\p{L}\p{N}]/u.test(letter)) {
+      if (letterLike.test(letter)) {
         letters.push(letter);
         offsets.push(offset);
       }
@@ -82,6 +85,55 @@ function fits(source: string, translation: string, multiUnit: boolean): boolean 
   return subtitleDisplayLength(translation) <= limit || translation === source;
 }
 
+function displayPart(
+  text: string,
+  units: readonly SubtitleUnit[],
+  first: number,
+  last: number,
+  translation: string,
+): TranslationPart | null {
+  const words = units.slice(first, last + 1).filter((unit) => unit.word).length;
+  if (!words) return null;
+  const from = units[first].from;
+  const to = units[last].to;
+  return fits(text.slice(from, to), translation, words > 1)
+    ? ({ from, to, translation } as TranslationPart)
+    : null;
+}
+
+const punctuation = (text: string) => text.replace(/[\s\p{M}]/gu, '');
+const opening = /^[\p{Ps}\p{Pi}¿¡]/u;
+
+function quotedSource(source: string): { letters: number; head: string; tail: string } {
+  const { offsets } = comparable(source);
+  if (!offsets.length) return { letters: 0, head: '', tail: '' };
+  const last = offsets[offsets.length - 1];
+  return {
+    letters: offsets.length,
+    head: punctuation(source.slice(0, offsets[0])),
+    tail: punctuation(source.slice(last + String.fromCodePoint(source.codePointAt(last)!).length)),
+  };
+}
+
+function gapSplit(
+  gap: readonly string[],
+  spaced: readonly boolean[],
+  tail: string,
+  head: string,
+): number {
+  const ends = Array.from({ length: gap.length + 1 }, (_, end) => end);
+  const joined = (units: readonly string[]) => units.map(punctuation).join('');
+  const byHead = head ? ends.find((end) => joined(gap.slice(end)) === head) : undefined;
+  const byTail = tail ? ends.find((end) => joined(gap.slice(0, end)) === tail) : undefined;
+  const opens = gap.findIndex((unit) => opening.test(unit));
+  const attached = spaced.lastIndexOf(true);
+  return (
+    byHead ??
+    byTail ??
+    Math.min(opens < 0 ? gap.length : opens, attached < 0 ? gap.length : attached)
+  );
+}
+
 function alignedParts(
   text: string,
   parts: readonly { source: string; translation: string }[],
@@ -90,19 +142,28 @@ function alignedParts(
   const { letters, offsets } = comparable(text);
   const unitAt = (index: number) =>
     units.findIndex((unit) => unit.from <= offsets[index] && offsets[index] < unit.to);
+  const quoted = parts.map((part) => quotedSource(part.source));
+  if (quoted.some((source) => !source.letters)) return null;
   const accepted: TranslationPart[] = [];
   let position = 0;
   let first = 0;
-  for (const part of parts) {
-    const length = comparable(part.source).letters.length;
-    if (!length) return null;
-    position += length;
-    const last = position === letters.length ? units.length - 1 : unitAt(position - 1);
-    if (last < first || (position < letters.length && unitAt(position) === last)) return null;
-    const from = units[first].from;
-    const to = units[last].to;
-    if (!fits(text.slice(from, to), part.translation, last > first)) return null;
-    accepted.push({ from, to, translation: part.translation } as TranslationPart);
+  for (const [index, part] of parts.entries()) {
+    position += quoted[index].letters;
+    let last = units.length - 1;
+    if (position < letters.length) {
+      const end = unitAt(position - 1);
+      const next = unitAt(position);
+      if (end < first || next <= end) return null;
+      const span = units.slice(end, next + 1);
+      const gap = span.slice(1, -1).map((unit) => text.slice(unit.from, unit.to));
+      const spaced = span
+        .slice(1)
+        .map((unit, previous) => /\s/u.test(text.slice(span[previous].to, unit.from)));
+      last = end + gapSplit(gap, spaced, quoted[index].tail, quoted[index + 1].head);
+    }
+    const accept = displayPart(text, units, first, last, part.translation);
+    if (!accept) return null;
+    accepted.push(accept);
     first = last + 1;
   }
   return accepted;
@@ -159,11 +220,10 @@ export function readStoredTranslation(
     const last = units.findIndex((unit, index) => index >= first && unit.to === record?.to);
     const translation = typeof record?.translation === 'string' ? record.translation.trim() : '';
     if (record?.from !== units[first]?.from || last < 0 || !translation) return null;
-    const from = units[first].from;
-    const to = units[last].to;
-    if (translation.length > 5000 || !fits(input.text.slice(from, to), translation, last > first))
-      return null;
-    accepted.push({ from, to, translation } as TranslationPart);
+    const accept =
+      translation.length <= 5000 && displayPart(input.text, units, first, last, translation);
+    if (!accept) return null;
+    accepted.push(accept);
     first = last + 1;
   }
   return first === units.length ? { parts: accepted } : null;
