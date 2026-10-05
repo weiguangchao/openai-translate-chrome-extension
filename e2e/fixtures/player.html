@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Subline extension smoke fixture</title>
+    <link rel="icon" href="data:," />
+    <style>
+      body {
+        margin: 24px;
+        background: #20232a;
+        color: white;
+        font-family: sans-serif;
+      }
+      #player {
+        position: relative;
+        width: 800px;
+        height: 450px;
+      }
+      video {
+        display: block;
+        width: 100%;
+        height: 100%;
+      }
+      button {
+        margin-top: 16px;
+        padding: 12px 24px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Controlled player</h1>
+    <div id="player">
+      <video muted playsinline></video>
+      <div id="native"></div>
+    </div>
+    <button id="play">Play fixture</button>
+    <script>
+      const player = document.querySelector('#player');
+      const native = document.querySelector('#native');
+      const video = document.querySelector('video');
+      if (location.hostname === 'www.youtube.com') {
+        player.className = 'html5-video-player';
+        native.className = 'ytp-caption-window-container';
+        const track = {
+          languageCode: 'en',
+          vssId: '.en',
+          baseUrl: 'https://www.youtube.com/api/timedtext?v=e2e-youtube&lang=en',
+        };
+        player.getOption = () => track;
+        player.getPlayerResponse = () => ({
+          videoDetails: { videoId: 'e2e-youtube' },
+          captions: { playerCaptionsTracklistRenderer: { captionTracks: [track] } },
+        });
+      } else {
+        player.setAttribute('data-testid', 'playerContainer');
+        native.setAttribute('data-testid', 'caption_renderer_overlay');
+        native.__reactFiber$fixture = {
+          memoizedProps: {
+            eventConsumer: {
+              selectedTextTrack$: {
+                subscribe(callback) {
+                  callback({ selectedTextTrack: { language: 'en', role: 'subtitle' } });
+                  return { unsubscribe() {} };
+                },
+              },
+            },
+          },
+          return: {
+            memoizedProps: {
+              value: {
+                activeStreamInfo: {
+                  url: 'https://play.hbomax.com/e2e/manifest.mpd',
+                  streamMode: 'VOD',
+                },
+              },
+            },
+          },
+        };
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = 800;
+      canvas.height = 450;
+      const drawing = canvas.getContext('2d');
+      function draw() {
+        drawing.fillStyle = '#343c4e';
+        drawing.fillRect(0, 0, canvas.width, canvas.height);
+        drawing.fillStyle = '#a8bbde';
+        drawing.fillRect((performance.now() / 20) % 700, 120, 100, 100);
+      }
+      draw();
+      setInterval(draw, 100);
+      video.srcObject = canvas.captureStream(10);
+      document.querySelector('#play').addEventListener('click', () => video.play());
+    </script>
+  </body>
+</html>

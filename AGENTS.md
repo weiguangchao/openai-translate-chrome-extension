@@ -1,6 +1,7 @@
 # OpenAI Translate Chrome Extension
 
 - When debugging or verifying, prefer the local Chrome browser. On macOS, Chrome is located at `/Applications/Google Chrome.app`.
+- Run `npm run verify` for the same checks used in CI. Install its isolated test browser with `npx playwright install chromium`; real-site acceptance can reuse the user's logged-in Chrome profile.
 
 ## Glossary
 

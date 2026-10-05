@@ -1,0 +1,10 @@
+<MPD type="static" mediaPresentationDuration="PT60S">
+  <Period start="PT0S" duration="PT60S">
+    <AdaptationSet contentType="text" lang="en">
+      <Role value="subtitle" />
+      <Representation id="english" mimeType="text/vtt">
+        <BaseURL>english.vtt</BaseURL>
+      </Representation>
+    </AdaptationSet>
+  </Period>
+</MPD>
