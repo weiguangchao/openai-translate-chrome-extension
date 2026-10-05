@@ -110,6 +110,37 @@ it('recovers complete results from a truncated response only after parsing fails
   expect(published.mock.calls).toEqual([[0, '完整']]);
 });
 
+it.each([
+  {
+    label: 'malformed',
+    final:
+      '{"results":[{"id":0,"parts":[{"translation":"一"} stray]},' +
+      JSON.stringify(result(1, '二')) +
+      ']}',
+    published: [[1, '二']],
+  },
+  {
+    label: 'truncated',
+    final: '{"results":[' + JSON.stringify(result(0, '一')) + ',{"id":1,"parts":[{"transl',
+    published: [[0, '一']],
+  },
+])('never falls back to a draft when the final JSON is $label', async ({ final, published }) => {
+  respond(`${payload([result(0, '草稿一'), result(1, '草稿二')])}\nFinal\n${final}`);
+  const publish = vi.fn();
+  await expect(
+    translateCaptionBatch(
+      settings,
+      [
+        { text: 'One.', needsSplit: false },
+        { text: 'Two.', needsSplit: false },
+      ],
+      undefined,
+      publish,
+    ),
+  ).resolves.toBeNull();
+  expect(publish.mock.calls).toEqual(published);
+});
+
 it('discards a response that arrives after cancellation even if the provider ignores abort', async () => {
   let finish!: (response: Response) => void;
   vi.stubGlobal(

@@ -48,8 +48,13 @@ function hasTranslationPayload(value: unknown): boolean {
   return Array.isArray(record.results) || Array.isArray(record.translations);
 }
 
-function lastTranslationPayload(text: string): unknown {
-  let payload: unknown;
+interface ModelPayload {
+  readonly json: string;
+  readonly parsed: { value: unknown } | null;
+}
+
+function lastTranslationPayload(text: string): ModelPayload | undefined {
+  let payload: ModelPayload | undefined;
   let index = 0;
   while (index < text.length) {
     const objectAt = text.indexOf('{', index);
@@ -57,18 +62,16 @@ function lastTranslationPayload(text: string): unknown {
     const start = objectAt < 0 ? arrayAt : arrayAt < 0 ? objectAt : Math.min(objectAt, arrayAt);
     if (start < 0) break;
     const end = skipValue(text, start);
-    if (end < 0) {
-      index = start + 1;
-      continue;
-    }
-    try {
-      const value = JSON.parse(text.slice(start, end));
-      if (hasTranslationPayload(value)) payload = value;
-    } catch {
-      index = start + 1;
-      continue;
-    }
-    index = end;
+    const json = end < 0 ? text.slice(start) : text.slice(start, end);
+    const parsed = end < 0 ? null : parsedJson(json);
+    if (parsed) {
+      if (hasTranslationPayload(parsed.value)) payload = { json, parsed };
+      index = end;
+    } else if (resultsArray(json) >= 0) {
+      payload = { json, parsed: null };
+      if (end < 0) break;
+      index = end;
+    } else index = start + 1;
   }
   return payload;
 }
@@ -81,9 +84,9 @@ export function parseModelJson(response: string): unknown {
     if (typeof value !== 'string') return value;
     return JSON.parse(value);
   } catch {
-    const payload = lastTranslationPayload(stripOpeningFence(text));
-    if (payload === undefined) throw new SyntaxError('Invalid model JSON');
-    return payload;
+    const parsed = lastTranslationPayload(stripOpeningFence(text))?.parsed;
+    if (!parsed) throw new SyntaxError('Invalid model JSON');
+    return parsed.value;
   }
 }
 
@@ -116,14 +119,9 @@ function skipSpace(text: string, index: number): number {
 }
 
 export function scanTranslationResults(source: string): unknown[] {
-  let text = stripOpeningFence(modelAnswer(source));
-  if (!text.trimStart().startsWith('{')) {
-    const objectAt = text.indexOf('{');
-    if (objectAt < 0) return [];
-    text = text.slice(objectAt);
-  }
-  const start = findMember(text, 'results');
-  if (start < 0 || text[start] !== '[') return [];
+  const text = lastTranslationPayload(stripOpeningFence(modelAnswer(source)))?.json ?? '';
+  const start = resultsArray(text);
+  if (start < 0) return [];
   const values: unknown[] = [];
   let index = skipSpace(text, start + 1);
   while (index < text.length && text[index] !== ']') {
@@ -136,6 +134,11 @@ export function scanTranslationResults(source: string): unknown[] {
     index = skipSpace(text, index + 1);
   }
   return values;
+}
+
+function resultsArray(text: string): number {
+  const start = findMember(text, 'results');
+  return text[start] === '[' ? start : -1;
 }
 
 function scannedResult(text: string, start: number, end: number): unknown {
