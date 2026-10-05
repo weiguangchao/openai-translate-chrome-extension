@@ -54,7 +54,7 @@ declare global {
 interface Input {
   id: number;
   text: string;
-  needsSplit: boolean;
+  split?: true;
 }
 interface Post {
   inputs: Input[];

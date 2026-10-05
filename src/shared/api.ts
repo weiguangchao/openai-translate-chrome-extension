@@ -10,7 +10,6 @@ import {
 } from './subtitle-segmentation';
 import {
   readCaptionTranslation,
-  subtitleUnits,
   type CaptionTranslation,
   type TranslationInput,
 } from './caption-translation';
@@ -267,22 +266,23 @@ export async function translateCaptionBatch(
     throw new Error('单次翻译的字幕过多。');
   const response = await complete(
     settings,
-    `The input is an array of ordered captions from one passage. Use neighbors only as context; never move content between captions. Return only JSON {"results":[{"id":0,"parts":[{"translation":"..."}]}]} with one result per input id, in input order.
-needsSplit=false: return one part translating the whole caption.
-needsSplit=true: split AND translate using the caption's units ([index, source text] pairs). Return at least two parts, or one for a single unit, as {"endExclusive":number,"translation":"..."}. Each part spans from the previous endExclusive (initially 0) to its own, excluding the end. End values must be strictly increasing integers, with the last equal to units.length, covering every unit exactly once. Use natural clause boundaries, keep related words together, and avoid tiny fragments. Aim for at most ${subtitleDisplayLimit} display columns in each part's source and translation (CJK characters count as two); allow slight overflow to preserve meaning. Translate each span in full-caption context, preserving its content, spoken order, repetitions, and self-corrections.`,
+    `The input is a JSON array of ordered captions from one passage. Use neighboring captions only as context; never move content between captions. Return only JSON {"results":[{"id":0,"parts":[...]}]} with exactly one result per input id, in input order.
+
+Without "split": return one part, {"translation":"..."}, translating the whole caption.
+
+With "split":true, the caption is too long for one line. Break it into consecutive parts and translate each as {"source":"...","translation":"..."}.
+- Copy the caption text into the sources word for word and in order; joined together, the sources must reproduce the text. Do not add, drop, or reword anything, including fillers and repetitions.
+- Break at natural clause boundaries and keep related words together. Prefer break points where each part's translation reads naturally on its own, without borrowing words from a neighboring part.
+- Aim for at most ${subtitleDisplayLimit} display columns in each part's source and in its translation (CJK characters count as two). Allow slight overflow rather than break a phrase, and avoid tiny fragments.
+- Translate each part in the context of the whole caption, preserving its content, spoken order, repetitions, and self-corrections.
+
+Example output shape (placeholders, not real text):
+{"results":[{"id":0,"parts":[{"translation":"<translation of caption 0>"}]},{"id":1,"parts":[{"source":"<first part of caption 1>","translation":"<its translation>"},{"source":"<rest of caption 1>","translation":"<its translation>"}]}]}`,
     JSON.stringify(
       inputs.map((input, id) => ({
         id,
         text: input.text,
-        needsSplit: input.needsSplit,
-        ...(input.needsSplit
-          ? {
-              units: subtitleUnits(input.text).map((unit, index) => [
-                index,
-                input.text.slice(unit.from, unit.to),
-              ]),
-            }
-          : {}),
+        ...(input.needsSplit ? { split: true } : {}),
       })),
     ),
     65536,

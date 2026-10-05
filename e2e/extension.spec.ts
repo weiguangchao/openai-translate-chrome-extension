@@ -30,9 +30,9 @@ for (const platform of ['youtube', 'hbo'] as const) {
       expect(p.posts).toHaveLength(1);
       expect(p.posts[0].body).toMatchObject({ model: 'e2e-fixed-model', stream: false });
       expect(p.posts[0].inputs).toEqual([
-        { id: 0, text: source, needsSplit: false },
-        { id: 1, text: nextSource, needsSplit: false },
-        { id: 2, text: 'The garden is quiet.', needsSplit: false },
+        { id: 0, text: source },
+        { id: 1, text: nextSource },
+        { id: 2, text: 'The garden is quiet.' },
       ]);
     });
   });
@@ -45,7 +45,7 @@ for (const platform of ['youtube', 'hbo'] as const) {
         await p.seek(40);
         await p.play();
         await expect.poll(() => p.posts.length).toBe(1);
-        expect(p.posts[0].inputs).toMatchObject([{ id: 0, text: longCaption, needsSplit: true }]);
+        expect(p.posts[0].inputs).toMatchObject([{ id: 0, text: longCaption, split: true }]);
         await p.pause();
         const host = await p.overlay.elementHandle();
         const downloads = p.downloads.length;
