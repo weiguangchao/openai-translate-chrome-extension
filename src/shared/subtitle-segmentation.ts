@@ -122,18 +122,15 @@ export function scanTranslationResults(source: string): unknown[] {
     if (objectAt < 0) return [];
     text = text.slice(objectAt);
   }
-  const start = findArray(text, 'results');
-  if (start < 0) return [];
+  const start = findMember(text, 'results');
+  if (start < 0 || text[start] !== '[') return [];
   const values: unknown[] = [];
   let index = skipSpace(text, start + 1);
   while (index < text.length && text[index] !== ']') {
     const end = skipValue(text, index);
     if (end < 0) break;
-    try {
-      values.push(JSON.parse(text.slice(index, end)));
-    } catch {
-      break;
-    }
+    const value = scannedResult(text, index, end);
+    if (value !== undefined) values.push(value);
     index = skipSpace(text, end);
     if (text[index] !== ',') break;
     index = skipSpace(text, index + 1);
@@ -141,7 +138,25 @@ export function scanTranslationResults(source: string): unknown[] {
   return values;
 }
 
-function findArray(text: string, name: string): number {
+function scannedResult(text: string, start: number, end: number): unknown {
+  const result = text.slice(start, end);
+  const whole = parsedJson(result);
+  if (whole) return whole.value;
+  const at = findMember(result, 'id');
+  const idEnd = at < 0 ? -1 : skipValue(result, at);
+  const id = idEnd < 0 ? null : parsedJson(result.slice(at, idEnd));
+  return id ? { id: id.value } : undefined;
+}
+
+function parsedJson(text: string): { value: unknown } | null {
+  try {
+    return { value: JSON.parse(text) as unknown };
+  } catch {
+    return null;
+  }
+}
+
+function findMember(text: string, name: string): number {
   let index = skipSpace(text, 0);
   if (index >= text.length || text[index] !== '{') return -1;
   index++;
@@ -154,7 +169,7 @@ function findArray(text: string, name: string): number {
     index = skipSpace(text, key.end);
     if (text[index] !== ':') return -1;
     index = skipSpace(text, index + 1);
-    if (key.value === name) return text[index] === '[' ? index : -1;
+    if (key.value === name) return index;
     const next = skipValue(text, index);
     if (next < 0) return -1;
     index = skipSpace(text, next);

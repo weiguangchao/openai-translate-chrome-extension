@@ -522,6 +522,45 @@ it('retries only the cue that was not committed when the batch reply is short', 
   expect(JSON.parse(fetch.mock.calls[1][1].body as string).stream).toBe(false);
 });
 
+it('keeps the well-formed results of a reply with malformed JSON and retries only the broken ones', async () => {
+  const { fetch, requests } = pendingProvider();
+  const queue = new TranslationQueue();
+  const pending = queue.prefetch('tab', settings, [
+    { text: longCaption, segment: 0, needsSplit: true },
+    { text: 'Middle.', segment: 0, needsSplit: false },
+    { text: 'After.', segment: 0, needsSplit: false },
+  ]);
+  const broken = (result: unknown) => JSON.stringify(result).replace(/\}\]\}$/, '} stray]}');
+  const results = [
+    broken(longResult(0)),
+    JSON.stringify({ id: 1, parts: [{ translation: '中间。' }] }),
+    broken({ id: 2, parts: [{ translation: '之后。' }] }),
+  ];
+  requests[0].resolve(
+    Response.json({
+      choices: [{ message: { content: '```json\n{"results":[' + results.join(',') + ']}\n```' } }],
+    }),
+  );
+  await flush();
+  expect(requests.map((request) => request.texts)).toEqual([
+    [longCaption, 'Middle.', 'After.'],
+    [longCaption],
+    ['After.'],
+  ]);
+  expect(
+    JSON.parse(JSON.parse(fetch.mock.calls[1][1].body as string).messages[1].content)[0],
+  ).toMatchObject({ id: 0, split: true });
+  await expect(queue.lookup(settings, 'Middle.')).resolves.toBe('中间。');
+  requests[1].resolve(structuredReply([longResult()]));
+  requests[2].resolve(providerReply(['After.'], () => '之后。'));
+  await expect(pending).resolves.toEqual([
+    readCaptionTranslation(translationInput(longCaption, true), longResult()),
+    '中间。',
+    '之后。',
+  ]);
+  expect(fetch).toHaveBeenCalledTimes(3);
+});
+
 it('sends each segment as its own request, even with fewer than ten captions, and never mixes tabs', () => {
   const { batches } = pendingProvider();
   const queue = new TranslationQueue();

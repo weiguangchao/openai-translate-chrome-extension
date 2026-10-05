@@ -200,6 +200,15 @@ it('waits for a whole result object in a fragmented stream, including escaped br
   expect(scanTranslationResults(head + ',{"id":0,"parts":[')).toEqual([first]);
 });
 
+it('reduces a complete but malformed result object to its id and keeps reading', () => {
+  const ok = { id: 1, parts: [{ translation: '好' }] };
+  expect(
+    scanTranslationResults(
+      `{"results":[{"id":0,"parts":[{"translation":"坏"} stray]},${JSON.stringify(ok)},{"parts":[} ]}]}`,
+    ),
+  ).toEqual([{ id: 0 }, ok]);
+});
+
 it('flags whole long sentences for a Provider split and excludes overlapping cues', () => {
   const captions = timedCaptions([
     { text: 'Before, ' + text, startTime: 0, endTime: 10 },
