@@ -12,15 +12,19 @@ try {
     await writeFile(path.join(broken, `${platform}-page.js`), '');
   await mkdir(output, { recursive: true });
   await rm(path.join(output, 'report.json'), { force: true });
-  const result = spawnSync(process.execPath, ['node_modules/@playwright/test/cli.js', 'test'], {
-    encoding: 'utf8',
-    timeout: 90_000,
-    env: {
-      ...process.env,
-      SUBLINE_EXTENSION_PATH: broken,
-      SUBLINE_E2E_OUTPUT_DIR: output,
+  const result = spawnSync(
+    process.execPath,
+    ['node_modules/@playwright/test/cli.js', 'test', '--grep', 'packaged extension translates'],
+    {
+      encoding: 'utf8',
+      timeout: 90_000,
+      env: {
+        ...process.env,
+        SUBLINE_EXTENSION_PATH: broken,
+        SUBLINE_E2E_OUTPUT_DIR: output,
+      },
     },
-  });
+  );
   await writeFile(path.join(output, 'output.log'), result.stdout + result.stderr);
   if (result.error) throw result.error;
   assert.equal(result.status, 1, 'Removing page scripts must fail the same browser tests');

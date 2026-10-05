@@ -1,199 +1,294 @@
-import { createHash } from 'node:crypto';
-import { execFileSync } from 'node:child_process';
-import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import path from 'node:path';
-import { chromium, expect, test, type BrowserContext } from '@playwright/test';
+import { expect, test } from '@playwright/test';
+import { longCaption, longCaptionParts, longTranslations } from '../tests/fixtures/long-caption';
+import {
+  asrSource,
+  asrTranslation,
+  draftPrefix,
+  frenchSource,
+  frenchTranslation,
+  nextSource,
+  nextTranslation,
+  source,
+  translation,
+  withPlayer,
+} from './harness';
 
-const extensionPath = path.resolve(process.env.SUBLINE_EXTENSION_PATH ?? 'dist');
-const providerUrl = 'https://www.youtube.com/__e2e_provider__/v1/chat/completions';
-const scenarios = [
-  {
-    platform: 'youtube',
-    url: 'https://www.youtube.com/watch?v=e2e-youtube',
-    source: 'The moon is bright tonight.',
-    translation: '今晚的月亮很明亮。',
-    resources: ['https://www.youtube.com/api/timedtext?v=e2e-youtube&lang=en&fmt=json3'],
-  },
-  {
-    platform: 'hbo',
-    url: 'https://play.hbomax.com/video/watch/e2e-hbo',
-    source: 'We will meet at the station.',
-    translation: '我们将在车站见面。',
-    resources: [
-      'https://play.hbomax.com/e2e/manifest.mpd',
-      'https://play.hbomax.com/e2e/english.vtt',
-    ],
-  },
-];
+for (const platform of ['youtube', 'hbo'] as const) {
+  test(`${platform}: packaged extension translates a source track through its worker`, async ({}, info) => {
+    await withPlayer(platform, info, async (p) => {
+      await expect(p.original, 'Source timeline must reach the overlay').toHaveText(source);
+      await p.play();
+      await p.pair(source, translation);
+      expect(p.downloads).toHaveLength(platform === 'youtube' ? 1 : 2);
+      expect(p.posts).toHaveLength(1);
+      expect(p.posts[0].body).toMatchObject({ model: 'e2e-fixed-model', stream: false });
+      expect(p.posts[0].inputs).toEqual([
+        { id: 0, text: source, needsSplit: false },
+        { id: 1, text: nextSource, needsSplit: false },
+        { id: 2, text: 'The garden is quiet.', needsSplit: false },
+      ]);
+    });
+  });
 
-for (const scenario of scenarios) {
-  test(`${scenario.platform}: packaged extension translates a source track through its worker`, async ({}, testInfo) => {
-    const profile = await mkdtemp(path.join(tmpdir(), 'subline-e2e-'));
-    const requests: { url: string; method: string; worker: string | null; body: unknown }[] = [];
-    const unexpected: string[] = [];
-    const errors: string[] = [];
-    let context: BrowserContext | undefined;
-    try {
-      const manifest = JSON.parse(
-        await readFile(path.join(extensionPath, 'manifest.json'), 'utf8'),
-      );
-      expect(manifest).toEqual(JSON.parse(await readFile('public/manifest.json', 'utf8')));
-      const files = (await readdir(extensionPath, { recursive: true, withFileTypes: true }))
-        .filter((entry) => entry.isFile())
-        .map((entry) => path.join(entry.parentPath, entry.name))
-        .sort();
-      const digest = createHash('sha256');
-      for (const file of files) {
-        digest.update(path.relative(extensionPath, file));
-        digest.update(await readFile(file));
-      }
-      context = await chromium.launchPersistentContext(profile, {
-        channel: 'chromium',
-        headless: !process.env.E2E_HEADED,
-        viewport: { width: 1280, height: 800 },
-        args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`],
-      });
-      await context.tracing.start({ screenshots: true, snapshots: true, sources: true });
-      const worker = context.serviceWorkers()[0] ?? (await context.waitForEvent('serviceworker'));
-      const extensionId = new URL(worker.url()).host;
-      expect(worker.url()).toBe(`chrome-extension://${extensionId}/background.js`);
-      await testInfo.attach('build.json', {
-        body: JSON.stringify(
-          {
-            sha: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
-            node: process.version,
-            playwright: JSON.parse(
-              await readFile('node_modules/@playwright/test/package.json', 'utf8'),
-            ).version,
-            browser: context.browser()?.version(),
-            extensionId,
-            extensionPath,
-            buildSha256: digest.digest('hex'),
-          },
-          null,
-          2,
-        ),
-        contentType: 'application/json',
-      });
-      context.on('weberror', (error) => errors.push(error.error().message));
-      context.on('console', (message) => {
-        if (message.type() === 'error') errors.push(message.text());
-      });
-      await context.route('**/*', async (route) => {
-        const request = route.request();
-        const url = request.url();
-        if (url.startsWith(`chrome-extension://${extensionId}/`)) return route.continue();
-        const worker = request.serviceWorker()?.url() ?? null;
-        requests.push({ url, method: request.method(), worker, body: request.postDataJSON() });
-        const fulfill = (file: string, contentType: string) =>
-          route.fulfill({ path: path.resolve('e2e/fixtures', file), contentType });
-        if (url === scenario.url && request.isNavigationRequest())
-          return fulfill('player.html', 'text/html');
-        if (url === scenario.resources[0] && scenario.platform === 'youtube')
-          return fulfill('youtube.json', 'application/json');
-        if (url === scenario.resources[0] && scenario.platform === 'hbo')
-          return fulfill('hbo.mpd', 'application/dash+xml');
-        if (url === scenario.resources[1] && scenario.platform === 'hbo')
-          return fulfill('hbo.vtt', 'text/vtt');
-        if (url === providerUrl && request.method() === 'POST' && worker) {
-          return route.fulfill({
-            json: {
-              choices: [
-                {
-                  message: {
-                    content: JSON.stringify({
-                      results: [{ id: 0, parts: [{ translation: scenario.translation }] }],
-                    }),
-                  },
-                },
-              ],
-            },
-          });
+  test(`${platform}: delayed split stays hidden and style changes preserve in-flight work`, async ({}, info) => {
+    await withPlayer(
+      platform,
+      info,
+      async (p) => {
+        await p.seek(40);
+        await p.play();
+        await expect.poll(() => p.posts.length).toBe(1);
+        expect(p.posts[0].inputs).toMatchObject([{ id: 0, text: longCaption, needsSplit: true }]);
+        await p.pause();
+        const host = await p.overlay.elementHandle();
+        const downloads = p.downloads.length;
+        await p.settings({ original: { color: '#FFFFFF', size: 32 } });
+        await expect(p.original).toHaveCSS('font-size', '32px');
+        expect(
+          await host!.evaluate((node) => node === document.querySelector('[data-subline-overlay]')),
+        ).toBe(true);
+        expect(p.posts).toHaveLength(1);
+        expect(p.downloads).toHaveLength(downloads);
+        await expect(p.original).toBeHidden();
+        await p.release(0);
+        await p.pair(longCaptionParts[1], longTranslations[1]);
+        expect(p.posts).toHaveLength(1);
+        expect(p.failed.filter((r) => r.url.includes('__e2e_provider__'))).toEqual([]);
+        const frames = await p.frames();
+        expect(frames.some((f) => f.original === longCaption)).toBe(false);
+        for (const f of frames.filter((f) => f.original)) {
+          const index = longCaptionParts.indexOf(f.original);
+          expect(index).toBeGreaterThanOrEqual(0);
+          expect(f.translation).toBe(longTranslations[index]);
         }
-        unexpected.push(`${request.method()} ${url}`);
-        await route.abort('blockedbyclient');
+      },
+      { long: true, hold: true },
+    );
+  });
+
+  test(`${platform}: pause permits completion, seek and resume reuse completed cache`, async ({}, info) => {
+    await withPlayer(
+      platform,
+      info,
+      async (p) => {
+        await p.play();
+        await expect.poll(() => p.posts.length).toBe(1);
+        await p.pause();
+        await p.release(0);
+        await p.pair(source, translation);
+        await p.seek(35);
+        await p.pair(nextSource, nextTranslation);
+        await p.seek(2);
+        await p.pair(source, translation);
+        await p.play();
+        await expect
+          .poll(() => p.page.locator('video').evaluate((v: HTMLVideoElement) => v.currentTime))
+          .toBeGreaterThan(3.5);
+        expect(p.posts).toHaveLength(1);
+        expect(p.downloads).toHaveLength(platform === 'youtube' ? 1 : 2);
+        await p.pause();
+        await p.page.evaluate(() => window.fixture.switchVideo('second'));
+        await expect(p.original).toHaveText(nextSource);
+        await p.pair(nextSource, nextTranslation);
+        expect(p.posts).toHaveLength(1);
+      },
+      { hold: true },
+    );
+  });
+
+  test(`${platform}: a late response cannot overwrite a new SPA video`, async ({}, info) => {
+    await withPlayer(
+      platform,
+      info,
+      async (p) => {
+        await p.play();
+        await expect.poll(() => p.posts.length).toBe(1);
+        await p.page.evaluate(() => window.fixture.switchVideo('second'));
+        await expect(p.original).toHaveText(nextSource);
+        await expect.poll(() => p.posts.length).toBe(2);
+        expect(p.posts[1].inputs.map((i) => i.text)).toEqual([nextSource]);
+        await p.release(1);
+        await p.pair(nextSource, nextTranslation);
+        await p.release(0);
+        await p.seek(3);
+        await p.pair(nextSource, nextTranslation);
+        const frames = await p.frames();
+        const current = frames.findIndex(
+          (f) => f.id === 'second' && f.translation === nextTranslation,
+        );
+        expect(current).toBeGreaterThanOrEqual(0);
+        expect(frames.slice(current).some((f) => f.translation === translation)).toBe(false);
+      },
+      { hold: true },
+    );
+  });
+
+  test(`${platform}: source and selected tracks change without consuming website translations`, async ({}, info) => {
+    await withPlayer(platform, info, async (p) => {
+      await p.play();
+      await p.pair(source, translation);
+      await p.page.evaluate(() => window.fixture.select('en', 'asr'));
+      await p.pair(asrSource, asrTranslation);
+      await p.page.evaluate(() => window.fixture.select('zh-CN'));
+      await p.pair(source, translation);
+      expect(
+        p.downloads.some(
+          (r) => new URL(r.url).searchParams.has('tlang') || r.url.includes('zh-CN'),
+        ),
+      ).toBe(false);
+      await p.settings({ sourceLanguage: 'fr' });
+      await p.page.evaluate(() => window.fixture.select('fr'));
+      await p.pair(frenchSource, frenchTranslation);
+      if (platform === 'hbo') {
+        await p.page.evaluate(() => window.fixture.select(null));
+        await expect(p.original).toBeHidden();
+        await expect(p.translated).toBeHidden();
+        await p.page.evaluate(() => window.fixture.select('fr'));
+        await p.pair(frenchSource, frenchTranslation);
+      }
+      expect(p.downloads.some((r) => r.url.includes('fr'))).toBe(true);
+    });
+  });
+
+  test(`${platform}: paused uncached content waits for resume`, async ({}, info) => {
+    await withPlayer(platform, info, async (p) => {
+      await expect(p.original).toHaveText(source);
+      expect(p.posts).toHaveLength(0);
+      await p.page.evaluate(() => window.fixture.switchVideo('second'));
+      await expect(p.original).toHaveText(nextSource);
+      await p.page.waitForTimeout(1500);
+      expect(p.posts).toHaveLength(0);
+      await p.play();
+      await p.pair(nextSource, nextTranslation);
+      expect(p.posts).toHaveLength(1);
+    });
+  });
+
+  test(`${platform}: fullscreen, disable and extension reload restore native captions`, async ({}, info) => {
+    await withPlayer(platform, info, async (p) => {
+      await p.play();
+      await p.pair(source, translation);
+      await p.pause();
+      await p.page.evaluate(() => window.fixture.native('Native caption'));
+      await expect(p.page.locator('#native')).toHaveCSS('opacity', '0');
+      await p.page.getByRole('button', { name: 'Fullscreen fixture' }).click();
+      await expect
+        .poll(() => p.page.evaluate(() => document.fullscreenElement?.localName))
+        .toBe(platform === 'youtube' ? 'html' : 'div');
+      const video = (await p.page.locator('video').boundingBox())!;
+      const viewport = await p.page.evaluate(() => ({ width: innerWidth, height: innerHeight }));
+      expect(video).toEqual({ x: 0, y: 0, ...viewport });
+      const placement = await p.page.evaluate(async () => {
+        const misplaced: string[] = [];
+        let shown = 0;
+        const end = performance.now() + 1000;
+        while (performance.now() < end) {
+          await new Promise(requestAnimationFrame);
+          const area = document.querySelector('video')!.getBoundingClientRect();
+          const host = document.querySelector('[data-subline-overlay]');
+          for (const line of host?.shadowRoot?.querySelectorAll<HTMLElement>('.line') ?? []) {
+            if (line.hidden) continue;
+            shown++;
+            const box = line.getBoundingClientRect();
+            if (
+              box.left < area.left ||
+              box.right > area.right ||
+              box.top < area.top + area.height / 2 ||
+              box.bottom > area.bottom
+            )
+              misplaced.push(`${line.className} at ${Math.round(box.top)}`);
+          }
+        }
+        return { shown, misplaced: [...new Set(misplaced)] };
       });
-      await worker.evaluate(async () => {
-        await chrome.storage.local.set({
-          'subline.settings.v1': {
-            enabled: true,
-            youtube: true,
-            hbo: true,
-            baseUrl: 'https://www.youtube.com/__e2e_provider__/v1',
-            apiKey: 'e2e-fake-key',
-            model: 'e2e-fixed-model',
-            sourceLanguage: 'en',
-            targetLanguage: 'zh-CN',
-          },
-        });
+      expect(placement.shown).toBeGreaterThan(0);
+      expect(placement.misplaced, 'Fullscreen captions stay in the lower video area').toEqual([]);
+      await p.pair(source, translation);
+      await p.page.evaluate(() => document.exitFullscreen());
+      await p.settings({ enabled: false });
+      await expect(p.overlay).toHaveCount(0);
+      await expect(p.page.locator('#native')).toHaveCSS('opacity', '1');
+      await expect(p.page.locator('#native')).toBeVisible();
+      await p.settings({ enabled: true });
+      await expect(p.overlay).toHaveCount(1);
+      await expect(p.page.locator('#native')).toHaveCSS('opacity', '0');
+      await p.settingsPage.evaluate(() => {
+        setTimeout(() => chrome.runtime.reload());
       });
-      const settingsPage = await context.newPage();
-      await settingsPage.goto(`chrome-extension://${extensionId}/popup.html`);
+      await expect(p.overlay).toHaveCount(0);
+      await expect(p.page.locator('#native')).toHaveCSS('opacity', '1');
+      await expect(p.page.locator('#native')).toBeVisible();
+      p.settingsPage = await p.context.newPage();
+      await expect(async () => {
+        await p.settingsPage.goto(`chrome-extension://${p.extensionId}/popup.html`);
+      }).toPass({ timeout: 8000 });
       await expect
         .poll(() =>
-          settingsPage.evaluate(async () => {
-            const reply = await chrome.runtime.sendMessage({ type: 'settings' });
-            return reply?.data?.configured;
-          }),
+          p.settingsPage.evaluate(
+            async () => (await chrome.runtime.sendMessage({ type: 'settings' })).data.configured,
+          ),
         )
         .toBe(true);
-      await settingsPage.close();
-      const page = await context.newPage();
-      await page.goto(scenario.url);
-      const overlay = page.locator('[data-subline-overlay]');
-      await expect(
-        overlay.locator('.original'),
-        'Source timeline must reach the overlay',
-      ).toHaveText(scenario.source);
-      await page.getByRole('button', { name: 'Play fixture' }).click();
-      await expect(overlay.locator('.translation')).toHaveText(scenario.translation);
-      await expect(overlay).toHaveCount(1);
-      await expect(overlay.locator('.original')).toBeVisible();
-      await expect(overlay.locator('.translation')).toBeVisible();
-      await expect
-        .poll(() =>
-          page.locator('video').evaluate((video: HTMLVideoElement) => ({
-            paused: video.paused,
-            ready: video.readyState >= 2,
-            playing: video.currentTime > 0,
-          })),
-        )
-        .toEqual({ paused: false, ready: true, playing: true });
-      for (const url of scenario.resources)
-        expect(requests.filter((request) => request.url === url && !request.worker)).toHaveLength(
-          1,
-        );
-      const posts = requests.filter((request) => request.url === providerUrl);
-      expect(posts).toHaveLength(1);
-      expect(posts[0].worker).toBe(worker.url());
-      expect(posts[0].body).toMatchObject({ model: 'e2e-fixed-model', stream: false });
-      const body = posts[0].body as { messages: { role: string; content: string }[] };
-      expect(JSON.parse(body.messages.find((message) => message.role === 'user')!.content)).toEqual(
-        [{ id: 0, text: scenario.source, needsSplit: false }],
-      );
-      expect(unexpected, 'Every HTTP request must be handled by an explicit fixture').toEqual([]);
-      expect(errors, 'No browser or extension errors').toEqual([]);
-    } finally {
-      await testInfo.attach('network.json', {
-        body: JSON.stringify({ requests, unexpected, errors }, null, 2),
+      await p.page.reload();
+      await p.play();
+      await p.pair(source, translation);
+    });
+  });
+
+  test(`${platform}: compatibility retry uses actual worker HTTP and finishes`, async ({}, info) => {
+    await withPlayer(
+      platform,
+      info,
+      async (p) => {
+        await p.play();
+        await p.pair(source, translation);
+        expect(p.posts).toHaveLength(2);
+        expect(p.posts[0].body).toHaveProperty('response_format');
+        expect(p.posts[1].body).not.toHaveProperty('response_format');
+        expect(p.posts[1].inputs).toEqual(p.posts[0].inputs);
+      },
+      { retry: true },
+    );
+  });
+
+  test(`${platform}: a draft before the final JSON never reaches the overlay or cache`, async ({}, info) => {
+    await withPlayer(
+      platform,
+      info,
+      async (p) => {
+        await p.play();
+        await p.pair(source, translation);
+        await p.pause();
+        await p.seek(35);
+        await p.pair(nextSource, nextTranslation);
+        await p.seek(2);
+        await p.pair(source, translation);
+        expect(p.posts).toHaveLength(1);
+        const frames = await p.frames();
+        expect(frames.filter((f) => f.translation.startsWith(draftPrefix))).toEqual([]);
+      },
+      { draft: true },
+    );
+  });
+
+  test(`${platform}: a stopped worker restarts on new page demand`, async ({}, info) => {
+    await withPlayer(platform, info, async (p) => {
+      await p.play();
+      await p.pair(source, translation);
+      await p.pause();
+      const worker = await p.watchWorker();
+      await worker.stop();
+      await expect.poll(worker.status).toBe('stopped');
+      await p.page.evaluate(() => window.fixture.switchVideo('second'));
+      await p.play();
+      await p.pair(nextSource, nextTranslation);
+      await expect.poll(worker.status).toBe('running');
+      expect(p.posts).toHaveLength(2);
+      await info.attach('worker.json', {
+        body: JSON.stringify(worker.history),
         contentType: 'application/json',
       });
-      if (context) {
-        if (testInfo.status !== testInfo.expectedStatus) {
-          const page = context.pages().find((page) => page.url() === scenario.url);
-          if (page)
-            await testInfo.attach('failure.png', {
-              body: await page.screenshot(),
-              contentType: 'image/png',
-            });
-          const trace = testInfo.outputPath('trace.zip');
-          await context.tracing.stop({ path: trace });
-          await testInfo.attach('trace', { path: trace, contentType: 'application/zip' });
-        } else await context.tracing.stop();
-        await context.close();
-      }
-      await rm(profile, { recursive: true, force: true });
-    }
+      await worker.detach();
+    });
   });
 }

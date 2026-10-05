@@ -1,9 +1,0 @@
-{
-  "events": [
-    {
-      "tStartMs": 0,
-      "dDurationMs": 60000,
-      "segs": [{ "utf8": "The moon is bright tonight." }]
-    }
-  ]
-}
