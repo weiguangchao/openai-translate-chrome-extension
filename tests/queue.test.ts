@@ -1,11 +1,16 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { TranslationQueue, translationSendsPerSecond } from '../src/extension/queue';
+import { translationSendsPerSecond } from '../src/shared/provider/transport';
+let TranslationQueue: typeof import('../src/extension/queue').TranslationQueue;
 import { DEFAULT_SETTINGS } from '../src/shared/settings';
 import { providerReply, requestedTexts } from './fixtures/provider';
 import { readCaptionTranslation, translationInput } from '../src/shared/caption-translation';
 import { longCaption, longResult, structuredReply } from './fixtures/long-caption';
 
-beforeEach(() => vi.useFakeTimers());
+beforeEach(async () => {
+  vi.useFakeTimers();
+  vi.resetModules();
+  ({ TranslationQueue } = await import('../src/extension/queue'));
+});
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.useRealTimers();

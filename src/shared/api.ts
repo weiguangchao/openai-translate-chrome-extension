@@ -1,3 +1,4 @@
+import { providerFetch } from './provider/transport';
 import { translationBatchLimit } from './limits';
 import { englishLanguageName, validateBaseUrl, validateSettings, type Settings } from './settings';
 import { addTokenUsage, readProviderUsage } from './token-usage';
@@ -31,32 +32,32 @@ function timeoutError(): Error {
 function invalidJson(): Error {
   return new Error('接口没有返回有效的 JSON，请检查 Base URL 是否为 API 地址。');
 }
-function withDeadline(signal?: AbortSignal): AbortSignal {
-  return signal
-    ? AbortSignal.any([signal, AbortSignal.timeout(60000)])
-    : AbortSignal.timeout(60000);
-}
 async function fetchApi(
   settings: Settings,
   path: string,
   body: unknown,
-  signal: AbortSignal,
-): Promise<Response> {
+  signal?: AbortSignal,
+  canSend?: () => boolean,
+): Promise<{ response: Response; signal: AbortSignal }> {
   if (!settings.apiKey.trim()) throw new Error('请先填写 API Key。');
-  let response: Response;
+  let result: { response: Response; signal: AbortSignal };
   try {
-    response = await fetch(endpoint(settings, path), {
-      method: body ? 'POST' : 'GET',
-      headers: {
-        Authorization: `Bearer ${settings.apiKey.trim()}`,
-        ...(body ? { 'Content-Type': 'application/json' } : {}),
+    result = await providerFetch(
+      endpoint(settings, path),
+      {
+        method: body ? 'POST' : 'GET',
+        headers: {
+          Authorization: `Bearer ${settings.apiKey.trim()}`,
+          ...(body ? { 'Content-Type': 'application/json' } : {}),
+        },
+        body: body ? JSON.stringify(body) : undefined,
+        credentials: 'omit',
+        redirect: 'error',
+        cache: 'no-store',
       },
-      body: body ? JSON.stringify(body) : undefined,
       signal,
-      credentials: 'omit',
-      redirect: 'error',
-      cache: 'no-store',
-    });
+      canSend,
+    );
   } catch (error) {
     if (error instanceof Error && ['TimeoutError', 'AbortError'].includes(error.name))
       throw timeoutError();
@@ -64,6 +65,7 @@ async function fetchApi(
       '无法连接接口。请检查 Base URL、网络和网站访问权限；浏览器预览还需要接口允许 CORS。',
     );
   }
+  const { response } = result;
   if (!response.ok) {
     const errors: Record<number, string> = {
       401: 'API Key 无效或已过期。',
@@ -76,7 +78,7 @@ async function fetchApi(
       response.status,
     );
   }
-  return response;
+  return result;
 }
 async function request(
   settings: Settings,
@@ -84,7 +86,7 @@ async function request(
   body?: unknown,
   signal?: AbortSignal,
 ): Promise<unknown> {
-  const response = await fetchApi(settings, path, body, withDeadline(signal));
+  const { response } = await fetchApi(settings, path, body, signal);
   try {
     return await response.json();
   } catch {
@@ -197,6 +199,7 @@ async function complete(
   signal: AbortSignal | undefined,
   onText?: (text: string) => void,
   caption = false,
+  canSend?: () => boolean,
 ): Promise<string> {
   validateSettings(settings, true);
   const instructions = translatorInstructions(settings, task);
@@ -209,6 +212,7 @@ async function complete(
         signal,
         onText,
         caption,
+        canSend,
       );
       rememberRejection(settings, probe.dropped);
       if (!text.trim()) throw new Error('模型未返回译文，请确认该模型支持 /chat/completions。');
@@ -227,9 +231,15 @@ async function postModel(
   signal: AbortSignal | undefined,
   onText?: (text: string) => void,
   caption = false,
+  canSend?: () => boolean,
 ): Promise<string> {
-  const deadline = withDeadline(signal);
-  const response = await fetchApi(settings, '/chat/completions', body, deadline);
+  const { response, signal: deadline } = await fetchApi(
+    settings,
+    '/chat/completions',
+    body,
+    signal,
+    canSend,
+  );
   return readModelText(response, deadline, onText, caption);
 }
 
@@ -253,6 +263,7 @@ export async function translateCaptionBatch(
   inputs: TranslationInput[],
   signal?: AbortSignal,
   onTranslation?: (index: number, translation: CaptionTranslation) => void,
+  canSend?: () => boolean,
 ): Promise<CaptionTranslation[] | null> {
   inputs.forEach((input) => checkText(input.text));
   if (!inputs.length || inputs.length > translationBatchLimit)
@@ -294,6 +305,7 @@ needsSplit=true: split AND translate using the caption's units ([index, source t
     signal,
     (text) => submit(scanTranslationResults(text)),
     true,
+    canSend,
   );
   try {
     submit(translationPayloads(parseModelJson(response)));

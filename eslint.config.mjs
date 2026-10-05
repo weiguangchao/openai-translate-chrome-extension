@@ -19,6 +19,27 @@ const noComments = {
   },
 };
 
+const providerTransport = {
+  meta: {
+    type: 'problem',
+    schema: [],
+    messages: {
+      bypass:
+        'Provider POST must use src/shared/provider/transport.ts; retries also consume a send slot.',
+    },
+  },
+  create(context) {
+    return {
+      Identifier(node) {
+        if (node.name === 'fetch') context.report({ node, messageId: 'bypass' });
+      },
+      "MemberExpression[computed=true] > Literal.property[value='fetch']"(node) {
+        context.report({ node, messageId: 'bypass' });
+      },
+    };
+  },
+};
+
 function layer(files, forbidden) {
   return {
     files,
@@ -46,9 +67,14 @@ export default [
     languageOptions: { parser: tsParser },
     linterOptions: { noInlineConfig: true },
     plugins: {
-      local: { rules: { 'no-comments': noComments } },
+      local: { rules: { 'no-comments': noComments, 'provider-transport': providerTransport } },
     },
     rules: { 'local/no-comments': 'error' },
+  },
+  {
+    files: ['src/shared/api.ts', 'src/shared/provider/**/*.ts'],
+    ignores: ['src/shared/provider/transport.ts'],
+    rules: { 'local/provider-transport': 'error' },
   },
   layer(['src/shared/**'], ['core', 'platforms', 'extension', 'ui']),
   layer(['src/core/**'], ['platforms', 'extension', 'ui']),

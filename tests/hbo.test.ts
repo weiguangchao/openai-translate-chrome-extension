@@ -18,6 +18,7 @@ let queue: TranslationQueue;
 const requested: { at: number; texts: string[]; signal: AbortSignal }[] = [];
 let targetLanguage = '';
 let failTarget = false;
+let testTime = Date.now();
 
 function manifest(languages = ['en-US', ...(targetLanguage ? [targetLanguage] : [])]): string {
   return `<MPD type="static" mediaPresentationDuration="PT90S">
@@ -84,7 +85,8 @@ function vtt(part: number, language: string): string {
 }
 
 beforeEach(async () => {
-  vi.useFakeTimers();
+  testTime += 600000;
+  vi.useFakeTimers({ now: testTime });
   requested.length = 0;
   targetLanguage = '';
   failTarget = false;
