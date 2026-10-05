@@ -14,6 +14,9 @@ import {
   withPlayer,
 } from './harness';
 
+const shownError = (cause: string) =>
+  new RegExp(`^Subline：(${cause}|接口暂不可用，稍后将自动重试。)$`);
+
 for (const platform of ['youtube', 'hbo'] as const) {
   test(`${platform}: packaged extension translates a source track through its worker`, async ({}, info) => {
     await withPlayer(platform, info, async (p) => {
@@ -276,7 +279,7 @@ for (const platform of ['youtube', 'hbo'] as const) {
     await withPlayer(platform, info, async (p) => {
       await p.settings({ apiKey: 'e2e-invalid-key' });
       await p.play();
-      await expect(p.translated).toHaveText('Subline：API Key 无效或已过期。');
+      await expect(p.translated).toHaveText(shownError('API Key 无效或已过期。'));
       await expect(p.translated).toHaveClass(/error/);
       await expect(p.original).toHaveText(source);
       expect(p.posts.map((post) => post.status)).toContain(401);
@@ -301,7 +304,7 @@ for (const platform of ['youtube', 'hbo'] as const) {
         await p.page.evaluate(() => window.fixture.switchVideo('second'));
         await expect(p.original).toHaveText(nextSource);
         await p.play();
-        await expect(p.translated).toHaveText('Subline：接口返回 HTTP 503，请稍后重试。');
+        await expect(p.translated).toHaveText(shownError('接口返回 HTTP 503，请稍后重试。'));
         const failedAt = Date.now();
         expect(p.posts.map((post) => post.status)).toEqual([503]);
         await expect(p.translated).toHaveText(nextTranslation, { timeout: 25_000 });

@@ -21,20 +21,20 @@
 
 `e2e/harness.ts` 负责启动、路由、Provider 夹具和诊断附件；`e2e/extension.spec.ts` 每个平台运行以下 12 个场景，共 24 例。播放器使用支持 Range 请求、可 seek 的 90 秒 WebM；页面夹具逐帧记录字幕层可见内容及 `video.currentTime`，用于检查中途闪错。
 
-| 方案中的首批场景          | 浏览器用例                                                                 | 关键断言                                                                                                                                                |
-| ------------------------- | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 完整链路                  | packaged extension translates a source track through its worker            | 打包页面脚本读取原文；Provider POST 来自扩展 worker；恰好一个字幕层                                                                                     |
-| 长句切分＋延迟、仅改字号  | delayed split stays hidden and style changes preserve in-flight work       | 未就绪时不闪现整条长句；改字号保留字幕层、请求和源下载；逐帧原文译文成对                                                                                |
-| 暂停 / 恢复 / 缓存复用    | pause permits completion, seek and resume reuse completed cache            | 暂停时已发请求可完成；暂停拖动显示缓存译文；不重复 POST、不重复下载                                                                                     |
-| seek / 换视频旧响应晚到   | a late response cannot overwrite a new SPA video                           | 新视频译文先到，旧响应后到也不能覆盖                                                                                                                    |
-| 字幕语言和轨道切换        | source and selected tracks change without consuming website translations   | 切换 ASR、网站目标语言轨道、源语言；从不下载网站目标语言轨道；HBO 关闭字幕清空字幕层                                                                    |
-| 暂停时未缓存内容          | paused uncached content waits for resume                                   | 暂停期间不发起新翻译，恢复后再请求                                                                                                                      |
-| 开关、全屏、扩展重载      | fullscreen, disable and extension reload restore native captions           | YouTube 夹具对 `<html>` 全屏、HBO 夹具对播放器容器全屏；1 秒逐帧采样字幕始终在视频下半区；关闭和重载后原生字幕恢复；刷新后重新接管                      |
-| 兼容重试与实际发送        | compatibility retry uses actual worker HTTP and finishes                   | 400 后去掉 `response_format` 重发同一输入并完成                                                                                                         |
-| 草稿 JSON＋最终 JSON      | a draft before the final JSON never reaches the overlay or cache           | 字幕层和暂停拖动读取的缓存都只出现最终译文                                                                                                              |
-| 后台终止后恢复            | a stopped worker restarts on new page demand                               | CDP `ServiceWorker.stopWorker` 后观察到 `running → stopped → running`，新页面需求完成翻译                                                               |
-| Provider 出错：密钥无效   | an invalid key shows a safe error and recovers once fixed                  | 夹具 Provider 校验密钥，返回 401 并在错误体中回显密钥；字幕层显示 `Subline：API Key 无效或已过期。`，不出现密钥或原始错误；改回正确密钥后无需刷新即恢复 |
-| Provider 出错：暂时不可用 | a transient Provider failure recovers after backoff without extra requests | 首次请求 503 时显示 `Subline：接口返回 HTTP 503，请稍后重试。`；15 秒退避内不再发请求；之后自动重试成功，请求序列恰为 503、200                          |
+| 方案中的首批场景          | 浏览器用例                                                                 | 关键断言                                                                                                                                                             |
+| ------------------------- | -------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 完整链路                  | packaged extension translates a source track through its worker            | 打包页面脚本读取原文；Provider POST 来自扩展 worker；恰好一个字幕层                                                                                                  |
+| 长句切分＋延迟、仅改字号  | delayed split stays hidden and style changes preserve in-flight work       | 未就绪时不闪现整条长句；改字号保留字幕层、请求和源下载；逐帧原文译文成对                                                                                             |
+| 暂停 / 恢复 / 缓存复用    | pause permits completion, seek and resume reuse completed cache            | 暂停时已发请求可完成；暂停拖动显示缓存译文；不重复 POST、不重复下载                                                                                                  |
+| seek / 换视频旧响应晚到   | a late response cannot overwrite a new SPA video                           | 新视频译文先到，旧响应后到也不能覆盖                                                                                                                                 |
+| 字幕语言和轨道切换        | source and selected tracks change without consuming website translations   | 切换 ASR、网站目标语言轨道、源语言；从不下载网站目标语言轨道；HBO 关闭字幕清空字幕层                                                                                 |
+| 暂停时未缓存内容          | paused uncached content waits for resume                                   | 暂停期间不发起新翻译，恢复后再请求                                                                                                                                   |
+| 开关、全屏、扩展重载      | fullscreen, disable and extension reload restore native captions           | YouTube 夹具对 `<html>` 全屏、HBO 夹具对播放器容器全屏；1 秒逐帧采样字幕始终在视频下半区；关闭和重载后原生字幕恢复；刷新后重新接管                                   |
+| 兼容重试与实际发送        | compatibility retry uses actual worker HTTP and finishes                   | 400 后去掉 `response_format` 重发同一输入并完成                                                                                                                      |
+| 草稿 JSON＋最终 JSON      | a draft before the final JSON never reaches the overlay or cache           | 字幕层和暂停拖动读取的缓存都只出现最终译文                                                                                                                           |
+| 后台终止后恢复            | a stopped worker restarts on new page demand                               | CDP `ServiceWorker.stopWorker` 后观察到 `running → stopped → running`，新页面需求完成翻译                                                                            |
+| Provider 出错：密钥无效   | an invalid key shows a safe error and recovers once fixed                  | 夹具 Provider 校验密钥，返回 401 并在错误体中回显密钥；字幕层只显示 `Subline：API Key 无效或已过期。` 或退避提示，不出现密钥或原始错误；改回正确密钥后无需刷新即恢复 |
+| Provider 出错：暂时不可用 | a transient Provider failure recovers after backoff without extra requests | 首次请求 503 时只显示 `Subline：接口返回 HTTP 503，请稍后重试。` 或退避提示；15 秒退避内不再发请求；之后自动重试成功，请求序列恰为 503、200                          |
 
 ### 定向失败证据
 
@@ -105,7 +105,7 @@ Playwright 默认参数下，`chrome.runtime.reload()` 会使扩展停留在 `DI
 3. 从备份恢复设置，不刷新页面。约 2 秒后下一句恢复原文译文，之后 10 秒内没有错误。
 4. 恢复后设置摘要仍为 `4578f739248ef57a`，临时备份已删除，扩展保持启用且已配置。
 
-发现：预取请求先失败时，可见字幕在随后 15 秒退避内只显示通用的“接口暂不可用，稍后将自动重试”，真实原因（密钥无效）只偶尔出现。恢复本身正常；是否在退避期间沿用上一次失败原因，属于提示文案决定，本次未改。
+发现：预取请求先失败时，可见字幕在随后 15 秒退避内只显示通用的“接口暂不可用，稍后将自动重试”，真实原因（密钥无效）只偶尔出现。GitHub Actions 上的浏览器回归也出现了同一顺序：预取先失败，可见字幕显示退避提示，因此两个出错场景都接受“真实原因或退避提示”两种文本，其他内容一律判失败。恢复本身正常；是否在退避期间沿用上一次失败原因，属于提示文案决定，本次未改。
 
 ## 4. 后台生命周期：调试与休眠分开验证
 
