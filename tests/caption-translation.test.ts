@@ -86,6 +86,57 @@ it('maps quoted sources onto the original text and ignores case, punctuation, qu
   ]);
 });
 
+const lyrics =
+  '[upbeat music] ♪ Rolling down the river road ♪ ♪ Under skies of silver gray ♪ ♪ We will sing until it’s done ♪♪ (Anna) "Are you coming with us?"';
+const verses = [
+  '[upbeat music] ♪ Rolling down the river road ♪',
+  '♪ Under skies of silver gray ♪ ♪ We will sing until it’s done ♪♪',
+  '(Anna) "Are you coming with us?"',
+];
+function displayedSources(source: string, quoted: readonly string[]): string[] {
+  const result = readCaptionTranslation(translationInput(source, true), {
+    parts: quoted.map((part, index) => ({ source: part, translation: `第${index}段` })),
+  });
+  if (!result || typeof result === 'string') throw new Error('Expected split result');
+  return result.parts.map((part) => source.slice(part.from, part.to));
+}
+
+it('keeps punctuation between parts on the side where the Provider quoted it', () => {
+  expect(displayedSources(lyrics, verses)).toEqual(verses);
+  const quote = [
+    '他站在车站等了很久很久，一直没有跟任何人说过一句话，最后他终于开口说：',
+    '“这趟火车到底还会不会回来呢？”然后转身离开了。',
+  ];
+  expect(displayedSources(quote.join(''), quote)).toEqual(quote);
+});
+
+it('starts a part at an opening bracket or quote the Provider left out', () => {
+  const source =
+    'He waited for hours at the station without saying a word to anyone, (Ross) “Is the train ever coming back?”';
+  expect(
+    displayedSources(source, [
+      'He waited for hours at the station without saying a word to anyone',
+      'Ross Is the train ever coming back',
+    ]),
+  ).toEqual([
+    'He waited for hours at the station without saying a word to anyone,',
+    '(Ross) “Is the train ever coming back?”',
+  ]);
+  const plain =
+    'We waited at the station for hours and then finally we left. "Wait for me," she said as she ran after us.';
+  expect(
+    displayedSources(plain, [
+      'We waited at the station for hours and then finally we left',
+      'Wait for me',
+      'she said as she ran after us',
+    ]),
+  ).toEqual([
+    'We waited at the station for hours and then finally we left.',
+    '"Wait for me,"',
+    'she said as she ran after us.',
+  ]);
+});
+
 it('joins every part of a caption that does not need a split into one translation', () => {
   const short = translationInput('Short.', false);
   expect(translationInput(text, false).needsSplit).toBe(false);
@@ -200,6 +251,15 @@ it('waits for a whole result object in a fragmented stream, including escaped br
   expect(scanTranslationResults(head + ',{"id":0,"parts":[')).toEqual([first]);
 });
 
+it('reduces a complete but malformed result object to its id and keeps reading', () => {
+  const ok = { id: 1, parts: [{ translation: '好' }] };
+  expect(
+    scanTranslationResults(
+      `{"results":[{"id":0,"parts":[{"translation":"坏"} stray]},${JSON.stringify(ok)},{"parts":[} ]}]}`,
+    ),
+  ).toEqual([{ id: 0 }, ok]);
+});
+
 it('flags whole long sentences for a Provider split and excludes overlapping cues', () => {
   const captions = timedCaptions([
     { text: 'Before, ' + text, startTime: 0, endTime: 10 },
@@ -308,4 +368,25 @@ it('revalidates serialized translations before constructing display captions', (
     expect(readStoredTranslation(input, invalid)).toBeNull();
   expect(readStoredTranslation(translationInput('Short.', false), ' 短句 ')).toBe('短句');
   expect(readStoredTranslation(translationInput('Short.', false), valid)).toBeNull();
+});
+
+it('revalidates boundaries inside punctuation and rejects a stored part without words', () => {
+  const input = translationInput(lyrics, true);
+  const valid = readCaptionTranslation(input, {
+    parts: verses.map((source, index) => ({ source, translation: `第${index}段` })),
+  });
+  if (!valid || typeof valid === 'string') throw new Error('Expected split result');
+  expect(readStoredTranslation(input, JSON.parse(JSON.stringify(valid)))).toEqual(valid);
+  const [first, second, third] = valid.parts;
+  const under = lyrics.indexOf('Under');
+  expect(
+    readStoredTranslation(input, {
+      parts: [{ ...first, to: under - 1 }, { ...second, from: under }, third],
+    }),
+  ).not.toBeNull();
+  expect(
+    readStoredTranslation(input, {
+      parts: [first, { ...second, to: second.from + 1 }, { ...second, from: under }, third],
+    }),
+  ).toBeNull();
 });

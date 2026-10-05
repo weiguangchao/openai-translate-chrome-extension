@@ -48,27 +48,45 @@ function hasTranslationPayload(value: unknown): boolean {
   return Array.isArray(record.results) || Array.isArray(record.translations);
 }
 
-function lastTranslationPayload(text: string): unknown {
-  let payload: unknown;
+interface ModelPayload {
+  readonly json: string;
+  readonly parsed: { value: unknown } | null;
+}
+
+function nextPayloadStart(text: string, index: number): number {
+  while (index < text.length) {
+    const character = text[index];
+    if (character === '{' || character === '[') return index;
+    const quoted = character === '"' ? readString(text, index) : null;
+    if (!quoted) {
+      index++;
+      continue;
+    }
+    index = skipSpace(text, quoted.end);
+    if (text[index] !== ':') continue;
+    const start = skipSpace(text, index + 1);
+    const end = skipValue(text, start);
+    index = end < 0 ? start + 1 : end;
+  }
+  return -1;
+}
+
+function lastTranslationPayload(text: string): ModelPayload | undefined {
+  let payload: ModelPayload | undefined;
   let index = 0;
   while (index < text.length) {
-    const objectAt = text.indexOf('{', index);
-    const arrayAt = text.indexOf('[', index);
-    const start = objectAt < 0 ? arrayAt : arrayAt < 0 ? objectAt : Math.min(objectAt, arrayAt);
+    const start = nextPayloadStart(text, index);
     if (start < 0) break;
     const end = skipValue(text, start);
-    if (end < 0) {
-      index = start + 1;
-      continue;
-    }
-    try {
-      const value = JSON.parse(text.slice(start, end));
-      if (hasTranslationPayload(value)) payload = value;
-    } catch {
-      index = start + 1;
-      continue;
-    }
-    index = end;
+    const json = end < 0 ? text.slice(start) : text.slice(start, end);
+    const parsed = end < 0 ? null : parsedJson(json);
+    if (parsed) {
+      if (hasTranslationPayload(parsed.value)) payload = { json, parsed };
+      index = end;
+    } else if (resultsArray(json) >= 0) {
+      payload = { json, parsed: null };
+      index = end < 0 ? start + 1 : end;
+    } else index = start + 1;
   }
   return payload;
 }
@@ -81,9 +99,9 @@ export function parseModelJson(response: string): unknown {
     if (typeof value !== 'string') return value;
     return JSON.parse(value);
   } catch {
-    const payload = lastTranslationPayload(stripOpeningFence(text));
-    if (payload === undefined) throw new SyntaxError('Invalid model JSON');
-    return payload;
+    const parsed = lastTranslationPayload(stripOpeningFence(text))?.parsed;
+    if (!parsed) throw new SyntaxError('Invalid model JSON');
+    return parsed.value;
   }
 }
 
@@ -116,24 +134,16 @@ function skipSpace(text: string, index: number): number {
 }
 
 export function scanTranslationResults(source: string): unknown[] {
-  let text = stripOpeningFence(modelAnswer(source));
-  if (!text.trimStart().startsWith('{')) {
-    const objectAt = text.indexOf('{');
-    if (objectAt < 0) return [];
-    text = text.slice(objectAt);
-  }
-  const start = findArray(text, 'results');
+  const text = lastTranslationPayload(stripOpeningFence(modelAnswer(source)))?.json ?? '';
+  const start = resultsArray(text);
   if (start < 0) return [];
   const values: unknown[] = [];
   let index = skipSpace(text, start + 1);
   while (index < text.length && text[index] !== ']') {
     const end = skipValue(text, index);
     if (end < 0) break;
-    try {
-      values.push(JSON.parse(text.slice(index, end)));
-    } catch {
-      break;
-    }
+    const value = scannedResult(text, index, end);
+    if (value !== undefined) values.push(value);
     index = skipSpace(text, end);
     if (text[index] !== ',') break;
     index = skipSpace(text, index + 1);
@@ -141,7 +151,30 @@ export function scanTranslationResults(source: string): unknown[] {
   return values;
 }
 
-function findArray(text: string, name: string): number {
+function resultsArray(text: string): number {
+  const start = findMember(text, 'results');
+  return text[start] === '[' ? start : -1;
+}
+
+function scannedResult(text: string, start: number, end: number): unknown {
+  const result = text.slice(start, end);
+  const whole = parsedJson(result);
+  if (whole) return whole.value;
+  const at = findMember(result, 'id');
+  const idEnd = at < 0 ? -1 : skipValue(result, at);
+  const id = idEnd < 0 ? null : parsedJson(result.slice(at, idEnd));
+  return id ? { id: id.value } : undefined;
+}
+
+function parsedJson(text: string): { value: unknown } | null {
+  try {
+    return { value: JSON.parse(text) as unknown };
+  } catch {
+    return null;
+  }
+}
+
+function findMember(text: string, name: string): number {
   let index = skipSpace(text, 0);
   if (index >= text.length || text[index] !== '{') return -1;
   index++;
@@ -154,7 +187,7 @@ function findArray(text: string, name: string): number {
     index = skipSpace(text, key.end);
     if (text[index] !== ':') return -1;
     index = skipSpace(text, index + 1);
-    if (key.value === name) return text[index] === '[' ? index : -1;
+    if (key.value === name) return index;
     const next = skipValue(text, index);
     if (next < 0) return -1;
     index = skipSpace(text, next);

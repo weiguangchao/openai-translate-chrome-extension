@@ -20,7 +20,7 @@ const queue = new TranslationQueue();
 let settings: Settings;
 let translationRevision = crypto.randomUUID();
 let updateSequence = 0;
-const consumers = new Map<string, PlatformId>();
+const consumers = new Map<string, { platform: PlatformId; document?: string }>();
 const ready = (async () => {
   await chrome.storage.local.setAccessLevel({ accessLevel: 'TRUSTED_CONTEXTS' });
   settings = normalizeSettings((await chrome.storage.local.get(STORAGE_KEY))[STORAGE_KEY]);
@@ -35,8 +35,11 @@ async function contentRequest(
   message: object,
   platform: PlatformId,
   consumer: string,
+  document?: string,
 ): Promise<unknown> {
-  consumers.set(consumer, platform);
+  const previous = consumers.get(consumer);
+  if (previous && previous.document !== document) queue.release([consumer]);
+  consumers.set(consumer, { platform, document });
   if (type === 'prefetch-pause' || type === 'prefetch-resume') {
     if (type === 'prefetch-pause') queue.pause(consumer);
     else queue.resume(consumer);
@@ -96,6 +99,7 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, respond) => {
         message as object,
         platform,
         `${sender.tab?.id}:${sender.frameId}`,
+        sender.documentId,
       );
     throw new Error('不支持的请求。');
   })().then(
@@ -118,7 +122,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
       consumers.clear();
     } else if (change.availability) {
       const disabled = [...consumers]
-        .filter(([, platform]) => !settings[platform])
+        .filter(([, { platform }]) => !settings[platform])
         .map(([consumer]) => consumer);
       for (const consumer of disabled) consumers.delete(consumer);
       queue.release(disabled);

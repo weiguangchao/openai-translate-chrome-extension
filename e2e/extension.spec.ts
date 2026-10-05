@@ -5,11 +5,14 @@ import {
   asrSource,
   asrTranslation,
   draftPrefix,
+  elsewhereUrl,
   frenchSource,
   frenchTranslation,
   nextSource,
   nextTranslation,
   source,
+  thirdSource,
+  thirdTranslation,
   translation,
   withPlayer,
   type Player,
@@ -270,25 +273,32 @@ for (const platform of ['youtube', 'hbo'] as const) {
     );
   });
 
-  test(`${platform}: a draft before the final JSON never reaches the overlay or cache`, async ({}, info) => {
-    await withPlayer(
-      platform,
-      info,
-      async (p) => {
-        await p.play();
-        await p.pair(source, translation);
-        await p.pause();
-        await p.seek(35);
-        await p.pair(nextSource, nextTranslation);
-        await p.seek(2);
-        await p.pair(source, translation);
-        expect(p.posts).toHaveLength(1);
-        const frames = await p.frames();
-        expect(frames.filter((f) => f.translation.startsWith(draftPrefix))).toEqual([]);
-      },
-      { draft: true },
-    );
-  });
+  for (const draft of ['complete', 'truncated'] as const) {
+    test(`${platform}: a ${draft} draft before the final JSON never reaches the overlay or cache`, async ({}, info) => {
+      await withPlayer(
+        platform,
+        info,
+        async (p) => {
+          await p.play();
+          await p.pair(source, translation);
+          await p.pause();
+          await p.seek(35);
+          await p.pair(nextSource, nextTranslation);
+          await p.seek(2);
+          await p.pair(source, translation);
+          expect(p.posts).toHaveLength(1);
+          const frames = await p.frames();
+          expect(frames.filter((f) => f.translation.startsWith(draftPrefix))).toEqual([]);
+          if (draft === 'truncated')
+            await info.attach('final-cached.png', {
+              body: await p.page.screenshot(),
+              contentType: 'image/png',
+            });
+        },
+        { draft },
+      );
+    });
+  }
 
   test(`${platform}: an invalid key shows a safe error and recovers once fixed`, async ({}, info) => {
     await withPlayer(platform, info, async (p) => {
@@ -332,6 +342,28 @@ for (const platform of ['youtube', 'hbo'] as const) {
     );
   });
 
+  test(`${platform}: returning to the same tab from another site still translates after a pause`, async ({}, info) => {
+    await withPlayer(platform, info, async (p) => {
+      await p.play();
+      await p.pair(source, translation);
+      await p.pause();
+      await p.page.waitForTimeout(500);
+      await p.page.goto(elsewhereUrl);
+      await p.page.goto(p.urlFor('third'));
+      await expect
+        .poll(() =>
+          p.page
+            .locator('video')
+            .evaluate((v: HTMLVideoElement) => v.seekable.length && v.duration),
+        )
+        .toBe(90);
+      await p.play();
+      await p.pair(thirdSource, thirdTranslation);
+      expect(p.posts).toHaveLength(2);
+      expect(p.posts[1].inputs).toEqual([{ id: 0, text: thirdSource }]);
+    });
+  });
+
   test(`${platform}: a stopped worker restarts on new page demand`, async ({}, info) => {
     await withPlayer(platform, info, async (p) => {
       await p.play();
@@ -353,3 +385,27 @@ for (const platform of ['youtube', 'hbo'] as const) {
     });
   });
 }
+
+test('hbo: website captions read before the timeline loads never show untranslated', async ({}, info) => {
+  await withPlayer(
+    'hbo',
+    info,
+    async (p) => {
+      await p.page.evaluate((text) => window.fixture.native(text), source);
+      await p.play();
+      await expect.poll(() => p.downloads.length, 'Manifest requested and held').toBe(1);
+      await p.page.waitForTimeout(1000);
+      expect((await p.frames()).filter((f) => f.original)).toEqual([]);
+      expect(p.posts).toEqual([]);
+      p.releaseTimeline();
+      await p.pair(source, translation);
+      expect(
+        (await p.frames()).filter(
+          (f) => f.original && (!f.translation || f.translation === '翻译中'),
+        ),
+        'The source never appears before its translation',
+      ).toEqual([]);
+    },
+    { holdTimeline: true },
+  );
+});
