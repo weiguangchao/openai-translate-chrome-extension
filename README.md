@@ -74,7 +74,7 @@ TypeScript 文件禁止任何注释，包括行注释、块注释、JSDoc 和工
 
 Vitest 只发现 `tests/` 下的测试；DOM 与平台环境分配集中在 `scripts/test-projects.ts`。`test:discovery` 独立扫描正式文件、比对 Vitest 实际发现结果，并创建自己的临时实验文件验证排除规则，不删除已有 `.artifacts/` 内容。浏览器用例放在单独的 `e2e/`。
 
-浏览器回归使用固定版本的 Playwright Chromium，在每例独立的临时 profile 加载未经修改的 `dist/manifest.json`，并在 `chrome://extensions` 打开开发者模式，否则 Chromium 会在 `chrome.runtime.reload()` 后禁用未打包扩展。页面播放器接口、JSON3/DASH/WebVTT 和 Provider 响应是本地夹具；视频为支持 Range 请求、可 seek 的本地 WebM，MAIN 页面脚本、内容脚本、Chrome 消息、后台 fetch 和 Shadow DOM 渲染均为打包后的真实实现。两平台各 10 个场景覆盖完整链路、延迟长句切分、暂停与缓存、seek 和换视频晚到响应、轨道切换、全屏、开关、扩展重载、兼容重试、草稿/最终 JSON 和后台强制停止；页面夹具逐帧记录字幕层内容，用于发现中途闪错。HTTP 请求只允许明确的夹具路由，Provider 请求必须来自扩展 Service Worker；其他请求会被中止并使测试失败。不需要登录网站或提供真实 API Key。
+浏览器回归使用固定版本的 Playwright Chromium，在每例独立的临时 profile 加载未经修改的 `dist/manifest.json`，并在 `chrome://extensions` 打开开发者模式，否则 Chromium 会在 `chrome.runtime.reload()` 后禁用未打包扩展。页面播放器接口、JSON3/DASH/WebVTT 和 Provider 响应是本地夹具；视频为支持 Range 请求、可 seek 的本地 WebM，MAIN 页面脚本、内容脚本、Chrome 消息、后台 fetch 和 Shadow DOM 渲染均为打包后的真实实现。两平台各 12 个场景覆盖完整链路、延迟长句切分、暂停与缓存、seek 和换视频晚到响应、轨道切换、全屏、开关、扩展重载、兼容重试、Provider 密钥无效和暂时不可用后的恢复、草稿/最终 JSON 和后台强制停止；页面夹具逐帧记录字幕层内容，用于发现中途闪错。HTTP 请求只允许明确的夹具路由，Provider 请求必须来自扩展 Service Worker；其他请求会被中止并使测试失败。不需要登录网站或提供真实 API Key。
 
 假 Provider 使用 manifest 已授权的 YouTube 域名路径，由 BrowserContext 完全拦截。这验证已授权配置下的翻译链路，不覆盖自定义 Provider 的首次域名授权弹窗。每次生成 `.artifacts/e2e/report/index.html` 和 JSON 报告，附请求记录、代码版本、浏览器版本及构建摘要；失败附截图与 trace。CI 上传这些结果。设置 `E2E_HEADED=1` 可观察测试窗口。
 
