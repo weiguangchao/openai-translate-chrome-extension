@@ -62,6 +62,10 @@
       const native = document.querySelector('#native');
       const video = document.querySelector('video');
       const youtube = location.hostname === 'www.youtube.com';
+      const x = location.hostname === 'x.com';
+      const path = (id) =>
+        youtube ? `/watch?v=${id}` : x ? `/e2e/status/${id}` : `/video/watch/${id}`;
+      let nativeTrack;
       const state = {
         id:
           (youtube
@@ -88,6 +92,43 @@
             },
           },
         });
+      } else if (x) {
+        const subtitles = [
+          ['en', 'en', 'English'],
+          ['en-asr', 'en', 'English (auto)'],
+          ['fr', 'fr', 'Français'],
+          ['zh-CN', 'zh-CN', '中文'],
+        ];
+        const media = () => `https://video.twimg.com/e2e/${state.id}`;
+        player.setAttribute('data-testid', 'videoPlayer');
+        player.__reactFiber$fixture = {
+          memoizedProps: {
+            value: {
+              playerApi: {
+                video: {
+                  hlsJs: {
+                    media: video,
+                    get url() {
+                      return `${media()}/pl/master.m3u8?tag=14`;
+                    },
+                    get subtitleTracks() {
+                      return subtitles.map(([code, lang, name]) => ({
+                        name,
+                        lang,
+                        url: `${media()}/pl/s0/${code}.m3u8`,
+                      }));
+                    },
+                    get subtitleTrack() {
+                      if (!state.language) return -1;
+                      const code = state.kind === 'asr' ? `${state.language}-asr` : state.language;
+                      return subtitles.findIndex(([id]) => id === code);
+                    },
+                  },
+                },
+              },
+            },
+          },
+        };
       } else {
         player.setAttribute('data-testid', 'playerContainer');
         native.setAttribute('data-testid', 'caption_renderer_overlay');
@@ -129,12 +170,19 @@
         },
         switchVideo(id) {
           state.id = id;
-          history.pushState({}, '', youtube ? `/watch?v=${id}` : `/video/watch/${id}`);
+          history.pushState({}, '', path(id));
           video.currentTime = 0;
           document.dispatchEvent(new Event('yt-navigate-finish'));
         },
         native(text) {
-          native.textContent = text;
+          if (!x) {
+            native.textContent = text;
+            return;
+          }
+          nativeTrack ??= video.addTextTrack('subtitles', 'English', 'en');
+          nativeTrack.mode = 'showing';
+          for (const cue of [...nativeTrack.cues]) nativeTrack.removeCue(cue);
+          nativeTrack.addCue(new VTTCue(0, 90, text));
         },
       };
       const frames = [];

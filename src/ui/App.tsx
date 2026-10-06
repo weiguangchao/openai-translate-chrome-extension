@@ -43,6 +43,7 @@ import {
   Select,
   SubtitlePreview,
   Toggle,
+  XMark,
   YoutubeMark,
 } from './components';
 import { useAlert } from './Alert';
@@ -466,6 +467,15 @@ export function App() {
                           label="在 HBO Max 启用"
                           checked={settings.hbo}
                           onChange={(value) => update('hbo', value)}
+                        />
+                      </div>
+                      <div>
+                        <XMark />
+                        <span>X（推特）</span>
+                        <Toggle
+                          label="在 X（推特）启用"
+                          checked={settings.x}
+                          onChange={(value) => update('x', value)}
                         />
                       </div>
                     </div>

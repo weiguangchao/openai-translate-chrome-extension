@@ -2,7 +2,8 @@ import type { PrefetchItem } from '../src/shared/caption-translation';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { CaptionController } from '../src/core/controller';
 import { createHboPlatform } from '../src/platforms/hbo/platform';
-import { hboMediaUrl, parseHboManifest, parseHboVtt } from '../src/platforms/hbo/captions';
+import { hboMediaUrl, parseHboManifest } from '../src/platforms/hbo/captions';
+import { parseWebVtt } from '../src/core/webvtt';
 import { BridgeTimeline } from '../src/core/bridge/client';
 import { TranslationQueue } from '../src/extension/queue';
 import { DEFAULT_SETTINGS, publicSettings } from '../src/shared/settings';
@@ -520,7 +521,7 @@ it('parses multiperiod HBO WebVTT templates without adding the period offset twi
       offset: 0,
     })),
   );
-  expect(parseHboVtt(vtt(2, 'en-US'), tracks[0].files[1].offset)[0]).toEqual({
+  expect(parseWebVtt(vtt(2, 'en-US'), tracks[0].files[1].offset)[0]).toEqual({
     startTime: 33,
     endTime: 35,
     text: 'Cue 11',
@@ -587,10 +588,10 @@ it('resolves BaseURL, repeated templates, presentation offsets, and ignores vide
 it('parses VTT identifiers, markup, entities and CRLF while skipping metadata and invalid times', () => {
   const text =
     'WEBVTT\n\nNOTE ignore\n00:00.000 --> 00:01.000\nComment\n\nSTYLE\n::cue { color: red }\n\ncue-id\n00:01.000 --> 00:03.000 align:start\n<v Narrator><i>Hello &amp; goodbye.</i></v>\nSecond line &lt;3\n\n00:04.000 --> 00:02.000\nInvalid\n\n00:60.000 --> 01:02.000\nInvalid\n';
-  expect(parseHboVtt(`\uFEFF${text.replaceAll('\n', '\r\n')}`, 10)).toEqual([
+  expect(parseWebVtt(`\uFEFF${text.replaceAll('\n', '\r\n')}`, 10)).toEqual([
     { startTime: 11, endTime: 13, text: 'Hello & goodbye.\nSecond line <3' },
   ]);
-  expect(() => parseHboVtt('<html>Not subtitles</html>')).toThrow('Invalid WebVTT');
+  expect(() => parseWebVtt('<html>Not subtitles</html>')).toThrow('Invalid WebVTT');
 });
 
 it('keeps the HBO source across target/provider/style changes, seeks, blob renewal and signed URL renewal', async () => {

@@ -26,6 +26,7 @@ export interface Platform {
   readonly id: PlatformId;
   readonly style: string;
   videoId(): string;
+  findVideo?(): HTMLVideoElement | undefined;
   findPlayer(video: HTMLVideoElement): HTMLElement | null;
   source(video: HTMLVideoElement, player: HTMLElement, sourceLanguage: string): CaptionSource;
   reset(): void;

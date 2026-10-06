@@ -30,13 +30,18 @@ it('recognizes registered sites and rejects lookalike or insecure hosts', () => 
       'https://play.max.com/video',
       'https://play.hbomax.com/',
       'https://www.hbo.com/',
+      'https://x.com/NASA/status/1',
+      'https://twitter.com/NASA',
     ].map(platformForUrl),
-  ).toEqual(['youtube', 'youtube', 'hbo', 'hbo', 'hbo']);
+  ).toEqual(['youtube', 'youtube', 'hbo', 'hbo', 'hbo', 'x', 'x']);
   for (const url of [
     'http://www.youtube.com/',
     'https://notyoutube.com/',
     'https://youtube.com.evil.example/',
     'https://imax.com/',
+    'https://box.com/',
+    'https://x.com.evil.example/',
+    'http://x.com/',
     'chrome-extension://extension-id/popup.html',
     'not a url',
     undefined,

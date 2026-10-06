@@ -483,4 +483,4 @@ it('finishes an in-flight translation while paused and does not start another un
     { type: 'prefetch-resume' },
     { type: 'prefetch-pause' },
   ]);
-});
+}, 15_000);

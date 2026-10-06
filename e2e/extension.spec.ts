@@ -18,12 +18,22 @@ import {
   type Player,
 } from './harness';
 
+async function expectNativeHidden(p: Player, hidden: boolean) {
+  if (p.platform === 'x') {
+    const video = expect(p.page.locator('video'));
+    await (hidden ? video : video.not).toHaveClass(/subline-native/);
+    return;
+  }
+  await expect(p.page.locator('#native')).toHaveCSS('opacity', hidden ? '0' : '1');
+  if (!hidden) await expect(p.page.locator('#native')).toBeVisible();
+}
+
 const errorsShown = async (p: Player) =>
   [...new Set((await p.frames()).map((f) => f.translation))].filter((t) =>
     t.startsWith('Subline：'),
   );
 
-for (const platform of ['youtube', 'hbo'] as const) {
+for (const platform of ['youtube', 'hbo', 'x'] as const) {
   test(`${platform}: packaged extension translates a source track through its worker`, async ({}, info) => {
     await withPlayer(platform, info, async (p) => {
       await expect
@@ -158,7 +168,7 @@ for (const platform of ['youtube', 'hbo'] as const) {
       await p.settings({ sourceLanguage: 'fr' });
       await p.page.evaluate(() => window.fixture.select('fr'));
       await p.pair(frenchSource, frenchTranslation);
-      if (platform === 'hbo') {
+      if (platform !== 'youtube') {
         await p.page.evaluate(() => window.fixture.select(null));
         await expect(p.original).toBeHidden();
         await expect(p.translated).toBeHidden();
@@ -192,7 +202,7 @@ for (const platform of ['youtube', 'hbo'] as const) {
       await p.pair(source, translation);
       await p.pause();
       await p.page.evaluate(() => window.fixture.native('Native caption'));
-      await expect(p.page.locator('#native')).toHaveCSS('opacity', '0');
+      await expectNativeHidden(p, true);
       await p.page.getByRole('button', { name: 'Fullscreen fixture' }).click();
       await expect
         .poll(() => p.page.evaluate(() => document.fullscreenElement?.localName))
@@ -229,17 +239,15 @@ for (const platform of ['youtube', 'hbo'] as const) {
       await p.page.evaluate(() => document.exitFullscreen());
       await p.settings({ enabled: false });
       await expect(p.overlay).toHaveCount(0);
-      await expect(p.page.locator('#native')).toHaveCSS('opacity', '1');
-      await expect(p.page.locator('#native')).toBeVisible();
+      await expectNativeHidden(p, false);
       await p.settings({ enabled: true });
       await expect(p.overlay).toHaveCount(1);
-      await expect(p.page.locator('#native')).toHaveCSS('opacity', '0');
+      await expectNativeHidden(p, true);
       await p.settingsPage.evaluate(() => {
         setTimeout(() => chrome.runtime.reload());
       });
       await expect(p.overlay).toHaveCount(0);
-      await expect(p.page.locator('#native')).toHaveCSS('opacity', '1');
-      await expect(p.page.locator('#native')).toBeVisible();
+      await expectNativeHidden(p, false);
       p.settingsPage = await p.context.newPage();
       await expect(async () => {
         await p.settingsPage.goto(`chrome-extension://${p.extensionId}/popup.html`);
@@ -386,26 +394,29 @@ for (const platform of ['youtube', 'hbo'] as const) {
   });
 }
 
-test('hbo: website captions read before the timeline loads never show untranslated', async ({}, info) => {
-  await withPlayer(
-    'hbo',
-    info,
-    async (p) => {
-      await p.page.evaluate((text) => window.fixture.native(text), source);
-      await p.play();
-      await expect.poll(() => p.downloads.length, 'Manifest requested and held').toBe(1);
-      await p.page.waitForTimeout(1000);
-      expect((await p.frames()).filter((f) => f.original)).toEqual([]);
-      expect(p.posts).toEqual([]);
-      p.releaseTimeline();
-      await p.pair(source, translation);
-      expect(
-        (await p.frames()).filter(
-          (f) => f.original && (!f.translation || f.translation === '翻译中'),
-        ),
-        'The source never appears before its translation',
-      ).toEqual([]);
-    },
-    { holdTimeline: true },
-  );
-});
+for (const platform of ['hbo', 'x'] as const) {
+  test(`${platform}: website captions read before the timeline loads never show untranslated`, async ({}, info) => {
+    await withPlayer(
+      platform,
+      info,
+      async (p) => {
+        await p.page.evaluate((text) => window.fixture.native(text), source);
+        await p.play();
+        await expect.poll(() => p.downloads.length, 'Manifest requested and held').toBe(1);
+        await p.page.waitForTimeout(1000);
+        expect((await p.frames()).filter((f) => f.original)).toEqual([]);
+        expect(p.posts).toEqual([]);
+        await expectNativeHidden(p, true);
+        p.releaseTimeline();
+        await p.pair(source, translation);
+        expect(
+          (await p.frames()).filter(
+            (f) => f.original && (!f.translation || f.translation === '翻译中'),
+          ),
+          'The source never appears before its translation',
+        ).toEqual([]);
+      },
+      { holdTimeline: true },
+    );
+  });
+}

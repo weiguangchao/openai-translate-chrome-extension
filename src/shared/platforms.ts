@@ -1,4 +1,4 @@
-export type PlatformId = 'youtube' | 'hbo';
+export type PlatformId = 'youtube' | 'hbo' | 'x';
 
 export interface PlatformSite {
   id: PlatformId;
@@ -16,6 +16,11 @@ export const PLATFORMS: readonly PlatformSite[] = [
     id: 'hbo',
     domains: ['max.com', 'hbomax.com', 'hbo.com'],
     matches: ['https://*.max.com/*', 'https://*.hbomax.com/*', 'https://*.hbo.com/*'],
+  },
+  {
+    id: 'x',
+    domains: ['x.com', 'twitter.com'],
+    matches: ['https://x.com/*', 'https://twitter.com/*'],
   },
 ];
 

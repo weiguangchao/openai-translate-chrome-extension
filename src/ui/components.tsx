@@ -103,6 +103,16 @@ export function HboMark() {
     </span>
   );
 }
+export function XMark() {
+  return (
+    <span className="x-mark">
+      <svg viewBox="0 0 20 20" fill="none" aria-hidden>
+        <rect width="20" height="20" rx="5" fill="#0F1419" />
+        <path d="m6.5 6 7 8M13.5 6l-7 8" stroke="white" strokeWidth="1.8" strokeLinecap="round" />
+      </svg>
+    </span>
+  );
+}
 function PreviewDialog({ children, onClose }: { children: ReactNode; onClose: () => void }) {
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => {
