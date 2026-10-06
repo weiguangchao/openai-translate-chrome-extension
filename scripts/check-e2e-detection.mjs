@@ -8,7 +8,7 @@ const broken = await mkdtemp(path.join(tmpdir(), 'subline-broken-'));
 const output = path.resolve('.artifacts/e2e-detection');
 try {
   await cp('dist', broken, { recursive: true });
-  for (const platform of ['youtube', 'hbo'])
+  for (const platform of ['youtube', 'hbo', 'x'])
     await writeFile(path.join(broken, `${platform}-page.js`), '');
   await mkdir(output, { recursive: true });
   await rm(path.join(output, 'report.json'), { force: true });
@@ -30,7 +30,7 @@ try {
   assert.equal(result.status, 1, 'Removing page scripts must fail the same browser tests');
   const report = JSON.parse(await readFile(path.join(output, 'report.json'), 'utf8'));
   const specs = report.suites.flatMap((suite) => suite.specs);
-  assert.equal(specs.length, 2, 'Both platform smoke tests must run');
+  assert.equal(specs.length, 3, 'Every platform smoke test must run');
   assert.deepEqual(report.errors, [], 'Runner errors do not prove regression detection');
   for (const spec of specs) {
     assert.equal(spec.tests.length, 1);
@@ -42,14 +42,14 @@ try {
     assert.ok(
       result.errors.some(
         (error) =>
-          error.message?.includes('Source timeline must reach the overlay') &&
-          error.message?.includes('toHaveText'),
+          error.message?.includes('Source timeline must be downloaded') &&
+          error.message?.includes('toBe'),
       ),
       `${spec.title} must fail its source subtitle assertion, not browser startup`,
     );
   }
   console.log(
-    'Detection check passed: both platform tests reject missing page scripts at the source subtitle assertion.',
+    'Detection check passed: every platform test rejects missing page scripts at the source subtitle assertion.',
   );
 } finally {
   await rm(broken, { recursive: true, force: true });

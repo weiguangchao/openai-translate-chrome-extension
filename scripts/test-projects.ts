@@ -26,4 +26,10 @@ export const domTestProjects = [
     include: ['tests/youtube.test.ts'],
     environmentOptions: { jsdom: { url: 'https://www.youtube.com/watch?v=video-1' } },
   },
+  {
+    name: 'x',
+    environment: 'jsdom',
+    include: ['tests/x.test.ts'],
+    environmentOptions: { jsdom: { url: 'https://x.com/NASA/status/1' } },
+  },
 ];

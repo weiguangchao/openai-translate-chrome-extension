@@ -18,7 +18,7 @@
 
 ### Sentence
 
-A sentence is one cue in the source subtitle timeline. YouTube and HBO WebVTT timelines first rejoin cues and split them at sentence-ending punctuation; overlapping HBO cues retain their original intervals. Sentences over 80 display columns are flagged for the Provider to split, except DOM-only or overlapping subtitles; the extension never splits them locally.
+A sentence is one cue in the source subtitle timeline. YouTube timelines and HBO and X WebVTT timelines first rejoin cues and split them at sentence-ending punctuation; overlapping HBO and X cues retain their original intervals. Sentences over 80 display columns are flagged for the Provider to split, except DOM-only or overlapping subtitles; the extension never splits them locally.
 
 ### Caption
 

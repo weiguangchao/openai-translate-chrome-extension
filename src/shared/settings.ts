@@ -15,6 +15,7 @@ export interface Settings {
   subtitleGap: number;
   youtube: boolean;
   hbo: boolean;
+  x: boolean;
 }
 export type PublicSettings = Omit<Settings, 'apiKey' | 'baseUrl' | 'model'> & {
   configured: boolean;
@@ -50,12 +51,13 @@ export const DEFAULT_SETTINGS: Settings = {
   subtitleGap: 8,
   youtube: true,
   hbo: true,
+  x: true,
 };
 export const STORAGE_KEY = 'subline.settings.v1';
 export function normalizeSettings(value: unknown): Settings {
   const input = value && typeof value === 'object' ? (value as Partial<Settings>) : {};
   const result = structuredClone(DEFAULT_SETTINGS);
-  for (const key of ['enabled', 'youtube', 'hbo'] as const)
+  for (const key of ['enabled', 'youtube', 'hbo', 'x'] as const)
     if (typeof input[key] === 'boolean') result[key] = input[key];
   for (const key of ['baseUrl', 'apiKey', 'model'] as const)
     if (typeof input[key] === 'string') result[key] = input[key];
@@ -133,7 +135,7 @@ export function classifySettingsChange(
     source: changed('sourceLanguage'),
     translation: changed('targetLanguage') || providerChanged,
     availability:
-      (['enabled', 'youtube', 'hbo'] as const).some(changed) ||
+      (['enabled', 'youtube', 'hbo', 'x'] as const).some(changed) ||
       ('configured' in previous && 'configured' in next && previous.configured !== next.configured),
   };
 }

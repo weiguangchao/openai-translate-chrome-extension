@@ -14,7 +14,7 @@ import {
 import type { Settings } from '../src/shared/settings';
 import { longCaption, longResult } from '../tests/fixtures/long-caption';
 
-export type Platform = 'youtube' | 'hbo';
+export type Platform = 'youtube' | 'hbo' | 'x';
 export const providerUrl = 'https://www.youtube.com/__e2e_provider__/v1/chat/completions';
 export const elsewhereUrl = 'https://example.org/';
 export const apiKey = 'e2e-fake-key';
@@ -68,6 +68,11 @@ interface Post {
   status: number;
   route: Route;
 }
+interface Cue {
+  start: number;
+  end: number;
+  text: string;
+}
 interface Options {
   long?: boolean;
   hold?: boolean;
@@ -100,15 +105,21 @@ export class Player {
       : Promise.resolve();
   }
   get origin() {
-    return this.platform === 'youtube' ? 'https://www.youtube.com' : 'https://play.hbomax.com';
+    return {
+      youtube: 'https://www.youtube.com',
+      hbo: 'https://play.hbomax.com',
+      x: 'https://x.com',
+    }[this.platform];
   }
   get url() {
     return this.urlFor('first');
   }
   urlFor(id: string) {
-    return this.platform === 'youtube'
-      ? `${this.origin}/watch?v=${id}`
-      : `${this.origin}/video/watch/${id}`;
+    return {
+      youtube: `${this.origin}/watch?v=${id}`,
+      hbo: `${this.origin}/video/watch/${id}`,
+      x: `${this.origin}/e2e/status/${id}`,
+    }[this.platform];
   }
   get overlay() {
     return this.page.locator('[data-subline-overlay]');
@@ -120,7 +131,7 @@ export class Player {
     return this.overlay.locator('.translation');
   }
   get downloads() {
-    return this.requests.filter((r) => /timedtext|\.mpd|\.vtt/.test(r.url));
+    return this.requests.filter((r) => /timedtext|\.mpd|\.m3u8|\.vtt/.test(r.url));
   }
   async setup() {
     const worker =
@@ -138,6 +149,7 @@ export class Player {
       enabled: true,
       youtube: true,
       hbo: true,
+      x: true,
       baseUrl: providerUrl.replace('/chat/completions', ''),
       apiKey,
       model: 'e2e-fixed-model',
@@ -238,7 +250,7 @@ export class Player {
     }
     await post.route.fulfill({ json: { choices: [{ message: { content } }] } });
   }
-  private cues(id: string, language: string, kind: string) {
+  private cues(id: string, language: string, kind: string): Cue[] {
     if (language === 'zh-CN')
       throw new Error('Website target-language track must never be downloaded');
     if (language === 'fr') return [{ start: 0, end: 90, text: frenchSource }];
@@ -322,17 +334,30 @@ export class Player {
           body: `<MPD type="static" mediaPresentationDuration="PT90S"><Period start="PT0S" duration="PT90S">${['en', 'en-asr', 'fr', 'zh-CN'].map((lang) => `<AdaptationSet contentType="text" lang="${lang === 'en-asr' ? 'en' : lang}"><Role value="${lang === 'en-asr' ? 'caption' : 'subtitle'}"/><Representation id="${lang}" mimeType="text/vtt"><BaseURL>${lang}.vtt</BaseURL></Representation></AdaptationSet>`).join('')}</Period></MPD>`,
         });
       }
-      const stamp = (seconds: number) =>
-        `00:${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}.000`;
       const cues = this.cues(
         id,
         file.replace('.vtt', '').replace('-asr', ''),
         file === 'en-asr.vtt' ? 'asr' : 'authored',
       );
-      return route.fulfill({
-        contentType: 'text/vtt',
-        body: `WEBVTT\n\n${cues.map((c) => `${stamp(c.start)} --> ${stamp(c.end)}\n${c.text}\n`).join('\n')}`,
-      });
+      return route.fulfill({ contentType: 'text/vtt', body: webvtt(cues) });
+    }
+    const hls = url.pathname.match(
+      /^\/e2e\/(first|second|third)\/(pl\/s0|subs)\/(en|en-asr|fr|zh-CN)\.(m3u8|vtt)$/,
+    );
+    if (this.platform === 'x' && url.origin === 'https://video.twimg.com' && hls) {
+      const [, id, folder, file, extension] = hls;
+      const cues = this.cues(id, file.replace('-asr', ''), file === 'en-asr' ? 'asr' : 'authored');
+      const headers = { 'access-control-allow-origin': '*' };
+      if (folder === 'pl/s0' && extension === 'm3u8') {
+        await this.timeline;
+        return route.fulfill({
+          contentType: 'application/x-mpegURL',
+          headers,
+          body: `#EXTM3U\n#EXT-X-PLAYLIST-TYPE:VOD\n#EXT-X-TARGETDURATION:90\n#EXTINF:90.000,\n/e2e/${id}/subs/${file}.vtt\n#EXT-X-ENDLIST\n`,
+        });
+      }
+      if (folder === 'subs' && extension === 'vtt')
+        return route.fulfill({ contentType: 'text/vtt', headers, body: webvtt(cues) });
     }
     if (
       url.href === providerUrl &&
@@ -365,6 +390,12 @@ export class Player {
     this.unexpected.push(`${request.method()} ${url.href}`);
     await route.abort('blockedbyclient');
   }
+}
+
+function webvtt(cues: Cue[]): string {
+  const stamp = (seconds: number) =>
+    `00:${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}.000`;
+  return `WEBVTT\n\n${cues.map((c) => `${stamp(c.start)} --> ${stamp(c.end)}\n${c.text}\n`).join('\n')}`;
 }
 
 export async function withPlayer(

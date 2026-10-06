@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Subline · 双语字幕",
   "version": "0.1.0",
-  "description": "观看 YouTube、HBO Max 时，使用自己的 OpenAI 兼容接口，在原字幕下方显示母语翻译。",
+  "description": "观看 YouTube、HBO Max、X（推特）视频时，使用自己的 OpenAI 兼容接口，在原字幕下方显示母语翻译。",
   "minimum_chrome_version": "120",
   "permissions": ["storage"],
   "host_permissions": [
@@ -10,7 +10,9 @@
     "https://m.youtube.com/*",
     "https://*.max.com/*",
     "https://*.hbomax.com/*",
-    "https://*.hbo.com/*"
+    "https://*.hbo.com/*",
+    "https://x.com/*",
+    "https://twitter.com/*"
   ],
   "optional_host_permissions": ["https://*/*", "http://*/*"],
   "background": { "service_worker": "background.js", "type": "module" },
@@ -55,6 +57,19 @@
     {
       "matches": ["https://*.max.com/*", "https://*.hbomax.com/*", "https://*.hbo.com/*"],
       "js": ["hbo-content.js"],
+      "run_at": "document_end",
+      "all_frames": true
+    },
+    {
+      "matches": ["https://x.com/*", "https://twitter.com/*"],
+      "js": ["x-page.js"],
+      "world": "MAIN",
+      "run_at": "document_start",
+      "all_frames": true
+    },
+    {
+      "matches": ["https://x.com/*", "https://twitter.com/*"],
+      "js": ["x-content.js"],
       "run_at": "document_end",
       "all_frames": true
     }

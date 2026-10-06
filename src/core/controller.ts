@@ -12,6 +12,7 @@ import { CaptionTranslator } from './translator';
 const SEEK_PREVIEW_CUES = 4;
 const STYLE = `
 video.subline-native::cue { color: transparent !important; background: transparent !important; text-shadow: none !important; }
+video.subline-native::-webkit-media-text-track-container { opacity: 0 !important; }
 .subline-player [data-subline-caption] { opacity: 0 !important; pointer-events: none !important; }
 `;
 const MEDIA_EVENTS = [
@@ -163,7 +164,9 @@ export class CaptionController {
       this.unmount();
       this.platform.reset();
     }
-    const video = [...document.querySelectorAll('video')].find((v) => visible(v) && !v.ended);
+    const video = this.platform.findVideo
+      ? this.platform.findVideo()
+      : [...document.querySelectorAll('video')].find((v) => visible(v) && !v.ended);
     const player = video ? playerFor(video, this.platform) : null;
     if (!video || !player) {
       this.stop();

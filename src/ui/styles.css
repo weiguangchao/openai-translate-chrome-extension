@@ -624,7 +624,7 @@ button:hover:not(:disabled) {
 }
 .site-options {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 15px;
 }
 .site-options > div {
@@ -637,7 +637,7 @@ button:hover:not(:disabled) {
   border-left: 1px solid var(--line);
   padding-left: 16px;
 }
-.site-options > div > span:not(.youtube-mark):not(.hbo-mark) {
+.site-options > div > span:not(.youtube-mark):not(.hbo-mark):not(.x-mark) {
   font-size: 12px;
   font-weight: 550;
 }
@@ -663,6 +663,9 @@ button:hover:not(:disabled) {
 .site-options .hbo-mark > span {
   font-size: 11px;
 }
+.site-options .x-mark {
+  width: 20px;
+}
 .youtube-mark {
   display: inline-flex;
   width: 25px;
@@ -671,6 +674,17 @@ button:hover:not(:disabled) {
   flex-shrink: 0;
 }
 .youtube-mark svg {
+  width: 100%;
+  display: block;
+}
+.x-mark {
+  display: inline-flex;
+  width: 20px;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.x-mark svg {
   width: 100%;
   display: block;
 }
@@ -1540,7 +1554,7 @@ button:hover:not(:disabled) {
     padding: 16px 23px;
   }
   .site-options {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
   .site-options > div + div {
     border-left: 1px solid var(--line);
