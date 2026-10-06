@@ -1,14 +1,9 @@
-import type { TimedCue } from '../../core/cues';
-
-export interface HboSubtitleFile {
-  url: string;
-  offset: number;
-}
+import type { SubtitleFile } from '../../core/webvtt';
 
 export interface HboSubtitleTrack {
   language: string;
   role: string;
-  files: HboSubtitleFile[];
+  files: SubtitleFile[];
 }
 
 export function hboMediaUrl(value: string, base?: string): string | undefined {
@@ -75,7 +70,7 @@ export function parseHboManifest(xml: string, url: string): HboSubtitleTrack[] {
       const template =
         children(representation, 'SegmentTemplate')[0] ??
         children(adaptation, 'SegmentTemplate')[0];
-      const files: HboSubtitleFile[] = [];
+      const files: SubtitleFile[] = [];
       if (template) {
         const media = template.getAttribute('media');
         const scale = Number(template.getAttribute('timescale') ?? 1);
@@ -151,47 +146,4 @@ export function parseHboManifest(xml: string, url: string): HboSubtitleTrack[] {
     }
   }
   return [...tracks.values()];
-}
-
-function timestamp(value: string): number {
-  if (!/^(?:\d{2,}:)?\d{2}:\d{2}\.\d{3}$/.test(value)) return NaN;
-  const parts = value.split(':').map(Number);
-  if (parts.at(-1)! >= 60 || parts.at(-2)! >= 60) return NaN;
-  return parts.reduce((total, part) => total * 60 + part, 0);
-}
-
-export function parseHboVtt(value: string, offset = 0): TimedCue[] {
-  const text = value.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n');
-  if (!/^WEBVTT(?:[ \t\n]|$)/.test(text)) throw new Error('Invalid WebVTT');
-  const cues: TimedCue[] = [];
-  for (const block of text.split(/\n[ \t]*\n/).slice(1)) {
-    if (/^(NOTE|STYLE|REGION)(?:\s|$)/.test(block)) continue;
-    const lines = block.trim().split('\n');
-    const index = lines[0]?.includes('-->') ? 0 : 1;
-    const timing = lines[index]?.match(/^(\S+)\s+-->\s+(\S+)(?:[ \t].*)?$/);
-    if (!timing) continue;
-    const startTime = timestamp(timing[1]) + offset;
-    const endTime = timestamp(timing[2]) + offset;
-    const raw = lines
-      .slice(index + 1)
-      .join('\n')
-      .replace(/<[^>]*>/g, '');
-    const text = raw
-      .replace(
-        /&(amp|lt|gt|nbsp|lrm|rlm);/g,
-        (_, entity: string) =>
-          ({ amp: '&', lt: '<', gt: '>', nbsp: ' ', lrm: '\u200e', rlm: '\u200f' })[entity]!,
-      )
-      .trim();
-    if (
-      Number.isFinite(startTime) &&
-      startTime >= 0 &&
-      endTime > startTime &&
-      text &&
-      text.length <= 5000
-    )
-      cues.push({ startTime, endTime, text });
-    if (cues.length > 30000) throw new Error('Caption track too large');
-  }
-  return cues;
 }

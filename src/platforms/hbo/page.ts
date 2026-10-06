@@ -1,9 +1,9 @@
 import { servePageTimeline } from '../../core/bridge/page';
 import { mediaIdentity } from '../../core/bridge/source-cache';
-import type { TimedCue } from '../../core/cues';
 import { languageTrack } from '../../core/languages';
 import { authoredSubtitleSentences } from '../../core/sentences';
-import { hboMediaUrl, parseHboManifest, parseHboVtt, type HboSubtitleTrack } from './captions';
+import { fetchSubtitleText, loadWebVtt } from '../../core/webvtt';
+import { hboMediaUrl, parseHboManifest } from './captions';
 import { hboVideoId } from './player';
 
 interface TextSelection {
@@ -54,41 +54,6 @@ function playerState() {
   return null;
 }
 
-async function resource(url: string, signal: AbortSignal): Promise<string> {
-  const response = await fetch(url, {
-    credentials: 'omit',
-    signal: AbortSignal.any([signal, AbortSignal.timeout(15000)]),
-  });
-  if (!response.ok || Number(response.headers.get('content-length')) > 4_000_000)
-    throw new Error('Subtitle resource unavailable');
-  const text = await response.text();
-  if (text.length > 4_000_000) throw new Error('Subtitle resource too large');
-  return text;
-}
-
-async function loadTrack(track: HboSubtitleTrack, signal: AbortSignal): Promise<TimedCue[]> {
-  const results: TimedCue[][] = [];
-  let next = 0;
-  await Promise.all(
-    Array.from({ length: Math.min(4, track.files.length) }, async () => {
-      while (next < track.files.length) {
-        const index = next++;
-        const file = track.files[index];
-        results[index] = parseHboVtt(await resource(file.url, signal), file.offset);
-      }
-    }),
-  );
-  const cues = results.flat().sort((a, b) => a.startTime - b.startTime || a.endTime - b.endTime);
-  if (cues.length > 30000) throw new Error('Caption track too large');
-  return cues.filter(
-    (cue, index) =>
-      !index ||
-      cue.startTime !== cues[index - 1].startTime ||
-      cue.endTime !== cues[index - 1].endTime ||
-      cue.text !== cues[index - 1].text,
-  );
-}
-
 servePageTimeline('hbo', {
   videoId: hboVideoId,
   update(request, cache) {
@@ -113,12 +78,12 @@ servePageTimeline('hbo', {
       cache.load(
         url,
         async (signal) => {
-          const tracks = parseHboManifest(await resource(url, signal), url);
+          const tracks = parseHboManifest(await fetchSubtitleText(url, signal), url);
           const preferred = [...tracks].sort(
             (a, b) => Number(b.role === role) - Number(a.role === role),
           );
           const source = languageTrack(preferred, (track) => track.language, language);
-          return source ? authoredSubtitleSentences(await loadTrack(source, signal)) : [];
+          return source ? authoredSubtitleSentences(await loadWebVtt(source.files, signal)) : [];
         },
         selectedSource ? null : [],
       );
