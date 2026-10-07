@@ -41,6 +41,8 @@ beforeEach(() => {
 afterEach(() => {
   controller?.destroy();
   controller = undefined;
+  document.documentElement.removeAttribute('data-subline-trace');
+  document.documentElement.removeAttribute('data-subline-trace-worker');
   vi.useRealTimers();
   vi.unstubAllGlobals();
   document.body.innerHTML = '';
@@ -281,4 +283,42 @@ it('keeps a displayed translation when playback resumes through a rebuffer seek'
   await vi.advanceTimersByTimeAsync(450);
   expect(lines()).toEqual(['Already translated.', '译文 Already translated.']);
   expect(translates()).toHaveLength(1);
+});
+
+it('reports what the viewer sees only while the page asks for a trace', async () => {
+  source = {
+    kind: 'timeline',
+    mode: 'model',
+    id: 'track',
+    cues: [{ startTime: 0, endTime: 10, text: 'Timed cue.' }],
+    layers: () => [],
+  };
+  controller = new CaptionController(
+    () => platform,
+    publicSettings({ ...DEFAULT_SETTINGS, apiKey: 'key', model: 'model' }),
+  );
+  await vi.advanceTimersByTimeAsync(450);
+  expect(lines()).toEqual(['Timed cue.', '译文 Timed cue.']);
+  const traces = () =>
+    sendMessage.mock.calls.map(([message]) => message).filter(({ type }) => type === 'trace');
+  expect(traces()).toEqual([]);
+
+  document.documentElement.setAttribute('data-subline-trace', 'run-1');
+  await vi.advanceTimersByTimeAsync(300);
+  expect(traces()).toEqual([
+    {
+      type: 'trace',
+      run: 'run-1',
+      time: 0,
+      paused: false,
+      seeking: false,
+      state: 'ready',
+      text: 'Timed cue.',
+      cue: 0,
+      start: 0,
+      end: 10,
+      segment: 0,
+    },
+  ]);
+  expect(document.documentElement.getAttribute('data-subline-trace-worker')).toBe('extension-id');
 });

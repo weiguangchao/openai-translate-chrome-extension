@@ -6,6 +6,7 @@ import { DEFAULT_SETTINGS } from '../src/shared/settings';
 import { providerReply, requestedTexts } from './fixtures/provider';
 import { readCaptionTranslation, translationInput } from '../src/shared/caption-translation';
 import { longCaption, longResult, structuredReply } from './fixtures/long-caption';
+import type { TraceEvent } from '../src/shared/trace';
 
 beforeEach(async () => {
   vi.useFakeTimers();
@@ -627,4 +628,42 @@ it('sends each segment as its own request, even with fewer than ten captions, an
     { text: 'Other 2', segment: 0, needsSplit: false },
   ]);
   expect(batches()).toEqual([cues.slice(0, 8), cues.slice(8), ['Other 1', 'Other 2']]);
+});
+
+it('traces each batch by tab and segment without its keys, texts or error messages', async () => {
+  const fetch = vi.fn(async (_url: string, init: RequestInit) => {
+    const texts = requestedTexts(init);
+    if (texts.includes('Slow')) {
+      const timeout = new Error('The operation was aborted due to timeout');
+      timeout.name = 'TimeoutError';
+      throw timeout;
+    }
+    return providerReply(texts, (text) => `${text} 译文`);
+  });
+  vi.stubGlobal('fetch', fetch);
+  const events: TraceEvent[] = [];
+  const queue = new TranslationQueue(undefined, (event) => events.push(event));
+  await expect(
+    queue.prefetch('7:0', settings, prefetchItems(['First', 'Second'])),
+  ).resolves.toEqual(['First 译文', 'Second 译文']);
+  await queue.prefetch('7:0', settings, prefetchItems(['Slow'], 1));
+  await expect(queue.request('7:0', settings, 'Current')).resolves.toBe('Current 译文');
+  expect(events.map(({ ms: _ms, ...event }) => event)).toEqual([
+    { e: 'batch', id: 1, tab: '7:0', seg: 0, size: 2, solo: false },
+    { e: 'sent', id: 1 },
+    { e: 'first', id: 1 },
+    { e: 'done', id: 1, result: 'ok' },
+    { e: 'batch', id: 2, tab: '7:0', seg: 1, size: 1, solo: false },
+    { e: 'sent', id: 2 },
+    { e: 'done', id: 2, result: 'timeout' },
+    { e: 'batch', id: 3, tab: '7:0', seg: null, size: 1, solo: false },
+    { e: 'sent', id: 3 },
+    { e: 'first', id: 3 },
+    { e: 'done', id: 3, result: 'ok' },
+  ]);
+  for (const event of events)
+    if (event.e === 'first' || event.e === 'done') expect(event.ms).toBeGreaterThanOrEqual(0);
+  const printed = JSON.stringify(events);
+  for (const hidden of [settings.apiKey, 'First', 'Slow', 'Current', 'aborted due to timeout'])
+    expect(printed).not.toContain(hidden);
 });

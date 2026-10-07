@@ -6,6 +6,7 @@ import {
 } from '../shared/caption-translation';
 import { ProviderTimeoutError } from '../shared/provider-error';
 import type { Settings } from '../shared/settings';
+import type { TraceEvent } from '../shared/trace';
 
 import { wakeProviderRequests } from '../shared/provider/transport';
 export const translationCacheLimit = 5000;
@@ -13,6 +14,7 @@ export const translationCacheLimit = 5000;
 interface Job {
   key: string;
   group: string;
+  consumer: string;
   segment?: string;
   settings: Settings;
   text: string;
@@ -45,8 +47,12 @@ export class TranslationQueue {
   private expired = new Set<string>();
   private sendTimer: ReturnType<typeof setTimeout> | undefined;
   private promoting = false;
+  private batches = 0;
 
-  constructor(private cacheLimit = translationCacheLimit) {}
+  constructor(
+    private cacheLimit = translationCacheLimit,
+    private trace: (event: TraceEvent) => void = () => {},
+  ) {}
 
   private group(settings: Settings): string {
     return JSON.stringify([
@@ -89,7 +95,7 @@ export class TranslationQueue {
     if (finished !== undefined) return Promise.resolve(finished);
     if (this.expired.has(key)) return Promise.reject(new ProviderTimeoutError());
     try {
-      const job = this.enqueue(key, settings, text, needsSplit);
+      const job = this.enqueue(key, settings, text, needsSplit, consumer);
       this.drain();
       return job.promise;
     } catch (error) {
@@ -132,6 +138,7 @@ export class TranslationQueue {
             settings,
             item.text,
             item.needsSplit,
+            consumer,
             JSON.stringify([consumer, item.segment]),
           );
       });
@@ -200,7 +207,8 @@ export class TranslationQueue {
     key: string,
     settings: Settings,
     text: string,
-    needsSplit = false,
+    needsSplit: boolean,
+    consumer: string,
     segment?: string,
   ): Job {
     const existing = this.jobs.get(key);
@@ -218,6 +226,7 @@ export class TranslationQueue {
     const job: Job = {
       key,
       group: this.group(settings),
+      consumer,
       segment,
       settings,
       text,
@@ -326,8 +335,24 @@ export class TranslationQueue {
   private run(batch: Job[]): void {
     const controller = new AbortController();
     for (const job of batch) Object.assign(job, { controller, batch });
+    const [first] = batch;
+    const id = ++this.batches;
+    const created = Date.now();
+    let sentAt: number | undefined;
+    let delivered = false;
+    const [tab, segment] = first.segment
+      ? (JSON.parse(first.segment) as [string, number])
+      : [first.consumer, null];
+    const elapsed = () => Date.now() - (sentAt ?? created);
+    const finish = (result: 'ok' | 'invalid' | 'timeout' | 'error' | 'aborted') =>
+      this.trace({ e: 'done', id, ms: elapsed(), result });
+    this.trace({ e: 'batch', id, tab, seg: segment, size: batch.length, solo: first.solo });
     const deliver = (index: number, translation: CaptionTranslation) => {
       if (controller.signal.aborted) return;
+      if (!delivered) {
+        delivered = true;
+        this.trace({ e: 'first', id, ms: elapsed() });
+      }
       const job = batch[index];
       if (!job) return;
       this.remember(job.key, translation);
@@ -336,7 +361,6 @@ export class TranslationQueue {
       job.resolve(translation);
       this.drain();
     };
-    const [first] = batch;
     const work = translateCaptionBatch(
       first.settings,
       batch.map((job) => translationInput(job.text, job.needsSplit)),
@@ -351,10 +375,13 @@ export class TranslationQueue {
               !state.paused &&
               batch.some((job) => state.current === job.key || state.window.includes(job.key)),
           );
-          if (wanted)
+          if (wanted) {
             batch.forEach((job) => {
               job.sent = true;
             });
+            sentAt = Date.now();
+            this.trace({ e: 'sent', id });
+          }
           return wanted;
         },
         priority: () => {
@@ -376,7 +403,8 @@ export class TranslationQueue {
     );
     void work.then(
       (results) => {
-        if (controller.signal.aborted) return;
+        if (controller.signal.aborted) return finish('aborted');
+        finish(results ? 'ok' : 'invalid');
         if (!results) {
           for (const job of batch) {
             if (this.jobs.get(job.key) !== job) continue;
@@ -405,9 +433,10 @@ export class TranslationQueue {
         this.drain();
       },
       (error) => {
-        if (controller.signal.aborted) return;
+        if (controller.signal.aborted) return finish('aborted');
         const failure = error instanceof Error ? error : new Error('翻译失败。');
         const timedOut = failure instanceof ProviderTimeoutError;
+        finish(timedOut ? 'timeout' : 'error');
         if (!timedOut) {
           this.backoffUntil = Date.now() + 15000;
           this.backoffReason = failure.message || '翻译失败。';

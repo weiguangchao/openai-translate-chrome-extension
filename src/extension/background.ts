@@ -14,9 +14,10 @@ import {
   STORAGE_KEY,
   type Settings,
 } from '../shared/settings';
-import { TranslationQueue } from './queue';
+import { printTrace, readTraceRequest } from '../shared/trace';
+import { TranslationQueue, translationCacheLimit } from './queue';
 
-const queue = new TranslationQueue();
+const queue = new TranslationQueue(translationCacheLimit, printTrace);
 let settings: Settings;
 let translationRevision = crypto.randomUUID();
 let updateSequence = 0;
@@ -93,15 +94,11 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, respond) => {
         ? fetchModels(draft)
         : translate(draft, 'The world is full of wonderful things.');
     }
-    if (platform)
-      return contentRequest(
-        type,
-        message as object,
-        platform,
-        `${sender.tab?.id}:${sender.frameId}`,
-        sender.documentId,
-      );
-    throw new Error('不支持的请求。');
+    if (!platform) throw new Error('不支持的请求。');
+    const consumer = `${sender.tab?.id}:${sender.frameId}`;
+    if (type === 'trace')
+      return printTrace({ e: 'view', tab: consumer, ...readTraceRequest(message as object) });
+    return contentRequest(type, message as object, platform, consumer, sender.documentId);
   })().then(
     (result) => respond({ ok: true, data: result }),
     (error) => respond({ ok: false, error: error instanceof Error ? error.message : '请求失败。' }),
