@@ -12,6 +12,7 @@ export const domTestProjects = [
       'tests/popup.test.tsx',
       'tests/settings-alerts.test.tsx',
       'tests/settings-models.test.tsx',
+      'tests/trace.test.ts',
     ],
   },
   {

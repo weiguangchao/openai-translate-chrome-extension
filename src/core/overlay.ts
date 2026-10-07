@@ -1,4 +1,5 @@
 import type { PublicSettings } from '../shared/settings';
+import type { ViewState } from '../shared/trace';
 
 const LOADING_TRANSLATION = '翻译中';
 const TIMEOUT_TRANSLATION = '接口调用超时';
@@ -23,6 +24,14 @@ export class SubtitleOverlay {
 
   get failed(): boolean {
     return Boolean(this.translation?.classList.contains('error'));
+  }
+
+  get state(): ViewState {
+    const text = this.translation && !this.translation.hidden ? this.translation.textContent : '';
+    if (!text) return 'empty';
+    if (this.failed) return 'error';
+    if (text === LOADING_TRANSLATION) return 'loading';
+    return text === TIMEOUT_TRANSLATION ? 'timeout' : 'ready';
   }
 
   mount(player: HTMLElement, settings: PublicSettings): void {

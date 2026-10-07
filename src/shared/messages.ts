@@ -1,6 +1,7 @@
 import type { PrefetchItem } from './caption-translation';
 import { prefetchWindowLimit } from './limits';
 import type { PublicSettings } from './settings';
+import type { TraceRequest } from './trace';
 
 export interface Reply<T> {
   ok?: boolean;
@@ -24,6 +25,7 @@ export type ContentRequest =
   | { type: 'settings' }
   | TranslateRequest
   | PrefetchRequest
+  | TraceRequest
   | { type: 'prefetch-pause' }
   | { type: 'prefetch-resume' };
 

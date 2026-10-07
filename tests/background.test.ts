@@ -329,3 +329,30 @@ it('sends only an opaque translation revision, retaining it for style changes', 
   });
   expect(JSON.stringify(provider)).not.toMatch(/secret-key|private-model|api\.openai/);
 });
+
+it('prints a page trace event with its tab and only the known fields', async () => {
+  const debug = vi.spyOn(console, 'debug').mockImplementation(() => {});
+  const send = await loadBackground({ ...DEFAULT_SETTINGS, apiKey: 'trusted-secret', model: 'm' });
+  const event = {
+    type: 'trace',
+    run: 'run-1',
+    time: 12.5,
+    paused: false,
+    seeking: false,
+    state: 'loading',
+    cue: 4,
+    start: 12,
+    end: 15,
+    segment: 0,
+    text: 'Hello',
+    apiKey: 'page-supplied',
+  };
+  await expect(send(event)).resolves.toEqual({ ok: true });
+  await expect(send({ ...event, time: -1 })).resolves.toMatchObject({ ok: false });
+  expect(debug.mock.calls).toEqual([
+    [
+      '[subline] {"e":"view","tab":"1:0","run":"run-1","t":12.5,"state":"loading","paused":false,"seeking":false,"cue":4,"start":12,"end":15,"seg":0,"text":"Hello"}',
+    ],
+  ]);
+  debug.mockRestore();
+});

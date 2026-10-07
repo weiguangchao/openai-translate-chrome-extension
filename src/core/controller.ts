@@ -7,6 +7,7 @@ import { SubtitleOverlay } from './overlay';
 import type { CaptionSource, LiveCaption, Platform, PlatformFactory } from './platform';
 import { PlaybackGate } from './playback';
 import { captionWindow, timedCaptions } from './timeline';
+import { TraceReporter, type TraceCaption } from './trace';
 import { CaptionTranslator } from './translator';
 
 const SEEK_PREVIEW_CUES = 4;
@@ -52,6 +53,8 @@ export class CaptionController {
   private platform: Platform;
   private overlay = new SubtitleOverlay();
   private translator: CaptionTranslator;
+  private trace: TraceReporter;
+  private shown: TraceCaption | null = null;
   private gate: PlaybackGate;
   private style: HTMLStyleElement;
   private interval: ReturnType<typeof setInterval>;
@@ -76,6 +79,10 @@ export class CaptionController {
     this.platform = createPlatform(() => this.tick());
     this.pageVideo = this.platform.videoId();
     this.translator = new CaptionTranslator(this.connection, this.overlay, () => this.tick());
+    this.trace = new TraceReporter(
+      (message) => void this.connection.sendMessage(message).catch(() => {}),
+      () => chrome.runtime.id,
+    );
     this.gate = new PlaybackGate({
       hold: () => {
         this.translator.prefetch([]);
@@ -149,6 +156,12 @@ export class CaptionController {
   }
 
   private tick(): void {
+    this.shown = null;
+    this.advance();
+    if (!this.destroyed && this.video) this.trace.note(this.video, this.shown, this.overlay.state);
+  }
+
+  private advance(): void {
     if (this.destroyed) return;
     if (!this.connection.active) {
       this.destroy();
@@ -217,13 +230,24 @@ export class CaptionController {
       );
     this.overlay.hide(caption.layers);
     video.classList.toggle('subline-native', caption.nativeTrack);
-    const cue = captions?.find(
-      (item) => item.startTime <= time && time < item.endTime && item.text === caption.text,
-    );
+    const cueIndex =
+      captions?.findIndex(
+        (item) => item.startTime <= time && time < item.endTime && item.text === caption.text,
+      ) ?? -1;
+    const cue = captions?.[cueIndex];
     if (!caption.text || !usesModel) {
       this.clearCaption();
       return;
     }
+    this.shown = {
+      text: caption.text,
+      ...(cue && {
+        cue: cueIndex,
+        start: cue.startTime,
+        end: cue.endTime,
+        segment: cue.segment,
+      }),
+    };
     this.translator.show({
       ...(cue?.needsSplit ? { kind: 'split', cue } : { kind: 'ordinary', text: caption.text }),
       time,
