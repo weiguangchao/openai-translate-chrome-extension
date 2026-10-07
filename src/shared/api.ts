@@ -1,3 +1,4 @@
+import { ProviderTimeoutError } from './provider-error';
 import { providerFetch, type ProviderSendPolicy } from './provider/transport';
 import { translationBatchLimit } from './limits';
 import { englishLanguageName, validateBaseUrl, validateSettings, type Settings } from './settings';
@@ -26,7 +27,7 @@ function endpoint(settings: Settings, path: string): string {
   return validateBaseUrl(settings.baseUrl).href.replace(/\/+$/, '') + path;
 }
 function timeoutError(): Error {
-  return new Error('接口请求超时，请检查网络或更换响应更快的模型。');
+  return new ProviderTimeoutError();
 }
 function invalidJson(): Error {
   return new Error('接口没有返回有效的 JSON，请检查 Base URL 是否为 API 地址。');
