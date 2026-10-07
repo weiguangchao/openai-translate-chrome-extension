@@ -15,7 +15,12 @@ import {
 let controller: CaptionController | undefined;
 let video: HTMLVideoElement;
 const saved = { ...DEFAULT_SETTINGS, apiKey: 'test-key', model: 'test-model' };
-const pending: { texts: string[]; signal: AbortSignal; resolve: (value: Response) => void }[] = [];
+const pending: {
+  texts: string[];
+  signal: AbortSignal;
+  resolve: (value: Response) => void;
+  reject: (error: unknown) => void;
+}[] = [];
 const requested: string[][] = [];
 const messages: string[] = [];
 const cues = [
@@ -75,7 +80,7 @@ beforeEach(async () => {
       const texts = requestedTexts(init);
       requested.push(texts);
       return new Promise<Response>((resolve, reject) => {
-        pending.push({ texts, signal: init.signal!, resolve });
+        pending.push({ texts, signal: init.signal!, resolve, reject });
         init.signal?.addEventListener('abort', () =>
           reject(new DOMException('Aborted', 'AbortError')),
         );
@@ -392,6 +397,49 @@ it('queues the current and next segment on open, waits out a scrub, and requests
   expect(translated()?.textContent).toBe('跳转后的字幕');
   await finish({ 'Cue 1': '迟到的旧字幕' });
   expect(translated()?.textContent).toBe('跳转后的字幕');
+});
+
+it('shows a timeout like the loading line, skips that batch, and translates the later segment', async () => {
+  const dense = Array.from({ length: 30 }, (_, index) => ({
+    startTime: 2 + index * 2,
+    endTime: 4 + index * 2,
+    text: `Cue ${index + 1}`,
+  }));
+  Object.defineProperty(video, 'textTracks', {
+    value: [
+      {
+        mode: 'showing',
+        kind: 'subtitles',
+        language: 'en',
+        cues: dense,
+        activeCues: [],
+      },
+    ],
+  });
+  controller = new CaptionController(createHboPlatform, publicSettings(saved));
+  await vi.advanceTimersByTimeAsync(0);
+  const block = (index: number) => dense.slice(index * 10, index * 10 + 10).map((cue) => cue.text);
+  expect(requested).toEqual([block(0), block(1)]);
+  await advance(3);
+  expect(translated()?.textContent).toBe('翻译中');
+  const timeout = new Error('The operation was aborted due to timeout');
+  timeout.name = 'TimeoutError';
+  pending.find((request) => request.texts.includes('Cue 1'))!.reject(timeout);
+  await vi.advanceTimersByTimeAsync(0);
+  const translation = translated();
+  expect(translation?.textContent).toBe('接口调用超时');
+  expect(translation?.classList.contains('error')).toBe(false);
+  expect(translation?.style.color).toBe('rgb(184, 229, 207)');
+  expect(translation?.style.fontSize).toBe('20px');
+  expect(original()?.hidden).toBe(true);
+  await finish({ 'Cue 11': '第十一句' });
+  const sent = requested.length;
+  await vi.advanceTimersByTimeAsync(20000);
+  expect(requested).toHaveLength(sent);
+  expect(translated()?.textContent).toBe('接口调用超时');
+  await advance(22);
+  expect(translated()?.textContent).toBe('第十一句');
+  expect(requested).toEqual([block(0), block(1), block(2)]);
 });
 
 it('previews a few cues after a jump settles, then resumes the lookahead once playback continues', async () => {

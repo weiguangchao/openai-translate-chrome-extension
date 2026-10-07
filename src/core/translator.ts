@@ -3,6 +3,7 @@ import {
   type CaptionTranslation,
   type PrefetchItem,
 } from '../shared/caption-translation';
+import { providerTimeoutMessage } from '../shared/provider-error';
 import type { ExtensionConnection } from './connection';
 import type { SubtitleOverlay } from './overlay';
 import { translatedCaptions, type TimedCaption } from './timeline';
@@ -36,6 +37,7 @@ export class CaptionTranslator {
   private windowKey = '';
   private prefetchedAt = 0;
   private playbackHeld = false;
+  private timedOut = false;
 
   constructor(
     private connection: ExtensionConnection,
@@ -84,6 +86,11 @@ export class CaptionTranslator {
       this.changedAt = Date.now();
       this.overlay.hideTranslation();
     }
+    if (this.timedOut) {
+      this.overlay.showOriginal('');
+      this.overlay.showTimeout();
+      return;
+    }
     const view = this.view(frame);
     this.overlay.showOriginal(view.kind === 'waiting' ? '' : view.original);
     if (view.kind === 'ready') {
@@ -131,6 +138,7 @@ export class CaptionTranslator {
     this.requested = '';
     this.result = null;
     this.checkedCache = false;
+    this.timedOut = false;
   }
 
   private view(frame: CaptionFrame): CaptionView {
@@ -179,9 +187,16 @@ export class CaptionTranslator {
       })
       .catch((error) => {
         if (this.version === version && this.overlay.mounted) {
-          this.overlay.showError(error instanceof Error ? error.message : '翻译失败，请检查配置。');
+          const message = error instanceof Error ? error.message : '翻译失败，请检查配置。';
           this.requested = '';
-          this.changedAt = Date.now() + 15000;
+          if (message === providerTimeoutMessage) {
+            this.timedOut = true;
+            this.overlay.showOriginal('');
+            this.overlay.showTimeout();
+          } else {
+            this.overlay.showError(message);
+            this.changedAt = Date.now() + 15000;
+          }
         }
         this.changed();
       });

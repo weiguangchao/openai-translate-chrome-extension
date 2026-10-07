@@ -119,6 +119,31 @@ it('sends every cue right away, shares in-flight work, and serves a completed cu
   expect(fetch).toHaveBeenCalledTimes(3);
 });
 
+it('translates the next caption after a timeout without pausing or retrying that batch', async () => {
+  const fetch = vi.fn(async (_url: string, init: RequestInit) => {
+    const texts = requestedTexts(init);
+    if (texts.includes('Stale')) {
+      const timeout = new Error('The operation was aborted due to timeout');
+      timeout.name = 'TimeoutError';
+      throw timeout;
+    }
+    return providerReply(texts, (text) => `${text} 译文`);
+  });
+  vi.stubGlobal('fetch', fetch);
+  const queue = new TranslationQueue();
+  const failed = queue.prefetch('tab', settings, prefetchItems(['Stale', 'Passed']));
+  await expect(failed).resolves.toEqual([null, null]);
+  expect(fetch).toHaveBeenCalledTimes(1);
+  queue.prefetch('tab', settings, prefetchItems(['Stale', 'Passed']));
+  await flush();
+  expect(fetch).toHaveBeenCalledTimes(1);
+  await expect(queue.request('tab', settings, 'Stale')).rejects.toThrow('接口请求超时');
+  expect(fetch).toHaveBeenCalledTimes(1);
+  const next = queue.prefetch('tab', settings, prefetchItems(['Later'], 1));
+  await expect(next).resolves.toEqual(['Later 译文']);
+  expect(fetch).toHaveBeenCalledTimes(2);
+});
+
 it('backs off after a rate limit so subsequent cues do not repeatedly bill or hit the provider', async () => {
   const fetch = vi.fn().mockResolvedValue(new Response('', { status: 429 }));
   vi.stubGlobal('fetch', fetch);

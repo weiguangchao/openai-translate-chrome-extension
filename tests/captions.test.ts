@@ -3,6 +3,7 @@ import { CaptionController } from '../src/core/controller';
 import { createHboPlatform } from '../src/platforms/hbo/platform';
 import { readHboCaption } from '../src/platforms/hbo/player';
 import { createYoutubePlatform } from '../src/platforms/youtube/platform';
+import { providerTimeoutMessage } from '../src/shared/provider-error';
 import { DEFAULT_SETTINGS, publicSettings } from '../src/shared/settings';
 
 let controller: CaptionController | undefined;
@@ -415,6 +416,31 @@ it('cleans up when prefetch throws during teardown and ignores an in-flight tran
   expect(document.querySelector('[data-subline-caption]')).toBeNull();
   expect(captionLayer().textContent).toBe('First cue');
   expect(vi.getTimerCount()).toBe(0);
+});
+
+it('shows a provider timeout like the loading line and does not retry that caption', async () => {
+  const sendMessage = vi.fn().mockResolvedValue({ ok: false, error: providerTimeoutMessage });
+  vi.stubGlobal('chrome', { runtime: { id: 'extension-id', sendMessage } });
+  controller = new CaptionController(createHboPlatform, settings());
+  await vi.advanceTimersByTimeAsync(450);
+  const translation = translationNode();
+  expect(translation?.textContent).toBe('接口调用超时');
+  expect(translation?.classList.contains('error')).toBe(false);
+  expect(translation?.style.color).toBe('rgb(184, 229, 207)');
+  expect(translation?.style.fontSize).toBe('20px');
+  expect(originalNode()?.hidden).toBe(true);
+  const translates = () =>
+    sendMessage.mock.calls.filter(([message]) => message.type === 'translate');
+  expect(translates()).toHaveLength(1);
+  await vi.advanceTimersByTimeAsync(20000);
+  expect(translationNode()?.textContent).toBe('接口调用超时');
+  expect(translates()).toHaveLength(1);
+  document.getElementById('cue')!.textContent = 'Second cue';
+  await vi.advanceTimersByTimeAsync(450);
+  expect(translates()).toEqual([
+    [{ type: 'translate', text: 'First cue' }],
+    [{ type: 'translate', text: 'Second cue' }],
+  ]);
 });
 
 it('shows the original with the error, keeps the controller alive and retries the current caption', async () => {

@@ -1,6 +1,7 @@
 import type { PublicSettings } from '../shared/settings';
 
 const LOADING_TRANSLATION = '翻译中';
+const TIMEOUT_TRANSLATION = '接口调用超时';
 const OVERLAY_STYLE =
   ':host{all:initial}.stack{position:absolute;left:4%;width:92%;text-align:center;font-family:Arial,"PingFang SC",sans-serif;line-height:1.4;pointer-events:none}.line{width:fit-content;max-width:100%;margin-inline:auto;padding:1px 8px;border-radius:3px;white-space:normal;overflow-wrap:anywhere;text-shadow:0 1px 3px #000;box-sizing:border-box}.error{font-size:13px!important;color:#ffe3b0!important}';
 
@@ -105,13 +106,21 @@ export class SubtitleOverlay {
   }
 
   showLoading(): void {
+    this.showStatus(LOADING_TRANSLATION);
+  }
+
+  showTimeout(): void {
+    this.showStatus(TIMEOUT_TRANSLATION);
+  }
+
+  private showStatus(text: string): void {
     if (
       !this.translation ||
-      (this.translation.textContent === LOADING_TRANSLATION && !this.translation.hidden)
+      (this.translation.textContent === text && !this.translation.hidden && !this.failed)
     )
       return;
     this.translation.classList.remove('error');
-    this.translation.textContent = LOADING_TRANSLATION;
+    this.translation.textContent = text;
     this.translation.hidden = false;
   }
 

@@ -4,6 +4,7 @@ import {
   type CaptionTranslation,
   type PrefetchItem,
 } from '../shared/caption-translation';
+import { ProviderTimeoutError } from '../shared/provider-error';
 import type { Settings } from '../shared/settings';
 
 import { wakeProviderRequests } from '../shared/provider/transport';
@@ -41,6 +42,7 @@ export class TranslationQueue {
   private consumers = new Map<string, Consumer>();
   private backoffUntil = 0;
   private backoffReason = '';
+  private expired = new Set<string>();
   private sendTimer: ReturnType<typeof setTimeout> | undefined;
   private promoting = false;
 
@@ -82,8 +84,10 @@ export class TranslationQueue {
     state.current = key;
     this.consumers.set(consumer, state);
     this.prune(false);
+    this.retainExpired();
     const finished = this.finished.get(key);
     if (finished !== undefined) return Promise.resolve(finished);
+    if (this.expired.has(key)) return Promise.reject(new ProviderTimeoutError());
     try {
       const job = this.enqueue(key, settings, text, needsSplit);
       this.drain();
@@ -119,9 +123,10 @@ export class TranslationQueue {
       });
     else this.consumers.delete(consumer);
     this.prune(true);
+    this.retainExpired();
     if (Date.now() >= this.backoffUntil)
       items.forEach((item, index) => {
-        if (!this.finished.has(keys[index]))
+        if (!this.finished.has(keys[index]) && !this.expired.has(keys[index]))
           this.enqueue(
             keys[index],
             settings,
@@ -137,6 +142,7 @@ export class TranslationQueue {
   release(consumers: readonly string[]): void {
     for (const consumer of consumers) this.consumers.delete(consumer);
     this.prune(true);
+    this.retainExpired();
     this.drain();
   }
 
@@ -159,6 +165,7 @@ export class TranslationQueue {
     this.prune(true);
     this.backoffUntil = 0;
     this.backoffReason = '';
+    this.expired.clear();
     clearTimeout(this.sendTimer);
     this.sendTimer = undefined;
   }
@@ -169,6 +176,16 @@ export class TranslationQueue {
         (key) => this.finished.get(key) ?? this.jobs.get(key)?.promise.catch(() => null) ?? null,
       ),
     );
+  }
+
+  private retainExpired(): void {
+    const live = new Set<string>();
+    for (const state of this.consumers.values()) {
+      if (state.current) live.add(state.current);
+      for (const key of state.window) live.add(key);
+      if (state.held) for (const key of state.held.keys) live.add(key);
+    }
+    for (const key of this.expired) if (!live.has(key)) this.expired.delete(key);
   }
 
   private remember(key: string, translation: CaptionTranslation): void {
@@ -390,10 +407,14 @@ export class TranslationQueue {
       (error) => {
         if (controller.signal.aborted) return;
         const failure = error instanceof Error ? error : new Error('翻译失败。');
-        this.backoffUntil = Date.now() + 15000;
-        this.backoffReason = failure.message || '翻译失败。';
+        const timedOut = failure instanceof ProviderTimeoutError;
+        if (!timedOut) {
+          this.backoffUntil = Date.now() + 15000;
+          this.backoffReason = failure.message || '翻译失败。';
+        }
         for (const job of batch) {
           if (this.jobs.get(job.key) !== job) continue;
+          if (timedOut) this.expired.add(job.key);
           this.jobs.delete(job.key);
           job.reject(failure);
         }
