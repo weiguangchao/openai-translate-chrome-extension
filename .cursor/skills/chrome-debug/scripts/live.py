@@ -2,18 +2,23 @@
 """Chrome commands through one DevTools socket to the signed-in Default profile.
 
     python3 live.py start                       # connect once; the user allows at most once
-    python3 live.py run CHECKS.json [--only N]  # exit 0 only when every check passed
-    python3 live.py reload [--path DIR]         # reload Subline after npm run build
+    python3 live.py run CHECKS.json --session ID [--only N]
+    python3 live.py reload --session ID [--path DIR]  # reload after npm run build
     python3 live.py status
-    python3 live.py stop                        # close the socket when the task ends
+    python3 live.py stop --session ID           # close this task's socket
 
 Use "run --help" for JSON fields, actions, and report semantics.
+start prints a session id. Pass it with --session ID on subsequent commands,
+or set CHROME_DEBUG_SESSION for this task only. Other tasks cannot reuse it.
 """
 
 import argparse
+from contextlib import contextmanager, nullcontext
+import fcntl
 import hashlib
 import json
 import os
+import secrets
 import signal
 import socket
 import subprocess
@@ -82,6 +87,41 @@ class NotRunning(Exception):
     pass
 
 
+class SessionConflict(Exception):
+    pass
+
+
+def session_id():
+    return os.environ.get("CHROME_DEBUG_SESSION")
+
+
+def require_owner(state):
+    owner = state.get("owner")
+    if not owner:
+        raise SessionConflict("This holder has no session owner. Have the task that started it stop it "
+                              "with its original live.py before starting a new session.")
+    if not session_id():
+        raise SessionConflict("A session id is required. Pass --session ID from this task's start output.")
+    if session_id() != owner:
+        raise SessionConflict("Holder belongs to another session. Wait for that task to stop it; "
+                              "do not adopt its session id.")
+
+
+@contextmanager
+def lifecycle_lock():
+    """Serialize start/stop, including the interval before a new holder publishes state."""
+    STATE.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    with open(STATE.with_suffix(".lock"), "a") as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise SessionConflict("Another session is starting or stopping Chrome debugging. Retry later.")
+        try:
+            yield
+        finally:
+            fcntl.flock(lock, fcntl.LOCK_UN)
+
+
 def load_state():
     try:
         return json.loads(STATE.read_text())
@@ -113,12 +153,17 @@ def alive(state):
 def request(method, params=None, timeout=15):
     """Yield every reply line until the holder marks one `done`."""
     state = load_state()
-    if state is None or not alive(state):
+    if state is None:
+        raise NotRunning
+    if method != "Session.status":
+        require_owner(state)
+    if not alive(state):
         raise NotRunning
     with socket.create_connection(("127.0.0.1", state["port"]), 5) as sock:
         # A page that never commits keeps the holder silent for a whole budget, so the read timeout covers it.
         sock.settimeout(timeout)
-        message = {"token": state["token"], "method": method, "params": params or {}}
+        message = {"token": state["token"], "owner": session_id(),
+                   "method": method, "params": params or {}}
         sock.sendall((json.dumps(message, ensure_ascii=False) + "\n").encode())
         with sock.makefile("rb") as stream:
             for line in stream:
@@ -144,9 +189,13 @@ def echo_log(offset):
 def start(_args):
     state = load_state()
     if state and alive(state):
+        require_owner(state)
         print(f"Holder already running (pid {state['pid']}). Reusing its Chrome socket.")
         return 0
-    # A stale state file stays: the new holder reads it to close a tab the old one left open.
+    owner = session_id() or secrets.token_hex(16)
+    # Keep the id available even if Chrome approval times out, so this task can retry.
+    print(f"Session: {owner}. Pass --session {owner} on this task's commands.", flush=True)
+    # A stale state file stays so the same task can clean up its previous check tab.
     STATE.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     offset = LOG.stat().st_size if LOG.exists() else 0
     with open(LOG, "ab") as log:
@@ -156,6 +205,7 @@ def start(_args):
             stdout=log,
             stderr=subprocess.STDOUT,
             start_new_session=True,
+            env={**os.environ, "CHROME_DEBUG_SESSION": owner},
         )
     deadline = time.monotonic() + START_SECONDS
     while time.monotonic() < deadline:
@@ -166,10 +216,16 @@ def start(_args):
             return 1
         state = load_state()
         if state and state.get("pid") == holder.pid:
-            print(f"Holder pid {holder.pid}. Stop it with: python3 {display(__file__)} stop")
+            print(f"Holder pid {holder.pid}. Stop it with: "
+                  f"python3 {display(__file__)} stop --session {owner}")
             return 0
         time.sleep(0.5)
     holder.terminate()
+    try:
+        holder.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        holder.kill()
+        holder.wait()
     echo_log(offset)
     print("Holder did not get ready in time.", file=sys.stderr)
     return 1
@@ -219,10 +275,13 @@ def load_checks(files, only):
             invalid(f"{name}: expected a JSON list of checks")
         loaded += [(check, Path(name).resolve().parent) for check in data]
     if only:
-        known = {check.get("name") for check, _ in loaded if isinstance(check, dict)}
+        for check, _ in loaded:
+            if not isinstance(check, dict) or not isinstance(check.get("name"), str) or not check["name"]:
+                invalid("Each check must have a non-empty string name before selecting with --only")
+        known = {check["name"] for check, _ in loaded}
         unknown = sorted(set(only) - known)
         if unknown:
-            raise SystemExit(f"No check named {', '.join(unknown)}. Checks: {', '.join(sorted(map(str, known)))}")
+            invalid(f"No check named {', '.join(unknown)}. Checks: {', '.join(sorted(known))}")
         loaded = [(check, folder) for check, folder in loaded if isinstance(check, dict) and check.get("name") in only]
     for check, folder in loaded:
         if not isinstance(check, dict):
@@ -326,6 +385,7 @@ def stop(_args):
     if state is None:
         print("Not running.")
         return 0
+    require_owner(state)
     pid = state.get("pid", 0)
     if alive(state):
         # SIGTERM ends a running check, closes its tab and the Chrome socket, and removes the state file.
@@ -363,8 +423,19 @@ def main():
     reloader.set_defaults(func=reload)
     commands.add_parser("status", help="report holder status").set_defaults(func=status)
     commands.add_parser("stop", help="close the Chrome socket and exit the holder").set_defaults(func=stop)
+    for command in commands.choices.values():
+        command.add_argument("--session", metavar="ID",
+                             help="this task's session id from start (or CHROME_DEBUG_SESSION)")
     args = parser.parse_args()
-    sys.exit(args.func(args))
+    if args.session is not None:
+        os.environ["CHROME_DEBUG_SESSION"] = args.session
+    try:
+        with lifecycle_lock() if args.command in ("start", "stop") else nullcontext():
+            result = args.func(args)
+    except SessionConflict as error:
+        print(str(error), file=sys.stderr)
+        result = 1
+    sys.exit(result)
 
 
 if __name__ == "__main__":

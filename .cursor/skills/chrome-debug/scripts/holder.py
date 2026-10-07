@@ -24,7 +24,7 @@ import time
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from live import STATE, alive, load_state
+from live import STATE, alive, load_state, session_id
 from worker_trace import summarize as summarize_worker
 
 PORT_FILE = Path(
@@ -413,7 +413,7 @@ def validate(checks):
             continue
         for index, step in enumerate(steps):
             action = step.get("action") if isinstance(step, dict) else None
-            if action not in STEP_FIELDS:
+            if not isinstance(action, str) or action not in STEP_FIELDS:
                 problems.append(f"{where} step {index}: unknown action {action!r}")
                 continue
             required, optional = STEP_FIELDS[action]
@@ -841,6 +841,9 @@ class Holder:
         self.chrome = chrome
         self.chrome_port = chrome_port
         self.token = secrets.token_hex(16)
+        self.owner = session_id()
+        if not self.owner:
+            raise ValueError("Start a session through live.py start")
         self.server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.server.bind(("127.0.0.1", 0))
         self.server.listen(8)
@@ -850,7 +853,7 @@ class Holder:
     def publish(self, tab=None):
         # The open tab is recorded so the next holder can close it if this one is killed.
         write_state({"pid": os.getpid(), "port": self.port, "token": self.token,
-                     "chrome_port": self.chrome_port, "tab": tab})
+                     "owner": self.owner, "chrome_port": self.chrome_port, "tab": tab})
 
     def serve(self):
         idle_until = time.monotonic() + IDLE_SECONDS
@@ -884,6 +887,9 @@ class Holder:
             return
         client.settimeout(None)
         method = request.get("method")
+        if method != "Session.status" and request.get("owner") != self.owner:
+            reply(client, {"done": True, "ok": False, "error": "Holder belongs to another session"})
+            return
         if method == "Session.status":
             reply(client, {"done": True, "ok": True, "pid": os.getpid(), "chrome_port": self.chrome_port,
                            "started": self.started, "idle_minutes": IDLE_SECONDS // 60})
@@ -1116,7 +1122,7 @@ def main():
     for number in (signal.SIGTERM, signal.SIGHUP):
         signal.signal(number, lambda *_: sys.exit(0))
     try:
-        if previous and previous.get("tab"):
+        if previous and previous.get("tab") and previous.get("owner") == holder.owner:
             try:
                 chrome.call("Target.closeTarget", {"targetId": previous["tab"]}, timeout=5)
                 log("Closed the tab a stopped holder left open.")
