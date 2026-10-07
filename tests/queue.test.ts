@@ -667,3 +667,29 @@ it('traces each batch by tab and segment without its keys, texts or error messag
   for (const hidden of [settings.apiKey, 'First', 'Slow', 'Current', 'aborted due to timeout'])
     expect(printed).not.toContain(hidden);
 });
+
+it('restores stored translations and mirrors new and evicted ones to the store', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (_url: string, init: RequestInit) =>
+      providerReply(requestedTexts(init), (text) => `${text} 译文`),
+    ),
+  );
+  const stored = new Map<string, unknown>();
+  const queue = new TranslationQueue(2);
+  queue.restore([], {
+    save: (key, translation) => stored.set(key, translation),
+    remove: (key) => stored.delete(key),
+  });
+  await queue.prefetch('tab', settings, prefetchItems(['One', 'Two', 'Three']));
+  expect([...stored.values()].sort()).toEqual(['Three 译文', 'Two 译文']);
+  for (const key of stored.keys()) expect(key).not.toContain(settings.apiKey);
+
+  vi.mocked(fetch).mockClear();
+  const restarted = new TranslationQueue(2);
+  restarted.restore(stored as Map<string, string>, { save: vi.fn(), remove: vi.fn() });
+  await expect(restarted.request('tab', settings, 'Three')).resolves.toBe('Three 译文');
+  await expect(restarted.lookup(settings, 'Two')).resolves.toBe('Two 译文');
+  await expect(restarted.lookup(settings, 'One')).resolves.toBeNull();
+  expect(fetch).not.toHaveBeenCalled();
+});
