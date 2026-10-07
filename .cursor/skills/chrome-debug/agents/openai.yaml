@@ -1,0 +1,5 @@
+interface:
+  display_name: "Chrome Debug"
+  short_description: "One Chrome DevTools session for YouTube, HBO, and X."
+policy:
+  allow_implicit_invocation: false
