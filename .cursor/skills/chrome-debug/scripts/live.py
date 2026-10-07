@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
-"""Run Subline checks in the signed-in Default Chrome through one DevTools socket.
+"""Chrome commands through one DevTools socket to the signed-in Default profile.
 
     python3 live.py start                       # connect once; the user allows at most once
     python3 live.py run CHECKS.json [--only N]  # exit 0 only when every check passed
     python3 live.py reload [--path DIR]         # reload Subline after npm run build
     python3 live.py status
     python3 live.py stop                        # close the socket when the task ends
+
+Use "run --help" for JSON fields, actions, and report semantics.
 """
 
 import argparse
@@ -26,6 +28,54 @@ STATE = Path(
 )
 LOG = STATE.with_suffix(".log")
 START_SECONDS = 75
+
+RUN_HELP = """Input
+  Each FILE contains a JSON list of checks:
+    [{"name": "page", "url": "https://example.com", "budget": 30,
+      "steps": [{"action": "evaluate", "expression": "document.title"}]}]
+
+  name             Check id, selected by --only NAME.
+  url              HTTP or HTTPS page to open in a new check tab.
+  budget           Total wall seconds per check, 1-600, including navigation.
+  steps            Non-empty action list, executed in order.
+  on_fail          Optional page expression, evaluated once before tab cleanup.
+  fail_screenshot  Optional screenshot path, captured before failed-tab cleanup.
+
+Actions
+  evaluate         expression or expression_file; optional save.
+                   Evaluate page JavaScript, await Promises, return JSON.
+                   Truthy values pass; falsy values retry every second.
+                   An object with a fail key ends the check as failed.
+                   Each attempt waits up to 8 seconds for the expression.
+  screenshot       path. JPEG for .jpg/.jpeg, otherwise PNG.
+  click            selector. Click the first matching document element.
+  seek             time; optional selector, default video. Seek within 1.5 s.
+  play             Optional selector, default video. Mute and request playback.
+                   Passes when the video exists. Later step retries keep playing
+                   and skip YouTube ads, so this action overrides manual pauses.
+  network-any      hints. Match any substring of this tab's recorded request URLs.
+  wait-overlay     Optional reject, default ["翻译中"]; reject_error, default true.
+                   Wait for a visible, nonempty Subline original/translation pair.
+  trace            seconds; optional selector, default video; optional save.
+                   Collect Subline timing events for playback seconds or to end.
+                   seconds must be 1-600 and below the check budget.
+                   Requires a Subline build with tracing and a caption source.
+                   Collects events from navigation; keeps its worker awake.
+                   Reports lag, loading, coverage, and batches. Lag and loading
+                   use video time; lag percentiles exclude never-ready captions.
+                   A successful trace means collection completed, not sync passed.
+
+Paths and reports
+  run mutes audio/video elements from navigation through tab cleanup, including
+  newly added media. Unmute attempts are ignored. Playback and pauses stay under
+  the check's control.
+  expression_file resolves from FILE's folder; output paths resolve from cwd.
+  evaluate with save writes the full value; without it, reports cap at 20,000 chars.
+  stdout emits one JSON report per check, then a summary; stderr carries progress.
+  A failed step ends its check. Remaining checks still run. Check tabs always close.
+  Reports include step values/stats and reason/error on failure. Request URLs omit
+  query strings. Exit 0: all steps passed; 1: failed check/holder; 2: invalid input.
+"""
 
 
 class NotRunning(Exception):
@@ -297,14 +347,21 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("start", help="connect to Chrome once and keep the socket").set_defaults(func=start)
-    runner = commands.add_parser("run", help="run checks from JSON files")
-    runner.add_argument("files", nargs="+")
+    runner = commands.add_parser(
+        "run", help="run checks from JSON files", epilog=RUN_HELP,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    runner.add_argument("files", nargs="+", metavar="FILE", help="JSON check files")
     runner.add_argument("--only", action="append", metavar="NAME", help="run only this check; repeatable")
     runner.set_defaults(func=run)
-    reloader = commands.add_parser("reload", help="reload Subline in Chrome after npm run build")
+    reloader = commands.add_parser(
+        "reload", help="reload Subline in Chrome",
+        description="Reload Subline from Chrome's loaded folder; does not build it. "
+        "Existing site tabs need a refresh.",
+    )
     reloader.add_argument("--path", help="folder Chrome loaded Subline from (default: this repository's dist)")
     reloader.set_defaults(func=reload)
-    commands.add_parser("status").set_defaults(func=status)
+    commands.add_parser("status", help="report holder status").set_defaults(func=status)
     commands.add_parser("stop", help="close the Chrome socket and exit the holder").set_defaults(func=stop)
     args = parser.parse_args()
     sys.exit(args.func(args))

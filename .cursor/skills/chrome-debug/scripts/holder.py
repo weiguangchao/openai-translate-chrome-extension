@@ -49,6 +49,36 @@ WORKER_WAIT_SECONDS = 20
 WORKER_QUIET_SECONDS = 30
 WORKER_EVENTS = 50000
 
+MUTE_MEDIA = """(() => {
+  const prototype = HTMLMediaElement.prototype;
+  const muted = Object.getOwnPropertyDescriptor(prototype, 'muted');
+  const defaultMuted = Object.getOwnPropertyDescriptor(prototype, 'defaultMuted');
+  const mute = (media) => {
+    if (!defaultMuted.get.call(media)) defaultMuted.set.call(media, true);
+    if (!muted.get.call(media)) muted.set.call(media, true);
+  };
+  for (const [name, descriptor] of [['muted', muted], ['defaultMuted', defaultMuted]]) {
+    Object.defineProperty(prototype, name, {
+      ...descriptor,
+      get() { mute(this); return descriptor.get.call(this); },
+      set() { mute(this); },
+    });
+  }
+  const muteTree = (node) => {
+    if (node instanceof HTMLMediaElement) mute(node);
+    node.querySelectorAll?.('audio,video').forEach(mute);
+  };
+  for (const type of ['play', 'volumechange']) {
+    document.addEventListener(type, (event) => {
+      if (event.target instanceof HTMLMediaElement) mute(event.target);
+    }, true);
+  }
+  new MutationObserver((records) => {
+    for (const record of records) for (const node of record.addedNodes) muteTree(node);
+  }).observe(document, { childList: true, subtree: true });
+  muteTree(document);
+})();"""
+
 
 class Verdict:
     """A probe's verdict that ends the step as failed at once. Falsy, so `if ok:` reads it as failed."""
@@ -972,6 +1002,10 @@ class Holder:
                 self.chrome.call("Network.enable", session=session)
                 # Inspector reports a renderer crash; Target.detachedFromTarget reports a closed tab.
                 self.chrome.call("Inspector.enable", session=session)
+                self.chrome.call("Page.enable", session=session)
+                self.chrome.call(
+                    "Page.addScriptToEvaluateOnNewDocument", {"source": MUTE_MEDIA}, session=session
+                )
                 if any(step.get("action") == "trace" for step in check["steps"]):
                     tab.watch_worker()
                 navigated = self.chrome.call("Page.navigate", {"url": check["url"]}, session=session)
