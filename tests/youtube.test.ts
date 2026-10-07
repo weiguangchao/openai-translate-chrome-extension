@@ -136,6 +136,11 @@ it('prefetches a long subtitle whole, has the Provider split it, and shows each 
   await vi.advanceTimersByTimeAsync(0);
   expect([...lines()].map((line) => [line.hidden, line.textContent])).toEqual([
     [true, ''],
+    [true, ''],
+  ]);
+  await vi.advanceTimersByTimeAsync(300);
+  expect([...lines()].map((line) => [line.hidden, line.textContent])).toEqual([
+    [true, ''],
     [false, '翻译中'],
   ]);
   expect(requests).toEqual([[githubCaption]]);

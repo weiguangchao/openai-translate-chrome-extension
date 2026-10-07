@@ -380,15 +380,49 @@ for (const platform of ['youtube', 'hbo', 'x'] as const) {
       const worker = await p.watchWorker();
       await worker.stop();
       await expect.poll(worker.status).toBe('stopped');
-      await p.page.evaluate(() => window.fixture.switchVideo('second'));
+      await p.page.evaluate(() => window.fixture.switchVideo('third'));
       await p.play();
-      await p.pair(nextSource, nextTranslation);
+      await p.pair(thirdSource, thirdTranslation);
       await expect.poll(worker.status).toBe('running');
       expect(p.posts).toHaveLength(2);
+      expect(p.posts[1].inputs).toEqual([{ id: 0, text: thirdSource }]);
       await info.attach('worker.json', {
         body: JSON.stringify(worker.history),
         contentType: 'application/json',
       });
+      await worker.detach();
+    });
+  });
+
+  test(`${platform}: a cached translation replaces the next caption without 翻译中`, async ({}, info) => {
+    await withPlayer(platform, info, async (p) => {
+      await p.play();
+      await p.pair(source, translation);
+      expect(p.posts).toHaveLength(1);
+      await p.seek(27);
+      const before = (await p.frames()).length;
+      await p.pair(nextSource, nextTranslation);
+      expect(
+        (await p.frames()).slice(before).filter((f) => f.translation === '翻译中'),
+        'A translation the worker already has never shows 翻译中 first',
+      ).toEqual([]);
+      expect(p.posts).toHaveLength(1);
+    });
+  });
+
+  test(`${platform}: a restarted worker keeps the translations it already had`, async ({}, info) => {
+    await withPlayer(platform, info, async (p) => {
+      await p.play();
+      await p.pair(source, translation);
+      await p.pause();
+      const worker = await p.watchWorker();
+      await worker.stop();
+      await expect.poll(worker.status).toBe('stopped');
+      await p.seek(31);
+      await p.play();
+      await p.pair(nextSource, nextTranslation);
+      await expect.poll(worker.status).toBe('running');
+      expect(p.posts, 'The restarted worker answers from its stored translations').toHaveLength(1);
       await worker.detach();
     });
   });

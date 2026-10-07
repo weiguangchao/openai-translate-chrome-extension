@@ -71,6 +71,11 @@ beforeEach(async () => {
         setAccessLevel: vi.fn().mockResolvedValue(undefined),
         get: vi.fn().mockResolvedValue({ [STORAGE_KEY]: saved }),
       },
+      session: {
+        get: vi.fn().mockResolvedValue({}),
+        set: vi.fn().mockResolvedValue(undefined),
+        remove: vi.fn().mockResolvedValue(undefined),
+      },
       onChanged: { addListener: vi.fn() },
     },
   });
@@ -734,6 +739,8 @@ it('shows the segment translation only after the JSON response is complete', asy
   controller = new CaptionController(createHboPlatform, publicSettings(saved));
   await vi.advanceTimersByTimeAsync(0);
   expect(requested).toEqual([['Opening line', 'Following line']]);
+  expect(translated()?.hidden).toBe(true);
+  await vi.advanceTimersByTimeAsync(300);
   expect(translated()?.textContent).toBe('翻译中');
   resolveResponse(
     providerReply(['Opening line', 'Following line'], (text) =>

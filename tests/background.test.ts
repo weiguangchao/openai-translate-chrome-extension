@@ -30,7 +30,7 @@ it('answers cache-only lookups without starting model work and reuses background
   expect(fetch).toHaveBeenCalledTimes(1);
 });
 
-async function loadBackground(saved: object) {
+async function loadBackground(saved: object, session = new Map<string, unknown>()) {
   let listener!: (
     message: unknown,
     sender: chrome.runtime.MessageSender,
@@ -54,6 +54,15 @@ async function loadBackground(saved: object) {
       local: {
         setAccessLevel: vi.fn().mockResolvedValue(undefined),
         get: vi.fn().mockResolvedValue({ [STORAGE_KEY]: saved }),
+      },
+      session: {
+        get: vi.fn(async () => Object.fromEntries(session)),
+        set: vi.fn(async (items: Record<string, unknown>) => {
+          for (const [key, value] of Object.entries(items)) session.set(key, value);
+        }),
+        remove: vi.fn(async (keys: string[]) => {
+          for (const key of keys) session.delete(key);
+        }),
       },
       onChanged: { addListener: vi.fn() },
     },
@@ -355,4 +364,26 @@ it('prints a page trace event with its tab and only the known fields', async () 
     ],
   ]);
   debug.mockRestore();
+});
+
+it('keeps translations in session storage, without the API key, for a restarted worker', async () => {
+  const fetch = vi.fn().mockResolvedValue(providerReply(['Hello'], () => '你好'));
+  vi.stubGlobal('fetch', fetch);
+  const session = new Map<string, unknown>();
+  const saved = { ...DEFAULT_SETTINGS, apiKey: 'trusted-secret', model: 'model' };
+  let send = await loadBackground(saved, session);
+  await expect(send({ type: 'translate', text: 'Hello' })).resolves.toEqual({
+    ok: true,
+    data: '你好',
+  });
+  await vi.waitFor(() => expect([...session.values()]).toContain('你好'));
+  expect(JSON.stringify([...session])).not.toContain('trusted-secret');
+
+  vi.resetModules();
+  send = await loadBackground(saved, session);
+  await expect(send({ type: 'translate', text: 'Hello', cacheOnly: true })).resolves.toEqual({
+    ok: true,
+    data: '你好',
+  });
+  expect(fetch).toHaveBeenCalledTimes(1);
 });

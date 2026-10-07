@@ -16,6 +16,7 @@ import {
 } from '../shared/settings';
 import { printTrace, readTraceRequest } from '../shared/trace';
 import { TranslationQueue, translationCacheLimit } from './queue';
+import { restoreTranslations } from './translation-store';
 
 const queue = new TranslationQueue(translationCacheLimit, printTrace);
 let settings: Settings;
@@ -25,6 +26,7 @@ const consumers = new Map<string, { platform: PlatformId; document?: string }>()
 const ready = (async () => {
   await chrome.storage.local.setAccessLevel({ accessLevel: 'TRUSTED_CONTEXTS' });
   settings = normalizeSettings((await chrome.storage.local.get(STORAGE_KEY))[STORAGE_KEY]);
+  await restoreTranslations(queue);
 })();
 
 function requireEnabled(platform: PlatformId): void {

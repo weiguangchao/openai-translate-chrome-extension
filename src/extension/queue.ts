@@ -11,6 +11,11 @@ import type { TraceEvent } from '../shared/trace';
 import { wakeProviderRequests } from '../shared/provider/transport';
 export const translationCacheLimit = 5000;
 
+export interface TranslationStore {
+  save(key: string, translation: CaptionTranslation): void;
+  remove(key: string): void;
+}
+
 interface Job {
   key: string;
   group: string;
@@ -48,6 +53,7 @@ export class TranslationQueue {
   private sendTimer: ReturnType<typeof setTimeout> | undefined;
   private promoting = false;
   private batches = 0;
+  private store: TranslationStore | undefined;
 
   constructor(
     private cacheLimit = translationCacheLimit,
@@ -66,10 +72,20 @@ export class TranslationQueue {
 
   private key(settings: Settings, text: string, needsSplit = false): string {
     return JSON.stringify([
-      this.group(settings),
+      settings.baseUrl,
+      settings.model,
+      settings.sourceLanguage,
+      settings.targetLanguage,
       text,
       translationInput(text, needsSplit).needsSplit,
     ]);
+  }
+
+  restore(entries: Iterable<readonly [string, CaptionTranslation]>, store: TranslationStore): void {
+    for (const [key, translation] of entries)
+      if (!this.finished.has(key)) this.finished.set(key, translation);
+    this.store = store;
+    this.evict();
   }
 
   lookup(settings: Settings, text: string, needsSplit = false): Promise<CaptionTranslation | null> {
@@ -198,9 +214,16 @@ export class TranslationQueue {
   private remember(key: string, translation: CaptionTranslation): void {
     this.finished.delete(key);
     this.finished.set(key, translation);
-    if (this.finished.size <= this.cacheLimit) return;
-    const [oldest] = this.finished.keys();
-    this.finished.delete(oldest);
+    this.store?.save(key, translation);
+    this.evict();
+  }
+
+  private evict(): void {
+    while (this.finished.size > this.cacheLimit) {
+      const [oldest] = this.finished.keys();
+      this.finished.delete(oldest);
+      this.store?.remove(oldest);
+    }
   }
 
   private enqueue(

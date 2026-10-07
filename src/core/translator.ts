@@ -8,6 +8,8 @@ import type { ExtensionConnection } from './connection';
 import type { SubtitleOverlay } from './overlay';
 import { translatedCaptions, type TimedCaption } from './timeline';
 
+const LOADING_DELAY_MS = 300;
+
 export type CaptionFrame = {
   readonly time: number;
   readonly cacheOnly: boolean;
@@ -99,8 +101,10 @@ export class CaptionTranslator {
     }
     const pending = this.requested === this.text && this.requested !== '';
     if (frame.cacheOnly && (this.checkedCache || pending)) return;
-    if (pending || Date.now() - this.changedAt < frame.debounce) {
-      if (!frame.cacheOnly && !this.overlay.failed) this.overlay.showLoading();
+    const waited = Date.now() - this.changedAt;
+    if (pending || waited < frame.debounce) {
+      if (!frame.cacheOnly && !this.overlay.failed && waited >= LOADING_DELAY_MS)
+        this.overlay.showLoading();
       return;
     }
     this.request(frame.cacheOnly);
@@ -160,7 +164,8 @@ export class CaptionTranslator {
     const { text, needsSplit, version } = this;
     this.requested = text;
     if (cacheOnly) this.checkedCache = true;
-    else this.overlay.showLoading();
+    else if (this.overlay.failed || Date.now() - this.changedAt >= LOADING_DELAY_MS)
+      this.overlay.showLoading();
     void this.connection
       .sendMessage<unknown>({
         type: 'translate',
