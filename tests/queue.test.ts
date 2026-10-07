@@ -1,5 +1,6 @@
 import { prefetchItems } from './fixtures/provider';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { translationBatchLimit } from '../src/shared/limits';
 import { translationSendsPerSecond } from '../src/shared/provider/transport';
 let TranslationQueue: typeof import('../src/extension/queue').TranslationQueue;
 import { DEFAULT_SETTINGS } from '../src/shared/settings';
@@ -253,18 +254,18 @@ it('answers a prefetch with cached and in-flight translations in order, and null
   expect(batches()).toHaveLength(3);
 });
 
-it('sends each new block of ten cues as one request and reuses a finished block', async () => {
+it('sends each new block of five cues as one request and reuses a finished block', async () => {
   const { batches, reply, requests } = pendingProvider();
   const queue = new TranslationQueue();
-  const cues = Array.from({ length: 40 }, (_, index) => `Cue ${index + 1}`);
-  const block = (index: number) => cues.slice(index * 10, index * 10 + 10);
-  queue.prefetch('tab', settings, prefetchItems(cues.slice(0, 30)));
+  const cues = Array.from({ length: 20 }, (_, index) => `Cue ${index + 1}`);
+  const block = (index: number) => cues.slice(index * 5, index * 5 + 5);
+  queue.prefetch('tab', settings, prefetchItems(cues.slice(0, 15)));
   expect(batches()).toEqual([block(0), block(1), block(2)]);
-  for (let start = 1; start < 10; start++) {
-    queue.prefetch('tab', settings, prefetchItems(cues.slice(start, 30)));
+  for (let start = 1; start < 5; start++) {
+    queue.prefetch('tab', settings, prefetchItems(cues.slice(start, 15)));
     expect(batches()).toHaveLength(3);
   }
-  queue.prefetch('tab', settings, prefetchItems(cues.slice(10, 40)));
+  queue.prefetch('tab', settings, prefetchItems(cues.slice(5, 20)));
   expect(requests[0].signal.aborted).toBe(true);
   expect(batches()).toEqual([block(0), block(1), block(2)]);
   await vi.advanceTimersByTimeAsync(1000);
@@ -280,21 +281,21 @@ it('sends each new block of ten cues as one request and reuses a finished block'
 it('does not prefetch the next segment until the current provider request receives a reply', async () => {
   const { batches, reply, requests } = pendingProvider();
   const queue = new TranslationQueue();
-  const cues = Array.from({ length: 30 }, (_, index) => `Cue ${index + 1}`);
-  const block = (index: number) => cues.slice(index * 10, index * 10 + 10);
+  const cues = Array.from({ length: 15 }, (_, index) => `Cue ${index + 1}`);
+  const block = (index: number) => cues.slice(index * 5, index * 5 + 5);
   queue.prefetch('tab', settings, prefetchItems(block(0)));
   queue.prefetch('tab', settings, prefetchItems(block(1)));
   queue.prefetch('tab', settings, prefetchItems(block(2)));
   expect(batches()).toEqual([block(0)]);
   expect(requests[0].signal.aborted).toBe(false);
-  const visible = queue.request('tab', settings, cues[20]);
+  const visible = queue.request('tab', settings, cues[10]);
   expect(batches()).toEqual([block(0)]);
   reply(0);
   await flush();
   expect(batches()).toEqual([block(0), block(2)]);
   expect(requests[0].signal.aborted).toBe(false);
   requests[1].resolve(providerReply(requests[1].texts, (text) => `${text} 译文`));
-  await expect(visible).resolves.toBe('Cue 21 译文');
+  await expect(visible).resolves.toBe('Cue 11 译文');
 });
 
 it('still sends the rest of the current segment while its provider request is in flight', async () => {
@@ -333,15 +334,15 @@ it('drops a parked next segment when the current request is cancelled', async ()
 it('starts from the current cue mid-block, sends a short final batch at the end of a video, and skips finished cues', async () => {
   const { batches, reply } = pendingProvider();
   const queue = new TranslationQueue();
-  const cues = Array.from({ length: 33 }, (_, index) => `Cue ${index + 1}`);
-  queue.prefetch('tab', settings, prefetchItems(cues.slice(7, 30)));
-  expect(batches()).toEqual([cues.slice(7, 17), cues.slice(17, 27), cues.slice(27, 30)]);
+  const cues = Array.from({ length: 18 }, (_, index) => `Cue ${index + 1}`);
+  queue.prefetch('tab', settings, prefetchItems(cues.slice(2, 15)));
+  expect(batches()).toEqual([cues.slice(2, 7), cues.slice(7, 12), cues.slice(12, 15)]);
   [0, 1, 2].forEach(reply);
   await flush();
-  queue.prefetch('tab', settings, prefetchItems(cues.slice(10, 33)));
+  queue.prefetch('tab', settings, prefetchItems(cues.slice(5, 18)));
   expect(batches()).toHaveLength(3);
   await vi.advanceTimersByTimeAsync(1000);
-  expect(batches().slice(3)).toEqual([cues.slice(30, 33)]);
+  expect(batches().slice(3)).toEqual([cues.slice(15, 18)]);
 });
 
 it('retries each cue on its own when the batch reply cannot be matched to the cues', async () => {
@@ -400,7 +401,8 @@ it('finishes sent requests while paused and does not send the rest until playbac
   const { fetch, requests, batches, reply } = pendingProvider();
   const queue = new TranslationQueue();
   const cues = Array.from({ length: 40 }, (_, index) => `Cue ${index + 1}`);
-  const block = (index: number) => cues.slice(index * 10, index * 10 + 10);
+  const block = (index: number) =>
+    cues.slice(index * translationBatchLimit, (index + 1) * translationBatchLimit);
   queue.prefetch('tab', settings, prefetchItems(cues));
   const visible = queue.request('tab', settings, cues[0]);
   expect(batches()).toEqual([block(0), block(1), block(2)]);
@@ -419,13 +421,14 @@ it('sends at most three requests each second', async () => {
   const { fetch, batches } = pendingProvider();
   const queue = new TranslationQueue();
   const cues = Array.from({ length: 40 }, (_, index) => `Cue ${index + 1}`);
-  const block = (index: number) => cues.slice(index * 10, index * 10 + 10);
+  const block = (index: number) =>
+    cues.slice(index * translationBatchLimit, (index + 1) * translationBatchLimit);
   queue.prefetch('tab', settings, prefetchItems(cues));
   expect(batches()).toEqual([block(0), block(1), block(2)]);
   await vi.advanceTimersByTimeAsync(999);
   expect(fetch).toHaveBeenCalledTimes(translationSendsPerSecond);
   await vi.advanceTimersByTimeAsync(1);
-  expect(batches()).toEqual([block(0), block(1), block(2), block(3)]);
+  expect(batches()).toEqual([block(0), block(1), block(2), block(3), block(4), block(5)]);
 });
 
 it('keeps a queued batch parked through a provider backoff', async () => {
@@ -438,7 +441,7 @@ it('keeps a queued batch parked through a provider backoff', async () => {
   await vi.advanceTimersByTimeAsync(1000);
   expect(fetch).toHaveBeenCalledTimes(translationSendsPerSecond);
   await vi.advanceTimersByTimeAsync(14000);
-  expect(fetch).toHaveBeenCalledTimes(translationSendsPerSecond + 1);
+  expect(fetch).toHaveBeenCalledTimes(translationSendsPerSecond * 2);
 });
 
 it('does not send a batch that leaves the window before a send slot opens', async () => {
@@ -446,7 +449,11 @@ it('does not send a batch that leaves the window before a send slot opens', asyn
   const queue = new TranslationQueue();
   const cues = Array.from({ length: 40 }, (_, index) => `Cue ${index + 1}`);
   queue.prefetch('tab', settings, prefetchItems(cues));
-  queue.prefetch('tab', settings, prefetchItems(cues.slice(0, 30)));
+  queue.prefetch(
+    'tab',
+    settings,
+    prefetchItems(cues.slice(0, translationBatchLimit * translationSendsPerSecond)),
+  );
   await vi.advanceTimersByTimeAsync(1000);
   expect(fetch).toHaveBeenCalledTimes(translationSendsPerSecond);
 });
@@ -610,16 +617,16 @@ it('keeps the well-formed results of a reply with malformed JSON and retries onl
   expect(fetch).toHaveBeenCalledTimes(3);
 });
 
-it('sends each segment as its own request, even with fewer than ten captions, and never mixes tabs', () => {
+it('sends each segment as its own request, even with fewer than five captions, and never mixes tabs', () => {
   const { batches } = pendingProvider();
   const queue = new TranslationQueue();
-  const cues = Array.from({ length: 12 }, (_, index) => `Cue ${index + 1}`);
+  const cues = Array.from({ length: 7 }, (_, index) => `Cue ${index + 1}`);
   queue.prefetch(
     'tab',
     settings,
     cues.map((text, index) => ({
       text,
-      segment: [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1][index] ?? 0,
+      segment: [0, 0, 0, 0, 1, 1, 1][index] ?? 0,
       needsSplit: [][index] === true,
     })),
   );
@@ -627,7 +634,7 @@ it('sends each segment as its own request, even with fewer than ten captions, an
     { text: 'Other 1', segment: 0, needsSplit: false },
     { text: 'Other 2', segment: 0, needsSplit: false },
   ]);
-  expect(batches()).toEqual([cues.slice(0, 8), cues.slice(8), ['Other 1', 'Other 2']]);
+  expect(batches()).toEqual([cues.slice(0, 4), cues.slice(4), ['Other 1', 'Other 2']]);
 });
 
 it('traces each batch by tab and segment without its keys, texts or error messages', async () => {

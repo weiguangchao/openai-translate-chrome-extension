@@ -347,7 +347,10 @@ it('keeps segments based on input captions when one provider result has more tha
   expect(display).toHaveLength(12);
   expect(display.every((part) => part.kind === 'display')).toBe(true);
   expect(captionWindow(captions, 0).items).toHaveLength(10);
-  expect(captions.map((caption) => caption.segment)).toEqual(Array(10).fill(0));
+  expect(captions.map((caption) => caption.segment)).toEqual([
+    ...Array(5).fill(0),
+    ...Array(5).fill(1),
+  ]);
 });
 
 it('revalidates serialized translations before constructing display captions', () => {

@@ -26,4 +26,4 @@ An input caption is a whole sentence. An input over 80 display columns is split 
 
 ### Segment
 
-A segment contains up to ten consecutive input captions, one per sentence, sent in one Provider request; segments are numbered from zero. Each result maps to an input ID and may contain multiple display captions, so the limit applies before Provider splitting.
+A segment contains up to five consecutive input captions, one per sentence, sent in one Provider request; segments are numbered from zero. Each result maps to an input ID and may contain multiple display captions, so the limit applies before Provider splitting.
