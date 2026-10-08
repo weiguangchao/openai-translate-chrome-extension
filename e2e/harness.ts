@@ -28,6 +28,7 @@ export const asrSource = 'This is the automatic caption.';
 export const asrTranslation = '这是自动字幕。';
 export const thirdSource = 'The ferry leaves at noon.';
 export const thirdTranslation = '渡轮中午出发。';
+export const gardenSource = 'The garden is quiet.';
 export const draftPrefix = '草稿：';
 const translations: Record<string, string> = {
   [source]: translation,
@@ -35,7 +36,7 @@ const translations: Record<string, string> = {
   [frenchSource]: frenchTranslation,
   [asrSource]: asrTranslation,
   [thirdSource]: thirdTranslation,
-  'The garden is quiet.': '花园很安静。',
+  [gardenSource]: '花园很安静。',
 };
 export interface Frame {
   at: number;
@@ -261,7 +262,7 @@ export class Player {
     return [
       { start: 0, end: 20, text: source },
       { start: 30, end: 50, text: nextSource },
-      { start: 65, end: 90, text: 'The garden is quiet.' },
+      { start: 65, end: 90, text: gardenSource },
     ];
   }
   private async route(route: Route) {

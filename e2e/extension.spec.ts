@@ -8,6 +8,7 @@ import {
   elsewhereUrl,
   frenchSource,
   frenchTranslation,
+  gardenSource,
   nextSource,
   nextTranslation,
   source,
@@ -33,6 +34,27 @@ const errorsShown = async (p: Player) =>
     t.startsWith('Subline：'),
   );
 
+const openingInputs = [
+  [{ id: 0, text: source }],
+  [{ id: 0, text: nextSource }],
+  [{ id: 0, text: gardenSource }],
+];
+
+async function expectOpeningPosts(p: Player) {
+  await expect.poll(() => p.posts.map((post) => post.inputs)).toEqual(openingInputs);
+}
+
+async function expectStored(p: Player, text: string) {
+  await expect
+    .poll(() =>
+      p.settingsPage.evaluate(async (caption) => {
+        const stored = await chrome.storage.session.get(null);
+        return Object.keys(stored).some((key) => key.includes(caption));
+      }, text),
+    )
+    .toBe(true);
+}
+
 for (const platform of ['youtube', 'hbo', 'x'] as const) {
   test(`${platform}: packaged extension translates a source track through its worker`, async ({}, info) => {
     await withPlayer(platform, info, async (p) => {
@@ -49,13 +71,9 @@ for (const platform of ['youtube', 'hbo', 'x'] as const) {
         'The source never appears before its translation',
       ).toEqual([]);
       expect(p.downloads).toHaveLength(platform === 'youtube' ? 1 : 2);
-      expect(p.posts).toHaveLength(1);
-      expect(p.posts[0].body).toMatchObject({ model: 'e2e-fixed-model', stream: false });
-      expect(p.posts[0].inputs).toEqual([
-        { id: 0, text: source },
-        { id: 1, text: nextSource },
-        { id: 2, text: 'The garden is quiet.' },
-      ]);
+      await expectOpeningPosts(p);
+      for (const post of p.posts)
+        expect(post.body).toMatchObject({ model: 'e2e-fixed-model', stream: false });
     });
   });
 
@@ -101,9 +119,11 @@ for (const platform of ['youtube', 'hbo', 'x'] as const) {
       info,
       async (p) => {
         await p.play();
-        await expect.poll(() => p.posts.length).toBe(1);
+        await expectOpeningPosts(p);
         await p.pause();
         await p.release(0);
+        await p.release(1);
+        await p.release(2);
         await p.pair(source, translation);
         await p.seek(35);
         await p.pair(nextSource, nextTranslation);
@@ -113,13 +133,13 @@ for (const platform of ['youtube', 'hbo', 'x'] as const) {
         await expect
           .poll(() => p.page.locator('video').evaluate((v: HTMLVideoElement) => v.currentTime))
           .toBeGreaterThan(3.5);
-        expect(p.posts).toHaveLength(1);
+        expect(p.posts.map((post) => post.inputs)).toEqual(openingInputs);
         expect(p.downloads).toHaveLength(platform === 'youtube' ? 1 : 2);
         await p.pause();
         await p.page.evaluate(() => window.fixture.switchVideo('second'));
         await expect(p.original).toHaveText(nextSource);
         await p.pair(nextSource, nextTranslation);
-        expect(p.posts).toHaveLength(1);
+        expect(p.posts.map((post) => post.inputs)).toEqual(openingInputs);
       },
       { hold: true },
     );
@@ -131,14 +151,16 @@ for (const platform of ['youtube', 'hbo', 'x'] as const) {
       info,
       async (p) => {
         await p.play();
-        await expect.poll(() => p.posts.length).toBe(1);
+        await expectOpeningPosts(p);
         await p.page.evaluate(() => window.fixture.switchVideo('second'));
-        await expect.poll(() => p.posts.length).toBe(2);
-        expect(p.posts[1].inputs.map((i) => i.text)).toEqual([nextSource]);
+        await expect.poll(() => p.posts.length).toBe(4);
+        expect(p.posts[3].inputs.map((i) => i.text)).toEqual([nextSource]);
         await expect(p.original).toBeHidden();
-        await p.release(1);
+        await p.release(3);
         await p.pair(nextSource, nextTranslation);
         await p.release(0);
+        await p.release(1);
+        await p.release(2);
         await p.seek(3);
         await p.pair(nextSource, nextTranslation);
         const frames = await p.frames();
@@ -272,10 +294,19 @@ for (const platform of ['youtube', 'hbo', 'x'] as const) {
       async (p) => {
         await p.play();
         await p.pair(source, translation);
-        expect(p.posts).toHaveLength(2);
-        expect(p.posts[0].body).toHaveProperty('response_format');
-        expect(p.posts[1].body).not.toHaveProperty('response_format');
-        expect(p.posts[1].inputs).toEqual(p.posts[0].inputs);
+        const rejected = p.posts.filter((post) => post.status === 400);
+        expect(rejected).toHaveLength(1);
+        expect(rejected[0].body).toHaveProperty('response_format');
+        const retry = p.posts.filter(
+          (post) =>
+            post !== rejected[0] &&
+            post.inputs.length === rejected[0].inputs.length &&
+            post.inputs.every((input, index) => input.text === rejected[0].inputs[index]?.text),
+        );
+        expect(retry).toHaveLength(1);
+        expect(retry[0].body).not.toHaveProperty('response_format');
+        expect(retry[0].inputs).toEqual(rejected[0].inputs);
+        expect(p.posts).toHaveLength(4);
       },
       { retry: true },
     );
@@ -294,7 +325,7 @@ for (const platform of ['youtube', 'hbo', 'x'] as const) {
           await p.pair(nextSource, nextTranslation);
           await p.seek(2);
           await p.pair(source, translation);
-          expect(p.posts).toHaveLength(1);
+          expect(p.posts.map((post) => post.inputs)).toEqual(openingInputs);
           const frames = await p.frames();
           expect(frames.filter((f) => f.translation.startsWith(draftPrefix))).toEqual([]);
           if (draft === 'truncated')
@@ -367,14 +398,17 @@ for (const platform of ['youtube', 'hbo', 'x'] as const) {
         .toBe(90);
       await p.play();
       await p.pair(thirdSource, thirdTranslation);
-      expect(p.posts).toHaveLength(2);
-      expect(p.posts[1].inputs).toEqual([{ id: 0, text: thirdSource }]);
+      expect(p.posts.map((post) => post.inputs)).toEqual([
+        ...openingInputs,
+        [{ id: 0, text: thirdSource }],
+      ]);
     });
   });
 
   test(`${platform}: a stopped worker restarts on new page demand`, async ({}, info) => {
     await withPlayer(platform, info, async (p) => {
       await p.play();
+      await expectOpeningPosts(p);
       await p.pair(source, translation);
       await p.pause();
       const worker = await p.watchWorker();
@@ -384,8 +418,10 @@ for (const platform of ['youtube', 'hbo', 'x'] as const) {
       await p.play();
       await p.pair(thirdSource, thirdTranslation);
       await expect.poll(worker.status).toBe('running');
-      expect(p.posts).toHaveLength(2);
-      expect(p.posts[1].inputs).toEqual([{ id: 0, text: thirdSource }]);
+      expect(p.posts.map((post) => post.inputs)).toEqual([
+        ...openingInputs,
+        [{ id: 0, text: thirdSource }],
+      ]);
       await info.attach('worker.json', {
         body: JSON.stringify(worker.history),
         contentType: 'application/json',
@@ -397,8 +433,9 @@ for (const platform of ['youtube', 'hbo', 'x'] as const) {
   test(`${platform}: a cached translation replaces the next caption without 翻译中`, async ({}, info) => {
     await withPlayer(platform, info, async (p) => {
       await p.play();
+      await expectOpeningPosts(p);
       await p.pair(source, translation);
-      expect(p.posts).toHaveLength(1);
+      await expectStored(p, nextSource);
       await p.seek(27);
       const before = (await p.frames()).length;
       await p.pair(nextSource, nextTranslation);
@@ -406,14 +443,17 @@ for (const platform of ['youtube', 'hbo', 'x'] as const) {
         (await p.frames()).slice(before).filter((f) => f.translation === '翻译中'),
         'A translation the worker already has never shows 翻译中 first',
       ).toEqual([]);
-      expect(p.posts).toHaveLength(1);
+      expect(p.posts.map((post) => post.inputs)).toEqual(openingInputs);
     });
   });
 
   test(`${platform}: a restarted worker keeps the translations it already had`, async ({}, info) => {
     await withPlayer(platform, info, async (p) => {
       await p.play();
+      await expectOpeningPosts(p);
       await p.pair(source, translation);
+      await expectStored(p, nextSource);
+      await expectStored(p, gardenSource);
       await p.pause();
       const worker = await p.watchWorker();
       await worker.stop();
@@ -422,7 +462,10 @@ for (const platform of ['youtube', 'hbo', 'x'] as const) {
       await p.play();
       await p.pair(nextSource, nextTranslation);
       await expect.poll(worker.status).toBe('running');
-      expect(p.posts, 'The restarted worker answers from its stored translations').toHaveLength(1);
+      expect(
+        p.posts.map((post) => post.inputs),
+        'The restarted worker answers from its stored translations',
+      ).toEqual(openingInputs);
       await worker.detach();
     });
   });
