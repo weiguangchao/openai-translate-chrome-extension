@@ -434,7 +434,7 @@ it('shows a timeout like the loading line, skips that batch, and translates the 
   const translation = translated();
   expect(translation?.textContent).toBe('接口调用超时');
   expect(translation?.classList.contains('error')).toBe(false);
-  expect(translation?.style.color).toBe('rgb(184, 229, 207)');
+  expect(translation?.classList.contains('timeout')).toBe(true);
   expect(translation?.style.fontSize).toBe('20px');
   expect(original()?.hidden).toBe(true);
   await finish({ 'Cue 6': '第六句' });

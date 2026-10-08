@@ -109,8 +109,28 @@ it('names what the translation line shows', () => {
   expect(overlay.state).toBe('ready');
   overlay.showTimeout();
   expect(overlay.state).toBe('timeout');
+  const root = player.querySelector('[data-subline-overlay]')!.shadowRoot!;
+  const translation = root.querySelector<HTMLElement>('.translation')!;
+  expect(translation.classList.contains('timeout')).toBe(true);
+  expect(translation.classList.contains('error')).toBe(false);
+  expect(root.querySelector('style')!.textContent).toContain('.timeout{color:#ffcc00!important}');
+  expect(translation.style.fontSize).toBe('20px');
+  overlay.updateStyle(
+    publicSettings({ ...DEFAULT_SETTINGS, translation: { color: '#112233', size: 18 } }),
+  );
+  expect(translation.classList.contains('timeout')).toBe(true);
+  expect(translation.style.color).toBe('rgb(17, 34, 51)');
+  expect(translation.style.fontSize).toBe('18px');
   overlay.showError('翻译失败。');
   expect(overlay.state).toBe('error');
+  expect(translation.classList.contains('timeout')).toBe(false);
+  overlay.showTimeout();
+  expect(overlay.state).toBe('timeout');
+  expect(translation.classList.contains('error')).toBe(false);
+  overlay.showTranslation('你好');
+  expect(overlay.state).toBe('ready');
+  expect(translation.classList.contains('timeout')).toBe(false);
+  expect(translation.style.color).toBe('rgb(17, 34, 51)');
   overlay.hideTranslation();
   expect(overlay.state).toBe('empty');
 });
