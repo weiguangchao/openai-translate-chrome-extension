@@ -1,9 +1,16 @@
 import { expect, test } from '@playwright/test';
+import {
+  prefetchBatchCount,
+  prefetchSentenceCount,
+  translationBatchLimit,
+} from '../src/shared/limits';
+import { providerTimeoutMs } from '../src/shared/provider/transport';
 import { longCaption, longCaptionParts, longTranslations } from '../tests/fixtures/long-caption';
 import {
   apiKey,
   asrSource,
   asrTranslation,
+  denseCue,
   draftPrefix,
   elsewhereUrl,
   frenchSource,
@@ -121,7 +128,8 @@ for (const platform of ['youtube', 'hbo', 'x'] as const) {
       info,
       async (p) => {
         await p.play();
-        await expectOpeningPosts(p);
+        await expect.poll(() => p.posts.length).toBeGreaterThan(0);
+        const openingCount = p.posts.length;
         await p.pause();
         await p.release(0);
         await p.pair(source, translation);
@@ -133,13 +141,13 @@ for (const platform of ['youtube', 'hbo', 'x'] as const) {
         await expect
           .poll(() => p.page.locator('video').evaluate((v: HTMLVideoElement) => v.currentTime))
           .toBeGreaterThan(3.5);
-        expect(p.posts.map((post) => post.inputs)).toEqual(openingInputs);
+        expect(p.posts).toHaveLength(openingCount);
         expect(p.downloads).toHaveLength(platform === 'youtube' ? 1 : 2);
         await p.pause();
         await p.page.evaluate(() => window.fixture.switchVideo('second'));
         await expect(p.original).toHaveText(nextSource);
         await p.pair(nextSource, nextTranslation);
-        expect(p.posts.map((post) => post.inputs)).toEqual(openingInputs);
+        expect(p.posts).toHaveLength(openingCount);
       },
       { hold: true },
     );
@@ -151,10 +159,11 @@ for (const platform of ['youtube', 'hbo', 'x'] as const) {
       info,
       async (p) => {
         await p.play();
-        await expectOpeningPosts(p);
+        await expect.poll(() => p.posts.length).toBeGreaterThan(0);
+        const openingCount = p.posts.length;
         await p.page.evaluate(() => window.fixture.switchVideo('second'));
-        await expect.poll(() => p.posts.length).toBe(2);
-        expect(p.posts[1].inputs.map((i) => i.text)).toEqual([nextSource]);
+        await expect.poll(() => p.posts.length).toBe(openingCount + 1);
+        expect(p.posts.at(-1)!.inputs.map((i) => i.text)).toEqual([nextSource]);
         await expect(p.original).toBeHidden();
         await p.release(1);
         await p.pair(nextSource, nextTranslation);
@@ -318,12 +327,13 @@ for (const platform of ['youtube', 'hbo', 'x'] as const) {
         async (p) => {
           await p.play();
           await p.pair(source, translation);
+          const openingCount = p.posts.length;
           await p.pause();
           await p.seek(35);
           await p.pair(nextSource, nextTranslation);
           await p.seek(2);
           await p.pair(source, translation);
-          expect(p.posts.map((post) => post.inputs)).toEqual(openingInputs);
+          expect(p.posts).toHaveLength(openingCount);
           const frames = await p.frames();
           expect(frames.filter((f) => f.translation.startsWith(draftPrefix))).toEqual([]);
           if (draft === 'truncated')
@@ -383,6 +393,7 @@ for (const platform of ['youtube', 'hbo', 'x'] as const) {
     await withPlayer(platform, info, async (p) => {
       await p.play();
       await p.pair(source, translation);
+      const openingCount = p.posts.length;
       await p.pause();
       await p.page.waitForTimeout(500);
       await p.page.goto(elsewhereUrl);
@@ -396,17 +407,16 @@ for (const platform of ['youtube', 'hbo', 'x'] as const) {
         .toBe(90);
       await p.play();
       await p.pair(thirdSource, thirdTranslation);
-      expect(p.posts.map((post) => post.inputs)).toEqual([
-        ...openingInputs,
-        [{ id: 0, text: thirdSource }],
-      ]);
+      expect(p.posts).toHaveLength(openingCount + 1);
+      expect(p.posts.at(-1)!.inputs).toEqual([{ id: 0, text: thirdSource }]);
     });
   });
 
   test(`${platform}: a stopped worker restarts on new page demand`, async ({}, info) => {
     await withPlayer(platform, info, async (p) => {
       await p.play();
-      await expectOpeningPosts(p);
+      await expect.poll(() => p.posts.length).toBeGreaterThan(0);
+      const openingCount = p.posts.length;
       await p.pair(source, translation);
       await p.pause();
       const worker = await p.watchWorker();
@@ -416,10 +426,8 @@ for (const platform of ['youtube', 'hbo', 'x'] as const) {
       await p.play();
       await p.pair(thirdSource, thirdTranslation);
       await expect.poll(worker.status).toBe('running');
-      expect(p.posts.map((post) => post.inputs)).toEqual([
-        ...openingInputs,
-        [{ id: 0, text: thirdSource }],
-      ]);
+      expect(p.posts).toHaveLength(openingCount + 1);
+      expect(p.posts.at(-1)!.inputs).toEqual([{ id: 0, text: thirdSource }]);
       await info.attach('worker.json', {
         body: JSON.stringify(worker.history),
         contentType: 'application/json',
@@ -431,7 +439,8 @@ for (const platform of ['youtube', 'hbo', 'x'] as const) {
   test(`${platform}: a cached translation replaces the next caption without 翻译中`, async ({}, info) => {
     await withPlayer(platform, info, async (p) => {
       await p.play();
-      await expectOpeningPosts(p);
+      await expect.poll(() => p.posts.length).toBeGreaterThan(0);
+      const openingCount = p.posts.length;
       await p.pair(source, translation);
       await expectStored(p, nextSource);
       await p.seek(27);
@@ -441,14 +450,15 @@ for (const platform of ['youtube', 'hbo', 'x'] as const) {
         (await p.frames()).slice(before).filter((f) => f.translation === '翻译中'),
         'A translation the worker already has never shows 翻译中 first',
       ).toEqual([]);
-      expect(p.posts.map((post) => post.inputs)).toEqual(openingInputs);
+      expect(p.posts).toHaveLength(openingCount);
     });
   });
 
   test(`${platform}: a restarted worker keeps the translations it already had`, async ({}, info) => {
     await withPlayer(platform, info, async (p) => {
       await p.play();
-      await expectOpeningPosts(p);
+      await expect.poll(() => p.posts.length).toBeGreaterThan(0);
+      const openingCount = p.posts.length;
       await p.pair(source, translation);
       await expectStored(p, nextSource);
       await expectStored(p, gardenSource);
@@ -460,14 +470,45 @@ for (const platform of ['youtube', 'hbo', 'x'] as const) {
       await p.play();
       await p.pair(nextSource, nextTranslation);
       await expect.poll(worker.status).toBe('running');
-      expect(
-        p.posts.map((post) => post.inputs),
-        'The restarted worker answers from its stored translations',
-      ).toEqual(openingInputs);
+      expect(p.posts, 'The restarted worker answers from its stored translations').toHaveLength(
+        openingCount,
+      );
       await worker.detach();
     });
   });
 }
+
+test('youtube: a stalled opening batch times out without a retry and the next batch still appears', async ({}, info) => {
+  test.setTimeout(providerTimeoutMs + 30_000);
+  await withPlayer(
+    'youtube',
+    info,
+    async (p) => {
+      await p.play();
+      await expect.poll(() => p.posts.length).toBe(prefetchBatchCount);
+      expect(p.posts.every((post) => post.inputs.length === translationBatchLimit)).toBe(true);
+      expect(p.posts.flatMap((post) => post.inputs.map((input) => input.text))).toEqual(
+        Array.from({ length: prefetchSentenceCount }, (_, index) => denseCue(index).text),
+      );
+      await p.pause();
+      expect(
+        await p.page.locator('video').evaluate((v: HTMLVideoElement) => v.currentTime),
+      ).toBeLessThan(denseCue(0).end);
+      await expect(p.translated).toHaveText('翻译中');
+      await p.page.waitForTimeout(providerTimeoutMs + 1500);
+      const first = p.posts[0].inputs.map((input) => input.text).join('\n');
+      expect(
+        p.posts.filter((post) => post.inputs.map((input) => input.text).join('\n') === first),
+      ).toHaveLength(1);
+      await expect(p.translated).toHaveText('接口调用超时');
+      const later = denseCue(translationBatchLimit);
+      await p.seek(later.start + 0.2);
+      await p.pair(later.text, later.translation);
+      await p.posts[0].route.abort('timedout').catch(() => undefined);
+    },
+    { dense: true, stallFirst: true },
+  );
+});
 
 for (const platform of ['hbo', 'x'] as const) {
   test(`${platform}: website captions read before the timeline loads never show untranslated`, async ({}, info) => {

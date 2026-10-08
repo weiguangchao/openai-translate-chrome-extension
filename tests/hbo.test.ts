@@ -6,6 +6,8 @@ import { hboMediaUrl, parseHboManifest } from '../src/platforms/hbo/captions';
 import { parseWebVtt } from '../src/core/webvtt';
 import { BridgeTimeline } from '../src/core/bridge/client';
 import { TranslationQueue } from '../src/extension/queue';
+import { prefetchBatchCount, translationBatchLimit } from '../src/shared/limits';
+import { providerSendWindowMs, translationSendsPerSecond } from '../src/shared/provider/transport';
 import { DEFAULT_SETTINGS, publicSettings } from '../src/shared/settings';
 import { providerReply, requestedTexts } from './fixtures/provider';
 
@@ -209,6 +211,30 @@ const lines = () =>
     .querySelector('[data-subline-overlay]')
     ?.shadowRoot?.querySelectorAll<HTMLElement>('.line');
 
+const cueCount = 30;
+
+function cueBatch(from: number): string[] {
+  return Array.from(
+    { length: Math.min(translationBatchLimit, cueCount - from + 1) },
+    (_, index) => `Cue ${from + index}`,
+  );
+}
+
+function cueBatches(): string[][] {
+  return Array.from({ length: Math.ceil(cueCount / translationBatchLimit) }, (_, index) =>
+    cueBatch(1 + index * translationBatchLimit),
+  );
+}
+
+function batchesThrough(cueNumber: number): string[][] {
+  const index = cueNumber - 1;
+  const end = Math.min(
+    cueCount,
+    (Math.floor(index / translationBatchLimit) + prefetchBatchCount) * translationBatchLimit,
+  );
+  return cueBatches().slice(0, Math.ceil(end / translationBatchLimit));
+}
+
 async function playTo(time: number): Promise<void> {
   while (video.currentTime < time) {
     video.currentTime = Math.min(time, video.currentTime + 1);
@@ -218,18 +244,18 @@ async function playTo(time: number): Promise<void> {
 }
 
 it.each([mediaUrl, edgeMediaUrl])(
-  'prefetches four batches from %s without TextTrack or visible cues, hiding the two-second provider latency',
+  'prefetches the opening batches from %s without TextTrack or visible cues, hiding the two-second provider latency',
   async (url) => {
     stream.url = url;
     controller = new CaptionController(createHboPlatform, publicSettings(settings));
     await vi.advanceTimersByTimeAsync(0);
-    const batch = (from: number) =>
-      Array.from({ length: Math.min(4, 31 - from) }, (_, index) => `Cue ${from + index}`);
-    const batches = [1, 5, 9, 13, 17, 21, 25, 29].map((from) => batch(from));
-    expect(requested.map((request) => request.texts)).toEqual(batches.slice(0, 3));
+    const batches = cueBatches();
+    expect(requested.map((request) => request.texts)).toEqual(
+      batches.slice(0, translationSendsPerSecond),
+    );
     expect(requested.every((request) => request.at === 0)).toBe(true);
-    await vi.advanceTimersByTimeAsync(1000);
-    expect(requested.map((request) => request.texts)).toEqual(batches.slice(0, 4));
+    await vi.advanceTimersByTimeAsync(providerSendWindowMs);
+    expect(requested.map((request) => request.texts)).toEqual(batches.slice(0, prefetchBatchCount));
     expect(requested.every((request) => request.at === 0)).toBe(true);
     await playTo(3);
     expect(lines()?.[0].textContent).toBe('Cue 1');
@@ -237,11 +263,11 @@ it.each([mediaUrl, edgeMediaUrl])(
     expect(lines()?.[1].hidden).toBe(false);
     await playTo(33);
     expect(lines()?.[1].textContent).toBe('译文 Cue 11');
-    expect(requested.map((request) => request.texts)).toEqual(batches.slice(0, 6));
+    expect(requested.map((request) => request.texts)).toEqual(batchesThrough(11));
     expect(requested.find((request) => request.texts.includes('Cue 11'))?.at).toBeLessThan(33);
     await playTo(63);
     expect(lines()?.[1].textContent).toBe('译文 Cue 21');
-    expect(requested.map((request) => request.texts)).toEqual(batches);
+    expect(requested.map((request) => request.texts)).toEqual(batchesThrough(21));
     expect(requested.find((request) => request.texts.includes('Cue 21'))?.at).toBeLessThan(63);
   },
 );
@@ -262,10 +288,10 @@ it('displays a finished HBO segment while the other prefetched segment is still 
   );
   controller = new CaptionController(createHboPlatform, publicSettings(settings));
   await vi.advanceTimersByTimeAsync(0);
-  const batch = (from: number) => Array.from({ length: 4 }, (_, index) => `Cue ${from + index}`);
-  expect(batches.map(({ texts }) => texts)).toEqual([batch(1), batch(5), batch(9)]);
-  await vi.advanceTimersByTimeAsync(1000);
-  expect(batches.map(({ texts }) => texts)).toEqual([batch(1), batch(5), batch(9), batch(13)]);
+  const opening = cueBatches();
+  expect(batches.map(({ texts }) => texts)).toEqual(opening.slice(0, translationSendsPerSecond));
+  await vi.advanceTimersByTimeAsync(providerSendWindowMs);
+  expect(batches.map(({ texts }) => texts)).toEqual(opening.slice(0, prefetchBatchCount));
   await playTo(3);
   await vi.advanceTimersByTimeAsync(300);
   expect(lines()?.[1].textContent).toBe('翻译中');
@@ -273,7 +299,7 @@ it('displays a finished HBO segment while the other prefetched segment is still 
   await vi.advanceTimersByTimeAsync(0);
   expect(lines()?.[1].textContent).toBe('译文 Cue 1');
   expect(lines()?.[0].textContent).toBe('Cue 1');
-  expect(batches).toHaveLength(4);
+  expect(batches).toHaveLength(prefetchBatchCount);
 });
 
 it('displays and translates one HBO track when alternate tracks have overlapping dialogue', async () => {
@@ -300,11 +326,7 @@ it('displays and translates one HBO track when alternate tracks have overlapping
     expect(lines()?.[0].textContent).toBe(`Cue ${cue}`);
     expect(lines()?.[1].textContent).toBe(`译文 Cue ${cue}`);
   }
-  expect(requested.map(({ texts }) => texts)).toEqual(
-    [1, 5, 9, 13, 17, 21, 25, 29].map((from) =>
-      Array.from({ length: Math.min(4, 31 - from) }, (_, index) => `Cue ${from + index}`),
-    ),
-  );
+  expect(requested.map(({ texts }) => texts)).toEqual(batchesThrough(21));
   const subtitles = vi
     .mocked(fetch)
     .mock.calls.map(([url]) => String(url))
@@ -359,7 +381,7 @@ it.each([true, false])(
     );
     if (configured) {
       expect(lines()?.[1].textContent).toBe('译文 Cue 1');
-      expect(requested).toHaveLength(4);
+      expect(requested).toHaveLength(prefetchBatchCount);
     } else {
       expect(lines()).toBeUndefined();
       expect(requested).toEqual([]);
@@ -374,7 +396,7 @@ it('does not download a target track even when it would fail', async () => {
   await playTo(4);
   expect(lines()?.[1].textContent).toBe('译文 Cue 1');
   expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).includes('/zh-CN/'))).toBe(false);
-  expect(requested).toHaveLength(4);
+  expect(requested).toHaveLength(prefetchBatchCount);
 });
 
 it('stops prefetch and clears the displayed subtitles when the HBO selection is off', async () => {
@@ -491,7 +513,7 @@ it('reads the committed React branch instead of an old episode retained on the D
   const urls = vi.mocked(fetch).mock.calls.map(([url]) => url);
   expect(urls).toContain(mediaUrl.replace('episode', 'current'));
   expect(urls).not.toContain(mediaUrl);
-  expect(requested).toHaveLength(3);
+  expect(requested).toHaveLength(Math.min(translationSendsPerSecond, prefetchBatchCount));
 });
 
 it('rejects unsolicited or malformed bridge responses', () => {

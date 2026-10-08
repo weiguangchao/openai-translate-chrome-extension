@@ -1,7 +1,7 @@
-const SEEK_SETTLE_MS = 400;
-const SEEK_JUMP_SECONDS = 1;
+export const seekSettleMs = 400;
+export const seekJumpSeconds = 1;
 const SEEK_JUMP_TOLERANCE = 1e-3;
-const LEAD_SECONDS = 1;
+export const leadSeconds = 1;
 
 export interface PlaybackHooks {
   hold(): void;
@@ -31,7 +31,7 @@ export class PlaybackGate {
     this.observedTime = time;
     if (
       Number.isFinite(previous) &&
-      Math.abs(time - previous) > SEEK_JUMP_SECONDS + SEEK_JUMP_TOLERANCE
+      Math.abs(time - previous) > seekJumpSeconds + SEEK_JUMP_TOLERANCE
     )
       this.hold();
   }
@@ -39,10 +39,10 @@ export class PlaybackGate {
   hold(): void {
     this.leadPending = true;
     this.opening = false;
-    this.settlesAt = Date.now() + SEEK_SETTLE_MS;
+    this.settlesAt = Date.now() + seekSettleMs;
     this.hooks.hold();
     this.clearTimers();
-    this.seekTimer = setTimeout(() => this.release(), SEEK_SETTLE_MS);
+    this.seekTimer = setTimeout(() => this.release(), seekSettleMs);
   }
 
   restartLead(): void {
@@ -52,7 +52,7 @@ export class PlaybackGate {
 
   lead(time: number, ready: boolean): number {
     if (ready && this.leadPending) {
-      this.leadEnd = time + LEAD_SECONDS;
+      this.leadEnd = time + leadSeconds;
       this.leadPending = false;
       this.opening = true;
     }

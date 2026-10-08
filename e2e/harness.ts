@@ -11,6 +11,7 @@ import {
   type Route,
   type TestInfo,
 } from '@playwright/test';
+import { prefetchSentenceCount, translationBatchLimit } from '../src/shared/limits';
 import type { Settings } from '../src/shared/settings';
 import { longCaption, longResult } from '../tests/fixtures/long-caption';
 
@@ -76,11 +77,25 @@ interface Cue {
 }
 interface Options {
   long?: boolean;
+  dense?: boolean;
+  stallFirst?: boolean;
   hold?: boolean;
   retry?: boolean;
   draft?: 'complete' | 'truncated';
   unavailable?: number;
   holdTimeline?: boolean;
+}
+
+const denseCueSeconds = 4;
+
+export function denseCue(index: number) {
+  const start = index * denseCueSeconds;
+  return {
+    start,
+    end: start + denseCueSeconds,
+    text: `Sentence ${index + 1}.`,
+    translation: `译文 ${index + 1}`,
+  };
 }
 
 export class Player {
@@ -237,6 +252,12 @@ export class Player {
     post.released = true;
     const results = post.inputs.map((input) => {
       if (input.text === longCaption) return longResult(input.id);
+      const sentence = /^Sentence (\d+)\.$/.exec(input.text);
+      if (sentence)
+        return {
+          id: input.id,
+          parts: [{ translation: denseCue(Number(sentence[1]) - 1).translation }],
+        };
       expect(translations[input.text], `Known Provider input: ${input.text}`).toBeTruthy();
       return { id: input.id, parts: [{ translation: translations[input.text] }] };
     });
@@ -259,6 +280,11 @@ export class Player {
     if (id === 'second') return [{ start: 0, end: 90, text: nextSource }];
     if (id === 'third') return [{ start: 0, end: 90, text: thirdSource }];
     if (this.options.long) return [{ start: 0, end: 90, text: longCaption }];
+    if (this.options.dense)
+      return Array.from({ length: prefetchSentenceCount + translationBatchLimit }, (_, index) => {
+        const cue = denseCue(index);
+        return { start: cue.start, end: cue.end, text: cue.text };
+      });
     return [
       { start: 0, end: 20, text: source },
       { start: 30, end: 50, text: nextSource },
@@ -385,7 +411,8 @@ export class Player {
         }[post.status];
         return route.fulfill({ status: post.status, json: { error: { message } } });
       }
-      if (!this.hold) await this.release(this.posts.length - 1);
+      if (!this.hold && !(this.options.stallFirst && this.posts.length === 1))
+        await this.release(this.posts.length - 1);
       return;
     }
     this.unexpected.push(`${request.method()} ${url.href}`);
