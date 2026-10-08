@@ -25,7 +25,7 @@ Append a command to `python3 .cursor/skills/chrome-debug/scripts/live.py`:
 
 Keep the session ID printed by `start`. Pass `--session ID` after the command on subsequent `start`, `run`, `reload`, and `stop` calls, or set `CHROME_DEBUG_SESSION` only for this task. A holder belongs to one task until stopped. If another task owns it, wait for that task to finish; do not copy its ID or stop its process. `status` is available without an ID. A holder started by an older version without ownership must be stopped by its original task using that version before this version can start.
 
-`run --help` describes check fields, composable actions, and return values. Choose URLs, steps, budgets, assertions, and evidence for the user's task. A completed trace is data, not a synchronization verdict.
+`run --help` describes check fields, composable actions, and return values. Choose URLs, steps, budgets, and evidence for the user's task. A finished trace exits 0 when collection finishes. Its end line prints from, played, wall, playbackRate, visible, coverage, missed, and lag max. Read playbackRate. Do not set it.
 
 Chrome must already be open with remote debugging enabled at `chrome://inspect/#remote-debugging`. `start` tries to accept Chrome's Allow dialog; if it remains open, ask the user to click Allow once. `reload` unloads Subline from existing site tabs until they are refreshed.
 

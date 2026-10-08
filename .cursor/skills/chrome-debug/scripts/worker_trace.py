@@ -1,20 +1,9 @@
-"""Summarize the timing events Subline's service worker prints, for `trace` with `"source": "worker"`.
-
-Each event is (milliseconds since epoch, dict), as src/shared/trace.ts prints it. `view` events
-come from the traced tab through the worker and say what the viewer saw at video time `t`.
-`batch`, `sent`, `first` and `done` are the worker's Provider requests, named by tab and
-segment number.
-"""
-
 import math
 
-# Views arrive on every change and at least every 2 s while playing. A longer jump in video
-# time is a seek or a stall, so it counts as no time.
 GAP_SECONDS = 3
-# A caption first seen this soon after its cue starts is measured from the cue start.
 CUE_SLACK_SECONDS = 0.5
-# 翻译中 shorter than this is a flash while a cached translation comes back, not a wait.
 FLASH_SECONDS = 0.3
+TOGETHER_SECONDS = 0.3
 
 
 def r1(value):
@@ -31,7 +20,6 @@ def nearest_rank(values, share):
 
 
 def collect_batches(events, tab):
-    """The Provider batches for one tab. Ids restart when the worker restarts, so the latest wins."""
     batches = []
     latest = {}
     for stamp, event in events:
@@ -56,7 +44,6 @@ def caption_key(view):
 
 
 def walk(window):
-    """Seconds per state, caption appearances and 翻译中 episodes, in video time."""
     states = {}
     caption_seconds = ready_seconds = 0.0
     sentences, episodes = [], []
@@ -113,6 +100,40 @@ def lag_of(sentence):
     return max(0.0, sentence["ready"] - (sentence["first"] if late_start else sentence["start"]))
 
 
+def clock(stats, rates, visible, samples):
+    if not samples or not rates:
+        return
+    rate = max(rates, key=rates.get)
+    share = round(visible / samples, 2)
+    stats["playbackRate"] = rate
+    stats["visible"] = share
+    wall = stats.get("wall")
+    played = stats.get("played") or 0
+    off = share < 0.5
+    if isinstance(wall, (int, float)) and wall >= 5 and rate:
+        if abs(played / wall - rate) > 0.2 * abs(rate):
+            off = True
+    if off:
+        stats["clock"] = "throttled"
+
+
+def trace_line(stats):
+    lag = stats.get("lag") or {}
+    text = ", ".join([
+        f"from {stats.get('from')}",
+        f"played {stats.get('played')}",
+        f"wall {stats.get('wall')}",
+        f"rate {stats.get('playbackRate')}",
+        f"visible {stats.get('visible')}",
+        f"coverage {stats.get('coverage')}",
+        f"missed {lag.get('missed')}",
+        f"lag.max {lag.get('max')}",
+    ])
+    if stats.get("clock") == "throttled":
+        text += ", throttled"
+    return text
+
+
 def batch_view(batch):
     def between(a, b):
         return r2((batch[b] - batch[a]) / 1000) if a in batch and b in batch else None
@@ -123,11 +144,9 @@ def batch_view(batch):
 
 
 def summarize(events, run, started, played):
-    """Stats for the views tagged `run` from `started` (ms since epoch) on, and their tab's batches."""
     views = [(stamp, event) for stamp, event in events if event.get("e") == "view" and event.get("run") == run]
     tab = views[0][1].get("tab") if views else None
     batches = collect_batches(events, tab)
-    # A seek is not playback, and the overlay can keep the previous translation through it.
     window = [(stamp, view) for stamp, view in views if stamp >= started and not view.get("seeking")]
     states, caption_seconds, ready_seconds, sentences, everything = walk(window)
     episodes = [e for e in everything if e["seconds"] >= FLASH_SECONDS]
@@ -148,6 +167,15 @@ def summarize(events, run, started, played):
     for batch in batches:
         result = batch.get("result", "pending")
         results[result] = results.get(result, 0) + 1
+    opening = [
+        {key: batch[key] for key in ("seg", "size", "result", "wait", "first", "roundTrip")}
+        for batch in shown_batches[:3]
+    ]
+    together = sum(
+        batch["first"] is not None and batch["roundTrip"] is not None
+        and abs(batch["first"] - batch["roundTrip"]) <= TOGETHER_SECONDS
+        for batch in shown_batches
+    )
     first_caption = next(((stamp, view) for stamp, view in window if caption_key(view)), None)
     first_ready = next(((stamp, view) for stamp, view in window if view.get("state") == "ready"), None)
 
@@ -185,6 +213,8 @@ def summarize(events, run, started, played):
             "max": r2(max(round_trips, default=None)),
             "firstItemP50": r2(nearest_rank(first_items, 0.5)),
             "waitMax": r2(max(waits, default=None)),
+            "opening": opening,
+            "together": together,
         },
     }
     shown_sentences = [
