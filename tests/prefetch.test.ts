@@ -362,7 +362,7 @@ it('preloads in the background and queries it at caption boundaries without anot
   expect(messages).toContain('translate');
 });
 
-it('queues the current and next segment on open, waits out a scrub, and requests only the cues at the new position', async () => {
+it('sends three opening batches at once, cancels the fourth during a scrub, and requests only the cues at the new position', async () => {
   const dense = Array.from({ length: 30 }, (_, index) => ({
     startTime: 2 + index * 2,
     endTime: 4 + index * 2,
@@ -381,8 +381,8 @@ it('queues the current and next segment on open, waits out a scrub, and requests
   });
   controller = new CaptionController(createHboPlatform, publicSettings(saved));
   await vi.advanceTimersByTimeAsync(0);
-  const block = (from: number) => dense.slice(from, from + 5).map((cue) => cue.text);
-  const opening = [block(0), block(5), block(10)];
+  const block = (from: number) => dense.slice(from, from + 4).map((cue) => cue.text);
+  const opening = [block(0), block(4), block(8)];
   expect(requested).toEqual(opening);
   Object.defineProperty(video, 'seeking', { configurable: true, value: true });
   video.currentTime = 40;
@@ -423,9 +423,10 @@ it('shows a timeout like the loading line, skips that batch, and translates the 
   });
   controller = new CaptionController(createHboPlatform, publicSettings(saved));
   await vi.advanceTimersByTimeAsync(0);
-  const block = (from: number) => dense.slice(from, from + 5).map((cue) => cue.text);
-  expect(requested).toEqual([block(0), block(5), block(10)]);
+  const block = (from: number) => dense.slice(from, from + 4).map((cue) => cue.text);
+  expect(requested).toEqual([block(0), block(4), block(8)]);
   await advance(3);
+  expect(requested).toEqual([block(0), block(4), block(8), block(12)]);
   expect(translated()?.textContent).toBe('翻译中');
   const timeout = new Error('The operation was aborted due to timeout');
   timeout.name = 'TimeoutError';
@@ -444,10 +445,10 @@ it('shows a timeout like the loading line, skips that batch, and translates the 
   expect(translated()?.textContent).toBe('接口调用超时');
   await advance(12);
   expect(translated()?.textContent).toBe('第六句');
-  expect(requested).toEqual([block(0), block(5), block(10), block(15)]);
+  expect(requested).toEqual([block(0), block(4), block(8), block(12), block(16)]);
 });
 
-it('after a jump settles, sends the next fifteen sentences as full batches', async () => {
+it('after a jump settles, sends the sentences from the new anchor in batches of four', async () => {
   const dense = Array.from({ length: 30 }, (_, index) => ({
     startTime: 2 + index * 2,
     endTime: 4 + index * 2,
@@ -465,10 +466,10 @@ it('after a jump settles, sends the next fifteen sentences as full batches', asy
   expect(requested).toHaveLength(started);
   expect(pending.slice(0, started).every((request) => request.signal.aborted)).toBe(true);
   await vi.advanceTimersByTimeAsync(200);
-  const block = (from: number) => dense.slice(from, from + 5).map((cue) => cue.text);
-  expect(requested.slice(started)).toEqual([block(20), block(25)]);
+  const block = (from: number) => dense.slice(from, from + 4).map((cue) => cue.text);
+  expect(requested.slice(started)).toEqual([block(20), block(24), block(28)]);
   await vi.advanceTimersByTimeAsync(1000);
-  expect(requested.slice(started)).toEqual([block(20), block(25)]);
+  expect(requested.slice(started)).toEqual([block(20), block(24), block(28)]);
   expect(pending[started].signal.aborted).toBe(false);
 });
 
@@ -528,11 +529,11 @@ it('finishes in-flight prefetch while paused and does not send more until playba
   };
   controller = new CaptionController(createHboPlatform, publicSettings(saved));
   await advance(2);
-  const block = (from: number) => dense.slice(from, from + 5).map((cue) => cue.text);
-  const opening = [block(0), block(5), block(10)];
+  const block = (from: number) => dense.slice(from, from + 4).map((cue) => cue.text);
+  const opening = [block(0), block(4), block(8), block(12)];
   expect(requested).toEqual(opening);
   await setPaused(true);
-  expect(pending.map((request) => request.signal.aborted)).toEqual([false, false, false]);
+  expect(pending.map((request) => request.signal.aborted)).toEqual([false, false, false, false]);
   await vi.advanceTimersByTimeAsync(60000);
   expect(requested).toHaveLength(opening.length);
   await finish({ 'Cue 1': '第一句' });
@@ -544,7 +545,8 @@ it('finishes in-flight prefetch while paused and does not send more until playba
   await vi.advanceTimersByTimeAsync(60000);
   expect(requested).toHaveLength(opening.length);
   await setPaused(false);
-  expect(requested.at(-1)).toEqual(block(15));
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(requested.at(-1)).toEqual(dense.slice(17, 21).map((cue) => cue.text));
   await setPaused(true);
   const sent = requested.length;
   await vi.advanceTimersByTimeAsync(60000);
@@ -552,7 +554,7 @@ it('finishes in-flight prefetch while paused and does not send more until playba
   expect(pending.at(-1)?.signal.aborted).toBe(false);
 });
 
-it('queues the next segment with the opening window and preloads the following segment when playback enters it', async () => {
+it('sends three opening batches at once, the fourth when the next send slot opens, and the following batch when playback enters the next group', async () => {
   const dense = Array.from({ length: 24 }, (_, index) => ({
     startTime: 2 + index * 2,
     endTime: 4 + index * 2,
@@ -563,20 +565,24 @@ it('queues the next segment with the opening window and preloads the following s
   });
   controller = new CaptionController(createHboPlatform, publicSettings(saved));
   await vi.advanceTimersByTimeAsync(0);
-  const block = (from: number) => dense.slice(from, from + 5).map((cue) => cue.text);
-  const opening = [block(0), block(5), block(10)];
+  const block = (from: number) => dense.slice(from, from + 4).map((cue) => cue.text);
+  const immediate = [block(0), block(4), block(8)];
+  expect(requested).toEqual(immediate);
+  await vi.advanceTimersByTimeAsync(999);
+  expect(requested).toEqual(immediate);
+  await vi.advanceTimersByTimeAsync(1);
+  const opening = [...immediate, block(12)];
   expect(requested).toEqual(opening);
-  expect(pending.map((request) => request.signal.aborted)).toEqual([false, false, false]);
-  for (let time = 1; time < 12; time++) {
+  for (let time = 1; time < 10; time++) {
     video.currentTime = time;
     video.dispatchEvent(new Event('timeupdate'));
     await vi.advanceTimersByTimeAsync(0);
   }
   expect(requested).toEqual(opening);
-  video.currentTime = 12;
+  video.currentTime = 10;
   video.dispatchEvent(new Event('timeupdate'));
-  await vi.advanceTimersByTimeAsync(1000);
-  expect(requested.at(-1)).toEqual(block(15));
+  await vi.advanceTimersByTimeAsync(0);
+  expect(requested.at(-1)).toEqual(block(16));
   expect(pending[2].signal.aborted).toBe(false);
 });
 
@@ -725,7 +731,10 @@ it('counts a long sentence as one caption when filling a segment', async () => {
   });
   controller = new CaptionController(createHboPlatform, publicSettings(saved));
   await vi.advanceTimersByTimeAsync(0);
-  expect(requested).toEqual([['Cue 1', 'Cue 2', 'Cue 3', long, 'After'], ['Later']]);
+  expect(requested).toEqual([
+    ['Cue 1', 'Cue 2', 'Cue 3', long],
+    ['After', 'Later'],
+  ]);
 });
 
 it('shows the segment translation only after the JSON response is complete', async () => {
