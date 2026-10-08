@@ -225,8 +225,13 @@ it('translates and displays complete ASR sentences across rolling events', async
   expect(sendMessage).toHaveBeenCalledWith({
     type: 'prefetch',
     items: [
-      { text: 'This field behind me will become a city.', segment: 0, needsSplit: false },
-      { text: 'Let’s build it.', segment: 0, needsSplit: false },
+      {
+        text: 'This field behind me will become a city.',
+        segment: 0,
+        needsSplit: false,
+        solo: true,
+      },
+      { text: 'Let’s build it.', segment: 0, needsSplit: false, solo: true },
     ],
   });
   await playTo(video, 1.2);
@@ -798,7 +803,11 @@ it('sends complete English sentences to the Provider and displays its translatio
   expect(requests).toEqual([
     {
       url: 'https://provider.example/v1/chat/completions',
-      texts: ['This field behind me will become a city.', 'Let’s build it.'],
+      texts: ['This field behind me will become a city.'],
+    },
+    {
+      url: 'https://provider.example/v1/chat/completions',
+      texts: ['Let’s build it.'],
     },
   ]);
   expect(transcripts).toEqual(['en']);
@@ -817,7 +826,8 @@ it('sends complete English sentences to the Provider and displays its translatio
     '让我们建造它。',
   ]);
   expect(requests.map((request) => request.texts)).toEqual([
-    ['This field behind me will become a city.', 'Let’s build it.'],
+    ['This field behind me will become a city.'],
+    ['Let’s build it.'],
   ]);
   queue.reset();
 });

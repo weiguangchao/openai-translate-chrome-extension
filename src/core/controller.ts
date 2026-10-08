@@ -6,11 +6,10 @@ import { selectedTrack } from './native';
 import { SubtitleOverlay } from './overlay';
 import type { CaptionSource, LiveCaption, Platform, PlatformFactory } from './platform';
 import { PlaybackGate } from './playback';
-import { captionWindow, timedCaptions } from './timeline';
+import { captionWindow, openingPrefetch, timedCaptions } from './timeline';
 import { TraceReporter, type TraceCaption } from './trace';
 import { CaptionTranslator } from './translator';
 
-const SEEK_PREVIEW_CUES = 4;
 const STYLE = `
 video.subline-native::cue { color: transparent !important; background: transparent !important; text-shadow: none !important; }
 video.subline-native::-webkit-media-text-track-container { opacity: 0 !important; }
@@ -216,18 +215,24 @@ export class CaptionController {
       this.translator.prefetch([]);
     }
     const captions = source.kind === 'timeline' ? timedCaptions(source.cues) : null;
-    const translationTime = this.gate.lead(time, captions !== null);
+    const usesModel = source.mode === 'model';
+    const scheduling = Boolean(captions) && usesModel && !video.paused && !this.gate.settling;
+    const translationTime = scheduling ? this.gate.lead(time, true) : time;
     const current = captions ? captionWindow(captions, time) : null;
     const upcoming =
       captions && translationTime !== time ? captionWindow(captions, translationTime) : current;
-    const usesModel = source.mode === 'model';
     const caption = currentCaption(source, current?.current ?? '');
     this.translator.notePlayback(video.paused);
-    const items = usesModel && !video.paused ? (upcoming?.items ?? []) : [];
-    if (!video.paused)
-      this.translator.prefetch(
-        this.gate.settling ? [] : this.gate.previewing ? items.slice(0, SEEK_PREVIEW_CUES) : items,
-      );
+    const opening = scheduling && usesModel && captions && this.gate.consumeOpening();
+    const items =
+      usesModel && !video.paused
+        ? this.gate.settling
+          ? []
+          : opening
+            ? openingPrefetch(captions, translationTime)
+            : (upcoming?.items ?? [])
+        : [];
+    if (!video.paused) this.translator.prefetch(items);
     this.overlay.hide(caption.layers);
     video.classList.toggle('subline-native', caption.nativeTrack);
     const cueIndex =
