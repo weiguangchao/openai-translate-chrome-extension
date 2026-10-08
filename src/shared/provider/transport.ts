@@ -1,5 +1,6 @@
 export const translationSendsPerSecond = 3;
-const sendWindowMs = 1000;
+export const providerSendWindowMs = 1000;
+export const providerTimeoutMs = 60_000;
 
 export interface ProviderSendPolicy {
   canSend(): boolean;
@@ -22,7 +23,7 @@ export function wakeProviderRequests(): void {
   timer = undefined;
   const now = Date.now();
   for (let index = sentAt.length - 1; index >= 0; index--)
-    if (now - sentAt[index].at >= sendWindowMs) sentAt.splice(index, 1);
+    if (now - sentAt[index].at >= providerSendWindowMs) sentAt.splice(index, 1);
   const ordered = [...pending].sort(
     (a, b) => (a.policy?.priority() ?? 0) - (b.policy?.priority() ?? 0),
   );
@@ -36,7 +37,7 @@ export function wakeProviderRequests(): void {
   if (pending.length && sentAt.length >= translationSendsPerSecond)
     timer = setTimeout(
       wakeProviderRequests,
-      Math.max(0, sendWindowMs - (Date.now() - sentAt[0].at)),
+      Math.max(0, providerSendWindowMs - (Date.now() - sentAt[0].at)),
     );
 }
 
@@ -52,8 +53,8 @@ export function providerFetch(
       try {
         signal?.throwIfAborted();
         const deadline = signal
-          ? AbortSignal.any([signal, AbortSignal.timeout(60000)])
-          : AbortSignal.timeout(60000);
+          ? AbortSignal.any([signal, AbortSignal.timeout(providerTimeoutMs)])
+          : AbortSignal.timeout(providerTimeoutMs);
         if (post) {
           const sent = { at: Date.now() };
           sentAt.push(sent);

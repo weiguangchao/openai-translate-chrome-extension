@@ -4,6 +4,8 @@ import { CaptionController } from '../src/core/controller';
 import { TranslationQueue } from '../src/extension/queue';
 import { parseXSubtitlePlaylist, xMediaUrl } from '../src/platforms/x/captions';
 import { createXPlatform } from '../src/platforms/x/platform';
+import { prefetchBatchCount, translationBatchLimit } from '../src/shared/limits';
+import { providerSendWindowMs, translationSendsPerSecond } from '../src/shared/provider/transport';
 import { DEFAULT_SETTINGS, publicSettings } from '../src/shared/settings';
 import { providerReply, requestedTexts } from './fixtures/provider';
 
@@ -192,7 +194,31 @@ afterEach(async () => {
   Reflect.deleteProperty(document, 'fullscreenElement');
 });
 
-it('prefetches four batches from the selected HLS subtitle playlist before any cue is shown', async () => {
+const cueCount = 30;
+
+function cueBatch(from: number): string[] {
+  return Array.from(
+    { length: Math.min(translationBatchLimit, cueCount - from + 1) },
+    (_, index) => `Cue ${from + index}`,
+  );
+}
+
+function cueBatches(): string[][] {
+  return Array.from({ length: Math.ceil(cueCount / translationBatchLimit) }, (_, index) =>
+    cueBatch(1 + index * translationBatchLimit),
+  );
+}
+
+function batchesThrough(cueNumber: number): string[][] {
+  const index = cueNumber - 1;
+  const end = Math.min(
+    cueCount,
+    (Math.floor(index / translationBatchLimit) + prefetchBatchCount) * translationBatchLimit,
+  );
+  return cueBatches().slice(0, Math.ceil(end / translationBatchLimit));
+}
+
+it('prefetches the opening batches from the selected HLS subtitle playlist before any cue is shown', async () => {
   const { player, video } = addPlayer('a', { top: 0, bottom: 360 }, false);
   controller = new CaptionController(createXPlatform, publicSettings(settings));
   await vi.advanceTimersByTimeAsync(0);
@@ -203,12 +229,12 @@ it('prefetches four batches from the selected HLS subtitle playlist before any c
         `${media.replace('/amplify_video', '/subtitles/amplify_video')}/a/EN/${part}-segment.vtt`,
     ),
   );
-  const batch = (from: number) =>
-    Array.from({ length: Math.min(4, 31 - from) }, (_, index) => `Cue ${from + index}`);
-  const batches = [1, 5, 9, 13, 17, 21, 25, 29].map((from) => batch(from));
-  expect(requested.map((request) => request.texts)).toEqual(batches.slice(0, 3));
-  await vi.advanceTimersByTimeAsync(1000);
-  expect(requested.map((request) => request.texts)).toEqual(batches.slice(0, 4));
+  const batches = cueBatches();
+  expect(requested.map((request) => request.texts)).toEqual(
+    batches.slice(0, translationSendsPerSecond),
+  );
+  await vi.advanceTimersByTimeAsync(providerSendWindowMs);
+  expect(requested.map((request) => request.texts)).toEqual(batches.slice(0, prefetchBatchCount));
   expect(player.querySelectorAll('[data-subline-overlay]')).toHaveLength(1);
   await playTo(video, 3);
   expect(lines()?.[0].textContent).toBe('Cue 1');
@@ -216,7 +242,7 @@ it('prefetches four batches from the selected HLS subtitle playlist before any c
   expect(video.classList.contains('subline-native')).toBe(true);
   await playTo(video, 33);
   expect(lines()?.[1].textContent).toBe('译文 Cue 11');
-  expect(requested.map((request) => request.texts)).toEqual(batches.slice(0, 6));
+  expect(requested.map((request) => request.texts)).toEqual(batchesThrough(11));
 });
 
 it('stops prefetch and clears the overlay when X captions are turned off', async () => {

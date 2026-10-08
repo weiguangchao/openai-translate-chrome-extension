@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { domTestProjects } from './test-projects.ts';
 
@@ -45,6 +45,22 @@ try {
   console.log(
     `Test discovery passed: ${formal.length} files, each in exactly one project; experiments excluded.`,
   );
+  const banned =
+    /from \+ [45]\b|batches of (?:four|five)|(?:fifteen|sixteen) sentences|three (?:full|anchor|opening) batches|(?:four|five) whole sentences|prefetches four batches|larger than four cues|block of (?:four|five)/;
+  const exempt = new Set(['tests/playback-schedule.test.ts', 'tests/playback-budget.test.ts']);
+  const hits = [];
+  for (const dir of ['tests', 'e2e']) {
+    const entries = await readdir(dir, { recursive: true });
+    for (const file of entries) {
+      const rel = path.join(dir, file).split(path.sep).join('/');
+      if (exempt.has(rel) || !/\.(?:[cm]?[jt]s|[jt]sx)$/.test(rel)) continue;
+      const lines = (await readFile(rel, 'utf8')).split('\n');
+      lines.forEach((line, index) => {
+        if (banned.test(line)) hits.push(`${rel}:${index + 1}: ${line.trim()}`);
+      });
+    }
+  }
+  assert.deepEqual(hits, [], 'Batch sizes in tests must come from the shared constants');
 } finally {
   await rm(experiment, { recursive: true, force: true });
 }

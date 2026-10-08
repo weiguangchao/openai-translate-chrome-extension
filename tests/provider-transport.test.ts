@@ -1,4 +1,9 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import {
+  providerSendWindowMs,
+  providerTimeoutMs,
+  translationSendsPerSecond,
+} from '../src/shared/provider/transport';
 import { DEFAULT_SETTINGS } from '../src/shared/settings';
 import { providerReply, requestedTexts } from './fixtures/provider';
 
@@ -87,7 +92,7 @@ it('cancels a waiting send without fetching or consuming another consumer’s wo
   ]);
 });
 
-it('starts each 60-second deadline only when its HTTP request is sent', async () => {
+it('starts each provider deadline only when its HTTP request is sent', async () => {
   const timeout = vi.spyOn(AbortSignal, 'timeout');
   const fetch = vi.fn(async (_url: string, init: RequestInit) =>
     providerReply(requestedTexts(init), () => '完成'),
@@ -96,12 +101,13 @@ it('starts each 60-second deadline only when its HTTP request is sent', async ()
   const work = ['A', 'B', 'C', 'D'].map((text) =>
     api.translateCaptionBatch(settings, [{ text, needsSplit: false }]),
   );
-  expect(timeout.mock.calls).toEqual([[60000], [60000], [60000]]);
-  await vi.advanceTimersByTimeAsync(999);
-  expect(timeout).toHaveBeenCalledTimes(3);
+  const immediate = Array.from({ length: translationSendsPerSecond }, () => [providerTimeoutMs]);
+  expect(timeout.mock.calls).toEqual(immediate);
+  await vi.advanceTimersByTimeAsync(providerSendWindowMs - 1);
+  expect(timeout).toHaveBeenCalledTimes(translationSendsPerSecond);
   await vi.advanceTimersByTimeAsync(1);
   await expect(Promise.all(work)).resolves.toEqual([['完成'], ['完成'], ['完成'], ['完成']]);
-  expect(timeout.mock.calls).toEqual([[60000], [60000], [60000], [60000]]);
+  expect(timeout.mock.calls).toEqual([...immediate, [providerTimeoutMs]]);
 });
 
 it('prioritizes the visible caption when the next send window opens', async () => {

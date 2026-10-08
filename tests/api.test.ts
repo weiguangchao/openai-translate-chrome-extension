@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fetchModels, translate, translateCaptionBatch } from '../src/shared/api';
+import { translationBatchLimit } from '../src/shared/limits';
 import { TOKEN_USAGE_KEY } from '../src/shared/token-usage';
 import {
   DEFAULT_SETTINGS,
@@ -148,13 +149,13 @@ describe('OpenAI-compatible provider contract', () => {
     expect(JSON.parse(fetch.mock.calls[0][1].body).max_tokens).toBe(65536);
   });
 
-  it('refuses batches larger than four cues before contacting the provider', async () => {
+  it('refuses a batch larger than the caption limit before contacting the provider', async () => {
     const fetch = vi.fn();
     vi.stubGlobal('fetch', fetch);
     await expect(
       translateCaptionBatch(
         config(),
-        ordinary(Array.from({ length: 5 }, (_, index) => `${index}`)),
+        ordinary(Array.from({ length: translationBatchLimit + 1 }, (_, index) => `${index}`)),
       ),
     ).rejects.toThrow();
     expect(fetch).not.toHaveBeenCalled();
