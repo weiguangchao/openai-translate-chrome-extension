@@ -267,7 +267,7 @@ it('sends each new block of five cues as one request and reuses a finished block
   }
   queue.prefetch('tab', settings, prefetchItems(cues.slice(5, 20)));
   expect(requests[0].signal.aborted).toBe(true);
-  expect(batches()).toEqual([block(0), block(1), block(2)]);
+  expect(batches()).toEqual([block(0), block(1), block(2), block(3)]);
   await vi.advanceTimersByTimeAsync(1000);
   expect(batches()).toEqual([block(0), block(1), block(2), block(3)]);
   [1, 2, 3].forEach(reply);
@@ -415,6 +415,36 @@ it('finishes sent requests while paused and does not send the rest until playbac
   expect(fetch).toHaveBeenCalledTimes(translationSendsPerSecond);
   queue.resume('tab');
   expect(batches()[3]).toEqual(block(3));
+});
+
+it('sends an opening as two captions, then five, before the rest of the window', async () => {
+  const { fetch, requests, batches } = pendingProvider();
+  const queue = new TranslationQueue();
+  const cues = Array.from({ length: 10 }, (_, index) => `Cue ${index + 1}`);
+  queue.prefetch(
+    'tab',
+    settings,
+    cues.map((text, index) => ({
+      text,
+      segment: Math.floor(index / translationBatchLimit),
+      needsSplit: false,
+      ...(index < 2 ? { solo: true } : index < 7 ? { batch: 0 } : {}),
+    })),
+  );
+  expect(batches()).toEqual([['Cue 1'], ['Cue 2'], ['Cue 3', 'Cue 4', 'Cue 5', 'Cue 6', 'Cue 7']]);
+  expect(fetch).toHaveBeenCalledTimes(translationSendsPerSecond);
+  queue.prefetch(
+    'tab',
+    settings,
+    cues.map((text, index) => ({
+      text,
+      segment: Math.floor(index / translationBatchLimit),
+      needsSplit: false,
+    })),
+  );
+  expect(requests.slice(0, 3).every((request) => !request.signal.aborted)).toBe(true);
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(batches()[3]).toEqual(['Cue 8', 'Cue 9', 'Cue 10']);
 });
 
 it('sends at most three requests each second', async () => {

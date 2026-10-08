@@ -25,6 +25,7 @@ interface Job {
   text: string;
   needsSplit: boolean;
   solo: boolean;
+  batchGroup?: number;
   promise: Promise<CaptionTranslation>;
   resolve: (value: CaptionTranslation) => void;
   reject: (error: Error) => void;
@@ -156,6 +157,7 @@ export class TranslationQueue {
             item.needsSplit,
             consumer,
             JSON.stringify([consumer, item.segment]),
+            { solo: item.solo === true, batch: item.batch },
           );
       });
     this.drain();
@@ -233,10 +235,15 @@ export class TranslationQueue {
     needsSplit: boolean,
     consumer: string,
     segment?: string,
+    options?: { solo?: boolean; batch?: number },
   ): Job {
     const existing = this.jobs.get(key);
     if (existing) {
-      if (!existing.controller) existing.segment ??= segment;
+      if (!existing.controller) {
+        existing.segment ??= segment;
+        if (options?.solo) existing.solo = true;
+        if (options?.batch !== undefined) existing.batchGroup ??= options.batch;
+      }
       return existing;
     }
     if (Date.now() < this.backoffUntil) throw new Error(this.backoffReason);
@@ -254,7 +261,8 @@ export class TranslationQueue {
       settings,
       text,
       needsSplit: translationInput(text, needsSplit).needsSplit,
-      solo: false,
+      solo: options?.solo === true,
+      ...(options?.batch !== undefined ? { batchGroup: options.batch } : {}),
       promise,
       resolve,
       reject,
@@ -327,7 +335,12 @@ export class TranslationQueue {
         ? [first]
         : waiting
             .filter(
-              (job) => !job.solo && job.group === first.group && job.segment === first.segment,
+              (job) =>
+                !job.solo &&
+                job.group === first.group &&
+                (first.batchGroup !== undefined
+                  ? job.batchGroup === first.batchGroup
+                  : job.batchGroup === undefined && job.segment === first.segment),
             )
             .slice(0, translationBatchLimit);
       for (const job of batch) waiting.splice(waiting.indexOf(job), 1);

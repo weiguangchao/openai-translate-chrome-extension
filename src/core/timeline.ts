@@ -1,4 +1,9 @@
-import { prefetchSegmentCount, translationBatchLimit } from '../shared/limits';
+import {
+  openingBatchCount,
+  openingSoloCount,
+  prefetchSegmentCount,
+  translationBatchLimit,
+} from '../shared/limits';
 import { needsSubtitleSegmentation } from '../shared/subtitle-segmentation';
 import type { PrefetchItem, TranslationPart } from '../shared/caption-translation';
 import type { TimedCue } from './cues';
@@ -120,4 +125,29 @@ export function captionWindow(
     items.push({ text, segment: active[0].segment, needsSplit: split });
   }
   return { current: captionAt(remaining, time), items };
+}
+
+export function openingPrefetch(
+  captions: readonly TimedCaption[],
+  time: number,
+): readonly PrefetchItem[] {
+  const first = captions.findIndex((caption) => caption.endTime > time);
+  if (first < 0) return [];
+  let segmentEnd = first;
+  while (
+    segmentEnd < captions.length &&
+    captions[segmentEnd].segment < captions[first].segment + prefetchSegmentCount
+  )
+    segmentEnd++;
+  const burstEnd = Math.min(captions.length, first + openingSoloCount + openingBatchCount);
+  return captions.slice(first, Math.max(segmentEnd, burstEnd)).map((caption, index) => ({
+    text: caption.text,
+    segment: caption.segment,
+    needsSplit: caption.needsSplit,
+    ...(index < openingSoloCount
+      ? { solo: true }
+      : index < openingSoloCount + openingBatchCount
+        ? { batch: 0 }
+        : {}),
+  }));
 }

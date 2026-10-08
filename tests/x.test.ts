@@ -204,7 +204,11 @@ it('prefetches two segments from the selected HLS subtitle playlist before any c
     ),
   );
   const batch = (from: number) => Array.from({ length: 5 }, (_, i) => `Cue ${from + i}`);
-  expect(requested.map((request) => request.texts)).toEqual([batch(1), batch(6)]);
+  expect(requested.map((request) => request.texts)).toEqual([
+    ['Cue 1'],
+    ['Cue 2'],
+    ['Cue 3', 'Cue 4', 'Cue 5', 'Cue 6', 'Cue 7'],
+  ]);
   expect(player.querySelectorAll('[data-subline-overlay]')).toHaveLength(1);
   await playTo(video, 3);
   expect(lines()?.[0].textContent).toBe('Cue 1');
@@ -213,8 +217,10 @@ it('prefetches two segments from the selected HLS subtitle playlist before any c
   await playTo(video, 33);
   expect(lines()?.[1].textContent).toBe('译文 Cue 11');
   expect(requested.map((request) => request.texts)).toEqual([
-    batch(1),
-    batch(6),
+    ['Cue 1'],
+    ['Cue 2'],
+    ['Cue 3', 'Cue 4', 'Cue 5', 'Cue 6', 'Cue 7'],
+    ['Cue 8', 'Cue 9', 'Cue 10'],
     batch(11),
     batch(16),
   ]);

@@ -21,6 +21,8 @@ export interface TranslationInput {
 
 export interface PrefetchItem extends TranslationInput {
   readonly segment: number;
+  readonly solo?: boolean;
+  readonly batch?: number;
 }
 
 const letterLike = /[\p{L}\p{N}]/u;

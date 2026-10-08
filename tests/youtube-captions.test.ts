@@ -3,6 +3,7 @@ import { parseYoutubeCaptions } from '../src/platforms/youtube/captions';
 import {
   captionAt,
   captionWindow,
+  openingPrefetch,
   timedCaptions,
   translatedCaptions,
   type TimedCaption,
@@ -358,6 +359,40 @@ it('covers the rest of the current segment and the following segment, however fa
   expect(captionWindow(captions, 165).items.map((item) => item.text)).toEqual(texts(16, 25));
   expect(captionWindow(captions, 205).items.map((item) => item.text)).toEqual(texts(20, 30));
   expect(captionWindow(captions, 9999)).toEqual({ current: '', items: [] });
+});
+
+it('starts an opening from the sentence at the anchor, with two single requests and the next five together', () => {
+  const cues = Array.from({ length: 12 }, (_, index) => ({
+    startTime: index * 10,
+    endTime: index * 10 + 8,
+    text: `Cue ${index + 1}`,
+  }));
+  const captions = timedCaptions(cues);
+  const mark = (text: string, segment: number, solo = false, batch?: number) => ({
+    text,
+    segment,
+    needsSplit: false,
+    ...(solo ? { solo: true } : {}),
+    ...(batch !== undefined ? { batch } : {}),
+  });
+  expect(openingPrefetch(captions, 1).map(({ text }) => text)).toEqual(
+    cues.slice(0, 10).map((cue) => cue.text),
+  );
+  expect(
+    openingPrefetch(captions, 1)
+      .slice(0, 2)
+      .every((item) => item.solo),
+  ).toBe(true);
+  expect(openingPrefetch(captions, 41)).toEqual([
+    mark('Cue 5', 0, true),
+    mark('Cue 6', 1, true),
+    mark('Cue 7', 1, false, 0),
+    mark('Cue 8', 1, false, 0),
+    mark('Cue 9', 1, false, 0),
+    mark('Cue 10', 1, false, 0),
+    mark('Cue 11', 2, false, 0),
+  ]);
+  expect(openingPrefetch(captions, 9999)).toEqual([]);
 });
 
 it('flags a long cue shown on its own for a Provider split, but not overlapping cues joined into one line', () => {

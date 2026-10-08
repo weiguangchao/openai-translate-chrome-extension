@@ -68,16 +68,25 @@ export function readPrefetchRequest(message: object): PrefetchRequest {
     type: 'prefetch',
     items: items.map((item: unknown): PrefetchItem => {
       if (!item || typeof item !== 'object') throw new Error('预加载字幕内容无效。');
-      const { text, segment, needsSplit } = item as Record<string, unknown>;
+      const { text, segment, needsSplit, solo, batch } = item as Record<string, unknown>;
       if (
         !validText(text) ||
         typeof segment !== 'number' ||
         !Number.isSafeInteger(segment) ||
         segment < 0 ||
-        typeof needsSplit !== 'boolean'
+        typeof needsSplit !== 'boolean' ||
+        (solo !== undefined && typeof solo !== 'boolean') ||
+        (batch !== undefined &&
+          (typeof batch !== 'number' || !Number.isSafeInteger(batch) || batch < 0))
       )
         throw new Error('预加载字幕内容无效。');
-      return { text, segment, needsSplit };
+      return {
+        text,
+        segment,
+        needsSplit,
+        ...(solo ? { solo } : {}),
+        ...(batch !== undefined ? { batch } : {}),
+      };
     }),
   };
 }

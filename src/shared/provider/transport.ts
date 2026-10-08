@@ -14,14 +14,15 @@ interface PendingSend {
 }
 
 const pending: PendingSend[] = [];
-let sentAt: number[] = [];
+const sentAt: { at: number }[] = [];
 let timer: ReturnType<typeof setTimeout> | undefined;
 
 export function wakeProviderRequests(): void {
   clearTimeout(timer);
   timer = undefined;
   const now = Date.now();
-  sentAt = sentAt.filter((at) => now - at < sendWindowMs);
+  for (let index = sentAt.length - 1; index >= 0; index--)
+    if (now - sentAt[index].at >= sendWindowMs) sentAt.splice(index, 1);
   const ordered = [...pending].sort(
     (a, b) => (a.policy?.priority() ?? 0) - (b.policy?.priority() ?? 0),
   );
@@ -33,7 +34,10 @@ export function wakeProviderRequests(): void {
     send.start();
   }
   if (pending.length && sentAt.length >= translationSendsPerSecond)
-    timer = setTimeout(wakeProviderRequests, Math.max(0, sendWindowMs - (Date.now() - sentAt[0])));
+    timer = setTimeout(
+      wakeProviderRequests,
+      Math.max(0, sendWindowMs - (Date.now() - sentAt[0].at)),
+    );
 }
 
 export function providerFetch(
@@ -50,7 +54,20 @@ export function providerFetch(
         const deadline = signal
           ? AbortSignal.any([signal, AbortSignal.timeout(60000)])
           : AbortSignal.timeout(60000);
-        if (post) sentAt.push(Date.now());
+        if (post) {
+          const sent = { at: Date.now() };
+          sentAt.push(sent);
+          signal?.addEventListener(
+            'abort',
+            () => {
+              const index = sentAt.indexOf(sent);
+              if (index < 0) return;
+              sentAt.splice(index, 1);
+              wakeProviderRequests();
+            },
+            { once: true },
+          );
+        }
         void fetch(url, { ...init, signal: deadline }).then(
           (response) => resolve({ response, signal: deadline }),
           reject,

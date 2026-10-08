@@ -1,5 +1,4 @@
 const SEEK_SETTLE_MS = 400;
-const LOOKAHEAD_DELAY_MS = 1000;
 const SEEK_JUMP_SECONDS = 1;
 const SEEK_JUMP_TOLERANCE = 1e-3;
 const LEAD_SECONDS = 1;
@@ -11,12 +10,11 @@ export interface PlaybackHooks {
 
 export class PlaybackGate {
   private leadPending = true;
+  private opening = false;
   private leadEnd = 0;
   private observedTime = Number.NaN;
   private settlesAt = 0;
-  private lookaheadAt = 0;
   private seekTimer: ReturnType<typeof setTimeout> | undefined;
-  private lookaheadTimer: ReturnType<typeof setTimeout> | undefined;
 
   constructor(private hooks: PlaybackHooks) {}
 
@@ -26,10 +24,6 @@ export class PlaybackGate {
 
   get settling(): boolean {
     return Date.now() < this.settlesAt;
-  }
-
-  get previewing(): boolean {
-    return Date.now() < this.lookaheadAt;
   }
 
   observe(time: number): void {
@@ -44,8 +38,8 @@ export class PlaybackGate {
 
   hold(): void {
     this.leadPending = true;
+    this.opening = false;
     this.settlesAt = Date.now() + SEEK_SETTLE_MS;
-    this.lookaheadAt = Number.POSITIVE_INFINITY;
     this.hooks.hold();
     this.clearTimers();
     this.seekTimer = setTimeout(() => this.release(), SEEK_SETTLE_MS);
@@ -53,40 +47,40 @@ export class PlaybackGate {
 
   restartLead(): void {
     this.leadPending = true;
+    this.opening = false;
   }
 
   lead(time: number, ready: boolean): number {
     if (ready && this.leadPending) {
       this.leadEnd = time + LEAD_SECONDS;
       this.leadPending = false;
+      this.opening = true;
     }
     return Math.max(time, this.leadEnd);
   }
 
+  consumeOpening(): boolean {
+    const opening = this.opening;
+    this.opening = false;
+    return opening;
+  }
+
   reset(): void {
     this.leadPending = true;
+    this.opening = false;
     this.observedTime = Number.NaN;
     this.settlesAt = 0;
-    this.lookaheadAt = 0;
     this.clearTimers();
   }
 
   private release(): void {
     this.seekTimer = undefined;
     this.settlesAt = 0;
-    this.lookaheadAt = Date.now() + LOOKAHEAD_DELAY_MS;
-    clearTimeout(this.lookaheadTimer);
-    this.lookaheadTimer = setTimeout(() => {
-      this.lookaheadTimer = undefined;
-      this.hooks.changed();
-    }, LOOKAHEAD_DELAY_MS);
     this.hooks.changed();
   }
 
   private clearTimers(): void {
     clearTimeout(this.seekTimer);
-    clearTimeout(this.lookaheadTimer);
     this.seekTimer = undefined;
-    this.lookaheadTimer = undefined;
   }
 }
