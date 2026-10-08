@@ -345,17 +345,17 @@ it('covers the rest of the current segment and the following segment, however fa
   }));
   const captions = timedCaptions(cues);
   const texts = (from: number, to: number) => cues.slice(from, to).map((cue) => cue.text);
-  expect(captionWindow(captions, 0).items.map((item) => item.text)).toEqual(texts(0, 20));
+  expect(captionWindow(captions, 0).items.map((item) => item.text)).toEqual(texts(0, 10));
   expect(captionWindow(captions, 95)).toEqual({
     current: 'Cue 10',
-    items: texts(9, 20).map((text, index) => ({
+    items: texts(9, 15).map((text, index) => ({
       text,
-      segment: [0, ...texts(10, 20).map(() => 1)][index] ?? 0,
-      needsSplit: texts(9, 20).map(() => false)[index] === true,
+      segment: [1, 2, 2, 2, 2, 2][index] ?? 0,
+      needsSplit: false,
     })),
   });
-  expect(captionWindow(captions, 105).items.map((item) => item.text)).toEqual(texts(10, 30));
-  expect(captionWindow(captions, 165).items.map((item) => item.text)).toEqual(texts(16, 30));
+  expect(captionWindow(captions, 105).items.map((item) => item.text)).toEqual(texts(10, 20));
+  expect(captionWindow(captions, 165).items.map((item) => item.text)).toEqual(texts(16, 25));
   expect(captionWindow(captions, 205).items.map((item) => item.text)).toEqual(texts(20, 30));
   expect(captionWindow(captions, 9999)).toEqual({ current: '', items: [] });
 });
@@ -393,7 +393,7 @@ it('keeps a long cue whole while it overlaps another cue', () => {
   expect(captions.map((caption) => caption.text)).toEqual([long, 'Overlap.']);
 });
 
-it('puts ten whole sentences in each segment, however long', () => {
+it('puts five whole sentences in each segment, however long', () => {
   const long = ['a', 'b', 'c'].map((letter) => letter.repeat(60)).join(', ');
   const captions = timedCaptions([
     ...Array.from({ length: 8 }, (_, index) => ({
@@ -408,9 +408,9 @@ it('puts ten whole sentences in each segment, however long', () => {
       text: `After ${index + 1}.`,
     })),
   ]);
-  expect(captions.map((caption) => caption.segment)).toEqual([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1]);
+  expect(captions.map((caption) => caption.segment)).toEqual([0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 2, 2]);
   expect(captions[8]).toMatchObject({ text: long, needsSplit: true });
-  expect(captionWindow(captions, 0).items.map((item) => item.segment)).toEqual(
-    captions.map((caption) => caption.segment),
-  );
+  expect(captionWindow(captions, 0).items.map((item) => item.segment)).toEqual([
+    0, 0, 0, 0, 0, 1, 1, 1, 1, 1,
+  ]);
 });

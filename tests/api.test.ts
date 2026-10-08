@@ -97,7 +97,7 @@ describe('OpenAI-compatible provider contract', () => {
       expect(body).not.toHaveProperty('prompt');
       expect(body.stream).toBe(false);
       expect(body.max_tokens).toBe(65536);
-      expect(body.reasoning_effort).toBe('low');
+      expect(body.reasoning_effort).toBe('none');
       expect(init.redirect).toBe('error');
       expect(init.credentials).toBe('omit');
     },
@@ -128,7 +128,7 @@ describe('OpenAI-compatible provider contract', () => {
       expect(body).not.toHaveProperty('prompt');
       expect(body.stream).toBe(false);
       expect(body.max_tokens).toBe(65536);
-      expect(body.reasoning_effort).toBe('low');
+      expect(body.reasoning_effort).toBe('none');
       expect(body.response_format).toEqual({ type: 'json_object' });
     },
   );
@@ -148,13 +148,13 @@ describe('OpenAI-compatible provider contract', () => {
     expect(JSON.parse(fetch.mock.calls[0][1].body).max_tokens).toBe(65536);
   });
 
-  it('refuses batches larger than ten cues before contacting the provider', async () => {
+  it('refuses batches larger than five cues before contacting the provider', async () => {
     const fetch = vi.fn();
     vi.stubGlobal('fetch', fetch);
     await expect(
       translateCaptionBatch(
         config(),
-        ordinary(Array.from({ length: 11 }, (_, index) => `${index}`)),
+        ordinary(Array.from({ length: 6 }, (_, index) => `${index}`)),
       ),
     ).rejects.toThrow();
     expect(fetch).not.toHaveBeenCalled();
@@ -165,7 +165,7 @@ describe('OpenAI-compatible provider contract', () => {
       .fn()
       .mockResolvedValueOnce(
         Response.json(
-          { error: { message: "Unsupported value: 'reasoning_effort' does not support 'low'" } },
+          { error: { message: "Unsupported value: 'reasoning_effort' does not support 'none'" } },
           { status: 400 },
         ),
       )
@@ -183,10 +183,10 @@ describe('OpenAI-compatible provider contract', () => {
         return [body.model, body.reasoning_effort, body.max_tokens, body.stream];
       }),
     ).toEqual([
-      ['non-reasoning-model', 'low', 65536, false],
+      ['non-reasoning-model', 'none', 65536, false],
       ['non-reasoning-model', undefined, 65536, false],
       ['non-reasoning-model', undefined, 65536, false],
-      ['reasoning-model', 'low', 65536, false],
+      ['reasoning-model', 'none', 65536, false],
     ]);
   });
 
@@ -310,7 +310,7 @@ describe('batch replies', () => {
     const body = JSON.parse(fetch.mock.calls[0][1].body);
     expect(body.stream).toBe(false);
     expect(body.max_tokens).toBeGreaterThan(0);
-    expect(body.reasoning_effort).toBe('low');
+    expect(body.reasoning_effort).toBe('none');
     expect(body.response_format).toEqual({ type: 'json_object' });
   });
 
@@ -486,7 +486,7 @@ describe('batch replies', () => {
       undefined,
       undefined,
     ]);
-    expect(bodies.map((body) => body.reasoning_effort)).toEqual(['low', 'low', 'low']);
+    expect(bodies.map((body) => body.reasoning_effort)).toEqual(['none', 'none', 'none']);
     expect(bodies[0].max_tokens).toBeGreaterThan(0);
     expect(bodies[1].max_tokens).toBe(bodies[0].max_tokens);
     expect(bodies[2].max_tokens).toBe(bodies[1].max_tokens);
@@ -513,8 +513,8 @@ describe('batch replies', () => {
     ]);
     const bodies = fetch.mock.calls.map((call) => JSON.parse(call[1].body as string));
     expect(bodies.map((body) => [body.response_format?.type, body.reasoning_effort])).toEqual([
-      ['json_object', 'low'],
-      [undefined, 'low'],
+      ['json_object', 'none'],
+      [undefined, 'none'],
       [undefined, undefined],
       ['json_object', undefined],
       [undefined, undefined],
@@ -539,14 +539,14 @@ describe('batch replies', () => {
         return [body.reasoning_effort, body.max_tokens];
       }),
     ).toEqual([
-      ['low', 65536],
+      ['none', 65536],
       [undefined, 65536],
       [undefined, undefined],
     ]);
     await expect(translate(settings, 'Hi')).resolves.toBe('你好');
     const again = fetch.mock.calls.slice(3).map((call) => JSON.parse(call[1].body as string));
     expect(again.map((body) => [body.reasoning_effort, body.max_tokens])).toEqual([
-      ['low', undefined],
+      ['none', undefined],
       [undefined, undefined],
     ]);
     await expect(translate(settings, 'Hey')).resolves.toBe('你好');
@@ -588,8 +588,8 @@ describe('batch replies', () => {
       undefined,
     ]);
     expect(bodies.map((body) => body.reasoning_effort)).toEqual([
-      'low',
-      'low',
+      'none',
+      'none',
       undefined,
       undefined,
     ]);

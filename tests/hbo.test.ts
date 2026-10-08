@@ -223,10 +223,8 @@ it.each([mediaUrl, edgeMediaUrl])(
     stream.url = url;
     controller = new CaptionController(createHboPlatform, publicSettings(settings));
     await vi.advanceTimersByTimeAsync(0);
-    expect(requested.map((request) => request.texts)).toEqual([
-      Array.from({ length: 10 }, (_, i) => `Cue ${i + 1}`),
-      Array.from({ length: 10 }, (_, i) => `Cue ${i + 11}`),
-    ]);
+    const batch = (from: number) => Array.from({ length: 5 }, (_, i) => `Cue ${from + i}`);
+    expect(requested.map((request) => request.texts)).toEqual([batch(1), batch(6)]);
     expect(requested.every((request) => request.at === 0)).toBe(true);
     await playTo(3);
     expect(lines()?.[0].textContent).toBe('Cue 1');
@@ -234,11 +232,24 @@ it.each([mediaUrl, edgeMediaUrl])(
     expect(lines()?.[1].hidden).toBe(false);
     await playTo(33);
     expect(lines()?.[1].textContent).toBe('译文 Cue 11');
-    expect(requested[2].texts).toEqual(Array.from({ length: 10 }, (_, i) => `Cue ${i + 21}`));
-    expect(requested[2].at).toBeLessThan(63);
+    expect(requested.map((request) => request.texts)).toEqual([
+      batch(1),
+      batch(6),
+      batch(11),
+      batch(16),
+    ]);
+    expect(requested[2].at).toBeLessThan(33);
     await playTo(63);
     expect(lines()?.[1].textContent).toBe('译文 Cue 21');
-    expect(requested).toHaveLength(3);
+    expect(requested.map((request) => request.texts)).toEqual([
+      batch(1),
+      batch(6),
+      batch(11),
+      batch(16),
+      batch(21),
+      batch(26),
+    ]);
+    expect(requested[4].at).toBeLessThan(63);
   },
 );
 
@@ -259,8 +270,8 @@ it('displays a finished HBO segment while the other prefetched segment is still 
   controller = new CaptionController(createHboPlatform, publicSettings(settings));
   await vi.advanceTimersByTimeAsync(0);
   expect(batches.map(({ texts }) => texts)).toEqual([
-    Array.from({ length: 10 }, (_, i) => `Cue ${i + 1}`),
-    Array.from({ length: 10 }, (_, i) => `Cue ${i + 11}`),
+    Array.from({ length: 5 }, (_, i) => `Cue ${i + 1}`),
+    Array.from({ length: 5 }, (_, i) => `Cue ${i + 6}`),
   ]);
   await playTo(3);
   await vi.advanceTimersByTimeAsync(300);
@@ -297,7 +308,9 @@ it('displays and translates one HBO track when alternate tracks have overlapping
     expect(lines()?.[1].textContent).toBe(`译文 Cue ${cue}`);
   }
   expect(requested.map(({ texts }) => texts)).toEqual(
-    [0, 1, 2].map((segment) => Array.from({ length: 10 }, (_, i) => `Cue ${segment * 10 + i + 1}`)),
+    [0, 1, 2, 3, 4, 5].map((segment) =>
+      Array.from({ length: 5 }, (_, i) => `Cue ${segment * 5 + i + 1}`),
+    ),
   );
   const subtitles = vi
     .mocked(fetch)
@@ -614,11 +627,11 @@ it('keeps the HBO source across target/provider/style changes, seeks, blob renew
   Object.defineProperty(video, 'currentSrc', { value: 'blob:renewed-same-episode' });
   history.replaceState(null, '', '/video/watch/episode-1?tracking=changed');
   video.dispatchEvent(new Event('pause'));
-  video.currentTime = 33;
+  video.currentTime = 18;
   video.dispatchEvent(new Event('seeked'));
   await vi.advanceTimersByTimeAsync(1600);
   expect(downloads()).toHaveLength(4);
-  expect(lines()?.[0].textContent).toBe('Cue 11');
+  expect(lines()?.[0].textContent).toBe('Cue 6');
   controller.update({ ...publicSettings(settings), enabled: false });
   await vi.advanceTimersByTimeAsync(0);
   controller.update(publicSettings(settings));
