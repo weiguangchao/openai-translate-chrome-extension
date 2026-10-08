@@ -187,7 +187,7 @@ function completionBody(
     stream: false,
     ...(probe.jsonObject ? { response_format: { type: 'json_object' as const } } : {}),
     ...(probe.maxTokens ? { max_tokens: maxTokens } : {}),
-    ...(probe.reasoning ? { reasoning_effort: 'none' as const } : {}),
+    ...(probe.reasoning ? { reasoning_effort: 'low' as const } : {}),
   };
 }
 
