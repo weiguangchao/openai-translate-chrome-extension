@@ -426,7 +426,7 @@ it('shows a provider timeout like the loading line and does not retry that capti
   const translation = translationNode();
   expect(translation?.textContent).toBe('接口调用超时');
   expect(translation?.classList.contains('error')).toBe(false);
-  expect(translation?.style.color).toBe('rgb(184, 229, 207)');
+  expect(translation?.classList.contains('timeout')).toBe(true);
   expect(translation?.style.fontSize).toBe('20px');
   expect(originalNode()?.hidden).toBe(true);
   const translates = () =>

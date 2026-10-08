@@ -4,7 +4,7 @@ import type { ViewState } from '../shared/trace';
 const LOADING_TRANSLATION = '翻译中';
 const TIMEOUT_TRANSLATION = '接口调用超时';
 const OVERLAY_STYLE =
-  ':host{all:initial}.stack{position:absolute;left:4%;width:92%;text-align:center;font-family:Arial,"PingFang SC",sans-serif;line-height:1.4;pointer-events:none}.line{width:fit-content;max-width:100%;margin-inline:auto;padding:1px 8px;border-radius:3px;white-space:normal;overflow-wrap:anywhere;text-shadow:0 1px 3px #000;box-sizing:border-box}.error{font-size:13px!important;color:#ffe3b0!important}';
+  ':host{all:initial}.stack{position:absolute;left:4%;width:92%;text-align:center;font-family:Arial,"PingFang SC",sans-serif;line-height:1.4;pointer-events:none}.line{width:fit-content;max-width:100%;margin-inline:auto;padding:1px 8px;border-radius:3px;white-space:normal;overflow-wrap:anywhere;text-shadow:0 1px 3px #000;box-sizing:border-box}.error{font-size:13px!important;color:#ffe3b0!important}.timeout{color:#ffcc00!important}';
 
 export class SubtitleOverlay {
   player: HTMLElement | null = null;
@@ -109,28 +109,33 @@ export class SubtitleOverlay {
 
   showTranslation(text: string): void {
     if (!this.translation) return;
-    this.translation.classList.remove('error');
+    this.translation.classList.remove('error', 'timeout');
     if (this.translation.textContent !== text) this.translation.textContent = text;
     this.translation.hidden = !text;
   }
 
   showLoading(): void {
-    this.showStatus(LOADING_TRANSLATION);
+    this.showStatus(LOADING_TRANSLATION, false);
   }
 
   showTimeout(): void {
-    this.showStatus(TIMEOUT_TRANSLATION);
+    this.showStatus(TIMEOUT_TRANSLATION, true);
   }
 
-  private showStatus(text: string): void {
+  private showStatus(text: string, timeout: boolean): void {
+    const node = this.translation;
+    if (!node) return;
     if (
-      !this.translation ||
-      (this.translation.textContent === text && !this.translation.hidden && !this.failed)
+      node.textContent === text &&
+      !node.hidden &&
+      !this.failed &&
+      node.classList.contains('timeout') === timeout
     )
       return;
-    this.translation.classList.remove('error');
-    this.translation.textContent = text;
-    this.translation.hidden = false;
+    node.classList.remove('error');
+    node.classList.toggle('timeout', timeout);
+    node.textContent = text;
+    node.hidden = false;
   }
 
   clearLoading(): void {
@@ -140,13 +145,14 @@ export class SubtitleOverlay {
   showError(message: string): void {
     if (!this.translation) return;
     this.translation.textContent = `Subline：${message}`;
+    this.translation.classList.remove('timeout');
     this.translation.classList.add('error');
     this.translation.hidden = false;
   }
 
   hideTranslation(): void {
     if (!this.translation) return;
-    this.translation.classList.remove('error');
+    this.translation.classList.remove('error', 'timeout');
     this.translation.textContent = '';
     this.translation.hidden = true;
   }
