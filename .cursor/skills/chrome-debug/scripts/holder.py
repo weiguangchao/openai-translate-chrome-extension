@@ -1,13 +1,4 @@
 #!/usr/bin/env python3
-"""Own the only DevTools socket to the signed-in Default Chrome and run checks on it.
-
-Started by `live.py start`. Chrome asks "Allow remote debugging?" once for this
-socket. Clients reach the holder on 127.0.0.1 with newline-delimited JSON and the
-token from the state file. The holder never forwards raw DevTools messages, so a
-client can only run checks, reload Subline, or ask for status. `live.py stop` sends
-SIGTERM, which closes the open tab and the socket.
-"""
-
 import base64
 import hmac
 import json
@@ -25,7 +16,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from live import STATE, alive, load_state, session_id
-from worker_trace import summarize as summarize_worker
+from worker_trace import clock as clock_stats, summarize as summarize_worker, trace_line
 
 PORT_FILE = Path(
     os.environ.get("CHROME_DEBUG_PORT_FILE")
@@ -40,7 +31,6 @@ PREVIEW_CHARS = 500
 TRACE_MILESTONE = 60
 CAPTION_HINTS = ("/api/timedtext", ".vtt", ".mpd", "/subtitles/")
 SKIP_AD = ".ytp-skip-ad-button, .ytp-ad-skip-button-modern, .ytp-ad-skip-button"
-# `trace` reads what Subline's service worker prints (src/shared/trace.ts).
 SUBLINE_NAME = "Subline"
 TRACE_ATTRIBUTE = "data-subline-trace"
 TRACE_WORKER_ATTRIBUTE = "data-subline-trace-worker"
@@ -48,6 +38,7 @@ TRACE_PREFIX = "[subline] "
 WORKER_WAIT_SECONDS = 20
 WORKER_QUIET_SECONDS = 30
 WORKER_EVENTS = 50000
+STALL_SECONDS = 20
 
 MUTE_MEDIA = """(() => {
   const prototype = HTMLMediaElement.prototype;
@@ -81,7 +72,6 @@ MUTE_MEDIA = """(() => {
 
 
 class Verdict:
-    """A probe's verdict that ends the step as failed at once. Falsy, so `if ok:` reads it as failed."""
 
     def __bool__(self):
         return False
@@ -134,6 +124,13 @@ OVERLAY = r"""
 """
 
 
+def video_report():
+    return """const ad = Boolean(document.querySelector('#movie_player.ad-showing'));
+      return {time: Math.round(video.currentTime * 100) / 100, paused: video.paused,
+        ended: video.ended, ad, rate: video.playbackRate, ready: video.readyState,
+        visible: document.visibilityState};"""
+
+
 def log(message):
     print(time.strftime("%H:%M:%S"), message, file=sys.stderr, flush=True)
 
@@ -146,7 +143,7 @@ def public_url(url):
 
 
 class ChromeClosed(Exception):
-    """The DevTools socket is gone. The holder cannot recover without a new Allow."""
+    pass
 
 
 class CdpError(RuntimeError):
@@ -154,11 +151,10 @@ class CdpError(RuntimeError):
 
 
 class TabGone(Exception):
-    """The check's tab closed or crashed. Nothing more can run in it, so the check ends now."""
+    pass
 
 
 class Chrome:
-    """One WebSocket to the browser endpoint. Messages for timed-out calls are dropped."""
 
     def __init__(self, sock, rest):
         self.sock = sock
@@ -170,7 +166,6 @@ class Chrome:
         self.listener = None
 
     def call(self, method, params=None, session=None, timeout=20, abort=None):
-        """Send one command and wait for its reply. `abort()` returning true stops the wait early."""
         message_id = self.next_id
         self.next_id += 1
         payload = {"id": message_id, "method": method}
@@ -306,7 +301,6 @@ def read_endpoint():
 
 
 def click_allow():
-    """Return None when the script ran, or the reason it could not."""
     try:
         result = subprocess.run(
             ["osascript", "-e", ALLOW_SCRIPT], capture_output=True, text=True, timeout=20, check=False
@@ -321,7 +315,6 @@ def click_allow():
 
 
 def handshake(port, path):
-    # No Origin header: Chrome answers 403 to Origin http://127.0.0.1:<port>.
     key = base64.b64encode(os.urandom(16)).decode()
     request = (
         f"GET {path} HTTP/1.1\r\n"
@@ -444,7 +437,6 @@ def validate(checks):
 
 
 class Tab:
-    """One tab opened for one check. Every step shares the check's deadline."""
 
     def __init__(self, chrome, target_id, session, deadline, progress):
         self.chrome = chrome
@@ -455,13 +447,20 @@ class Tab:
         self.requests = []
         self.seen = set()
         self.playing = None
+        self.expect_motion = False
+        self.rates = {}
+        self.clock_samples = 0
+        self.clock_visible = 0
+        self.stall_since = None
+        self.stall_time = None
+        self.buffering = False
+        self.fail_reason = None
         self.last_error = None
         self.gone = None
         self.video_time = None
         self.label = None
         self.step_started = None
         self.milestone = None
-        # Set by watch_worker() when a step traces the service worker.
         self.run_id = None
         self.tag = None
         self.extension = None
@@ -516,13 +515,6 @@ class Tab:
             self.saw_view = self.saw_view or (event.get("e") == "view" and event.get("run") == self.run_id)
 
     def watch_worker(self):
-        """Collect Subline's worker events for this tab from navigation on.
-
-        The page tag asks Subline's content script to report; it answers with its extension id
-        in TRACE_WORKER_ATTRIBUTE. Target discovery reports the worker now and whenever it
-        restarts. Never turn on the page's Runtime domain here: YouTube notices it and stops
-        serving captions.
-        """
         self.run_id = secrets.token_hex(8)
         root = "document.documentElement"
         self.tag = (f"(() => {{ if ({root}.getAttribute({json.dumps(TRACE_ATTRIBUTE)}) !== {json.dumps(self.run_id)}) "
@@ -531,7 +523,6 @@ class Tab:
         self.chrome.call("Target.setDiscoverTargets", {"discover": True})
 
     def pump_worker(self):
-        """Keep the page tagged and attach to Subline's worker. Only listens there, never evaluates."""
         try:
             answer = self.evaluate(self.tag)
         except CdpError:
@@ -556,7 +547,6 @@ class Tab:
                 continue
 
     def await_worker(self):
-        """Attach before any step plays the video, so the first Provider batch is seen."""
         limit = time.monotonic() + WORKER_WAIT_SECONDS
         while not self.workers and time.monotonic() < min(limit, self.deadline):
             self.check_gone()
@@ -587,15 +577,46 @@ class Tab:
             raise TabGone(self.gone)
 
     def remember(self, value):
-        """Keep the video time a probe reported, for the error if the tab dies. Returns the value."""
         if isinstance(value, dict) and isinstance(value.get("time"), (int, float)):
             self.video_time = value["time"]
         return value
 
+    def note_stall(self, value):
+        self.buffering = False
+        if not isinstance(value, dict) or "ready" not in value:
+            self.stall_since = None
+            return None
+        rate = value.get("rate")
+        if isinstance(rate, (int, float)):
+            self.rates[rate] = self.rates.get(rate, 0) + 1
+            self.clock_samples += 1
+            if value.get("visible") == "visible":
+                self.clock_visible += 1
+        if value.get("ended") or value.get("ad"):
+            self.stall_since = None
+            return None
+        ready = value.get("ready")
+        if not isinstance(ready, (int, float)) or ready < 3:
+            self.stall_since = None
+            self.buffering = True
+            return None
+        now = time.monotonic()
+        mark = value.get("time")
+        if self.stall_time != mark or self.stall_since is None:
+            self.stall_time = mark
+            self.stall_since = now
+            return None
+        if now - self.stall_since >= STALL_SECONDS:
+            self.fail_reason = f"video time stuck at {mark} s, readyState {ready}"
+            return FAIL
+        return None
+
+    def attach_clock(self, stats):
+        clock_stats(stats, self.rates, self.clock_visible, self.clock_samples)
+
     def call(self, method, params=None, timeout=20):
         self.check_gone()
         try:
-            # A crashed renderer never replies, so the wait ends as soon as the crash event arrives.
             return self.chrome.call(
                 method, params, session=self.session, timeout=timeout, abort=lambda: self.gone
             )
@@ -616,7 +637,6 @@ class Tab:
         return result.get("result", {}).get("value")
 
     def sample(self, expression):
-        """Evaluate, treating page errors and navigation as not ready yet. A dead tab still raises TabGone."""
         try:
             value = self.evaluate(expression)
         except CdpError as error:
@@ -626,15 +646,19 @@ class Tab:
         return value
 
     def until(self, probe, passed):
-        """Poll until `passed(value)` is truthy or FAIL, or the budget runs out. Returns (True, FAIL or False, value)."""
         beat = time.monotonic() + HEARTBEAT_SECONDS
         while True:
             self.check_gone()
             if self.run_id:
                 self.pump_worker()
+            observed = None
             if self.playing:
-                self.remember(self.sample(self.playing))
+                observed = self.remember(self.sample(self.playing))
             value = probe()
+            if isinstance(value, dict) and "ready" in value:
+                observed = self.remember(value)
+            if self.expect_motion and self.note_stall(observed) is FAIL:
+                return FAIL, observed
             verdict = passed(value)
             if verdict is FAIL:
                 return FAIL, value
@@ -646,7 +670,10 @@ class Tab:
                 return False, value
             if self.label and now >= beat:
                 waited = round(now - self.step_started)
-                self.progress({**self.label, "state": "wait", "waited": waited, "video": self.video_time})
+                event = {**self.label, "state": "wait", "waited": waited, "video": self.video_time}
+                if self.buffering:
+                    event["buffering"] = True
+                self.progress(event)
                 beat = now + HEARTBEAT_SECONDS
             self.chrome.idle(min(POLL_SECONDS, left))
 
@@ -659,6 +686,7 @@ class Tab:
     def run(self, step, label):
         self.label = label
         self.milestone = None
+        self.fail_reason = None
         self.progress({**label, "state": "start"})
         started = self.step_started = time.monotonic()
         try:
@@ -672,7 +700,14 @@ class Tab:
             result["reason"] = "budget spent"
             if self.last_error:
                 result["page_error"] = self.last_error
-        self.progress({**label, "state": "end", "ok": result["ok"], "seconds": result["seconds"]})
+        event = {**label, "state": "end", "ok": result["ok"], "seconds": result["seconds"]}
+        if step["action"] == "trace" and isinstance(result.get("stats"), dict):
+            detail = trace_line(result["stats"])
+            fail = result.get("value") if isinstance(result.get("value"), dict) else None
+            if fail and fail.get("fail"):
+                detail = f"{detail}, {fail['fail']}"
+            event["detail"] = detail
+        self.progress(event)
         return result
 
     def do_play(self, step):
@@ -687,12 +722,33 @@ class Tab:
             const playing = video.play();
             if (playing && playing.catch) playing.catch(() => {{}});
           }}
-          return {{paused: video.paused, time: Math.round(video.currentTime * 10) / 10}};
+          {video_report()}
         }})()"""
-        ok, value = self.until(lambda: self.sample(expression), lambda value: value is not None)
-        # From here on, every poll keeps the video playing and skips YouTube ads.
-        self.playing = expression
-        return {"ok": ok, "video": value}
+        self.expect_motion = True
+        origin = [None]
+
+        def playing(item):
+            if not isinstance(item, dict):
+                return False
+            if item.get("ended"):
+                return True
+            if item.get("paused"):
+                return False
+            mark = item.get("time")
+            if origin[0] is None:
+                origin[0] = mark
+                return False
+            return mark != origin[0]
+
+        ok, value = self.until(lambda: self.sample(expression), playing)
+        if ok is True:
+            self.playing = expression
+            return {"ok": True, "video": value}
+        result = {"ok": False, "video": value}
+        if self.fail_reason:
+            result["reason"] = "fail"
+            result["value"] = {"fail": self.fail_reason}
+        return result
 
     def do_seek(self, step):
         target = float(step["time"])
@@ -749,7 +805,6 @@ class Tab:
         def passed(value):
             if isinstance(value, dict) and "fail" in value:
                 return FAIL
-            # JavaScript truthiness: empty arrays and objects pass.
             return value not in (None, False, 0, "")
 
         verdict, value = self.until(lambda: self.sample(step["expression"]), passed)
@@ -764,13 +819,13 @@ class Tab:
         return result
 
     def do_trace(self, step):
+        self.expect_motion = True
         started = time.time() * 1000
         selector = json.dumps(step.get("selector", "video"))
         probe = f"""(() => {{
           const video = document.querySelector({selector});
           if (!video) return null;
-          const ad = Boolean(document.querySelector('#movie_player.ad-showing'));
-          return {{time: Math.round(video.currentTime * 100) / 100, paused: video.paused, ended: video.ended, ad}};
+          {video_report()}
         }})()"""
         progress = {"played": 0.0, "last": None, "playing_since": None, "milestone": TRACE_MILESTONE}
 
@@ -790,7 +845,9 @@ class Tab:
                 progress["playing_since"] = time.monotonic()
             if progress["played"] >= progress["milestone"]:
                 progress["milestone"] += TRACE_MILESTONE
-                self.milestone = summary()["stats"]
+                stats = summary()["stats"]
+                self.attach_clock(stats)
+                self.milestone = stats
             since = progress["playing_since"]
             if not self.saw_view and since is not None and time.monotonic() - since > WORKER_QUIET_SECONDS:
                 return FAIL
@@ -799,14 +856,19 @@ class Tab:
         try:
             verdict, _ = self.until(lambda: self.sample(probe), passed)
         except TabGone:
-            self.milestone = summary()["stats"]
+            stats = summary()["stats"]
+            self.attach_clock(stats)
+            self.milestone = stats
             raise
         full = summary()
-        if verdict is True and not self.saw_view:
+        self.attach_clock(full["stats"])
+        if self.fail_reason or (verdict is True and not self.saw_view):
             verdict = FAIL
         result = {"ok": verdict is True}
         if verdict is FAIL:
-            if not self.extension:
+            if self.fail_reason:
+                why = self.fail_reason
+            elif not self.extension:
                 why = ("no answer from Subline in this tab; it is off for this site, or Chrome runs a build "
                        "from before tracing, so run live reload")
             elif not self.attached:
@@ -851,7 +913,6 @@ class Holder:
         self.started = time.time()
 
     def publish(self, tab=None):
-        # The open tab is recorded so the next holder can close it if this one is killed.
         write_state({"pid": os.getpid(), "port": self.port, "token": self.token,
                      "owner": self.owner, "chrome_port": self.chrome_port, "tab": tab})
 
@@ -901,11 +962,6 @@ class Holder:
             reply(client, {"done": True, "ok": False, "error": f"unknown method {method!r}"})
 
     def reload(self, client, extension):
-        """Reload Subline as its button at chrome://extensions does: fresh worker, empty caches.
-
-        Runs two fixed expressions in Subline's own popup page, never one a client sends. Open
-        YouTube, HBO and X tabs lose Subline until they are refreshed.
-        """
         if not isinstance(extension, str) or not re.fullmatch(r"[a-p]{32}", extension):
             reply(client, {"done": True, "ok": False, "error": "extension must be a 32-letter extension id"})
             return
@@ -923,7 +979,6 @@ class Holder:
             return result.get("result", {}).get("value")
 
         def popup():
-            """Open Subline's popup page and return its target, session and extension name."""
             target = self.chrome.call("Target.createTarget", {"url": f"{origin}/popup.html"})["targetId"]
             opened.append(target)
             self.publish(target)
@@ -951,11 +1006,10 @@ class Holder:
             try:
                 evaluate(session, "chrome.runtime.reload()")
             except CdpError:
-                pass  # The popup closes as the extension reloads.
+                pass
             deadline = time.monotonic() + 15
             while not set(workers) - before and time.monotonic() < deadline:
                 self.chrome.idle(0.3)
-            # A reload that leaves Subline off shows no new worker and no popup.
             if not set(workers) - before and popup()[1] != name:
                 raise CdpError("Subline did not come back after reloading; turn it on at chrome://extensions")
             log(f"Reloaded {name}.")
@@ -997,7 +1051,6 @@ class Holder:
         tab = None
         try:
             try:
-                # Open blank, attach, enable Network, then navigate, so no early request is missed.
                 target_id = self.chrome.call("Target.createTarget", {"url": "about:blank"})["targetId"]
                 self.publish(target_id)
                 session = self.chrome.call(
@@ -1006,7 +1059,6 @@ class Holder:
                 tab = Tab(self.chrome, target_id, session, started + check["budget"], progress)
                 self.chrome.listener = tab.on_event
                 self.chrome.call("Network.enable", session=session)
-                # Inspector reports a renderer crash; Target.detachedFromTarget reports a closed tab.
                 self.chrome.call("Inspector.enable", session=session)
                 self.chrome.call("Page.enable", session=session)
                 self.chrome.call(
@@ -1047,7 +1099,6 @@ class Holder:
                     pass
                 self.publish()
         if tab:
-            # A tab lost after every step passed fails nothing.
             if tab.gone and not report["ok"]:
                 report["error"] = tab.gone
             report["captions"] = [url for url in tab.requests if any(h in url.lower() for h in CAPTION_HINTS)][:8]
@@ -1055,7 +1106,6 @@ class Holder:
         return report
 
     def wrap_up(self, check, tab, report):
-        """Before the tab closes, read its title and, for a failed check, what the page still shows."""
         try:
             if not report["ok"] and check.get("on_fail"):
                 try:
@@ -1073,7 +1123,6 @@ class Holder:
 
 
 def clip(value, limit=VALUE_CHARS):
-    """The value itself when its JSON fits in `limit` characters, otherwise that JSON cut short."""
     text = json.dumps(value, ensure_ascii=False)
     return value if len(text) <= limit else text[:limit] + "…"
 

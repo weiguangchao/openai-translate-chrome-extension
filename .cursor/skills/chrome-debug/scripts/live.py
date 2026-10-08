@@ -1,17 +1,4 @@
 #!/usr/bin/env python3
-"""Chrome commands through one DevTools socket to the signed-in Default profile.
-
-    python3 live.py start                       # connect once; the user allows at most once
-    python3 live.py run CHECKS.json --session ID [--only N]
-    python3 live.py reload --session ID [--path DIR]  # reload after npm run build
-    python3 live.py status
-    python3 live.py stop --session ID           # close this task's socket
-
-Use "run --help" for JSON fields, actions, and report semantics.
-start prints a session id. Pass it with --session ID on subsequent commands,
-or set CHROME_DEBUG_SESSION for this task only. Other tasks cannot reuse it.
-"""
-
 import argparse
 from contextlib import contextmanager, nullcontext
 import fcntl
@@ -56,8 +43,11 @@ Actions
   click            selector. Click the first matching document element.
   seek             time; optional selector, default video. Seek within 1.5 s.
   play             Optional selector, default video. Mute and request playback.
-                   Passes when the video exists. Later step retries keep playing
-                   and skip YouTube ads, so this action overrides manual pauses.
+                   Passes when the video has ended or currentTime advances.
+                   A playable video that does not advance for 20 s fails with
+                   its time and readyState. Buffering waits. Later polls keep
+                   playing and skip YouTube ads, so this action overrides manual
+                   pauses. Read playbackRate. Do not set it.
   network-any      hints. Match any substring of this tab's recorded request URLs.
   wait-overlay     Optional reject, default ["翻译中"]; reject_error, default true.
                    Wait for a visible, nonempty Subline original/translation pair.
@@ -68,7 +58,13 @@ Actions
                    Collects events from navigation; keeps its worker awake.
                    Reports lag, loading, coverage, and batches. Lag and loading
                    use video time; lag percentiles exclude never-ready captions.
-                   A successful trace means collection completed, not sync passed.
+                   The end line prints from, played, wall, playbackRate, visible,
+                   coverage, missed, and lag max. stats.batches.opening is the
+                   first three batches. together counts batches whose first item
+                   arrived with the whole batch. clock is "throttled" when the tab
+                   was mostly hidden or played/wall diverges from playbackRate.
+                   Exit 0 means collection finished. A playable video that does
+                   not advance for 20 s fails. Buffering waits.
 
 Paths and reports
   run mutes audio/video elements from navigation through tab cleanup, including
@@ -109,7 +105,6 @@ def require_owner(state):
 
 @contextmanager
 def lifecycle_lock():
-    """Serialize start/stop, including the interval before a new holder publishes state."""
     STATE.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     with open(STATE.with_suffix(".lock"), "a") as lock:
         try:
@@ -140,7 +135,6 @@ def pid_alive(pid):
 
 
 def alive(state):
-    """True when the holder process exists and accepts connections. Busy holders count."""
     if not pid_alive(state.get("pid", 0)):
         return False
     try:
@@ -151,7 +145,6 @@ def alive(state):
 
 
 def request(method, params=None, timeout=15):
-    """Yield every reply line until the holder marks one `done`."""
     state = load_state()
     if state is None:
         raise NotRunning
@@ -160,7 +153,6 @@ def request(method, params=None, timeout=15):
     if not alive(state):
         raise NotRunning
     with socket.create_connection(("127.0.0.1", state["port"]), 5) as sock:
-        # A page that never commits keeps the holder silent for a whole budget, so the read timeout covers it.
         sock.settimeout(timeout)
         message = {"token": state["token"], "owner": session_id(),
                    "method": method, "params": params or {}}
@@ -174,7 +166,6 @@ def request(method, params=None, timeout=15):
 
 
 def echo_log(offset):
-    """Print holder log lines written after `offset`; return the new offset."""
     try:
         with open(LOG, "rb") as file:
             file.seek(offset)
@@ -193,9 +184,7 @@ def start(_args):
         print(f"Holder already running (pid {state['pid']}). Reusing its Chrome socket.")
         return 0
     owner = session_id() or secrets.token_hex(16)
-    # Keep the id available even if Chrome approval times out, so this task can retry.
     print(f"Session: {owner}. Pass --session {owner} on this task's commands.", flush=True)
-    # A stale state file stays so the same task can clean up its previous check tab.
     STATE.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     offset = LOG.stat().st_size if LOG.exists() else 0
     with open(LOG, "ab") as log:
@@ -244,13 +233,11 @@ def invalid(message):
 
 
 def resolve(owner, field):
-    """Output paths resolve from where `live run` runs."""
     if isinstance(owner.get(field), str):
         owner[field] = str(Path(owner[field]).resolve())
 
 
 def inline(step, folder, where):
-    """Replace `expression_file`, resolved from the check file's folder, with its text."""
     if ("expression" in step) == ("expression_file" in step):
         invalid(f"{where}: evaluate needs exactly one of expression and expression_file")
     name = step.pop("expression_file", None)
@@ -305,9 +292,15 @@ def show_progress(event):
         text = head
     elif state == "wait":
         video = event.get("video")
-        text = f"{head}: waiting {event.get('waited')} s" + (f", video at {video} s" if video is not None else "")
+        text = f"{head}: waiting {event.get('waited')} s"
+        if video is not None:
+            text += f", video at {video} s"
+        if event.get("buffering"):
+            text += ", buffering"
     else:
         text = f"{head}: {'ok' if event.get('ok') else 'failed'} in {event.get('seconds')} s"
+        if event.get("detail"):
+            text += f", {event['detail']}"
     print(text, file=sys.stderr, flush=True)
 
 
@@ -344,7 +337,6 @@ def run(args):
 
 
 def extension_id(folder):
-    """Chrome names an unpacked extension after the folder it was loaded from."""
     digest = hashlib.sha256(str(folder).encode()).hexdigest()[:32]
     return "".join(chr(ord("a") + int(char, 16)) for char in digest)
 
@@ -388,7 +380,6 @@ def stop(_args):
     require_owner(state)
     pid = state.get("pid", 0)
     if alive(state):
-        # SIGTERM ends a running check, closes its tab and the Chrome socket, and removes the state file.
         os.kill(pid, signal.SIGTERM)
         for _ in range(40):
             if not pid_alive(pid):
@@ -404,7 +395,10 @@ def stop(_args):
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description="Chrome commands through one DevTools socket to the signed-in Default profile.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("start", help="connect to Chrome once and keep the socket").set_defaults(func=start)
     runner = commands.add_parser(
