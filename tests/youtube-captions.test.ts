@@ -3,7 +3,6 @@ import { parseYoutubeCaptions } from '../src/platforms/youtube/captions';
 import {
   captionAt,
   captionWindow,
-  openingPrefetch,
   timedCaptions,
   translatedCaptions,
   type TimedCaption,
@@ -148,9 +147,9 @@ it('joins ASR fragments, uses word timestamps within a cue and preserves the fin
   expect(captionWindow(timedCaptions(cues), 1.5)).toEqual({
     current: 'We are ready.',
     items: [
-      { text: 'We are ready.', segment: 0, needsSplit: false },
-      { text: 'Are you?', segment: 0, needsSplit: false },
-      { text: 'Let’s go', segment: 0, needsSplit: false },
+      { text: 'We are ready.', segment: 0, needsSplit: false, batch: 0 },
+      { text: 'Are you?', segment: 0, needsSplit: false, batch: 0 },
+      { text: 'Let’s go', segment: 0, needsSplit: false, batch: 0 },
     ],
   });
   expect(captionWindow(timedCaptions(cues), 2).current).toBe('Are you?');
@@ -338,7 +337,7 @@ it('ignores malformed and non-text events while retaining valid captions', () =>
   ).toEqual([{ startTime: 0, endTime: 1, text: 'Valid.' }]);
 });
 
-it('covers the rest of the current segment and the following segment, however far apart', () => {
+it('covers the next fifteen sentences from the anchor and packs them into batches of five', () => {
   const cues = Array.from({ length: 30 }, (_, index) => ({
     startTime: index * 10,
     endTime: index * 10 + 8,
@@ -346,53 +345,39 @@ it('covers the rest of the current segment and the following segment, however fa
   }));
   const captions = timedCaptions(cues);
   const texts = (from: number, to: number) => cues.slice(from, to).map((cue) => cue.text);
-  expect(captionWindow(captions, 0).items.map((item) => item.text)).toEqual(texts(0, 10));
+  const packed = (from: number, to: number) =>
+    texts(from, to).map((text, offset) => ({
+      text,
+      segment: Math.floor((from + offset) / 5),
+      needsSplit: false,
+      batch: Math.floor(offset / 5),
+    }));
+  expect(captionWindow(captions, 0).items).toEqual(packed(0, 15));
   expect(captionWindow(captions, 95)).toEqual({
     current: 'Cue 10',
-    items: texts(9, 15).map((text, index) => ({
-      text,
-      segment: [1, 2, 2, 2, 2, 2][index] ?? 0,
-      needsSplit: false,
-    })),
+    items: packed(9, 24),
   });
-  expect(captionWindow(captions, 105).items.map((item) => item.text)).toEqual(texts(10, 20));
-  expect(captionWindow(captions, 165).items.map((item) => item.text)).toEqual(texts(16, 25));
-  expect(captionWindow(captions, 205).items.map((item) => item.text)).toEqual(texts(20, 30));
-  expect(captionWindow(captions, 9999)).toEqual({ current: '', items: [] });
-});
-
-it('starts an opening from the sentence at the anchor, with two single requests and the next five together', () => {
-  const cues = Array.from({ length: 12 }, (_, index) => ({
-    startTime: index * 10,
-    endTime: index * 10 + 8,
-    text: `Cue ${index + 1}`,
-  }));
-  const captions = timedCaptions(cues);
-  const mark = (text: string, segment: number, solo = false, batch?: number) => ({
-    text,
-    segment,
-    needsSplit: false,
-    ...(solo ? { solo: true } : {}),
-    ...(batch !== undefined ? { batch } : {}),
-  });
-  expect(openingPrefetch(captions, 1).map(({ text }) => text)).toEqual(
-    cues.slice(0, 10).map((cue) => cue.text),
-  );
-  expect(
-    openingPrefetch(captions, 1)
-      .slice(0, 2)
-      .every((item) => item.solo),
-  ).toBe(true);
-  expect(openingPrefetch(captions, 41)).toEqual([
-    mark('Cue 5', 0, true),
-    mark('Cue 6', 1, true),
-    mark('Cue 7', 1, false, 0),
-    mark('Cue 8', 1, false, 0),
-    mark('Cue 9', 1, false, 0),
-    mark('Cue 10', 1, false, 0),
-    mark('Cue 11', 2, false, 0),
+  expect(captionWindow(captions, 105).items).toEqual(packed(10, 25));
+  expect(captionWindow(captions, 165).items).toEqual(packed(16, 30));
+  expect(captionWindow(captions, 205).items).toEqual(packed(20, 30));
+  expect(captionWindow(captions, 41).items.map((item) => [item.text, item.batch])).toEqual([
+    ['Cue 5', 0],
+    ['Cue 6', 0],
+    ['Cue 7', 0],
+    ['Cue 8', 0],
+    ['Cue 9', 0],
+    ['Cue 10', 1],
+    ['Cue 11', 1],
+    ['Cue 12', 1],
+    ['Cue 13', 1],
+    ['Cue 14', 1],
+    ['Cue 15', 2],
+    ['Cue 16', 2],
+    ['Cue 17', 2],
+    ['Cue 18', 2],
+    ['Cue 19', 2],
   ]);
-  expect(openingPrefetch(captions, 9999)).toEqual([]);
+  expect(captionWindow(captions, 9999)).toEqual({ current: '', items: [] });
 });
 
 it('flags a long cue shown on its own for a Provider split, but not overlapping cues joined into one line', () => {
@@ -411,10 +396,10 @@ it('flags a long cue shown on its own for a Provider split, but not overlapping 
     [long, true],
   ]);
   expect(captionWindow(captions, 0).items).toEqual([
-    { text: first, segment: 0, needsSplit: false },
-    { text: `${first}\n${second}`, segment: 0, needsSplit: false },
-    { text: second, segment: 0, needsSplit: false },
-    { text: long, segment: 0, needsSplit: true },
+    { text: first, segment: 0, needsSplit: false, batch: 0 },
+    { text: `${first}\n${second}`, segment: 0, needsSplit: false, batch: 0 },
+    { text: second, segment: 0, needsSplit: false, batch: 0 },
+    { text: long, segment: 0, needsSplit: true, batch: 0 },
   ]);
 });
 
@@ -446,6 +431,9 @@ it('puts five whole sentences in each segment, however long', () => {
   expect(captions.map((caption) => caption.segment)).toEqual([0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 2, 2]);
   expect(captions[8]).toMatchObject({ text: long, needsSplit: true });
   expect(captionWindow(captions, 0).items.map((item) => item.segment)).toEqual([
-    0, 0, 0, 0, 0, 1, 1, 1, 1, 1,
+    0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 2, 2,
+  ]);
+  expect(captionWindow(captions, 0).items.map((item) => item.batch)).toEqual([
+    0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 2, 2,
   ]);
 });

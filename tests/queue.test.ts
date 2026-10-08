@@ -417,34 +417,24 @@ it('finishes sent requests while paused and does not send the rest until playbac
   expect(batches()[3]).toEqual(block(3));
 });
 
-it('sends an opening as two captions, then five, before the rest of the window', async () => {
-  const { fetch, requests, batches } = pendingProvider();
+it('sends an anchor window as three full batches even when timeline segments split them', () => {
+  const { requests, batches } = pendingProvider();
   const queue = new TranslationQueue();
-  const cues = Array.from({ length: 10 }, (_, index) => `Cue ${index + 1}`);
-  queue.prefetch(
-    'tab',
-    settings,
-    cues.map((text, index) => ({
+  const cues = Array.from({ length: 20 }, (_, index) => `Cue ${index + 1}`);
+  const pack = (from: number, count: number) =>
+    cues.slice(from, from + count).map((text, offset) => ({
       text,
-      segment: Math.floor(index / translationBatchLimit),
+      segment: Math.floor((from + offset + 3) / translationBatchLimit),
       needsSplit: false,
-      ...(index < 2 ? { solo: true } : index < 7 ? { batch: 0 } : {}),
-    })),
-  );
-  expect(batches()).toEqual([['Cue 1'], ['Cue 2'], ['Cue 3', 'Cue 4', 'Cue 5', 'Cue 6', 'Cue 7']]);
+      batch: Math.floor((from + offset) / translationBatchLimit),
+    }));
+  queue.prefetch('tab', settings, pack(0, 15));
+  expect(batches()).toEqual([cues.slice(0, 5), cues.slice(5, 10), cues.slice(10, 15)]);
   expect(fetch).toHaveBeenCalledTimes(translationSendsPerSecond);
-  queue.prefetch(
-    'tab',
-    settings,
-    cues.map((text, index) => ({
-      text,
-      segment: Math.floor(index / translationBatchLimit),
-      needsSplit: false,
-    })),
-  );
-  expect(requests.slice(0, 3).every((request) => !request.signal.aborted)).toBe(true);
-  await vi.advanceTimersByTimeAsync(1000);
-  expect(batches()[3]).toEqual(['Cue 8', 'Cue 9', 'Cue 10']);
+  queue.prefetch('tab', settings, pack(5, 15));
+  expect(requests[0].signal.aborted).toBe(true);
+  expect(requests.slice(1, 3).every((request) => !request.signal.aborted)).toBe(true);
+  expect(batches()[3]).toEqual(cues.slice(15, 20));
 });
 
 it('sends at most three requests each second', async () => {

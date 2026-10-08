@@ -1,9 +1,4 @@
-import {
-  openingBatchCount,
-  openingSoloCount,
-  prefetchSegmentCount,
-  translationBatchLimit,
-} from '../shared/limits';
+import { prefetchBatchCount, translationBatchLimit } from '../shared/limits';
 import { needsSubtitleSegmentation } from '../shared/subtitle-segmentation';
 import type { PrefetchItem, TranslationPart } from '../shared/caption-translation';
 import type { TimedCue } from './cues';
@@ -103,16 +98,17 @@ export function captionAt(cues: readonly TimedCue[], time: number): string {
 export function captionWindow(
   captions: readonly TimedCaption[],
   time: number,
+  origin = -1,
 ): { current: string; items: readonly PrefetchItem[] } {
   const first = captions.findIndex((caption) => caption.endTime > time);
-  let end = first;
-  if (first >= 0)
-    while (
-      end < captions.length &&
-      captions[end].segment < captions[first].segment + prefetchSegmentCount
-    )
-      end++;
-  const remaining = first < 0 ? [] : captions.slice(first, end);
+  if (first < 0) return { current: '', items: [] };
+  const originIndex = origin < 0 || origin > first ? first : origin;
+  const batchAtPlayhead = Math.floor((first - originIndex) / translationBatchLimit);
+  const end = Math.min(
+    captions.length,
+    originIndex + (batchAtPlayhead + prefetchBatchCount) * translationBatchLimit,
+  );
+  const remaining = captions.slice(first, end);
   const boundaries = [...new Set(remaining.flatMap((cue) => [cue.startTime, cue.endTime]))]
     .filter((at) => at > time)
     .sort((a, b) => a - b);
@@ -122,32 +118,13 @@ export function captionWindow(
     const text = joinedText(active);
     const split = active.length === 1 && active[0].needsSplit === true;
     if (!text || items.some((item) => item.text === text && item.needsSplit === split)) continue;
-    items.push({ text, segment: active[0].segment, needsSplit: split });
+    const sentenceIndex = captions.indexOf(active[0]);
+    items.push({
+      text,
+      segment: active[0].segment,
+      needsSplit: split,
+      batch: Math.floor((sentenceIndex - originIndex) / translationBatchLimit),
+    });
   }
   return { current: captionAt(remaining, time), items };
-}
-
-export function openingPrefetch(
-  captions: readonly TimedCaption[],
-  time: number,
-): readonly PrefetchItem[] {
-  const first = captions.findIndex((caption) => caption.endTime > time);
-  if (first < 0) return [];
-  let segmentEnd = first;
-  while (
-    segmentEnd < captions.length &&
-    captions[segmentEnd].segment < captions[first].segment + prefetchSegmentCount
-  )
-    segmentEnd++;
-  const burstEnd = Math.min(captions.length, first + openingSoloCount + openingBatchCount);
-  return captions.slice(first, Math.max(segmentEnd, burstEnd)).map((caption, index) => ({
-    text: caption.text,
-    segment: caption.segment,
-    needsSplit: caption.needsSplit,
-    ...(index < openingSoloCount
-      ? { solo: true }
-      : index < openingSoloCount + openingBatchCount
-        ? { batch: 0 }
-        : {}),
-  }));
 }
