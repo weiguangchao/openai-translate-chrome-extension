@@ -192,7 +192,7 @@ afterEach(async () => {
   Reflect.deleteProperty(document, 'fullscreenElement');
 });
 
-it('prefetches three batches from the selected HLS subtitle playlist before any cue is shown', async () => {
+it('prefetches four batches from the selected HLS subtitle playlist before any cue is shown', async () => {
   const { player, video } = addPlayer('a', { top: 0, bottom: 360 }, false);
   controller = new CaptionController(createXPlatform, publicSettings(settings));
   await vi.advanceTimersByTimeAsync(0);
@@ -203,9 +203,12 @@ it('prefetches three batches from the selected HLS subtitle playlist before any 
         `${media.replace('/amplify_video', '/subtitles/amplify_video')}/a/EN/${part}-segment.vtt`,
     ),
   );
-  const batch = (from: number) => Array.from({ length: 5 }, (_, i) => `Cue ${from + i}`);
-  const batches = [1, 6, 11, 16, 21, 26].map((from) => batch(from));
+  const batch = (from: number) =>
+    Array.from({ length: Math.min(4, 31 - from) }, (_, index) => `Cue ${from + index}`);
+  const batches = [1, 5, 9, 13, 17, 21, 25, 29].map((from) => batch(from));
   expect(requested.map((request) => request.texts)).toEqual(batches.slice(0, 3));
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(requested.map((request) => request.texts)).toEqual(batches.slice(0, 4));
   expect(player.querySelectorAll('[data-subline-overlay]')).toHaveLength(1);
   await playTo(video, 3);
   expect(lines()?.[0].textContent).toBe('Cue 1');
@@ -213,7 +216,7 @@ it('prefetches three batches from the selected HLS subtitle playlist before any 
   expect(video.classList.contains('subline-native')).toBe(true);
   await playTo(video, 33);
   expect(lines()?.[1].textContent).toBe('译文 Cue 11');
-  expect(requested.map((request) => request.texts)).toEqual(batches.slice(0, 5));
+  expect(requested.map((request) => request.texts)).toEqual(batches.slice(0, 6));
 });
 
 it('stops prefetch and clears the overlay when X captions are turned off', async () => {
