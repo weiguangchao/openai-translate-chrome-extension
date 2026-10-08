@@ -229,9 +229,9 @@ it('translates and displays complete ASR sentences across rolling events', async
         text: 'This field behind me will become a city.',
         segment: 0,
         needsSplit: false,
-        solo: true,
+        batch: 0,
       },
-      { text: 'Let’s build it.', segment: 0, needsSplit: false, solo: true },
+      { text: 'Let’s build it.', segment: 0, needsSplit: false, batch: 0 },
     ],
   });
   await playTo(video, 1.2);
@@ -313,8 +313,8 @@ it('loads the selected YouTube track before playback, aligns rolling captions, a
   expect(sendMessage).toHaveBeenCalledWith({
     type: 'prefetch',
     items: [
-      { text: 'First phrase.', segment: 0, needsSplit: false },
-      { text: 'Second phrase.', segment: 0, needsSplit: false },
+      { text: 'First phrase.', segment: 0, needsSplit: false, batch: 0 },
+      { text: 'Second phrase.', segment: 0, needsSplit: false, batch: 0 },
     ],
   });
   expect(lines()[1].hidden).toBe(true);
@@ -499,8 +499,8 @@ it('translates authored English sentences even when authored, automatic and brow
   expect(sendMessage).toHaveBeenCalledWith({
     type: 'prefetch',
     items: [
-      { text: 'This field behind me will become a city.', segment: 0, needsSplit: false },
-      { text: 'Go.', segment: 0, needsSplit: false },
+      { text: 'This field behind me will become a city.', segment: 0, needsSplit: false, batch: 0 },
+      { text: 'Go.', segment: 0, needsSplit: false, batch: 0 },
     ],
   });
   expect(fetch.mock.calls.map(([url]) => new URL(url).searchParams.get('track'))).toEqual(['.en']);
@@ -803,11 +803,7 @@ it('sends complete English sentences to the Provider and displays its translatio
   expect(requests).toEqual([
     {
       url: 'https://provider.example/v1/chat/completions',
-      texts: ['This field behind me will become a city.'],
-    },
-    {
-      url: 'https://provider.example/v1/chat/completions',
-      texts: ['Let’s build it.'],
+      texts: ['This field behind me will become a city.', 'Let’s build it.'],
     },
   ]);
   expect(transcripts).toEqual(['en']);
@@ -826,8 +822,7 @@ it('sends complete English sentences to the Provider and displays its translatio
     '让我们建造它。',
   ]);
   expect(requests.map((request) => request.texts)).toEqual([
-    ['This field behind me will become a city.'],
-    ['Let’s build it.'],
+    ['This field behind me will become a city.', 'Let’s build it.'],
   ]);
   queue.reset();
 });

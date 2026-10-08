@@ -1,5 +1,4 @@
 export const translationBatchLimit = 5;
-export const prefetchSegmentCount = 2;
-export const prefetchWindowLimit = translationBatchLimit * prefetchSegmentCount;
-export const openingSoloCount = 2;
-export const openingBatchCount = translationBatchLimit;
+export const prefetchBatchCount = 3;
+export const prefetchSentenceCount = translationBatchLimit * prefetchBatchCount;
+export const prefetchWindowLimit = 1 + 2 * (prefetchSentenceCount + 1);

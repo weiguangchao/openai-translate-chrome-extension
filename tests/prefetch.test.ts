@@ -113,7 +113,7 @@ it.each([true, false])(
     expect(targetTrack.mode).toBe('disabled');
     expect(sourceTrack.mode).toBe('showing');
     if (configured) {
-      expect(requested).toEqual([['First cue'], ['Second cue'], ['Third cue', 'After seeking']]);
+      expect(requested).toEqual([['First cue', 'Second cue', 'Third cue', 'After seeking']]);
       await finish({ 'First cue': 'Provider 译文' });
       expect(translated()?.textContent).toBe('Provider 译文');
     } else {
@@ -187,12 +187,13 @@ it('renders a late split at the current time, follows estimated boundaries, and 
   });
   controller = new CaptionController(createHboPlatform, publicSettings(saved));
   await advance(8);
-  expect(requested).toEqual([[longCaption], ['After.']]);
+  expect(requested).toEqual([[longCaption, 'After.']]);
   expect(translated()?.textContent).toBe('翻译中');
   expect(original()?.hidden).toBe(true);
   expect(original()?.textContent).toBe('');
-  pending[0].resolve(structuredReply([longResult()]));
-  pending[1].resolve(structuredReply([{ id: 0, parts: [{ translation: '之后。' }] }]));
+  pending[0].resolve(
+    structuredReply([longResult(), { id: 1, parts: [{ translation: '之后。' }] }]),
+  );
   await vi.advanceTimersByTimeAsync(0);
   const sourceText = () =>
     document.querySelector('[data-subline-overlay]')?.shadowRoot?.querySelector('.original')
@@ -213,7 +214,7 @@ it('renders a late split at the current time, follows estimated boundaries, and 
   await vi.advanceTimersByTimeAsync(500);
   expect(sourceText()).toBe(longCaptionParts[0]);
   expect(translated()?.textContent).toBe(longTranslations[0]);
-  expect(requested).toEqual([[longCaption], ['After.']]);
+  expect(requested).toEqual([[longCaption, 'After.']]);
 });
 
 it('shows the whole long sentence for its full duration when the Provider split does not match the source', async () => {
@@ -242,9 +243,9 @@ it('shows the whole long sentence for its full duration when the Provider split 
           translation: longTranslations[index],
         })),
       },
+      { id: 1, parts: [{ translation: '之后。' }] },
     ]),
   );
-  pending[1].resolve(structuredReply([{ id: 0, parts: [{ translation: '之后。' }] }]));
   await vi.advanceTimersByTimeAsync(0);
   expect(original()?.textContent).toBe(longCaption);
   expect(translated()?.textContent).toBe(longTranslations.join(''));
@@ -253,7 +254,7 @@ it('shows the whole long sentence for its full duration when the Provider split 
   expect(translated()?.textContent).toBe(longTranslations.join(''));
   await advance(15);
   expect(translated()?.textContent).toBe('之后。');
-  expect(requested).toEqual([[longCaption], ['After.']]);
+  expect(requested).toEqual([[longCaption, 'After.']]);
 });
 
 it('shows the whole long sentence with the error when its translation fails', async () => {
@@ -338,11 +339,9 @@ it.each(['playing', 'paused', 'seeking'])(
 it('preloads in the background and queries it at caption boundaries without another provider request', async () => {
   controller = new CaptionController(createHboPlatform, publicSettings(saved));
   await vi.advanceTimersByTimeAsync(0);
-  const opening = [['First cue'], ['Second cue'], ['Third cue', 'After seeking']];
+  const opening = [['First cue', 'Second cue', 'Third cue', 'After seeking']];
   expect(requested).toEqual(opening);
-  await finish({ 'First cue': '第一句' });
-  await finish({ 'Second cue': '第二句' });
-  await finish({ 'Third cue': '第三句' });
+  await finish({ 'First cue': '第一句', 'Second cue': '第二句', 'Third cue': '第三句' });
   expect(translated()?.hidden).toBe(true);
   for (const [time, text] of [
     [2, '第一句'],
@@ -382,7 +381,8 @@ it('queues the current and next segment on open, waits out a scrub, and requests
   });
   controller = new CaptionController(createHboPlatform, publicSettings(saved));
   await vi.advanceTimersByTimeAsync(0);
-  const opening = [['Cue 1'], ['Cue 2'], ['Cue 3', 'Cue 4', 'Cue 5', 'Cue 6', 'Cue 7']];
+  const block = (from: number) => dense.slice(from, from + 5).map((cue) => cue.text);
+  const opening = [block(0), block(5), block(10)];
   expect(requested).toEqual(opening);
   Object.defineProperty(video, 'seeking', { configurable: true, value: true });
   video.currentTime = 40;
@@ -423,7 +423,8 @@ it('shows a timeout like the loading line, skips that batch, and translates the 
   });
   controller = new CaptionController(createHboPlatform, publicSettings(saved));
   await vi.advanceTimersByTimeAsync(0);
-  expect(requested).toEqual([['Cue 1'], ['Cue 2'], dense.slice(2, 7).map((cue) => cue.text)]);
+  const block = (from: number) => dense.slice(from, from + 5).map((cue) => cue.text);
+  expect(requested).toEqual([block(0), block(5), block(10)]);
   await advance(3);
   expect(translated()?.textContent).toBe('翻译中');
   const timeout = new Error('The operation was aborted due to timeout');
@@ -443,16 +444,10 @@ it('shows a timeout like the loading line, skips that batch, and translates the 
   expect(translated()?.textContent).toBe('接口调用超时');
   await advance(12);
   expect(translated()?.textContent).toBe('第六句');
-  expect(requested).toEqual([
-    ['Cue 1'],
-    ['Cue 2'],
-    dense.slice(2, 7).map((cue) => cue.text),
-    dense.slice(7, 10).map((cue) => cue.text),
-    dense.slice(10, 15).map((cue) => cue.text),
-  ]);
+  expect(requested).toEqual([block(0), block(5), block(10), block(15)]);
 });
 
-it('after a jump settles, sends the landing sentence, the next sentence, and the five after them', async () => {
+it('after a jump settles, sends the next fifteen sentences as full batches', async () => {
   const dense = Array.from({ length: 30 }, (_, index) => ({
     startTime: 2 + index * 2,
     endTime: 4 + index * 2,
@@ -470,13 +465,10 @@ it('after a jump settles, sends the landing sentence, the next sentence, and the
   expect(requested).toHaveLength(started);
   expect(pending.slice(0, started).every((request) => request.signal.aborted)).toBe(true);
   await vi.advanceTimersByTimeAsync(200);
-  expect(requested.slice(started, started + 3)).toEqual([
-    ['Cue 21'],
-    ['Cue 22'],
-    ['Cue 23', 'Cue 24', 'Cue 25', 'Cue 26', 'Cue 27'],
-  ]);
+  const block = (from: number) => dense.slice(from, from + 5).map((cue) => cue.text);
+  expect(requested.slice(started)).toEqual([block(20), block(25)]);
   await vi.advanceTimersByTimeAsync(1000);
-  expect(requested.at(-1)).toEqual(['Cue 28', 'Cue 29', 'Cue 30']);
+  expect(requested.slice(started)).toEqual([block(20), block(25)]);
   expect(pending[started].signal.aborted).toBe(false);
 });
 
@@ -497,11 +489,11 @@ it('starts translation one second ahead on first load and after seeking', async 
       ?.shadowRoot?.querySelectorAll<HTMLElement>('.line')[0];
   controller = new CaptionController(createHboPlatform, publicSettings(saved));
   await vi.advanceTimersByTimeAsync(0);
-  expect(requested).toEqual([['Stay'], ['Next'], ['Seek tail', 'After']]);
+  expect(requested).toEqual([['Stay', 'Next', 'Seek tail', 'After']]);
   expect(original()?.hidden).toBe(true);
   expect(translated()?.hidden).toBe(true);
   await advance(3.2);
-  expect(requested).toEqual([['Stay'], ['Next'], ['Seek tail', 'After']]);
+  expect(requested).toEqual([['Stay', 'Next', 'Seek tail', 'After']]);
   expect(pending[0].signal.aborted).toBe(false);
   expect(original()?.hidden).toBe(true);
   expect(translated()?.textContent).toBe('翻译中');
@@ -512,9 +504,9 @@ it('starts translation one second ahead on first load and after seeking', async 
   Object.defineProperty(video, 'seeking', { value: false });
   video.dispatchEvent(new Event('seeked'));
   await vi.advanceTimersByTimeAsync(0);
-  expect(requested).toHaveLength(3);
+  expect(requested).toHaveLength(1);
   await vi.advanceTimersByTimeAsync(400);
-  expect(requested.slice(3)).toEqual([['After']]);
+  expect(requested.slice(1)).toEqual([['After']]);
   expect(original()?.hidden).toBe(true);
   expect(translated()?.hidden).toBe(true);
   expect(pending[0].signal.aborted).toBe(true);
@@ -536,15 +528,11 @@ it('finishes in-flight prefetch while paused and does not send more until playba
   };
   controller = new CaptionController(createHboPlatform, publicSettings(saved));
   await advance(2);
-  const opening = [
-    ['Cue 1'],
-    ['Cue 2'],
-    dense.slice(2, 7).map((cue) => cue.text),
-    dense.slice(7, 10).map((cue) => cue.text),
-  ];
+  const block = (from: number) => dense.slice(from, from + 5).map((cue) => cue.text);
+  const opening = [block(0), block(5), block(10)];
   expect(requested).toEqual(opening);
   await setPaused(true);
-  expect(pending.map((request) => request.signal.aborted)).toEqual([false, false, false, false]);
+  expect(pending.map((request) => request.signal.aborted)).toEqual([false, false, false]);
   await vi.advanceTimersByTimeAsync(60000);
   expect(requested).toHaveLength(opening.length);
   await finish({ 'Cue 1': '第一句' });
@@ -556,7 +544,7 @@ it('finishes in-flight prefetch while paused and does not send more until playba
   await vi.advanceTimersByTimeAsync(60000);
   expect(requested).toHaveLength(opening.length);
   await setPaused(false);
-  expect(requested.at(-1)).toEqual(['Cue 8', 'Cue 9', 'Cue 10', 'Cue 11', 'Cue 12']);
+  expect(requested.at(-1)).toEqual(block(15));
   await setPaused(true);
   const sent = requested.length;
   await vi.advanceTimersByTimeAsync(60000);
@@ -575,23 +563,20 @@ it('queues the next segment with the opening window and preloads the following s
   });
   controller = new CaptionController(createHboPlatform, publicSettings(saved));
   await vi.advanceTimersByTimeAsync(0);
-  expect(requested).toEqual([['Cue 1'], ['Cue 2'], dense.slice(2, 7).map((cue) => cue.text)]);
+  const block = (from: number) => dense.slice(from, from + 5).map((cue) => cue.text);
+  const opening = [block(0), block(5), block(10)];
+  expect(requested).toEqual(opening);
   expect(pending.map((request) => request.signal.aborted)).toEqual([false, false, false]);
   for (let time = 1; time < 12; time++) {
     video.currentTime = time;
     video.dispatchEvent(new Event('timeupdate'));
     await vi.advanceTimersByTimeAsync(0);
   }
-  expect(requested).toEqual([
-    ['Cue 1'],
-    ['Cue 2'],
-    dense.slice(2, 7).map((cue) => cue.text),
-    dense.slice(7, 10).map((cue) => cue.text),
-  ]);
+  expect(requested).toEqual(opening);
   video.currentTime = 12;
   video.dispatchEvent(new Event('timeupdate'));
   await vi.advanceTimersByTimeAsync(1000);
-  expect(requested.at(-1)).toEqual(dense.slice(10, 15).map((cue) => cue.text));
+  expect(requested.at(-1)).toEqual(block(15));
   expect(pending[2].signal.aborted).toBe(false);
 });
 
@@ -618,8 +603,7 @@ it('continues using the provider when a native target track appears', async () =
   Object.defineProperty(video, 'textTracks', { value: tracks });
   controller = new CaptionController(createHboPlatform, publicSettings(saved));
   await advance(2);
-  await finish({ 'First cue': '模型生成的字幕' });
-  await finish({ 'Second cue': 'Second cue 译文' });
+  await finish({ 'First cue': '模型生成的字幕', 'Second cue': 'Second cue 译文' });
   const target = {
     mode: 'disabled',
     kind: 'subtitles',
@@ -634,7 +618,7 @@ it('continues using the provider when a native target track appears', async () =
   expect(target.mode).toBe('disabled');
   await advance(4);
   expect(translated()?.textContent).toBe('Second cue 译文');
-  expect(requested).toHaveLength(3);
+  expect(requested).toHaveLength(1);
 });
 
 it('queries the background again on a repeated caption while keeping the displayed caption between ticks', async () => {
@@ -650,7 +634,7 @@ it('queries the background again on a repeated caption while keeping the display
   await advance(2);
   expect(translated()?.textContent).toBe('第一句');
   expect(messages.filter((type) => type === 'translate').length).toBeGreaterThan(firstMessages + 1);
-  expect(requested).toHaveLength(3);
+  expect(requested).toHaveLength(1);
 });
 
 it('translates overlapping sentences separately, and has the Provider split a long cue of its own', async () => {
@@ -680,7 +664,7 @@ it('translates overlapping sentences separately, and has the Provider split a lo
   ];
   controller = new CaptionController(createHboPlatform, publicSettings(saved));
   await vi.advanceTimersByTimeAsync(0);
-  expect(requested).toEqual([[first], [second], [long]]);
+  expect(requested).toEqual([[first, joined, second, long]]);
   const delivered = new Set<(typeof pending)[number]>();
   const deliver = async () => {
     for (const request of [...pending]) {
@@ -741,7 +725,7 @@ it('counts a long sentence as one caption when filling a segment', async () => {
   });
   controller = new CaptionController(createHboPlatform, publicSettings(saved));
   await vi.advanceTimersByTimeAsync(0);
-  expect(requested).toEqual([['Cue 1'], ['Cue 2'], ['Cue 3', long, 'After', 'Later']]);
+  expect(requested).toEqual([['Cue 1', 'Cue 2', 'Cue 3', long, 'After'], ['Later']]);
 });
 
 it('shows the segment translation only after the JSON response is complete', async () => {
@@ -766,17 +750,22 @@ it('shows the segment translation only after the JSON response is complete', asy
   );
   controller = new CaptionController(createHboPlatform, publicSettings(saved));
   await vi.advanceTimersByTimeAsync(0);
-  expect(requested).toEqual([['Opening line'], ['Following line']]);
+  expect(requested).toEqual([['Opening line', 'Following line']]);
   expect(translated()?.hidden).toBe(true);
   await vi.advanceTimersByTimeAsync(300);
   expect(translated()?.textContent).toBe('翻译中');
   resolvers
     .find((resolver) => resolver.texts.includes('Opening line'))!
-    .resolve(providerReply(['Opening line'], () => '开场字幕'));
+    .resolve(
+      providerReply(
+        ['Opening line', 'Following line'],
+        (text) => ({ 'Opening line': '开场字幕', 'Following line': '下一句' })[text] ?? text,
+      ),
+    );
   for (let attempt = 0; attempt < 8; attempt++) await vi.advanceTimersByTimeAsync(0);
   expect(translated()?.textContent).toBe('开场字幕');
   expect(translated()?.hidden).toBe(false);
-  expect(requested).toEqual([['Opening line'], ['Following line']]);
+  expect(requested).toEqual([['Opening line', 'Following line']]);
 });
 
 it('reuses the cues read from a track until the track changes', () => {

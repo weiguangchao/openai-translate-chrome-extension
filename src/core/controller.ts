@@ -6,7 +6,7 @@ import { selectedTrack } from './native';
 import { SubtitleOverlay } from './overlay';
 import type { CaptionSource, LiveCaption, Platform, PlatformFactory } from './platform';
 import { PlaybackGate } from './playback';
-import { captionWindow, openingPrefetch, timedCaptions } from './timeline';
+import { captionWindow, timedCaptions } from './timeline';
 import { TraceReporter, type TraceCaption } from './trace';
 import { CaptionTranslator } from './translator';
 
@@ -62,6 +62,7 @@ export class CaptionController {
   private mode: SourceMode | null = null;
   private source = '';
   private nativeTrack: TextTrack | undefined;
+  private batchOrigin = 0;
   private destroyed = false;
   private onMediaChange = (event: Event) => {
     if (event.type === 'seeking' || event.type === 'seeked') this.gate.hold();
@@ -131,6 +132,7 @@ export class CaptionController {
     this.nativeTrack = undefined;
     this.translator.reset();
     this.gate.reset();
+    this.batchOrigin = 0;
   }
 
   private mount(video: HTMLVideoElement, player: HTMLElement): void {
@@ -218,20 +220,19 @@ export class CaptionController {
     const usesModel = source.mode === 'model';
     const scheduling = Boolean(captions) && usesModel && !video.paused && !this.gate.settling;
     const translationTime = scheduling ? this.gate.lead(time, true) : time;
-    const current = captions ? captionWindow(captions, time) : null;
+    if (scheduling && captions && this.gate.consumeOpening()) {
+      const anchor = captions.findIndex((caption) => caption.endTime > translationTime);
+      if (anchor >= 0) this.batchOrigin = anchor;
+    }
+    const current = captions ? captionWindow(captions, time, this.batchOrigin) : null;
     const upcoming =
-      captions && translationTime !== time ? captionWindow(captions, translationTime) : current;
+      captions && translationTime !== time
+        ? captionWindow(captions, translationTime, this.batchOrigin)
+        : current;
     const caption = currentCaption(source, current?.current ?? '');
     this.translator.notePlayback(video.paused);
-    const opening = scheduling && usesModel && captions && this.gate.consumeOpening();
     const items =
-      usesModel && !video.paused
-        ? this.gate.settling
-          ? []
-          : opening
-            ? openingPrefetch(captions, translationTime)
-            : (upcoming?.items ?? [])
-        : [];
+      usesModel && !video.paused ? (this.gate.settling ? [] : (upcoming?.items ?? [])) : [];
     if (!video.paused) this.translator.prefetch(items);
     this.overlay.hide(caption.layers);
     video.classList.toggle('subline-native', caption.nativeTrack);

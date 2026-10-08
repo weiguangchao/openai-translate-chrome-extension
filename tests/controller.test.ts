@@ -87,7 +87,7 @@ it('drives any platform through the waiting, live and timeline caption sources',
   expect(layer.hasAttribute('data-subline-caption')).toBe(false);
   expect(sendMessage).toHaveBeenCalledWith({
     type: 'prefetch',
-    items: [{ text: 'Timed cue.', segment: 0, needsSplit: false }],
+    items: [{ text: 'Timed cue.', segment: 0, needsSplit: false, batch: 0 }],
   });
 
   controller.destroy();

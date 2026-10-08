@@ -35,9 +35,11 @@ const errorsShown = async (p: Player) =>
   );
 
 const openingInputs = [
-  [{ id: 0, text: source }],
-  [{ id: 0, text: nextSource }],
-  [{ id: 0, text: gardenSource }],
+  [
+    { id: 0, text: source },
+    { id: 1, text: nextSource },
+    { id: 2, text: gardenSource },
+  ],
 ];
 
 async function expectOpeningPosts(p: Player) {
@@ -122,8 +124,6 @@ for (const platform of ['youtube', 'hbo', 'x'] as const) {
         await expectOpeningPosts(p);
         await p.pause();
         await p.release(0);
-        await p.release(1);
-        await p.release(2);
         await p.pair(source, translation);
         await p.seek(35);
         await p.pair(nextSource, nextTranslation);
@@ -153,14 +153,12 @@ for (const platform of ['youtube', 'hbo', 'x'] as const) {
         await p.play();
         await expectOpeningPosts(p);
         await p.page.evaluate(() => window.fixture.switchVideo('second'));
-        await expect.poll(() => p.posts.length).toBe(4);
-        expect(p.posts[3].inputs.map((i) => i.text)).toEqual([nextSource]);
+        await expect.poll(() => p.posts.length).toBe(2);
+        expect(p.posts[1].inputs.map((i) => i.text)).toEqual([nextSource]);
         await expect(p.original).toBeHidden();
-        await p.release(3);
+        await p.release(1);
         await p.pair(nextSource, nextTranslation);
         await p.release(0);
-        await p.release(1);
-        await p.release(2);
         await p.seek(3);
         await p.pair(nextSource, nextTranslation);
         const frames = await p.frames();
@@ -306,7 +304,7 @@ for (const platform of ['youtube', 'hbo', 'x'] as const) {
         expect(retry).toHaveLength(1);
         expect(retry[0].body).not.toHaveProperty('response_format');
         expect(retry[0].inputs).toEqual(rejected[0].inputs);
-        expect(p.posts).toHaveLength(4);
+        expect(p.posts).toHaveLength(2);
       },
       { retry: true },
     );
