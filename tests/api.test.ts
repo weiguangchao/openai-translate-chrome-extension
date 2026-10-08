@@ -97,7 +97,7 @@ describe('OpenAI-compatible provider contract', () => {
       expect(body).not.toHaveProperty('prompt');
       expect(body.stream).toBe(false);
       expect(body.max_tokens).toBe(65536);
-      expect(body.reasoning_effort).toBe('none');
+      expect(body.reasoning_effort).toBe('low');
       expect(init.redirect).toBe('error');
       expect(init.credentials).toBe('omit');
     },
@@ -128,7 +128,7 @@ describe('OpenAI-compatible provider contract', () => {
       expect(body).not.toHaveProperty('prompt');
       expect(body.stream).toBe(false);
       expect(body.max_tokens).toBe(65536);
-      expect(body.reasoning_effort).toBe('none');
+      expect(body.reasoning_effort).toBe('low');
       expect(body.response_format).toEqual({ type: 'json_object' });
     },
   );
@@ -165,7 +165,7 @@ describe('OpenAI-compatible provider contract', () => {
       .fn()
       .mockResolvedValueOnce(
         Response.json(
-          { error: { message: "Unsupported value: 'reasoning_effort' does not support 'none'" } },
+          { error: { message: "Unsupported value: 'reasoning_effort' does not support 'low'" } },
           { status: 400 },
         ),
       )
@@ -183,10 +183,10 @@ describe('OpenAI-compatible provider contract', () => {
         return [body.model, body.reasoning_effort, body.max_tokens, body.stream];
       }),
     ).toEqual([
-      ['non-reasoning-model', 'none', 65536, false],
+      ['non-reasoning-model', 'low', 65536, false],
       ['non-reasoning-model', undefined, 65536, false],
       ['non-reasoning-model', undefined, 65536, false],
-      ['reasoning-model', 'none', 65536, false],
+      ['reasoning-model', 'low', 65536, false],
     ]);
   });
 
@@ -310,7 +310,7 @@ describe('batch replies', () => {
     const body = JSON.parse(fetch.mock.calls[0][1].body);
     expect(body.stream).toBe(false);
     expect(body.max_tokens).toBeGreaterThan(0);
-    expect(body.reasoning_effort).toBe('none');
+    expect(body.reasoning_effort).toBe('low');
     expect(body.response_format).toEqual({ type: 'json_object' });
   });
 
@@ -486,7 +486,7 @@ describe('batch replies', () => {
       undefined,
       undefined,
     ]);
-    expect(bodies.map((body) => body.reasoning_effort)).toEqual(['none', 'none', 'none']);
+    expect(bodies.map((body) => body.reasoning_effort)).toEqual(['low', 'low', 'low']);
     expect(bodies[0].max_tokens).toBeGreaterThan(0);
     expect(bodies[1].max_tokens).toBe(bodies[0].max_tokens);
     expect(bodies[2].max_tokens).toBe(bodies[1].max_tokens);
@@ -513,8 +513,8 @@ describe('batch replies', () => {
     ]);
     const bodies = fetch.mock.calls.map((call) => JSON.parse(call[1].body as string));
     expect(bodies.map((body) => [body.response_format?.type, body.reasoning_effort])).toEqual([
-      ['json_object', 'none'],
-      [undefined, 'none'],
+      ['json_object', 'low'],
+      [undefined, 'low'],
       [undefined, undefined],
       ['json_object', undefined],
       [undefined, undefined],
@@ -539,14 +539,14 @@ describe('batch replies', () => {
         return [body.reasoning_effort, body.max_tokens];
       }),
     ).toEqual([
-      ['none', 65536],
+      ['low', 65536],
       [undefined, 65536],
       [undefined, undefined],
     ]);
     await expect(translate(settings, 'Hi')).resolves.toBe('你好');
     const again = fetch.mock.calls.slice(3).map((call) => JSON.parse(call[1].body as string));
     expect(again.map((body) => [body.reasoning_effort, body.max_tokens])).toEqual([
-      ['none', undefined],
+      ['low', undefined],
       [undefined, undefined],
     ]);
     await expect(translate(settings, 'Hey')).resolves.toBe('你好');
@@ -588,8 +588,8 @@ describe('batch replies', () => {
       undefined,
     ]);
     expect(bodies.map((body) => body.reasoning_effort)).toEqual([
-      'none',
-      'none',
+      'low',
+      'low',
       undefined,
       undefined,
     ]);
