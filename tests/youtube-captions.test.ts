@@ -337,7 +337,7 @@ it('ignores malformed and non-text events while retaining valid captions', () =>
   ).toEqual([{ startTime: 0, endTime: 1, text: 'Valid.' }]);
 });
 
-it('covers the next fifteen sentences from the anchor and packs them into batches of five', () => {
+it('covers the next sixteen sentences from the anchor and packs them into batches of four', () => {
   const cues = Array.from({ length: 30 }, (_, index) => ({
     startTime: index * 10,
     endTime: index * 10 + 8,
@@ -348,16 +348,16 @@ it('covers the next fifteen sentences from the anchor and packs them into batche
   const packed = (from: number, to: number) =>
     texts(from, to).map((text, offset) => ({
       text,
-      segment: Math.floor((from + offset) / 5),
+      segment: Math.floor((from + offset) / 4),
       needsSplit: false,
-      batch: Math.floor(offset / 5),
+      batch: Math.floor(offset / 4),
     }));
-  expect(captionWindow(captions, 0).items).toEqual(packed(0, 15));
+  expect(captionWindow(captions, 0).items).toEqual(packed(0, 16));
   expect(captionWindow(captions, 95)).toEqual({
     current: 'Cue 10',
-    items: packed(9, 24),
+    items: packed(9, 25),
   });
-  expect(captionWindow(captions, 105).items).toEqual(packed(10, 25));
+  expect(captionWindow(captions, 105).items).toEqual(packed(10, 26));
   expect(captionWindow(captions, 165).items).toEqual(packed(16, 30));
   expect(captionWindow(captions, 205).items).toEqual(packed(20, 30));
   expect(captionWindow(captions, 41).items.map((item) => [item.text, item.batch])).toEqual([
@@ -365,17 +365,18 @@ it('covers the next fifteen sentences from the anchor and packs them into batche
     ['Cue 6', 0],
     ['Cue 7', 0],
     ['Cue 8', 0],
-    ['Cue 9', 0],
+    ['Cue 9', 1],
     ['Cue 10', 1],
     ['Cue 11', 1],
     ['Cue 12', 1],
-    ['Cue 13', 1],
-    ['Cue 14', 1],
+    ['Cue 13', 2],
+    ['Cue 14', 2],
     ['Cue 15', 2],
     ['Cue 16', 2],
-    ['Cue 17', 2],
-    ['Cue 18', 2],
-    ['Cue 19', 2],
+    ['Cue 17', 3],
+    ['Cue 18', 3],
+    ['Cue 19', 3],
+    ['Cue 20', 3],
   ]);
   expect(captionWindow(captions, 9999)).toEqual({ current: '', items: [] });
 });
@@ -413,7 +414,7 @@ it('keeps a long cue whole while it overlaps another cue', () => {
   expect(captions.map((caption) => caption.text)).toEqual([long, 'Overlap.']);
 });
 
-it('puts five whole sentences in each segment, however long', () => {
+it('puts four whole sentences in each segment, however long', () => {
   const long = ['a', 'b', 'c'].map((letter) => letter.repeat(60)).join(', ');
   const captions = timedCaptions([
     ...Array.from({ length: 8 }, (_, index) => ({
@@ -428,12 +429,12 @@ it('puts five whole sentences in each segment, however long', () => {
       text: `After ${index + 1}.`,
     })),
   ]);
-  expect(captions.map((caption) => caption.segment)).toEqual([0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 2, 2]);
+  expect(captions.map((caption) => caption.segment)).toEqual([0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2]);
   expect(captions[8]).toMatchObject({ text: long, needsSplit: true });
   expect(captionWindow(captions, 0).items.map((item) => item.segment)).toEqual([
-    0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 2, 2,
+    0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2,
   ]);
   expect(captionWindow(captions, 0).items.map((item) => item.batch)).toEqual([
-    0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 2, 2,
+    0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2,
   ]);
 });
