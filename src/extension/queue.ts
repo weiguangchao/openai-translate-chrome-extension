@@ -3,9 +3,8 @@ import { translationInput, type CaptionTranslation } from '../shared/caption-tra
 import { latencySampleLimit, maxInFlightRequests } from '../shared/limits';
 import {
   planPlayback,
-  predictLatency,
   slackSeconds,
-  type LatencySample,
+  typicalLatency,
   type PlaybackCue,
 } from '../shared/playback-plan';
 import { ProviderTimeoutError } from '../shared/provider-error';
@@ -42,9 +41,15 @@ interface Pack {
   cues: readonly PlaybackCue[];
 }
 
+interface SnapshotCue {
+  key: string;
+  cue: PlaybackCue;
+}
+
 interface Consumer {
   current?: string;
   packs: Pack[];
+  snapshot: readonly SnapshotCue[];
   paused?: boolean;
   held?: boolean;
   time: number;
@@ -58,7 +63,7 @@ export class TranslationQueue {
   private backoffUntil = 0;
   private backoffReason = '';
   private expired = new Set<string>();
-  private samples: LatencySample[] = [];
+  private samples: number[] = [];
   private sendTimer: ReturnType<typeof setTimeout> | undefined;
   private batches = 0;
   private store: TranslationStore | undefined;
@@ -100,7 +105,12 @@ export class TranslationQueue {
     needsSplit = false,
   ): Promise<CaptionTranslation> {
     const key = this.key(settings, text, needsSplit);
-    const state: Consumer = this.consumers.get(consumer) ?? { packs: [], time: 0, rate: 1 };
+    const state: Consumer = this.consumers.get(consumer) ?? {
+      packs: [],
+      snapshot: [],
+      time: 0,
+      rate: 1,
+    };
     state.current = key;
     state.held = false;
     this.consumers.set(consumer, state);
@@ -133,9 +143,22 @@ export class TranslationQueue {
       return Promise.resolve([]);
     }
     const state = this.consumers.get(consumer);
-    const planned = planPlayback({ time, rate, cues, samples: this.samples });
-    const packs: Pack[] = planned.map((request, index) => ({
-      id: `${consumer}:${index}:${request.cues[0].start}:${request.cues[0].text}`,
+    const snapshot = cues.map((cue) => ({
+      key: this.key(settings, cue.text, cue.needsSplit),
+      cue,
+    }));
+    const open = snapshot.filter(
+      ({ key }) =>
+        !this.finished.has(key) && !this.expired.has(key) && !this.jobs.get(key)?.controller,
+    );
+    const planned = planPlayback({
+      time,
+      rate,
+      cues: open.map(({ cue }) => cue),
+      samples: this.samples,
+    });
+    const packs: Pack[] = planned.map((request) => ({
+      id: `${consumer}:${request.cues[0].start}:${request.cues[0].text}`,
       keys: request.cues.map((cue) => this.key(settings, cue.text, cue.needsSplit)),
       cues: request.cues,
     }));
@@ -150,6 +173,7 @@ export class TranslationQueue {
     this.consumers.set(consumer, {
       current,
       packs,
+      snapshot,
       paused: state?.paused,
       time,
       rate,
@@ -169,7 +193,7 @@ export class TranslationQueue {
         });
       });
     this.drain();
-    return this.results(packs.flatMap((pack) => pack.keys));
+    return this.results(snapshot.map(({ key }) => key));
   }
 
   hold(consumer: string, time: number): void {
@@ -178,10 +202,9 @@ export class TranslationQueue {
     state.time = time;
     state.current = undefined;
     state.held = true;
-    state.packs = state.packs.filter(
-      (pack) =>
-        pack.cues.some((cue) => cue.start <= time && time < cue.end) &&
-        pack.keys.some((key) => this.jobs.get(key)?.sent),
+    state.packs = [];
+    state.snapshot = state.snapshot.filter(
+      ({ key, cue }) => cue.start <= time && time < cue.end && this.jobs.get(key)?.sent,
     );
     this.prune(true);
     this.retainExpired();
@@ -232,7 +255,7 @@ export class TranslationQueue {
     const live = new Set<string>();
     for (const state of this.consumers.values()) {
       if (state.current) live.add(state.current);
-      for (const pack of state.packs) for (const key of pack.keys) live.add(key);
+      for (const { key } of state.snapshot) live.add(key);
     }
     for (const key of this.expired) if (!live.has(key)) this.expired.delete(key);
   }
@@ -252,8 +275,8 @@ export class TranslationQueue {
     }
   }
 
-  private noteSample(sentences: number, ms: number): void {
-    this.samples.push({ sentences, ms });
+  private noteSample(ms: number): void {
+    this.samples.push(ms);
     if (this.samples.length > latencySampleLimit * 4)
       this.samples.splice(0, this.samples.length - latencySampleLimit * 4);
   }
@@ -300,7 +323,7 @@ export class TranslationQueue {
     return new Set(
       [...this.consumers.values()].flatMap((state) => [
         ...(state.current ? [state.current] : []),
-        ...state.packs.flatMap((pack) => pack.keys),
+        ...state.snapshot.map(({ key }) => key),
       ]),
     );
   }
@@ -375,10 +398,10 @@ export class TranslationQueue {
     const start = cues.length ? Math.min(...cues.map((cue) => cue.start)) : time;
     const end = cues.length ? Math.max(...cues.map((cue) => cue.end)) : time;
     const slack = slackSeconds(start, time, rate);
-    const predictedMs = predictLatency(this.samples, batch.length);
+    const predictedMs = typicalLatency(this.samples);
     const elapsed = () => Date.now() - (sentAt ?? created);
     const finish = (result: 'ok' | 'invalid' | 'timeout' | 'error' | 'aborted') => {
-      if (result === 'ok' && sentAt !== undefined) this.noteSample(batch.length, elapsed());
+      if (result === 'ok' && sentAt !== undefined) this.noteSample(elapsed());
       this.trace({ e: 'done', id, ms: elapsed(), result });
     };
     this.trace({
@@ -425,8 +448,7 @@ export class TranslationQueue {
               !item.held &&
               batch.some(
                 (job) =>
-                  item.current === job.key ||
-                  item.packs.some((pack) => pack.keys.includes(job.key)),
+                  item.current === job.key || item.snapshot.some(({ key }) => key === job.key),
               ),
           );
           if (live) {

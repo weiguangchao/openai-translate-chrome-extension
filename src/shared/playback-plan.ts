@@ -1,9 +1,11 @@
 import {
-  behindGraceSeconds,
   latencyDefaultMs,
   latencyMaxMs,
   latencyMinMs,
   latencySampleLimit,
+  minShowSeconds,
+  packSpanSeconds,
+  planBufferSeconds,
   planSentenceCap,
   translationBatchLimit,
 } from './limits';
@@ -15,11 +17,6 @@ export interface PlaybackCue {
   readonly needsSplit: boolean;
 }
 
-export interface LatencySample {
-  readonly sentences: number;
-  readonly ms: number;
-}
-
 export interface PlannedRequest {
   readonly cues: readonly PlaybackCue[];
   readonly atRisk: boolean;
@@ -29,70 +26,56 @@ export function slackSeconds(start: number, time: number, rate: number): number 
   return (start - time) / Math.max(rate, 0.25);
 }
 
-export function predictLatency(samples: readonly LatencySample[], sentences: number): number {
-  const sized = samples
-    .filter((sample) => sample.sentences === sentences)
-    .slice(-latencySampleLimit);
-  const pool = (sized.length ? sized : samples.slice(-latencySampleLimit)).map(
-    (sample) => sample.ms,
-  );
-  if (!pool.length) return latencyDefaultMs;
-  const sorted = [...pool].sort((left, right) => left - right);
-  const mid = Math.floor(sorted.length / 2);
-  const median = sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
+export function typicalLatency(samples: readonly number[]): number {
+  const recent = samples.slice(-latencySampleLimit).sort((left, right) => left - right);
+  if (!recent.length) return latencyDefaultMs;
+  const mid = Math.floor(recent.length / 2);
+  const median = recent.length % 2 === 0 ? (recent[mid - 1] + recent[mid]) / 2 : recent[mid];
   return Math.min(latencyMaxMs, Math.max(latencyMinMs, median));
 }
 
-function packSize(
-  cues: readonly PlaybackCue[],
-  index: number,
-  time: number,
-  rate: number,
-  samples: readonly LatencySample[],
-  room: number,
-): number {
-  const firstSlack = slackSeconds(cues[index].start, time, rate);
-  const max = Math.min(translationBatchLimit, room, cues.length - index);
-  for (let size = max; size > 1; size--) {
-    const predicted = predictLatency(samples, size);
-    const spread = cues.slice(index, index + size).every((cue) => {
-      return slackSeconds(cue.start, time, rate) - firstSlack <= predicted / 1000;
-    });
-    if (spread && predicted <= Math.max(0, firstSlack) * 1000) return size;
-  }
-  return 1;
+export function slowLatency(samples: readonly number[]): number {
+  if (!samples.length) return 2 * latencyDefaultMs;
+  const sorted = [...samples].sort((left, right) => left - right);
+  return Math.max(latencyMinMs, sorted[Math.ceil(sorted.length * 0.9) - 1]);
 }
 
 export function planPlayback(input: {
   time: number;
   rate: number;
   cues: readonly PlaybackCue[];
-  samples?: readonly LatencySample[];
+  samples?: readonly number[];
 }): PlannedRequest[] {
   const samples = input.samples ?? [];
-  const eligible = input.cues.filter((cue) => {
-    const active = cue.start <= input.time && input.time < cue.end;
-    return active || cue.end >= input.time - behindGraceSeconds;
-  });
-  const ordered = [...eligible].sort(
-    (left, right) => left.start - right.start || left.end - right.end,
-  );
-  const horizon = (2 * predictLatency(samples, 1)) / 1000;
+  const typical = typicalLatency(samples) / 1000;
+  const slow = slowLatency(samples) / 1000;
+  const buffer = Math.max(planBufferSeconds, 3 * slow);
+  const slack = (cue: PlaybackCue) => slackSeconds(cue.start, input.time, input.rate);
+  const ordered = input.cues
+    .filter((cue) => slackSeconds(cue.end, input.time, input.rate) > minShowSeconds)
+    .sort((left, right) => left.start - right.start || left.end - right.end)
+    .slice(0, planSentenceCap);
   const requests: PlannedRequest[] = [];
   let index = 0;
-  let count = 0;
-  while (index < ordered.length && count < planSentenceCap) {
-    if (requests.length && slackSeconds(ordered[index].start, input.time, input.rate) >= horizon)
-      break;
-    const size = packSize(ordered, index, input.time, input.rate, samples, planSentenceCap - count);
-    const cues = ordered.slice(index, index + size);
-    const slack = slackSeconds(cues[0].start, input.time, input.rate);
+  if (ordered.length && slack(ordered[0]) < typical) {
+    requests.push({ cues: ordered.slice(0, 1), atRisk: true });
+    index = 1;
+  }
+  while (index < ordered.length && slack(ordered[index]) < buffer) {
+    let size = 1;
+    while (
+      size < translationBatchLimit &&
+      index + size < ordered.length &&
+      ordered[index + size].end - ordered[index].start <= packSpanSeconds
+    )
+      size++;
+    const growing = size < translationBatchLimit && index + size === ordered.length;
+    if (growing && slack(ordered[index]) >= 2 * slow) break;
     requests.push({
-      cues,
-      atRisk: predictLatency(samples, size) > Math.max(0, slack) * 1000,
+      cues: ordered.slice(index, index + size),
+      atRisk: typical > slack(ordered[index]),
     });
     index += size;
-    count += size;
   }
   return requests;
 }

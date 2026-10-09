@@ -1,6 +1,6 @@
 import { packedCues, prefetchItems } from './fixtures/provider';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { translationBatchLimit } from '../src/shared/limits';
+import { maxInFlightRequests, translationBatchLimit } from '../src/shared/limits';
 import { planPlayback } from '../src/shared/playback-plan';
 import { translationSendsPerSecond } from '../src/shared/provider/transport';
 let TranslationQueue: typeof import('../src/extension/queue').TranslationQueue;
@@ -298,7 +298,7 @@ it('aborts an in-flight pack that misses the playhead and does not enqueue durin
   expect(requests[0].signal.aborted).toBe(true);
   expect(batches()).toHaveLength(2);
   queue.prefetch('tab', settings, []);
-  queue.prefetch('tab', settings, prefetchItems(['Landed'], 50));
+  queue.prefetch('tab', settings, prefetchItems(['Landed'], 50), 50);
   expect(batches().at(-1)).toEqual(['Landed']);
   expect(requests.at(-1)?.signal.aborted).toBe(false);
 });
@@ -308,13 +308,13 @@ it('drops an unsent pack at the seek position until a settled snapshot arrives',
   const queue = new TranslationQueue();
   const cues = prefetchItems(['Now', 'Soon', 'Landing', 'After']);
   queue.prefetch('tab', settings, cues, 0, 1.5);
-  expect(batches()).toEqual([['Now'], ['Soon']]);
+  expect(batches()).toEqual([['Now'], ['Soon', 'Landing']]);
   queue.hold('tab', 8.6);
   await vi.advanceTimersByTimeAsync(1000);
-  expect(requests.every((request) => request.signal.aborted)).toBe(true);
-  expect(batches()).toEqual([['Now'], ['Soon']]);
+  expect(requests.map((request) => request.signal.aborted)).toEqual([true, false]);
+  expect(batches()).toHaveLength(2);
   queue.prefetch('tab', settings, cues, 8.6, 1.5);
-  expect(batches().slice(2)).toEqual([['Landing'], ['After']]);
+  expect(batches().slice(2)).toEqual([['After']]);
 });
 
 it('resumes a DOM-only caption after holding a seek without requiring a timeline snapshot', () => {
@@ -357,7 +357,7 @@ it("does not let another playing tab send a paused tab's transport-pending pack"
   reply(0);
   reply(1);
   await flush();
-  queue.prefetch('paused-tab', settings, packedCues([{ text: 'Paused cue' }]));
+  queue.prefetch('paused-tab', settings, packedCues([{ text: 'Paused cue' }], 2));
   queue.pause('paused-tab');
   queue.request('playing-tab', settings, 'Playing cue');
   await vi.advanceTimersByTimeAsync(1000);
@@ -369,18 +369,21 @@ it("does not let another playing tab send a paused tab's transport-pending pack"
   expect(batches().at(-1)).toEqual(['Paused cue']);
 });
 
-it('does not send a cue outside the horizon or a cue that is already translated', async () => {
+it('does not send a cue outside the buffer or a cue that is already translated', async () => {
   const { batches, reply } = pendingProvider();
   const queue = new TranslationQueue();
-  const cues = prefetchItems(Array.from({ length: 8 }, (_, index) => `Cue ${index + 1}`));
-  const opening = planPlayback({ time: 0, rate: 1, cues }).map((request) =>
+  const cues = prefetchItems(Array.from({ length: 12 }, (_, index) => `Cue ${index + 1}`));
+  const planned = planPlayback({ time: 0, rate: 1, cues }).map((request) =>
     request.cues.map((cue) => cue.text),
   );
   queue.prefetch('tab', settings, cues);
-  expect(batches()).toEqual(opening);
-  expect(opening.flat()).not.toContain('Cue 8');
-  opening.forEach((_, index) => reply(index));
-  await flush();
+  expect(batches()).toEqual(planned.slice(0, maxInFlightRequests));
+  for (let index = 0; index < planned.length; index++) {
+    reply(index);
+    await vi.advanceTimersByTimeAsync(1000);
+  }
+  expect(batches()).toEqual(planned);
+  expect(planned.flat()).not.toContain('Cue 10');
   queue.prefetch('tab', settings, cues, 4);
   expect(
     batches()
@@ -420,8 +423,8 @@ it('keeps a batch running while any of its cues is still needed, caches all of i
   await expect(visible).resolves.toBe('共享字幕');
   await expect(queue.request('tab-3', settings, 'Next cue')).resolves.toBe('下一句');
   expect(fetch).toHaveBeenCalledTimes(1);
-  queue.prefetch('tab', settings, packedCues([{ text: 'A' }, { text: 'B' }]));
-  queue.prefetch('tab', settings, packedCues([{ text: 'B' }, { text: 'C' }]));
+  queue.prefetch('tab', settings, packedCues([{ text: 'A' }, { text: 'B' }], 3));
+  queue.prefetch('tab', settings, packedCues([{ text: 'B' }, { text: 'C' }], 3));
   expect(batches().slice(1)).toEqual([['A', 'B'], ['C']]);
   expect(requests[1].signal.aborted).toBe(false);
   queue.prefetch('tab', settings, []);
@@ -476,7 +479,7 @@ it('sends at most two requests at once and keeps the per-second send cap', async
   expect(fetch).toHaveBeenCalledTimes(6);
 });
 
-it('keeps a queued pack parked through a provider backoff', async () => {
+it('keeps queued packs parked through a provider backoff', async () => {
   const fetch = vi.fn().mockResolvedValue(new Response('', { status: 429 }));
   vi.stubGlobal('fetch', fetch);
   const queue = new TranslationQueue();
@@ -487,7 +490,7 @@ it('keeps a queued pack parked through a provider backoff', async () => {
   await vi.advanceTimersByTimeAsync(14000);
   expect(fetch).toHaveBeenCalledTimes(2);
   await vi.advanceTimersByTimeAsync(1000);
-  expect(fetch).toHaveBeenCalledTimes(3);
+  expect(fetch).toHaveBeenCalledTimes(2 + maxInFlightRequests);
 });
 
 it('does not send a pack that leaves the plan before a slot opens', async () => {

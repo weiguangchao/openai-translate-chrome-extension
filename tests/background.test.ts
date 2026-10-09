@@ -166,17 +166,20 @@ it('starts a new page in the same tab without the pause the previous page left',
     model: 'model',
   });
   const first = { documentId: 'first-page' };
-  await send({ type: 'prefetch', time: 0, rate: 1, cues: packedCues([{ text: 'Old.' }]) }, first);
+  await send(
+    { type: 'prefetch', time: 0, rate: 1, cues: packedCues([{ text: 'Old.' }], 2) },
+    first,
+  );
   await expect(send({ type: 'prefetch-pause' }, first)).resolves.toEqual({ ok: true });
   const next = send(
-    { type: 'prefetch', time: 0, rate: 1, cues: packedCues([{ text: 'New.' }]) },
+    { type: 'prefetch', time: 0, rate: 1, cues: packedCues([{ text: 'New.' }], 2) },
     { url: 'https://www.youtube.com/watch?v=next', documentId: 'next-page' },
   );
   await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
   await expect(next).resolves.toEqual({ ok: true, data: ['New. 译文'] });
 });
 
-it('packs a prefetch by slack and rejects a snapshot without usable times', async () => {
+it('packs a prefetch by its time span and rejects a snapshot without usable times', async () => {
   const pending: string[][] = [];
   const fetch = vi.fn((_url: string, init: RequestInit) => {
     pending.push(requestedTexts(init));

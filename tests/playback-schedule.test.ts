@@ -3,6 +3,8 @@ import { PlaybackGate, seekJumpSeconds, seekSettleMs } from '../src/core/playbac
 import { captionAt, captionWindow, playbackCues, timedCaptions } from '../src/core/timeline';
 import {
   behindGraceSeconds,
+  maxInFlightRequests,
+  planBufferSeconds,
   planLookaheadCues,
   planLookaheadSeconds,
   translationBatchLimit,
@@ -140,22 +142,21 @@ function pendingProvider() {
   return { fetch, requests, batches, reply };
 }
 
-it('reuses a finished pack and aborts the pack that no longer covers the playhead', async () => {
+it('keeps sent packs through snapshot refreshes and cancels one only after its cues leave', async () => {
   const { batches, reply, requests } = pendingProvider();
   const queue = new TranslationQueue();
   const list = Array.from({ length: 8 }, (_, index) => `Cue ${index + 1}`);
   queue.prefetch('tab', settings, prefetchItems(list));
-  const opening = planPlayback({ time: 0, rate: 1, cues: prefetchItems(list) }).map((request) =>
-    request.cues.map((cue) => cue.text),
-  );
-  expect(batches()).toEqual(opening);
-  queue.prefetch('tab', settings, prefetchItems(list), 5);
+  expect(batches()).toEqual([['Cue 1'], ['Cue 2', 'Cue 3']]);
+  queue.prefetch('tab', settings, prefetchItems(list), 1);
+  expect(requests.map((request) => request.signal.aborted)).toEqual([false, false]);
+  expect(batches()).toHaveLength(2);
+  queue.prefetch('tab', settings, prefetchItems(list.slice(1), 4), 5);
   expect(requests[0].signal.aborted).toBe(true);
   expect(requests[1].signal.aborted).toBe(false);
-  expect(batches().length).toBeGreaterThan(opening.length);
   reply(1);
   await vi.advanceTimersByTimeAsync(0);
-  const again = queue.prefetch('tab', settings, prefetchItems(['Cue 2'], 4));
+  const again = queue.prefetch('tab', settings, prefetchItems(['Cue 2'], 4), 5);
   await expect(again).resolves.toEqual(['Cue 2 译文']);
   expect(
     batches()
@@ -164,20 +165,25 @@ it('reuses a finished pack and aborts the pack that no longer covers the playhea
   ).toHaveLength(1);
 });
 
-it('sends only the packs inside the horizon, even when the old segment numbers differ', async () => {
-  const { fetch, requests, batches } = pendingProvider();
+it('sends only the packs inside the buffer, even when the old segment numbers differ', async () => {
+  const { batches, reply } = pendingProvider();
   const queue = new TranslationQueue();
   const cues = prefetchItems(Array.from({ length: 16 }, (_, index) => `Cue ${index + 1}`));
   const shuffled = cues.map((cue, index) => ({ ...cue, segment: index }));
-  queue.prefetch('tab', settings, shuffled);
-  const opening = planPlayback({ time: 0, rate: 1, cues }).map((request) =>
+  const planned = planPlayback({ time: 0, rate: 1, cues }).map((request) =>
     request.cues.map((cue) => cue.text),
   );
-  expect(batches()).toEqual(opening);
-  expect(fetch).toHaveBeenCalledTimes(opening.length);
-  await vi.advanceTimersByTimeAsync(providerSendWindowMs);
-  expect(batches()).toEqual(opening);
-  queue.prefetch('tab', settings, prefetchItems(['Cue 16'], 80));
-  expect(requests[0].signal.aborted).toBe(true);
+  queue.prefetch('tab', settings, shuffled);
+  expect(batches()).toEqual(planned.slice(0, maxInFlightRequests));
+  for (let index = 0; index < planned.length; index++) {
+    reply(index);
+    await vi.advanceTimersByTimeAsync(providerSendWindowMs);
+  }
+  expect(batches()).toEqual(planned);
+  expect(cues.find((cue) => cue.text === 'Cue 10')!.start).toBeGreaterThanOrEqual(
+    planBufferSeconds,
+  );
+  expect(planned.flat()).not.toContain('Cue 10');
+  queue.prefetch('tab', settings, prefetchItems(['Cue 16'], 60), 60);
   expect(batches().at(-1)).toEqual(['Cue 16']);
 });
