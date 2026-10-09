@@ -1,9 +1,10 @@
 # OpenAI Translate Chrome Extension
 
-## Non-negotiables
+## Principle
 
 - Any prose surface → the unslop skill. Your reply is a prose surface. Write it per Writing the reply.
 - Before commit → the deslop skill
+- When the user asks for a real-browser check → the chrome-debug skill
 
 ## Pull requests
 
@@ -14,11 +15,13 @@
 
 ## Test
 
-When the user asks for a real-browser check with the chrome-debug skill, report these metrics for each build under test. Measure on an uncached video segment at 1x playback with the tab visible; a trace whose end line says `throttled` does not count.
+In a real-browser check, report the metrics below for each build at 1x, 1.25x, 1.5x and 2x. For each build and rate, seek once to a segment with no cached translations, trace 45 s from the landing point, then keep playing and trace 180 s. Durations are video seconds.
 
-- Steady translating share: the share of subtitle time spent showing the loading placeholder during at least 180 s of uninterrupted playback, computed from the trace stats as `states.loading / (states.loading + states.ready)`.
-- Seek landing first-caption wait: the video seconds from the seek landing until the first caption on screen shows its translation, computed as `firstReadyAt - firstCaptionAt` from a 45 s trace started at the landing point. Confirm the video is at the landing point before tracing; YouTube may resume at the last watched position.
-- Post-seek 45 s translating share: the same share as the steady metric, computed from that 45 s landing trace.
+A run counts only if its traces report the tested `playbackRate`, none is marked `throttled` (keep Chrome in front), and the landing trace starts at the seek target; YouTube may resume at the last watched position instead.
+
+- Loading while playing: the share of subtitle time that shows the loading placeholder instead of a translation, from the 180 s trace: `states.loading / (states.loading + states.ready)`.
+- Wait after seeking: the seconds a viewer waits after the seek until the first subtitle on screen shows its translation, from the 45 s trace: `(firstReadyAt - firstCaptionAt) / playbackRate`.
+- Loading after seeking: the same share as Loading while playing, from the 45 s trace.
 
 ## Glossary
 
