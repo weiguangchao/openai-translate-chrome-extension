@@ -11,8 +11,9 @@ import {
   type Route,
   type TestInfo,
 } from '@playwright/test';
-import { prefetchSentenceCount, translationBatchLimit } from '../src/shared/limits';
+import { planSentenceCap, translationBatchLimit } from '../src/shared/limits';
 import type { Settings } from '../src/shared/settings';
+import { TRACE_PREFIX, type TraceEvent } from '../src/shared/trace';
 import { longCaption, longResult } from '../tests/fixtures/long-caption';
 
 export type Platform = 'youtube' | 'hbo' | 'x';
@@ -84,6 +85,7 @@ interface Options {
   draft?: 'complete' | 'truncated';
   unavailable?: number;
   holdTimeline?: boolean;
+  recordVideo?: boolean;
 }
 
 const denseCueSeconds = 4;
@@ -106,6 +108,7 @@ export class Player {
   requests: { url: string; method: string; worker: string | null }[] = [];
   unexpected: string[] = [];
   errors: string[] = [];
+  trace: TraceEvent[] = [];
   failed: { url: string; error: string | null }[] = [];
   hold: boolean;
   releaseTimeline = () => {};
@@ -155,6 +158,11 @@ export class Player {
     this.extensionId = new URL(worker.url()).host;
     expect(worker.url()).toBe(`chrome-extension://${this.extensionId}/background.js`);
     this.context.on('weberror', (error) => this.errors.push(error.error().message));
+    this.context.on('console', (message) => {
+      const text = message.text();
+      if (text.startsWith(TRACE_PREFIX))
+        this.trace.push(JSON.parse(text.slice(TRACE_PREFIX.length)));
+    });
     this.context.on('requestfailed', (request) =>
       this.failed.push({ url: request.url(), error: request.failure()?.errorText ?? null }),
     );
@@ -281,7 +289,7 @@ export class Player {
     if (id === 'third') return [{ start: 0, end: 90, text: thirdSource }];
     if (this.options.long) return [{ start: 0, end: 90, text: longCaption }];
     if (this.options.dense)
-      return Array.from({ length: prefetchSentenceCount + translationBatchLimit }, (_, index) => {
+      return Array.from({ length: planSentenceCap + translationBatchLimit }, (_, index) => {
         const cue = denseCue(index);
         return { start: cue.start, end: cue.end, text: cue.text };
       });
@@ -456,6 +464,7 @@ export async function withPlayer(
       channel: 'chromium',
       headless: !process.env.E2E_HEADED,
       viewport: { width: 1280, height: 800 },
+      ...(options.recordVideo && { recordVideo: { dir: info.outputPath('videos') } }),
       args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`],
     });
     await context.tracing.start({ screenshots: true, snapshots: true, sources: true });
@@ -482,6 +491,7 @@ export async function withPlayer(
   } finally {
     try {
       if (player) {
+        await attach('scheduler.json', player.trace);
         await attach('network.json', {
           requests: player.requests,
           posts: player.posts.map(({ route: _route, ...post }) => post),
@@ -518,6 +528,12 @@ export async function withPlayer(
     } finally {
       try {
         await context?.close();
+        const video = player?.page?.video();
+        if (video)
+          await info.attach('playback.webm', {
+            path: await video.path(),
+            contentType: 'video/webm',
+          });
       } finally {
         await rm(profile, { recursive: true, force: true });
       }

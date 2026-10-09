@@ -1,4 +1,3 @@
-import type { PrefetchItem } from '../src/shared/caption-translation';
 import { afterEach, expect, it, vi } from 'vitest';
 import { CaptionController } from '../src/core/controller';
 import { createYoutubePlatform } from '../src/platforms/youtube/platform';
@@ -20,6 +19,13 @@ afterEach(() => {
   document.body.innerHTML = '';
   Reflect.deleteProperty(document, 'fullscreenElement');
 });
+
+function prefetchTexts(sendMessage: { mock: { calls: unknown[][] } }): string[] {
+  const snapshot = sendMessage.mock.calls
+    .map(([message]) => message as { type?: string; cues?: { text: string }[] })
+    .find((message) => message?.type === 'prefetch');
+  return snapshot?.cues?.map((cue) => cue.text) ?? [];
+}
 
 function setup() {
   vi.useFakeTimers();
@@ -56,7 +62,9 @@ function setup() {
     (message: {
       type: string;
       text?: string;
-      items?: readonly PrefetchItem[];
+      time?: number;
+      rate?: number;
+      cues?: { text: string; needsSplit: boolean; start: number; end: number }[];
       cacheOnly?: boolean;
       needsSplit?: boolean;
     }): Promise<{ ok: boolean; data?: CaptionTranslation | null }> =>
@@ -128,7 +136,11 @@ it('prefetches a long subtitle whole, has the Provider split it, and shows each 
           ? queue.lookup(saved, message.text!, message.needsSplit === true)
           : queue.request('video', saved, message.text!, message.needsSplit === true)),
       };
-    if (message.type === 'prefetch') queue.prefetch('video', saved, message.items!);
+    if (message.type === 'prefetch-hold') queue.hold('video', message.time ?? 0);
+    if (message.type === 'prefetch') {
+      if (!message.cues?.length) queue.release(['video']);
+      else void queue.prefetch('video', saved, message.cues, message.time ?? 0, message.rate ?? 1);
+    }
     return { ok: true };
   });
   await import('../src/platforms/youtube/page');
@@ -222,18 +234,10 @@ it('translates and displays complete ASR sentences across rolling events', async
     publicSettings({ ...DEFAULT_SETTINGS, apiKey: 'key', model: 'model' }),
   );
   await vi.advanceTimersByTimeAsync(0);
-  expect(sendMessage).toHaveBeenCalledWith({
-    type: 'prefetch',
-    items: [
-      {
-        text: 'This field behind me will become a city.',
-        segment: 0,
-        needsSplit: false,
-        batch: 0,
-      },
-      { text: 'Let’s build it.', segment: 0, needsSplit: false, batch: 0 },
-    ],
-  });
+  expect(prefetchTexts(sendMessage)).toEqual([
+    'This field behind me will become a city.',
+    'Let’s build it.',
+  ]);
   await playTo(video, 1.2);
   expect([...lines()].map((line) => line.textContent)).toEqual([
     'This field behind me will become a city.',
@@ -310,13 +314,7 @@ it('loads the selected YouTube track before playback, aligns rolling captions, a
   expect(fetch.mock.calls[0][0]).toContain('fmt=json3');
   expect(sendMessage).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'translate' }));
   await vi.advanceTimersByTimeAsync(16000);
-  expect(sendMessage).toHaveBeenCalledWith({
-    type: 'prefetch',
-    items: [
-      { text: 'First phrase.', segment: 0, needsSplit: false, batch: 0 },
-      { text: 'Second phrase.', segment: 0, needsSplit: false, batch: 0 },
-    ],
-  });
+  expect(prefetchTexts(sendMessage)).toEqual(['First phrase.', 'Second phrase.']);
   expect(lines()[1].hidden).toBe(true);
   await playTo(video, 4);
   expect(lines()[0].textContent).toBe('Second phrase.');
@@ -496,13 +494,11 @@ it('translates authored English sentences even when authored, automatic and brow
     'This field behind me will become a city.',
     '译文：This field behind me will become a city.',
   ]);
-  expect(sendMessage).toHaveBeenCalledWith({
-    type: 'prefetch',
-    items: [
-      { text: 'This field behind me will become a city.', segment: 0, needsSplit: false, batch: 0 },
-      { text: 'Go.', segment: 0, needsSplit: false, batch: 0 },
-    ],
-  });
+  expect(prefetchTexts(sendMessage)).toEqual([
+    'This field behind me will become a city.',
+    'Go.',
+    'Go.',
+  ]);
   expect(fetch.mock.calls.map(([url]) => new URL(url).searchParams.get('track'))).toEqual(['.en']);
   expect(targetTrack.mode).toBe('showing');
   expect(getComputedStyle(document.querySelector('.ytp-caption-window-container')!).opacity).toBe(
@@ -794,17 +790,19 @@ it('sends complete English sentences to the Provider and displays its translatio
           ? queue.lookup(saved, message.text!)
           : queue.request('video', saved, message.text!)),
       };
-    if (message.type === 'prefetch') queue.prefetch('video', saved, message.items!);
+    if (message.type === 'prefetch-hold') queue.hold('video', message.time ?? 0);
+    if (message.type === 'prefetch') {
+      if (!message.cues?.length) queue.release(['video']);
+      else void queue.prefetch('video', saved, message.cues, message.time ?? 0, message.rate ?? 1);
+    }
     return { ok: true };
   });
   await import('../src/platforms/youtube/page');
   controller = new CaptionController(createYoutubePlatform, publicSettings(saved));
   await vi.advanceTimersByTimeAsync(0);
-  expect(requests).toEqual([
-    {
-      url: 'https://provider.example/v1/chat/completions',
-      texts: ['This field behind me will become a city.', 'Let’s build it.'],
-    },
+  expect(requests.map((request) => request.texts)).toEqual([
+    ['This field behind me will become a city.'],
+    ['Let’s build it.'],
   ]);
   expect(transcripts).toEqual(['en']);
   video.currentTime = 1;
@@ -822,7 +820,8 @@ it('sends complete English sentences to the Provider and displays its translatio
     '让我们建造它。',
   ]);
   expect(requests.map((request) => request.texts)).toEqual([
-    ['This field behind me will become a city.', 'Let’s build it.'],
+    ['This field behind me will become a city.'],
+    ['Let’s build it.'],
   ]);
   queue.reset();
 });

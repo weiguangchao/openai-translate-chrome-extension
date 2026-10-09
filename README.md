@@ -16,4 +16,6 @@ npm run build
 npm run verify
 ```
 
-`npm ci` 按锁文件安装依赖。`npm run dev` 启动设置页预览，默认地址是 http://localhost:5173。`npm test` 运行接口、配置、翻译队列和字幕生命周期测试。`npm run build` 把扩展输出到 `dist/`。`npm run verify` 依次执行 lint、类型检查、测试、构建和 YouTube、HBO、X 的浏览器回归，任一步失败时进程以非零状态退出。
+`npm ci` 按锁文件安装依赖。`npm run dev` 启动设置页预览，默认地址是 http://localhost:5173。`npm test` 运行接口、配置、翻译队列和字幕生命周期测试。`npm run build`把扩展输出到`dist/`。`npm run verify` 依次执行 lint、类型检查、测试、构建和 YouTube、HBO、X 的浏览器回归，任一步失败时进程以非零状态退出。
+
+字幕队列根据视频时间、播放速度和近期请求耗时计算每句的时间余量。即将播放的句子单独请求，余量足够时每批最多四句，同时最多两个字幕请求在途。拖动过程中不发送新请求，落点稳定 400 毫秒后才恢复调度。调度测试和浏览器验证见 [改造记录](docs/reviews/2026-10-08-playback-slack-scheduler.md)。

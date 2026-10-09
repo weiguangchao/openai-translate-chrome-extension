@@ -1,12 +1,14 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { PlaybackGate, leadSeconds, seekSettleMs } from '../src/core/playback';
-import { captionWindow, timedCaptions } from '../src/core/timeline';
+import { PlaybackGate, seekJumpSeconds, seekSettleMs } from '../src/core/playback';
+import { captionAt, captionWindow, playbackCues, timedCaptions } from '../src/core/timeline';
 import {
-  prefetchBatchCount,
-  prefetchSentenceCount,
+  behindGraceSeconds,
+  planLookaheadCues,
+  planLookaheadSeconds,
   translationBatchLimit,
 } from '../src/shared/limits';
-import { providerSendWindowMs, translationSendsPerSecond } from '../src/shared/provider/transport';
+import { planPlayback } from '../src/shared/playback-plan';
+import { providerSendWindowMs } from '../src/shared/provider/transport';
 import { DEFAULT_SETTINGS } from '../src/shared/settings';
 import { prefetchItems, providerReply, requestedTexts } from './fixtures/provider';
 
@@ -32,38 +34,24 @@ function cues(count: number) {
   }));
 }
 
-function textsFrom(
-  list: readonly { startTime: number; endTime: number; text: string }[],
-  time: number,
-) {
-  const first = list.findIndex((cue) => cue.endTime > time);
-  if (first < 0) return [];
-  return list.slice(first, Math.min(list.length, first + prefetchSentenceCount));
-}
-
-it('packs each anchor into full batches and keeps a short batch at the end', () => {
+it('snapshots cues that can still reach the playhead within the next minute', () => {
   const list = cues(30);
   const captions = timedCaptions(list);
   for (const time of [0, 41, 95, 105, 165, 205]) {
-    const expected = textsFrom(list, time);
+    const expected = list
+      .filter(
+        (cue) =>
+          cue.endTime > time - behindGraceSeconds && cue.startTime < time + planLookaheadSeconds,
+      )
+      .slice(0, planLookaheadCues);
     const items = captionWindow(captions, time).items;
     expect(items.map((item) => item.text)).toEqual(expected.map((cue) => cue.text));
-    expect(items.map((item) => item.batch)).toEqual(
-      expected.map((_, offset) => Math.floor(offset / translationBatchLimit)),
-    );
-    expect(items.map((item) => item.segment)).toEqual(
-      expected.map((cue) => Math.floor(list.indexOf(cue) / translationBatchLimit)),
-    );
+    expect(
+      items.every((item) => item.end > item.start && typeof item.needsSplit === 'boolean'),
+    ).toBe(true);
   }
-  expect(captionWindow(captions, 0).items).toHaveLength(prefetchSentenceCount);
-  expect(new Set(captionWindow(captions, 0).items.map((item) => item.batch)).size).toBe(
-    prefetchBatchCount,
-  );
+  expect(captionWindow(captions, 0).items.length).toBeLessThanOrEqual(planLookaheadCues);
   expect(captionWindow(captions, 9999)).toEqual({ current: '', items: [] });
-  const tail = textsFrom(list, 250);
-  expect(tail.length).toBeGreaterThan(0);
-  expect(tail.length).toBeLessThan(prefetchSentenceCount);
-  expect(tail.length % translationBatchLimit).not.toBe(0);
 });
 
 it('counts a long sentence as one caption when it numbers segments', () => {
@@ -87,28 +75,50 @@ it('counts a long sentence as one caption when it numbers segments', () => {
     captions.map((_, index) => Math.floor(index / translationBatchLimit)),
   );
   expect(captions[ordinary]).toMatchObject({ text: long, needsSplit: true });
-  const items = captionWindow(captions, 0).items;
-  expect(items.map((item) => item.segment)).toEqual(
-    items.map((_, index) => Math.floor(index / translationBatchLimit)),
-  );
-  expect(items.map((item) => item.batch)).toEqual(
-    items.map((_, index) => Math.floor(index / translationBatchLimit)),
+  expect(captionWindow(captions, 0).items.find((item) => item.text === long)?.needsSplit).toBe(
+    true,
   );
 });
 
-it('leads by a fixed media interval and releases a seek on its own clock', async () => {
+it('keeps overlapping snapshot intervals aligned with the text actually shown', () => {
+  const captions = timedCaptions([
+    { startTime: 0, endTime: 10, text: 'First' },
+    { startTime: 5, endTime: 15, text: 'Second' },
+  ]);
+  const snapshot = playbackCues(captions, 0);
+  for (const time of [2, 7, 12]) {
+    expect(
+      snapshot.filter((cue) => cue.start <= time && time < cue.end).map((cue) => cue.text),
+    ).toEqual([captionAt(captions, time)]);
+  }
+});
+
+it('keeps a silent gap between repeated text in a snapshot', () => {
+  const captions = timedCaptions([
+    { startTime: 0, endTime: 1, text: 'Again' },
+    { startTime: 4, endTime: 5, text: 'Again' },
+  ]);
+  expect(playbackCues(captions, 0)).toEqual([
+    { text: 'Again', start: 0, end: 1, needsSplit: false },
+    { text: 'Again', start: 4, end: 5, needsSplit: false },
+  ]);
+});
+
+it('holds a jump and releases it only after the playhead stays still', async () => {
   const hooks = { hold: vi.fn(), changed: vi.fn() };
   const gate = new PlaybackGate(hooks);
-  expect(gate.lead(2, false)).toBe(2);
-  expect(gate.lead(2, true)).toBe(2 + leadSeconds);
-  expect(gate.lead(3, true)).toBe(2 + leadSeconds);
-  gate.restartLead();
-  expect(gate.lead(3, true)).toBe(3 + leadSeconds);
-  gate.hold();
+  gate.observe(2);
+  gate.observe(2 + seekJumpSeconds);
+  expect(hooks.hold).not.toHaveBeenCalled();
+  gate.observe(2 + seekJumpSeconds * 2 + 0.01);
   expect(gate.settling).toBe(true);
   expect(hooks.hold).toHaveBeenCalledOnce();
   await vi.advanceTimersByTimeAsync(seekSettleMs - 1);
   expect(gate.settling).toBe(true);
+  gate.hold();
+  await vi.advanceTimersByTimeAsync(seekSettleMs - 1);
+  expect(gate.settling).toBe(true);
+  expect(hooks.changed).not.toHaveBeenCalled();
   await vi.advanceTimersByTimeAsync(1);
   expect(gate.settling).toBe(false);
   expect(hooks.changed).toHaveBeenCalledOnce();
@@ -130,74 +140,44 @@ function pendingProvider() {
   return { fetch, requests, batches, reply };
 }
 
-function block(cues: readonly string[], index: number) {
-  return cues.slice(index * translationBatchLimit, (index + 1) * translationBatchLimit);
-}
-
-it('reuses a finished batch and drops the batch that leaves the window', async () => {
+it('reuses a finished pack and aborts the pack that no longer covers the playhead', async () => {
   const { batches, reply, requests } = pendingProvider();
   const queue = new TranslationQueue();
-  const depth = translationSendsPerSecond;
-  const list = Array.from(
-    { length: translationBatchLimit * (depth + 2) },
-    (_, index) => `Cue ${index + 1}`,
+  const list = Array.from({ length: 8 }, (_, index) => `Cue ${index + 1}`);
+  queue.prefetch('tab', settings, prefetchItems(list));
+  const opening = planPlayback({ time: 0, rate: 1, cues: prefetchItems(list) }).map((request) =>
+    request.cues.map((cue) => cue.text),
   );
-  queue.prefetch('tab', settings, prefetchItems(list.slice(0, translationBatchLimit * depth)));
-  expect(batches()).toEqual(Array.from({ length: depth }, (_, index) => block(list, index)));
-  for (let start = 1; start < translationBatchLimit; start++) {
-    queue.prefetch(
-      'tab',
-      settings,
-      prefetchItems(list.slice(start, translationBatchLimit * depth)),
-    );
-    expect(batches()).toHaveLength(depth);
-  }
-  queue.prefetch(
-    'tab',
-    settings,
-    prefetchItems(list.slice(translationBatchLimit, translationBatchLimit * (depth + 1))),
-  );
+  expect(batches()).toEqual(opening);
+  queue.prefetch('tab', settings, prefetchItems(list), 5);
   expect(requests[0].signal.aborted).toBe(true);
-  expect(batches()).toEqual(Array.from({ length: depth + 1 }, (_, index) => block(list, index)));
-  await vi.advanceTimersByTimeAsync(providerSendWindowMs);
-  expect(batches()).toHaveLength(depth + 1);
-  for (let index = 1; index <= depth; index++) reply(index);
+  expect(requests[1].signal.aborted).toBe(false);
+  expect(batches().length).toBeGreaterThan(opening.length);
+  reply(1);
   await vi.advanceTimersByTimeAsync(0);
-  await expect(queue.prefetch('tab', settings, prefetchItems(block(list, depth)))).resolves.toEqual(
-    block(list, depth).map((cue) => `${cue} 译文`),
-  );
-  expect(batches()).toHaveLength(depth + 1);
+  const again = queue.prefetch('tab', settings, prefetchItems(['Cue 2'], 4));
+  await expect(again).resolves.toEqual(['Cue 2 译文']);
+  expect(
+    batches()
+      .flat()
+      .filter((text) => text === 'Cue 2'),
+  ).toHaveLength(1);
 });
 
-it('sends the opening window up to the send rate, then the rest, even when segments differ', async () => {
+it('sends only the packs inside the horizon, even when the old segment numbers differ', async () => {
   const { fetch, requests, batches } = pendingProvider();
   const queue = new TranslationQueue();
-  const list = Array.from(
-    { length: translationBatchLimit * (prefetchBatchCount + 1) },
-    (_, index) => `Cue ${index + 1}`,
+  const cues = prefetchItems(Array.from({ length: 16 }, (_, index) => `Cue ${index + 1}`));
+  const shuffled = cues.map((cue, index) => ({ ...cue, segment: index }));
+  queue.prefetch('tab', settings, shuffled);
+  const opening = planPlayback({ time: 0, rate: 1, cues }).map((request) =>
+    request.cues.map((cue) => cue.text),
   );
-  const size = translationBatchLimit;
-  const pack = (from: number, count: number) =>
-    list.slice(from, from + count).map((text, offset) => ({
-      text,
-      segment: Math.floor((from + offset + size - 1) / size),
-      needsSplit: false,
-      batch: Math.floor((from + offset) / size),
-    }));
-  queue.prefetch('tab', settings, pack(0, size * prefetchBatchCount));
-  expect(batches()).toEqual(
-    Array.from({ length: translationSendsPerSecond }, (_, index) => block(list, index)),
-  );
-  expect(fetch).toHaveBeenCalledTimes(translationSendsPerSecond);
+  expect(batches()).toEqual(opening);
+  expect(fetch).toHaveBeenCalledTimes(opening.length);
   await vi.advanceTimersByTimeAsync(providerSendWindowMs);
-  expect(batches()).toEqual(
-    Array.from({ length: prefetchBatchCount }, (_, index) => block(list, index)),
-  );
-  queue.prefetch('tab', settings, pack(size, size * prefetchBatchCount));
+  expect(batches()).toEqual(opening);
+  queue.prefetch('tab', settings, prefetchItems(['Cue 16'], 80));
   expect(requests[0].signal.aborted).toBe(true);
-  expect(requests.slice(1, prefetchBatchCount).every((request) => !request.signal.aborted)).toBe(
-    true,
-  );
-  await vi.advanceTimersByTimeAsync(providerSendWindowMs);
-  expect(batches().at(-1)).toEqual(list.slice(size * prefetchBatchCount));
+  expect(batches().at(-1)).toEqual(['Cue 16']);
 });

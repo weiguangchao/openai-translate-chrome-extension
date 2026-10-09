@@ -1,14 +1,18 @@
 import { translateCaptionBatch, translationBatchLimit } from '../shared/api';
+import { translationInput, type CaptionTranslation } from '../shared/caption-translation';
+import { latencySampleLimit, maxInFlightRequests } from '../shared/limits';
 import {
-  translationInput,
-  type CaptionTranslation,
-  type PrefetchItem,
-} from '../shared/caption-translation';
+  planPlayback,
+  predictLatency,
+  slackSeconds,
+  type LatencySample,
+  type PlaybackCue,
+} from '../shared/playback-plan';
 import { ProviderTimeoutError } from '../shared/provider-error';
+import { wakeProviderRequests } from '../shared/provider/transport';
 import type { Settings } from '../shared/settings';
 import type { TraceEvent } from '../shared/trace';
 
-import { wakeProviderRequests } from '../shared/provider/transport';
 export const translationCacheLimit = 5000;
 
 export interface TranslationStore {
@@ -18,14 +22,12 @@ export interface TranslationStore {
 
 interface Job {
   key: string;
-  group: string;
   consumer: string;
-  segment?: string;
   settings: Settings;
   text: string;
   needsSplit: boolean;
   solo: boolean;
-  batchGroup?: number;
+  pack?: string;
   promise: Promise<CaptionTranslation>;
   resolve: (value: CaptionTranslation) => void;
   reject: (error: Error) => void;
@@ -33,15 +35,20 @@ interface Job {
   batch?: Job[];
   sent?: boolean;
 }
+
+interface Pack {
+  id: string;
+  keys: string[];
+  cues: readonly PlaybackCue[];
+}
+
 interface Consumer {
   current?: string;
-  window: string[];
+  packs: Pack[];
   paused?: boolean;
-  held?: {
-    settings: Settings;
-    items: readonly PrefetchItem[];
-    keys: string[];
-  };
+  held?: boolean;
+  time: number;
+  rate: number;
 }
 
 export class TranslationQueue {
@@ -51,8 +58,8 @@ export class TranslationQueue {
   private backoffUntil = 0;
   private backoffReason = '';
   private expired = new Set<string>();
+  private samples: LatencySample[] = [];
   private sendTimer: ReturnType<typeof setTimeout> | undefined;
-  private promoting = false;
   private batches = 0;
   private store: TranslationStore | undefined;
 
@@ -60,16 +67,6 @@ export class TranslationQueue {
     private cacheLimit = translationCacheLimit,
     private trace: (event: TraceEvent) => void = () => {},
   ) {}
-
-  private group(settings: Settings): string {
-    return JSON.stringify([
-      settings.baseUrl,
-      settings.apiKey,
-      settings.model,
-      settings.sourceLanguage,
-      settings.targetLanguage,
-    ]);
-  }
 
   private key(settings: Settings, text: string, needsSplit = false): string {
     return JSON.stringify([
@@ -103,8 +100,9 @@ export class TranslationQueue {
     needsSplit = false,
   ): Promise<CaptionTranslation> {
     const key = this.key(settings, text, needsSplit);
-    const state: Consumer = this.consumers.get(consumer) ?? { window: [] };
+    const state: Consumer = this.consumers.get(consumer) ?? { packs: [], time: 0, rate: 1 };
     state.current = key;
+    state.held = false;
     this.consumers.set(consumer, state);
     this.prune(false);
     this.retainExpired();
@@ -116,52 +114,78 @@ export class TranslationQueue {
       this.drain();
       return job.promise;
     } catch (error) {
-      return Promise.reject(error);
+      return Promise.reject(error instanceof Error ? error : new Error('翻译失败。'));
     }
   }
 
   prefetch(
     consumer: string,
     settings: Settings,
-    items: readonly PrefetchItem[],
+    cues: readonly PlaybackCue[],
+    time = 0,
+    rate = 1,
   ): Promise<(CaptionTranslation | null)[]> {
-    const keys = items.map((item) => this.key(settings, item.text, item.needsSplit));
-    const state = this.consumers.get(consumer);
-    if (
-      keys.length &&
-      state &&
-      this.windowAwaitingReply(state) &&
-      !keys.some((key) => state.window.includes(key))
-    ) {
-      state.held = { settings, items, keys };
-      return this.results(keys);
+    if (!cues.length) {
+      this.consumers.delete(consumer);
+      this.prune(true);
+      this.retainExpired();
+      this.drain();
+      return Promise.resolve([]);
     }
-    if (state) state.held = undefined;
-    const current = state?.current;
-    if (keys.length)
-      this.consumers.set(consumer, {
-        current: current && keys.includes(current) ? current : undefined,
-        window: keys,
-        paused: state?.paused,
-      });
-    else this.consumers.delete(consumer);
+    const state = this.consumers.get(consumer);
+    const planned = planPlayback({ time, rate, cues, samples: this.samples });
+    const packs: Pack[] = planned.map((request, index) => ({
+      id: `${consumer}:${index}:${request.cues[0].start}:${request.cues[0].text}`,
+      keys: request.cues.map((cue) => this.key(settings, cue.text, cue.needsSplit)),
+      cues: request.cues,
+    }));
+    const current = cues.some(
+      (cue) =>
+        cue.start <= time &&
+        time < cue.end &&
+        this.key(settings, cue.text, cue.needsSplit) === state?.current,
+    )
+      ? state?.current
+      : undefined;
+    this.consumers.set(consumer, {
+      current,
+      packs,
+      paused: state?.paused,
+      time,
+      rate,
+    });
     this.prune(true);
     this.retainExpired();
     if (Date.now() >= this.backoffUntil)
-      items.forEach((item, index) => {
-        if (!this.finished.has(keys[index]) && !this.expired.has(keys[index]))
-          this.enqueue(
-            keys[index],
-            settings,
-            item.text,
-            item.needsSplit,
-            consumer,
-            JSON.stringify([consumer, item.segment]),
-            { solo: item.solo === true, batch: item.batch },
-          );
+      planned.forEach((request, index) => {
+        const pack = packs[index];
+        request.cues.forEach((cue, cueIndex) => {
+          const key = pack.keys[cueIndex];
+          if (this.finished.has(key) || this.expired.has(key)) return;
+          const job = this.enqueue(key, settings, cue.text, cue.needsSplit, consumer, {
+            pack: pack.id,
+          });
+          if (!job.controller) job.pack = pack.id;
+        });
       });
     this.drain();
-    return this.results(keys);
+    return this.results(packs.flatMap((pack) => pack.keys));
+  }
+
+  hold(consumer: string, time: number): void {
+    const state = this.consumers.get(consumer);
+    if (!state) return;
+    state.time = time;
+    state.current = undefined;
+    state.held = true;
+    state.packs = state.packs.filter(
+      (pack) =>
+        pack.cues.some((cue) => cue.start <= time && time < cue.end) &&
+        pack.keys.some((key) => this.jobs.get(key)?.sent),
+    );
+    this.prune(true);
+    this.retainExpired();
+    this.drain();
   }
 
   release(consumers: readonly string[]): void {
@@ -187,6 +211,7 @@ export class TranslationQueue {
 
   reset(): void {
     this.consumers.clear();
+    this.samples = [];
     this.prune(true);
     this.backoffUntil = 0;
     this.backoffReason = '';
@@ -207,8 +232,7 @@ export class TranslationQueue {
     const live = new Set<string>();
     for (const state of this.consumers.values()) {
       if (state.current) live.add(state.current);
-      for (const key of state.window) live.add(key);
-      if (state.held) for (const key of state.held.keys) live.add(key);
+      for (const pack of state.packs) for (const key of pack.keys) live.add(key);
     }
     for (const key of this.expired) if (!live.has(key)) this.expired.delete(key);
   }
@@ -228,21 +252,24 @@ export class TranslationQueue {
     }
   }
 
+  private noteSample(sentences: number, ms: number): void {
+    this.samples.push({ sentences, ms });
+    if (this.samples.length > latencySampleLimit * 4)
+      this.samples.splice(0, this.samples.length - latencySampleLimit * 4);
+  }
+
   private enqueue(
     key: string,
     settings: Settings,
     text: string,
     needsSplit: boolean,
     consumer: string,
-    segment?: string,
-    options?: { solo?: boolean; batch?: number },
+    options?: { pack: string },
   ): Job {
     const existing = this.jobs.get(key);
     if (existing) {
       if (!existing.controller) {
-        existing.segment ??= segment;
-        if (options?.solo) existing.solo = true;
-        if (options?.batch !== undefined) existing.batchGroup ??= options.batch;
+        if (options?.pack) existing.pack = options.pack;
       }
       return existing;
     }
@@ -255,14 +282,12 @@ export class TranslationQueue {
     void promise.catch(() => {});
     const job: Job = {
       key,
-      group: this.group(settings),
       consumer,
-      segment,
       settings,
       text,
       needsSplit: translationInput(text, needsSplit).needsSplit,
-      solo: options?.solo === true,
-      ...(options?.batch !== undefined ? { batchGroup: options.batch } : {}),
+      solo: false,
+      ...(options?.pack ? { pack: options.pack } : {}),
       promise,
       resolve,
       reject,
@@ -271,12 +296,17 @@ export class TranslationQueue {
     return job;
   }
 
-  private prune(abortUnused: boolean): void {
-    const wanted = new Set(
-      [...this.consumers.values()].flatMap((state) =>
-        state.current ? [state.current, ...state.window] : state.window,
-      ),
+  private wanted(): Set<string> {
+    return new Set(
+      [...this.consumers.values()].flatMap((state) => [
+        ...(state.current ? [state.current] : []),
+        ...state.packs.flatMap((pack) => pack.keys),
+      ]),
     );
+  }
+
+  private prune(abortUnused: boolean): void {
+    const wanted = this.wanted();
     for (const [key, job] of this.jobs) {
       if (wanted.has(key) || (job.sent && !abortUnused)) continue;
       this.jobs.delete(key);
@@ -285,74 +315,34 @@ export class TranslationQueue {
     }
   }
 
-  private windowAwaitingReply(state: Consumer): boolean {
-    return state.window.some((key) => {
-      const job = this.jobs.get(key);
-      return Boolean(
-        job && (job.solo || (job.sent && job.controller && !job.controller.signal.aborted)),
-      );
-    });
-  }
-
-  private parked(key: string): boolean {
-    for (const state of this.consumers.values()) {
-      if (!state.held || !this.windowAwaitingReply(state)) continue;
-      if (state.held.keys.includes(key) && !state.window.includes(key)) return true;
-    }
-    return false;
-  }
-
-  private promoteHeld(): void {
-    if (this.promoting || Date.now() < this.backoffUntil) return;
-    this.promoting = true;
-    try {
-      for (const [consumer, state] of [...this.consumers]) {
-        if (!state.held || this.windowAwaitingReply(state)) continue;
-        const held = state.held;
-        state.held = undefined;
-        void this.prefetch(consumer, held.settings, held.items);
-      }
-    } finally {
-      this.promoting = false;
-    }
+  private inFlight(): number {
+    const seen = new Set<AbortController>();
+    for (const job of this.jobs.values())
+      if (job.controller && !job.controller.signal.aborted) seen.add(job.controller);
+    return seen.size;
   }
 
   private drain(): void {
-    this.promoteHeld();
-    const consumers = [...this.consumers.values()].filter((state) => !state.paused);
+    const consumers = [...this.consumers.values()].filter((state) => !state.paused && !state.held);
     const ordered = consumers.flatMap((state) => (state.current ? [state.current] : []));
-    const longest = Math.max(0, ...consumers.map((state) => state.window.length));
-    for (let index = 0; index < longest; index++)
-      for (const state of consumers) if (state.window[index]) ordered.push(state.window[index]);
+    for (const state of consumers) for (const pack of state.packs) ordered.push(...pack.keys);
     const waiting = [...new Set(ordered)].flatMap((key) => {
       const job = this.jobs.get(key);
-      return job && !job.controller && !this.parked(key) ? [job] : [];
+      return job && !job.controller ? [job] : [];
     });
     const now = Date.now();
-    while (waiting.length && now >= this.backoffUntil) {
-      const [first] = waiting;
-      const batch = first.solo
-        ? [first]
-        : waiting
-            .filter(
-              (job) =>
-                !job.solo &&
-                job.group === first.group &&
-                (first.batchGroup !== undefined
-                  ? job.batchGroup === first.batchGroup
-                  : job.batchGroup === undefined && job.segment === first.segment),
-            )
-            .slice(0, translationBatchLimit);
+    while (waiting.length && now >= this.backoffUntil && this.inFlight() < maxInFlightRequests) {
+      const first = waiting[0];
+      const batch =
+        first.solo || !first.pack
+          ? [first]
+          : waiting
+              .filter((job) => !job.solo && job.pack === first.pack)
+              .slice(0, translationBatchLimit);
       for (const job of batch) waiting.splice(waiting.indexOf(job), 1);
       this.run(batch);
     }
-    const heldReady = [...this.consumers.values()].some(
-      (state) => state.held && !this.windowAwaitingReply(state),
-    );
-    this.scheduleSend(
-      now,
-      waiting.length > 0 || heldReady || [...this.jobs.values()].some((job) => !job.sent),
-    );
+    this.scheduleSend(now, waiting.length > 0 || [...this.jobs.values()].some((job) => !job.sent));
     wakeProviderRequests();
   }
 
@@ -376,13 +366,36 @@ export class TranslationQueue {
     const created = Date.now();
     let sentAt: number | undefined;
     let delivered = false;
-    const [tab, segment] = first.segment
-      ? (JSON.parse(first.segment) as [string, number])
-      : [first.consumer, null];
+    const state = this.consumers.get(first.consumer);
+    const time = state?.time ?? 0;
+    const rate = state?.rate ?? 1;
+    const pack = state?.packs.find((item) => item.id === first.pack);
+    const cues =
+      pack?.cues.filter((_, index) => batch.some((job) => job.key === pack.keys[index])) ?? [];
+    const start = cues.length ? Math.min(...cues.map((cue) => cue.start)) : time;
+    const end = cues.length ? Math.max(...cues.map((cue) => cue.end)) : time;
+    const slack = slackSeconds(start, time, rate);
+    const predictedMs = predictLatency(this.samples, batch.length);
     const elapsed = () => Date.now() - (sentAt ?? created);
-    const finish = (result: 'ok' | 'invalid' | 'timeout' | 'error' | 'aborted') =>
+    const finish = (result: 'ok' | 'invalid' | 'timeout' | 'error' | 'aborted') => {
+      if (result === 'ok' && sentAt !== undefined) this.noteSample(batch.length, elapsed());
       this.trace({ e: 'done', id, ms: elapsed(), result });
-    this.trace({ e: 'batch', id, tab, seg: segment, size: batch.length, solo: first.solo });
+    };
+    this.trace({
+      e: 'batch',
+      id,
+      tab: first.consumer,
+      size: batch.length,
+      videoTime: time,
+      playbackRate: rate,
+      start,
+      end,
+      predictedMs,
+      slack: Math.round(slack * 100) / 100,
+      inFlight: this.inFlight(),
+      blocked: false,
+      atRisk: predictedMs > Math.max(0, slack) * 1000,
+    });
     const deliver = (index: number, translation: CaptionTranslation) => {
       if (controller.signal.aborted) return;
       if (!delivered) {
@@ -406,34 +419,29 @@ export class TranslationQueue {
         canSend: () => {
           if (batch.some((job) => job.sent)) return true;
           if (Date.now() < this.backoffUntil) return false;
-          const wanted = [...this.consumers.values()].some(
-            (state) =>
-              !state.paused &&
-              batch.some((job) => state.current === job.key || state.window.includes(job.key)),
+          const live = [...this.consumers.values()].some(
+            (item) =>
+              !item.paused &&
+              !item.held &&
+              batch.some(
+                (job) =>
+                  item.current === job.key ||
+                  item.packs.some((pack) => pack.keys.includes(job.key)),
+              ),
           );
-          if (wanted) {
+          if (live) {
             batch.forEach((job) => {
               job.sent = true;
             });
             sentAt = Date.now();
             this.trace({ e: 'sent', id });
           }
-          return wanted;
+          return batch.some((job) => job.sent);
         },
         priority: () => {
-          const consumers = [...this.consumers.values()].filter((state) => !state.paused);
-          if (consumers.some((state) => batch.some((job) => job.key === state.current))) return 0;
-          return (
-            1 +
-            Math.min(
-              ...consumers.flatMap((state) =>
-                batch.map((job) => {
-                  const index = state.window.indexOf(job.key);
-                  return index < 0 ? Infinity : index;
-                }),
-              ),
-            )
-          );
+          const consumers = [...this.consumers.values()].filter((item) => !item.paused);
+          if (consumers.some((item) => batch.some((job) => job.key === item.current))) return 0;
+          return 1;
         },
       },
     );
@@ -454,6 +462,7 @@ export class TranslationQueue {
               batch: undefined,
               sent: false,
               solo: true,
+              pack: undefined,
             });
           }
           this.drain();

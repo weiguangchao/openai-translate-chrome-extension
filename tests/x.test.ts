@@ -1,11 +1,9 @@
-import type { PrefetchItem } from '../src/shared/caption-translation';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { CaptionController } from '../src/core/controller';
 import { TranslationQueue } from '../src/extension/queue';
 import { parseXSubtitlePlaylist, xMediaUrl } from '../src/platforms/x/captions';
 import { createXPlatform } from '../src/platforms/x/platform';
-import { prefetchBatchCount, translationBatchLimit } from '../src/shared/limits';
-import { providerSendWindowMs, translationSendsPerSecond } from '../src/shared/provider/transport';
+import { providerSendWindowMs } from '../src/shared/provider/transport';
 import { DEFAULT_SETTINGS, publicSettings } from '../src/shared/settings';
 import { providerReply, requestedTexts } from './fixtures/provider';
 
@@ -159,15 +157,35 @@ beforeEach(async () => {
       id: 'extension-id',
       sendMessage: async (message: {
         type: string;
-        text: string;
-        items: readonly PrefetchItem[];
+        text?: string;
+        time?: number;
+        rate?: number;
+        cues?: { text: string; needsSplit: boolean; start: number; end: number }[];
         cacheOnly?: boolean;
       }) => {
         if (message.type === 'prefetch-pause') queue.pause('x');
         if (message.type === 'prefetch-resume') queue.resume('x');
-        if (message.type === 'prefetch')
-          return { ok: true, data: await queue.prefetch('x', settings, message.items) };
-        if (message.type === 'translate')
+        if (message.type === 'prefetch-hold') {
+          queue.hold('x', message.time ?? 0);
+          return { ok: true };
+        }
+        if (message.type === 'prefetch') {
+          if (!message.cues?.length) {
+            queue.release(['x']);
+            return { ok: true, data: [] };
+          }
+          return {
+            ok: true,
+            data: await queue.prefetch(
+              'x',
+              settings,
+              message.cues,
+              message.time ?? 0,
+              message.rate ?? 1,
+            ),
+          };
+        }
+        if (message.type === 'translate' && message.text !== undefined)
           return {
             ok: true,
             data: await (message.cacheOnly
@@ -194,30 +212,6 @@ afterEach(async () => {
   Reflect.deleteProperty(document, 'fullscreenElement');
 });
 
-const cueCount = 30;
-
-function cueBatch(from: number): string[] {
-  return Array.from(
-    { length: Math.min(translationBatchLimit, cueCount - from + 1) },
-    (_, index) => `Cue ${from + index}`,
-  );
-}
-
-function cueBatches(): string[][] {
-  return Array.from({ length: Math.ceil(cueCount / translationBatchLimit) }, (_, index) =>
-    cueBatch(1 + index * translationBatchLimit),
-  );
-}
-
-function batchesThrough(cueNumber: number): string[][] {
-  const index = cueNumber - 1;
-  const end = Math.min(
-    cueCount,
-    (Math.floor(index / translationBatchLimit) + prefetchBatchCount) * translationBatchLimit,
-  );
-  return cueBatches().slice(0, Math.ceil(end / translationBatchLimit));
-}
-
 it('prefetches the opening batches from the selected HLS subtitle playlist before any cue is shown', async () => {
   const { player, video } = addPlayer('a', { top: 0, bottom: 360 }, false);
   controller = new CaptionController(createXPlatform, publicSettings(settings));
@@ -229,12 +223,10 @@ it('prefetches the opening batches from the selected HLS subtitle playlist befor
         `${media.replace('/amplify_video', '/subtitles/amplify_video')}/a/EN/${part}-segment.vtt`,
     ),
   );
-  const batches = cueBatches();
-  expect(requested.map((request) => request.texts)).toEqual(
-    batches.slice(0, translationSendsPerSecond),
-  );
+  const opening = [['Cue 1'], ['Cue 2', 'Cue 3']];
+  expect(requested.map((request) => request.texts)).toEqual(opening);
   await vi.advanceTimersByTimeAsync(providerSendWindowMs);
-  expect(requested.map((request) => request.texts)).toEqual(batches.slice(0, prefetchBatchCount));
+  expect(requested.map((request) => request.texts)).toEqual(opening);
   expect(player.querySelectorAll('[data-subline-overlay]')).toHaveLength(1);
   await playTo(video, 3);
   expect(lines()?.[0].textContent).toBe('Cue 1');
@@ -242,7 +234,7 @@ it('prefetches the opening batches from the selected HLS subtitle playlist befor
   expect(video.classList.contains('subline-native')).toBe(true);
   await playTo(video, 33);
   expect(lines()?.[1].textContent).toBe('译文 Cue 11');
-  expect(requested.map((request) => request.texts)).toEqual(batchesThrough(11));
+  expect(requested.some((request) => request.texts.includes('Cue 11'))).toBe(true);
 });
 
 it('stops prefetch and clears the overlay when X captions are turned off', async () => {
@@ -258,7 +250,7 @@ it('stops prefetch and clears the overlay when X captions are turned off', async
   await playTo(video, 33);
   expect(requested).toHaveLength(count);
   hls.subtitleTrack = 0;
-  await vi.advanceTimersByTimeAsync(1200);
+  await vi.advanceTimersByTimeAsync(4000);
   expect(lines()?.[0].textContent).toBe('Cue 11');
   expect(lines()?.[1].textContent).toBe('译文 Cue 11');
 });

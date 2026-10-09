@@ -1,0 +1,131 @@
+[
+  {
+    "e": "batch",
+    "id": 1,
+    "tab": "945050705:0",
+    "size": 1,
+    "videoTime": 0.020239,
+    "playbackRate": 1.5,
+    "start": 0,
+    "end": 4,
+    "predictedMs": 4000,
+    "slack": -0.01,
+    "inFlight": 1,
+    "blocked": false,
+    "atRisk": true
+  },
+  {
+    "e": "sent",
+    "id": 1
+  },
+  {
+    "e": "batch",
+    "id": 2,
+    "tab": "945050705:0",
+    "size": 1,
+    "videoTime": 0.020239,
+    "playbackRate": 1.5,
+    "start": 4,
+    "end": 8,
+    "predictedMs": 4000,
+    "slack": 2.65,
+    "inFlight": 2,
+    "blocked": false,
+    "atRisk": true
+  },
+  {
+    "e": "sent",
+    "id": 2
+  },
+  {
+    "e": "first",
+    "id": 1,
+    "ms": 301
+  },
+  {
+    "e": "batch",
+    "id": 3,
+    "tab": "945050705:0",
+    "size": 2,
+    "videoTime": 0.020239,
+    "playbackRate": 1.5,
+    "start": 8,
+    "end": 16,
+    "predictedMs": 4000,
+    "slack": 5.32,
+    "inFlight": 2,
+    "blocked": false,
+    "atRisk": false
+  },
+  {
+    "e": "sent",
+    "id": 3
+  },
+  {
+    "e": "done",
+    "id": 1,
+    "ms": 307,
+    "result": "ok"
+  },
+  {
+    "e": "done",
+    "id": 2,
+    "ms": 369,
+    "result": "aborted"
+  },
+  {
+    "e": "done",
+    "id": 3,
+    "ms": 66,
+    "result": "aborted"
+  },
+  {
+    "e": "batch",
+    "id": 4,
+    "tab": "945050705:0",
+    "size": 1,
+    "videoTime": 61.401855,
+    "playbackRate": 1.5,
+    "start": 60,
+    "end": 64,
+    "predictedMs": 2000,
+    "slack": -0.93,
+    "inFlight": 1,
+    "blocked": false,
+    "atRisk": true
+  },
+  {
+    "e": "sent",
+    "id": 4
+  },
+  {
+    "e": "batch",
+    "id": 5,
+    "tab": "945050705:0",
+    "size": 1,
+    "videoTime": 61.401855,
+    "playbackRate": 1.5,
+    "start": 64,
+    "end": 68,
+    "predictedMs": 2000,
+    "slack": 1.73,
+    "inFlight": 2,
+    "blocked": false,
+    "atRisk": true
+  },
+  {
+    "e": "sent",
+    "id": 5
+  },
+  {
+    "e": "first",
+    "id": 4,
+    "ms": 56
+  },
+  {
+    "e": "done",
+    "id": 4,
+    "ms": 56,
+    "result": "ok"
+  }
+]

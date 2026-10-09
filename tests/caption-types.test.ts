@@ -7,25 +7,27 @@ it('rejects contradictory caption states, unverified display parts, and writes o
 import type { CaptionFrame } from '../src/core/translator';
 import type { DisplayCaption, TimedCaption } from '../src/core/timeline';
 import { timedCaptions, translatedCaptions } from '../src/core/timeline';
-import type { PrefetchItem, TranslationPart } from '../src/shared/caption-translation';
+import type { TranslationPart } from '../src/shared/caption-translation';
+import type { PlaybackCue } from '../src/shared/playback-plan';
 import type { PrefetchRequest } from '../src/shared/messages';
 import type { SourceCache } from '../src/core/bridge/source-cache';
 declare const cue: TimedCaption & { needsSplit: true };
 declare const display: DisplayCaption;
 declare const part: TranslationPart;
-declare const item: PrefetchItem;
+declare const item: PlaybackCue;
 declare const cache: SourceCache;
 const ordinary: CaptionFrame = { kind: 'ordinary', text: 'DOM caption.', time: 0, cacheOnly: false, debounce: 0 };
 const split: CaptionFrame = { kind: 'split', cue, time: 0, cacheOnly: false, debounce: 0 };
-const request: PrefetchRequest = { type: 'prefetch', items: [item] };
+const request: PrefetchRequest = { type: 'prefetch', time: 0, rate: 1, cues: [{ text: item.text, start: 0, end: 1, needsSplit: item.needsSplit }] };
 translatedCaptions(cue, [part]);
 `;
   const invalid = [
     `const missingCue: CaptionFrame = { kind: 'split', time: 0, cacheOnly: false, debounce: 0 };`,
     `const conflictingSource: CaptionFrame = { kind: 'split', cue, text: 'Different source.', time: 0, cacheOnly: false, debounce: 0 };`,
     `const parallelArrays: PrefetchRequest = { type: 'prefetch', texts: ['A'], segments: [0], needsSplit: [false] };`,
-    `const missingSegment: PrefetchItem = { text: 'A', needsSplit: false };`,
-    `item.segment = 1;`,
+    `const missingTime: PlaybackCue = { text: 'A', needsSplit: false };`,
+    `const oldGrouping: PlaybackCue = { text: 'A', start: 0, end: 1, needsSplit: false, batch: 0 };`,
+    `item.start = 1;`,
     `cache.state = { mode: 'model', source: null };`,
     `cache.revision = 0;`,
     `cache.state.source?.push(cue);`,
@@ -60,6 +62,8 @@ translatedCaptions(cue, [part]);
       .sort((a, b) => a - b),
   ).toEqual(invalid.map((_, index) => firstInvalidLine + index));
   expect(
-    diagnostics.every((diagnostic) => [2322, 2353, 2741, 2540, 2339].includes(diagnostic.code)),
+    diagnostics.every((diagnostic) =>
+      [2322, 2353, 2739, 2741, 2540, 2339].includes(diagnostic.code),
+    ),
   ).toBe(true);
 });

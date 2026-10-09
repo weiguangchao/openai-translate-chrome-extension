@@ -1,6 +1,6 @@
-import type { PrefetchItem } from '../shared/caption-translation';
 import { fetchModels, translate } from '../shared/api';
 import {
+  readHoldRequest,
   readPrefetchRequest,
   readTranslateRequest,
   requestType,
@@ -48,27 +48,19 @@ async function contentRequest(
     else queue.resume(consumer);
     return;
   }
+  if (type === 'prefetch-hold') {
+    queue.hold(consumer, readHoldRequest(message).time);
+    return;
+  }
   if (type === 'prefetch') {
-    const { items } = readPrefetchRequest(message);
-    if (!items.length) {
+    const snapshot = readPrefetchRequest(message);
+    if (!snapshot.cues.length) {
       consumers.delete(consumer);
       queue.release([consumer]);
       return;
     }
     requireEnabled(platform);
-    const positions = new Map<string, number>();
-    const unique: PrefetchItem[] = [];
-    const indices = items.map((item) => {
-      const key = JSON.stringify([item.text, item.needsSplit]);
-      const existing = positions.get(key);
-      if (existing !== undefined) return existing;
-      const index = unique.length;
-      positions.set(key, index);
-      unique.push(item);
-      return index;
-    });
-    const results = await queue.prefetch(consumer, settings, unique);
-    return indices.map((index) => results[index]);
+    return queue.prefetch(consumer, settings, snapshot.cues, snapshot.time, snapshot.rate);
   }
   if (type === 'translate') {
     requireEnabled(platform);

@@ -1,9 +1,4 @@
 import { expect, test } from '@playwright/test';
-import {
-  prefetchBatchCount,
-  prefetchSentenceCount,
-  translationBatchLimit,
-} from '../src/shared/limits';
 import { providerTimeoutMs } from '../src/shared/provider/transport';
 import { longCaption, longCaptionParts, longTranslations } from '../tests/fixtures/long-caption';
 import {
@@ -41,13 +36,7 @@ const errorsShown = async (p: Player) =>
     t.startsWith('Subline：'),
   );
 
-const openingInputs = [
-  [
-    { id: 0, text: source },
-    { id: 1, text: nextSource },
-    { id: 2, text: gardenSource },
-  ],
-];
+const openingInputs = [[{ id: 0, text: source }]];
 
 async function expectOpeningPosts(p: Player) {
   await expect.poll(() => p.posts.map((post) => post.inputs)).toEqual(openingInputs);
@@ -62,6 +51,11 @@ async function expectStored(p: Player, text: string) {
       }, text),
     )
     .toBe(true);
+}
+
+async function preloadNext(p: Player) {
+  await p.seek(24);
+  await expectStored(p, nextSource);
 }
 
 for (const platform of ['youtube', 'hbo', 'x'] as const) {
@@ -129,12 +123,18 @@ for (const platform of ['youtube', 'hbo', 'x'] as const) {
       async (p) => {
         await p.play();
         await expect.poll(() => p.posts.length).toBeGreaterThan(0);
-        const openingCount = p.posts.length;
         await p.pause();
         await p.release(0);
         await p.pair(source, translation);
         await p.seek(35);
+        await expect(p.original).toBeHidden();
+        expect(p.posts).toHaveLength(1);
+        await p.play();
+        await expect.poll(() => p.posts.length).toBe(2);
+        await p.release(1);
         await p.pair(nextSource, nextTranslation);
+        await p.pause();
+        const openingCount = p.posts.length;
         await p.seek(2);
         await p.pair(source, translation);
         await p.play();
@@ -327,6 +327,7 @@ for (const platform of ['youtube', 'hbo', 'x'] as const) {
         async (p) => {
           await p.play();
           await p.pair(source, translation);
+          await preloadNext(p);
           const openingCount = p.posts.length;
           await p.pause();
           await p.seek(35);
@@ -440,9 +441,9 @@ for (const platform of ['youtube', 'hbo', 'x'] as const) {
     await withPlayer(platform, info, async (p) => {
       await p.play();
       await expect.poll(() => p.posts.length).toBeGreaterThan(0);
-      const openingCount = p.posts.length;
       await p.pair(source, translation);
-      await expectStored(p, nextSource);
+      await preloadNext(p);
+      const openingCount = p.posts.length;
       await p.seek(27);
       const before = (await p.frames()).length;
       await p.pair(nextSource, nextTranslation);
@@ -458,10 +459,11 @@ for (const platform of ['youtube', 'hbo', 'x'] as const) {
     await withPlayer(platform, info, async (p) => {
       await p.play();
       await expect.poll(() => p.posts.length).toBeGreaterThan(0);
-      const openingCount = p.posts.length;
       await p.pair(source, translation);
-      await expectStored(p, nextSource);
+      await preloadNext(p);
+      await p.seek(59);
       await expectStored(p, gardenSource);
+      const openingCount = p.posts.length;
       await p.pause();
       const worker = await p.watchWorker();
       await worker.stop();
@@ -485,28 +487,72 @@ test('youtube: a stalled opening batch times out without a retry and the next ba
     info,
     async (p) => {
       await p.play();
-      await expect.poll(() => p.posts.length).toBe(prefetchBatchCount);
-      expect(p.posts.every((post) => post.inputs.length === translationBatchLimit)).toBe(true);
-      expect(p.posts.flatMap((post) => post.inputs.map((input) => input.text))).toEqual(
-        Array.from({ length: prefetchSentenceCount }, (_, index) => denseCue(index).text),
-      );
+      await expect.poll(() => p.posts.length).toBeGreaterThan(0);
+      expect(p.posts[0].inputs.map((input) => input.text)).toEqual([denseCue(0).text]);
+      await expect(p.translated).toHaveText('翻译中');
       await p.pause();
       expect(
         await p.page.locator('video').evaluate((v: HTMLVideoElement) => v.currentTime),
       ).toBeLessThan(denseCue(0).end);
-      await expect(p.translated).toHaveText('翻译中');
       await p.page.waitForTimeout(providerTimeoutMs + 1500);
       const first = p.posts[0].inputs.map((input) => input.text).join('\n');
       expect(
         p.posts.filter((post) => post.inputs.map((input) => input.text).join('\n') === first),
       ).toHaveLength(1);
       await expect(p.translated).toHaveText('接口调用超时');
-      const later = denseCue(translationBatchLimit);
+      const later = denseCue(4);
       await p.seek(later.start + 0.2);
+      await p.play();
       await p.pair(later.text, later.translation);
       await p.posts[0].route.abort('timedout').catch(() => undefined);
     },
     { dense: true, stallFirst: true },
+  );
+});
+
+test('youtube: 1.5x playback sends urgent captions alone and stays silent through continuous scrubbing', async ({}, info) => {
+  await withPlayer(
+    'youtube',
+    info,
+    async (p) => {
+      await p.page.locator('video').evaluate((video: HTMLVideoElement) => {
+        video.playbackRate = 1.5;
+      });
+      await p.play();
+      await expect.poll(() => p.posts.length).toBe(2);
+      expect(p.posts.map((post) => post.inputs.map((input) => input.text))).toEqual([
+        [denseCue(0).text],
+        [denseCue(1).text],
+      ]);
+      await expect(p.translated).toHaveText('翻译中');
+      await p.release(0);
+      await p.pair(denseCue(0).text, denseCue(0).translation);
+      await p.page.screenshot({ path: info.outputPath('opening.png') });
+      await expect.poll(() => p.posts.length).toBe(3);
+      const before = p.posts.length;
+      await p.page.locator('video').evaluate(async (video: HTMLVideoElement) => {
+        for (const time of [28.8, 44.8, 60.8]) {
+          video.currentTime = time;
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        }
+      });
+      expect(p.posts).toHaveLength(before);
+      await expect.poll(() => p.posts.length).toBe(before + 2);
+      expect(p.posts.slice(before).map((post) => post.inputs.map((input) => input.text))).toEqual([
+        [denseCue(15).text],
+        [denseCue(16).text],
+      ]);
+      await p.release(before);
+      await p.pair(denseCue(15).text, denseCue(15).translation);
+      await p.page.screenshot({ path: info.outputPath('landing.png') });
+      const batches = p.trace.filter((event) => event.e === 'batch');
+      expect(batches.length).toBeGreaterThan(0);
+      expect(
+        batches.every((event) => event.playbackRate === 1.5 && Number(event.inFlight) <= 2),
+      ).toBe(true);
+      expect(batches[0]).toMatchObject({ size: 1, atRisk: true, blocked: false });
+    },
+    { dense: true, hold: true, recordVideo: true },
   );
 });
 

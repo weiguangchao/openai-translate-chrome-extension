@@ -55,6 +55,24 @@ const lines = () =>
       .shadowRoot!.querySelectorAll<HTMLElement>('.line'),
   ].map((line) => (line.hidden ? null : line.textContent));
 
+it('releases a DOM-only consumer when the controller is destroyed', async () => {
+  source = {
+    kind: 'live',
+    mode: 'model',
+    read: () => ({ text: 'DOM caption', layers: [], nativeTrack: false }),
+  };
+  controller = new CaptionController(
+    () => platform,
+    publicSettings({ ...DEFAULT_SETTINGS, apiKey: 'key', model: 'model' }),
+  );
+  await vi.advanceTimersByTimeAsync(450);
+  expect(lines()).toEqual(['DOM caption', '译文 DOM caption']);
+  sendMessage.mockClear();
+  controller.destroy();
+  await vi.advanceTimersByTimeAsync(0);
+  expect(sendMessage).toHaveBeenCalledWith({ type: 'prefetch', time: 0, rate: 1, cues: [] });
+});
+
 it('drives any platform through the waiting, live and timeline caption sources', async () => {
   const layer = document.getElementById('layer')!;
   controller = new CaptionController(
@@ -87,7 +105,9 @@ it('drives any platform through the waiting, live and timeline caption sources',
   expect(layer.hasAttribute('data-subline-caption')).toBe(false);
   expect(sendMessage).toHaveBeenCalledWith({
     type: 'prefetch',
-    items: [{ text: 'Timed cue.', segment: 0, needsSplit: false, batch: 0 }],
+    time: 0,
+    rate: 1,
+    cues: [{ text: 'Timed cue.', start: 0, end: 10, needsSplit: false }],
   });
 
   controller.destroy();
