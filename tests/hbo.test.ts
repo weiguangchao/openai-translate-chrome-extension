@@ -225,7 +225,7 @@ const lines = () =>
     .querySelector('[data-subline-overlay]')
     ?.shadowRoot?.querySelectorAll<HTMLElement>('.line');
 
-const openingRequests = [['Cue 1'], ['Cue 2', 'Cue 3']];
+const openingRequests = [['Cue 1'], ['Cue 2', 'Cue 3', 'Cue 4']];
 
 async function playTo(time: number): Promise<void> {
   while (video.currentTime < time) {

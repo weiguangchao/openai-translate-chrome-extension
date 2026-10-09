@@ -223,7 +223,7 @@ it('prefetches the opening batches from the selected HLS subtitle playlist befor
         `${media.replace('/amplify_video', '/subtitles/amplify_video')}/a/EN/${part}-segment.vtt`,
     ),
   );
-  const opening = [['Cue 1'], ['Cue 2', 'Cue 3']];
+  const opening = [['Cue 1'], ['Cue 2', 'Cue 3', 'Cue 4']];
   expect(requested.map((request) => request.texts)).toEqual(opening);
   await vi.advanceTimersByTimeAsync(providerSendWindowMs);
   expect(requested.map((request) => request.texts)).toEqual(opening);

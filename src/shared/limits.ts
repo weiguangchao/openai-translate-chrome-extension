@@ -1,5 +1,8 @@
 export const translationBatchLimit = 4;
 export const planSentenceCap = 16;
+export const planBufferSeconds = 30;
+export const packSpanSeconds = 10;
+export const minShowSeconds = 1;
 export const planLookaheadSeconds = 60;
 export const planLookaheadCues = 24;
 export const maxInFlightRequests = 2;

@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { maxInFlightRequests } from '../src/shared/limits';
 import { providerTimeoutMs } from '../src/shared/provider/transport';
 import { longCaption, longCaptionParts, longTranslations } from '../tests/fixtures/long-caption';
 import {
@@ -510,7 +511,7 @@ test('youtube: a stalled opening batch times out without a retry and the next ba
   );
 });
 
-test('youtube: 1.5x playback sends urgent captions alone and stays silent through continuous scrubbing', async ({}, info) => {
+test('youtube: 1.5x playback sends the imminent caption alone and stays silent through continuous scrubbing', async ({}, info) => {
   await withPlayer(
     'youtube',
     info,
@@ -519,16 +520,16 @@ test('youtube: 1.5x playback sends urgent captions alone and stays silent throug
         video.playbackRate = 1.5;
       });
       await p.play();
-      await expect.poll(() => p.posts.length).toBe(2);
+      await expect.poll(() => p.posts.length).toBe(maxInFlightRequests);
       expect(p.posts.map((post) => post.inputs.map((input) => input.text))).toEqual([
         [denseCue(0).text],
-        [denseCue(1).text],
+        [denseCue(1).text, denseCue(2).text],
       ]);
       await expect(p.translated).toHaveText('翻译中');
       await p.release(0);
       await p.pair(denseCue(0).text, denseCue(0).translation);
       await p.page.screenshot({ path: info.outputPath('opening.png') });
-      await expect.poll(() => p.posts.length).toBe(3);
+      await expect.poll(() => p.posts.length).toBe(maxInFlightRequests + 1);
       const before = p.posts.length;
       await p.page.locator('video').evaluate(async (video: HTMLVideoElement) => {
         for (const time of [28.8, 44.8, 60.8]) {
@@ -537,10 +538,10 @@ test('youtube: 1.5x playback sends urgent captions alone and stays silent throug
         }
       });
       expect(p.posts).toHaveLength(before);
-      await expect.poll(() => p.posts.length).toBe(before + 2);
+      await expect.poll(() => p.posts.length).toBe(before + maxInFlightRequests);
       expect(p.posts.slice(before).map((post) => post.inputs.map((input) => input.text))).toEqual([
         [denseCue(15).text],
-        [denseCue(16).text],
+        [denseCue(16).text, denseCue(17).text],
       ]);
       await p.release(before);
       await p.pair(denseCue(15).text, denseCue(15).translation);
@@ -548,11 +549,40 @@ test('youtube: 1.5x playback sends urgent captions alone and stays silent throug
       const batches = p.trace.filter((event) => event.e === 'batch');
       expect(batches.length).toBeGreaterThan(0);
       expect(
-        batches.every((event) => event.playbackRate === 1.5 && Number(event.inFlight) <= 2),
+        batches.every(
+          (event) => event.playbackRate === 1.5 && Number(event.inFlight) <= maxInFlightRequests,
+        ),
       ).toBe(true);
       expect(batches[0]).toMatchObject({ size: 1, atRisk: true, blocked: false });
     },
     { dense: true, hold: true, recordVideo: true },
+  );
+});
+
+test('youtube: steady playback stays ahead of a Provider whose every fourth reply takes 15 s', async ({}, info) => {
+  const steadyUntil = 60;
+  test.setTimeout((steadyUntil + 40) * 1000);
+  await withPlayer(
+    'youtube',
+    info,
+    async (p) => {
+      await p.play();
+      await expect
+        .poll(() => p.page.locator('video').evaluate((v: HTMLVideoElement) => v.currentTime), {
+          timeout: (steadyUntil + 20) * 1000,
+          intervals: [1000],
+        })
+        .toBeGreaterThan(steadyUntil);
+      const frames = await p.frames();
+      expect(
+        frames.filter((frame) => frame.time >= denseCue(1).start && frame.translation === '翻译中'),
+      ).toEqual([]);
+      expect(frames.some((frame) => frame.translation === denseCue(14).translation)).toBe(true);
+      expect(p.trace.filter((event) => event.e === 'done' && event.result === 'aborted')).toEqual(
+        [],
+      );
+    },
+    { dense: true, latency: (post) => (post % 4 === 3 ? 15_000 : 3000), recordVideo: true },
   );
 });
 

@@ -499,7 +499,7 @@ it('after a jump settles, sends full batches from the new anchor', async () => {
   expect(pending[started].signal.aborted).toBe(false);
 });
 
-it('requests the cue on screen and waits out a seek before requesting the landing cues', async () => {
+it('skips a sub-second opening cue and waits out a seek before requesting the landing cues', async () => {
   const cues = [
     { startTime: 0, endTime: 0.6, text: 'Opening' },
     { startTime: 0.6, endTime: 4, text: 'Stay' },
@@ -518,7 +518,7 @@ it('requests the cue on screen and waits out a seek before requesting the landin
   await vi.advanceTimersByTimeAsync(0);
   const opening = sentTexts(cues, 0);
   expect(requested).toEqual(opening);
-  expect(requested.flat()).toContain('Opening');
+  expect(requested.flat()).not.toContain('Opening');
   expect(requested.flat()).not.toContain('Seek tail');
   expect(original()?.hidden).toBe(true);
   expect(translated()?.hidden).toBe(true);
@@ -536,8 +536,7 @@ it('requests the cue on screen and waits out a seek before requesting the landin
   await vi.advanceTimersByTimeAsync(0);
   expect(requested).toHaveLength(sent);
   await vi.advanceTimersByTimeAsync(400);
-  expect(requested.slice(sent)).toEqual(sentTexts(cues, 20));
-  expect(requested.flat()).toContain('Seek tail');
+  expect(requested.slice(sent)).toEqual([...sentTexts(cues, 20), ['Seek tail']]);
   expect(original()?.hidden).toBe(true);
   expect(translated()?.hidden).toBe(false);
   expect(translated()?.textContent).toBe('翻译中');

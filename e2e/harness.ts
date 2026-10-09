@@ -86,6 +86,7 @@ interface Options {
   unavailable?: number;
   holdTimeline?: boolean;
   recordVideo?: boolean;
+  latency?: (post: number) => number;
 }
 
 const denseCueSeconds = 4;
@@ -419,8 +420,12 @@ export class Player {
         }[post.status];
         return route.fulfill({ status: post.status, json: { error: { message } } });
       }
-      if (!this.hold && !(this.options.stallFirst && this.posts.length === 1))
-        await this.release(this.posts.length - 1);
+      const index = this.posts.length - 1;
+      const latency = this.options.latency?.(index);
+      if (latency !== undefined)
+        setTimeout(() => void this.release(index).catch(() => undefined), latency);
+      else if (!this.hold && !(this.options.stallFirst && this.posts.length === 1))
+        await this.release(index);
       return;
     }
     this.unexpected.push(`${request.method()} ${url.href}`);

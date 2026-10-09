@@ -127,13 +127,13 @@ it('prioritizes the visible caption when the next send window opens', async () =
   const prefetch = queue.prefetch(
     'window',
     settings,
-    prefetchItems(Array.from({ length: 4 }, (_, index) => `Future ${index}`)),
+    prefetchItems(Array.from({ length: 2 }, (_, index) => `Future ${index}`)),
   );
   const current = queue.request('current', settings, 'Visible');
   await vi.advanceTimersByTimeAsync(1000);
   expect(sent.slice(3)).toEqual(['Visible', 'Future 0']);
   await expect(current).resolves.toBe('完成');
-  await expect(prefetch).resolves.toEqual(['完成']);
+  await expect(prefetch).resolves.toEqual(['完成', null]);
 });
 
 it('replaces unsent work when a consumer moves to a disjoint window', async () => {
