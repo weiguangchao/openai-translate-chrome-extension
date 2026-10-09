@@ -10,6 +10,7 @@ Run from the repository root:
 
 ```bash
 python3 .cursor/skills/chrome-debug/scripts/live.py --help
+python3 .cursor/skills/chrome-debug/scripts/live.py do --help
 python3 .cursor/skills/chrome-debug/scripts/live.py run --help
 ```
 
@@ -18,26 +19,29 @@ Append a command to `python3 .cursor/skills/chrome-debug/scripts/live.py`:
 | Command | Effect |
 | --- | --- |
 | `start` | Create a session and print its ID, or reuse this task's holder with `--session ID`. |
-| `status` | Report whether the holder is running. |
-| `reload [--path DIR]` | Reload Subline from Chrome's loaded folder, defaulting to this repository's `dist`. Does not build it. |
-| `run FILE [FILE ...] [--only NAME]` | Run JSON checks. Each check opens its own tab with muted media, executes its steps, and closes that tab. |
-| `stop` | Stop the holder and close its socket and any active check tab. Leaves Chrome running. |
+| `status` | Report whether the holder is running and which tabs it keeps open. |
+| `reload [--path DIR] [--from BUILD]` | Reload Subline from the folder Chrome loaded it from, defaulting to this repository's `dist`, and print the build fingerprint. `--from` first replaces that folder's files with another build. Does not build. |
+| `open URL [--trace]` | Open a muted tab and print its tab ID. `--trace` watches Subline's worker from navigation so `trace` steps work. |
+| `do TAB STEP [--timeout S]` | Run one JSON step in an open tab and print its result. |
+| `close TAB` | Close a tab and undo its playback rate change. |
+| `run FILE [FILE ...] [--only NAME]` | Run JSON checks. Each check opens its own tab, runs its steps in order, and closes it. |
+| `stop` | Stop the holder and close its socket and its tabs. Leaves Chrome running. |
 
-Keep the session ID printed by `start`. Pass `--session ID` after the command on subsequent `start`, `run`, `reload`, and `stop` calls, or set `CHROME_DEBUG_SESSION` only for this task. A holder belongs to one task until stopped. If another task owns it, wait for that task to finish; do not copy its ID or stop its process. `status` is available without an ID. A holder started by an older version without ownership must be stopped by its original task using that version before this version can start.
+Keep the session ID printed by `start`. Pass `--session ID` after the command on later calls, or set `CHROME_DEBUG_SESSION` only for this task. A holder belongs to one task until stopped. If another task owns it, wait for that task to finish; do not copy its ID or stop its process. `status` is available without an ID. A holder started by an older version without ownership must be stopped by its original task using that version before this version can start.
 
-`run --help` describes check fields, composable actions, and return values. Choose URLs, steps, budgets, and evidence for the user's task. A finished trace exits 0 when collection finishes. Its end line prints from, played, wall, playbackRate, visible, coverage, missed, and lag max. Read playbackRate. Do not set it.
+Steps are the same in `do` and `run`: `media` seeks, sets the playback rate, plays or pauses and reports the video; `wait` waits for wall seconds or a video time; `evaluate`, `click`, `screenshot`, `requests`, `overlay`, `trace` and `focus` cover the page, Subline's overlay, Subline's timing events and the window. `do --help` lists every field and return value.
 
-Chrome must already be open with remote debugging enabled at `chrome://inspect/#remote-debugging`. `start` tries to accept Chrome's Allow dialog; if it remains open, ask the user to click Allow once. `reload` unloads Subline from existing site tabs until they are refreshed.
+Use `open`, `do` and `close` to react to what the page does, for example to seek again when a site jumps elsewhere or to bring Chrome to the front when a trace reports `throttled`. Use `run` to repeat a fixed check. A tab that gets no request for 15 minutes closes by itself.
 
-Before every debugging session, run `npm run build` in the repository that owns Chrome's loaded extension folder. Then `start` and `reload --path /absolute/path/to/that/dist` through the holder's DevTools socket. Run checks only after both build and reload succeed. Rebuild and reload after source changes during the session.
-
-Keep debug tabs' media muted throughout debugging. `run` installs media muting before navigation, covering existing and newly added audio/video elements without forcing playback. This also applies to `evaluate` steps and pause/resume checks.
+Chrome must already be open with remote debugging enabled at `chrome://inspect/#remote-debugging`. `start` tries to accept Chrome's Allow dialog; if it remains open, ask the user to click Allow once. Before checking a build, run `npm run build` in the repository that owns Chrome's loaded folder, then `start` and `reload`; rebuild and reload after source changes. `reload` unloads Subline from existing site tabs until they are refreshed.
 
 ## Constraints
 
 - Reach this Chrome only through `live.py`. Do not launch or quit it, read `DevToolsActivePort`, or open another DevTools connection.
-- Operate only tabs this task's checks opened. Stop this task's holder with its session ID when the task ends.
+- Operate only tabs this session opened. Close them and stop the holder with its session ID when the task ends.
+- Media stays muted from navigation until the tab closes; unmute attempts are ignored.
+- `focus` takes focus from the app the user is working in. Tell the user before using it.
 - Keep only the signed-in page text and screenshots the task needs.
 - Do not evaluate custom code or enable Network in extension contexts. The holder only listens to Subline trace logs; `reload` uses fixed popup expressions.
-- Do not enable the page's Runtime domain. YouTube stops serving captions. Page `Runtime.evaluate` is supported through `evaluate`.
-- Preserve failed checks and report their findings. Do not relax assertions to obtain a pass.
+- Do not enable the page's Runtime domain. YouTube stops serving captions. `evaluate` works without it.
+- Preserve failed steps and report their findings. Do not relax assertions to obtain a pass.

@@ -39,6 +39,10 @@ WORKER_WAIT_SECONDS = 20
 WORKER_QUIET_SECONDS = 30
 WORKER_EVENTS = 50000
 STALL_SECONDS = 20
+FOCUS_SECONDS = 5
+TAB_IDLE_SECONDS = 900
+LOADING_TEXT = "翻译中"
+ACTIVATE_CHROME = 'tell application "Google Chrome" to activate'
 
 MUTE_MEDIA = """(() => {
   const prototype = HTMLMediaElement.prototype;
@@ -122,6 +126,12 @@ OVERLAY = r"""
   };
 })()
 """
+
+
+def set_rate(rate):
+    return ("if (video.playbackRate !== %s) { const player = document.querySelector('#movie_player'); "
+            "if (player && typeof player.setPlaybackRate === 'function') player.setPlaybackRate(%s); "
+            "if (video.playbackRate !== %s) video.playbackRate = %s; }") % ((rate,) * 4)
 
 
 def video_report():
@@ -362,16 +372,65 @@ def handshake(port, path):
     return Chrome(sock, rest)
 
 
+NUMBER = (int, float)
 STEP_FIELDS = {
-    "play": ({}, {"selector": str}),
-    "seek": ({"time": (int, float)}, {"selector": str}),
+    "media": ({}, {"selector": str, "time": NUMBER, "rate": NUMBER, "play": bool, "pause": bool,
+                   "keep_playing": bool, "skip_ads": bool}),
+    "wait": ({}, {"seconds": NUMBER, "time": NUMBER, "selector": str}),
     "click": ({"selector": str}, {}),
-    "wait-overlay": ({}, {"reject": list, "reject_error": bool}),
-    "network-any": ({"hints": list}, {}),
+    "overlay": ({}, {"wait": bool}),
+    "requests": ({}, {"match": list}),
     "evaluate": ({"expression": str}, {"save": str}),
-    "trace": ({"seconds": (int, float)}, {"selector": str, "save": str}),
+    "trace": ({"seconds": NUMBER}, {"selector": str, "save": str}),
     "screenshot": ({"path": str}, {}),
+    "focus": ({}, {}),
 }
+
+
+def validate_step(step, where):
+    action = step.get("action") if isinstance(step, dict) else None
+    if not isinstance(action, str) or action not in STEP_FIELDS:
+        return [f"{where}: unknown action {action!r}"]
+    problems = []
+    required, optional = STEP_FIELDS[action]
+    for field, kind in {**required, **optional}.items():
+        if field not in step:
+            continue
+        value = step[field]
+        if (
+            not isinstance(value, kind)
+            or kind is NUMBER and isinstance(value, bool)
+            or isinstance(value, list) and not all(isinstance(item, str) and item for item in value)
+        ):
+            problems.append(f"{where}: {field} has the wrong type")
+    missing = set(required) - set(step)
+    extra = set(step) - set(required) - set(optional) - {"action"}
+    if missing:
+        problems.append(f"{where}: {action} needs {sorted(missing)}")
+    if extra:
+        problems.append(f"{where}: {action} does not take {sorted(extra)}")
+    if problems:
+        return problems
+    for field in ("path", "save"):
+        if isinstance(step.get(field), str) and not Path(step[field]).is_absolute():
+            problems.append(f"{where}: {field} must be an absolute path")
+    if action == "media":
+        if step.get("play") and step.get("pause"):
+            problems.append(f"{where}: media cannot both play and pause")
+        if "rate" in step and not 0.25 <= step["rate"] <= 4:
+            problems.append(f"{where}: rate must be 0.25-4")
+        if step.get("time", 0) < 0:
+            problems.append(f"{where}: time must not be negative")
+    if action == "wait":
+        if ("seconds" in step) == ("time" in step):
+            problems.append(f"{where}: wait needs exactly one of seconds and time")
+        elif "seconds" in step and not 0 < step["seconds"] <= 600:
+            problems.append(f"{where}: wait seconds must be above 0 and at most 600")
+    if action == "requests" and "match" in step and not step["match"]:
+        problems.append(f"{where}: match must not be empty")
+    if action == "trace" and not 1 <= step["seconds"] <= 600:
+        problems.append(f"{where}: trace seconds must be 1-600")
+    return problems
 
 
 def validate(checks):
@@ -405,35 +464,28 @@ def validate(checks):
             problems.append(f"{where}: steps must be a non-empty list")
             continue
         for index, step in enumerate(steps):
-            action = step.get("action") if isinstance(step, dict) else None
-            if not isinstance(action, str) or action not in STEP_FIELDS:
-                problems.append(f"{where} step {index}: unknown action {action!r}")
-                continue
-            required, optional = STEP_FIELDS[action]
-            for field, kind in {**required, **optional}.items():
-                value = step.get(field)
-                if field in step and (
-                    not isinstance(value, kind)
-                    or isinstance(value, list) and not all(isinstance(item, str) and item for item in value)
-                ):
-                    problems.append(f"{where} step {index}: {field} has the wrong type")
-            if action == "network-any" and not step.get("hints"):
-                problems.append(f"{where} step {index}: hints must not be empty")
-            missing = set(required) - set(step)
-            extra = set(step) - set(required) - set(optional) - {"action"}
-            if missing:
-                problems.append(f"{where} step {index}: {action} needs {sorted(missing)}")
-            if extra:
-                problems.append(f"{where} step {index}: {action} does not take {sorted(extra)}")
-            for field in ("path", "save"):
-                if isinstance(step.get(field), str) and not Path(step[field]).is_absolute():
-                    problems.append(f"{where} step {index}: {field} must be an absolute path")
-            seconds = step.get("seconds")
-            if action == "trace" and isinstance(seconds, (int, float)) and not (
-                1 <= seconds <= 600 and (not isinstance(budget, (int, float)) or seconds < budget)
+            found = validate_step(step, f"{where} step {index}")
+            problems += found
+            if (
+                not found
+                and step["action"] == "trace"
+                and isinstance(budget, (int, float))
+                and step["seconds"] >= budget
             ):
-                problems.append(f"{where} step {index}: trace seconds must be 1-600 and below the budget")
+                problems.append(f"{where} step {index}: trace seconds must be below the budget")
     return problems
+
+
+def activate_chrome():
+    try:
+        result = subprocess.run(
+            ["osascript", "-e", ACTIVATE_CHROME], capture_output=True, text=True, timeout=10, check=False
+        )
+    except subprocess.TimeoutExpired:
+        return "osascript timed out"
+    if result.returncode:
+        return result.stderr.strip()[:200] or f"osascript exited {result.returncode}"
+    return None
 
 
 class Tab:
@@ -446,7 +498,14 @@ class Tab:
         self.progress = progress
         self.requests = []
         self.seen = set()
-        self.playing = None
+        self.watch = None
+        self.keep_playing = False
+        self.skip_ads = False
+        self.rate = None
+        self.original_rate = None
+        self.id = None
+        self.url = None
+        self.used = time.monotonic()
         self.expect_motion = False
         self.rates = {}
         self.clock_samples = 0
@@ -554,14 +613,14 @@ class Tab:
             self.chrome.idle(0.1)
         self.pump_worker()
 
-    def stop_worker(self):
+    def stop_worker(self, keep_discovery=False):
         for session in list(self.workers):
             try:
                 self.chrome.call("Target.detachFromTarget", {"sessionId": session}, timeout=5)
             except CdpError:
                 pass
         self.workers.clear()
-        if self.run_id:
+        if self.run_id and not keep_discovery:
             try:
                 self.chrome.call("Target.setDiscoverTargets", {"discover": False}, timeout=5)
             except CdpError:
@@ -607,7 +666,8 @@ class Tab:
             self.stall_since = now
             return None
         if now - self.stall_since >= STALL_SECONDS:
-            self.fail_reason = f"video time stuck at {mark} s, readyState {ready}"
+            state = "paused" if value.get("paused") else f"readyState {ready}"
+            self.fail_reason = f"video time stuck at {mark} s, {state}"
             return FAIL
         return None
 
@@ -652,8 +712,8 @@ class Tab:
             if self.run_id:
                 self.pump_worker()
             observed = None
-            if self.playing:
-                observed = self.remember(self.sample(self.playing))
+            if self.watch:
+                observed = self.remember(self.sample(self.watch))
             value = probe()
             if isinstance(value, dict) and "ready" in value:
                 observed = self.remember(value)
@@ -710,58 +770,114 @@ class Tab:
         self.progress(event)
         return result
 
-    def do_play(self, step):
-        selector = json.dumps(step.get("selector", "video"))
-        expression = f"""(() => {{
-          const skip = document.querySelector({json.dumps(SKIP_AD)});
-          if (skip) skip.click();
-          const video = document.querySelector({selector});
+    def video_probe(self, selector, before=""):
+        return f"""(() => {{
+          {before}
+          const video = document.querySelector({json.dumps(selector)});
           if (!video) return null;
-          video.muted = true;
-          if (video.paused && !video.ended) {{
-            const playing = video.play();
-            if (playing && playing.catch) playing.catch(() => {{}});
-          }}
           {video_report()}
         }})()"""
-        self.expect_motion = True
+
+    def watch_probe(self, selector):
+        before = (f"const skip = document.querySelector({json.dumps(SKIP_AD)}); if (skip) skip.click();"
+                  if self.skip_ads else "")
+        probe = self.video_probe(selector, before)
+        keep = []
+        if self.rate is not None:
+            keep.append(set_rate(self.rate))
+        if self.keep_playing:
+            keep.append("if (video.paused && !video.ended) { const playing = video.play(); "
+                        "if (playing && playing.catch) playing.catch(() => {}); }")
+        return probe.replace("if (!video) return null;", "if (!video) return null;\n          " + " ".join(keep))
+
+    def restore(self):
+        self.rate = None
+        if self.original_rate is None:
+            return
+        try:
+            self.evaluate(
+                f"(() => {{ for (const video of document.querySelectorAll('video')) {{ {set_rate(self.original_rate)} }} "
+                "return true; })()",
+                timeout=5,
+            )
+        except (CdpError, TabGone):
+            pass
+
+    def do_media(self, step):
+        selector = step.get("selector", "video")
+        target, rate = step.get("time"), step.get("rate")
+        play, pause = step.get("play", False), step.get("pause", False)
+        self.keep_playing = step.get("keep_playing", self.keep_playing and not pause)
+        self.skip_ads = step.get("skip_ads", self.skip_ads)
+        if rate is not None and self.original_rate is None:
+            current = self.sample(f"document.querySelector({json.dumps(selector)})?.playbackRate")
+            if isinstance(current, (int, float)) and not isinstance(current, bool):
+                self.original_rate = current
+        if rate is not None:
+            self.rate = rate
+        actions = []
+        if rate is not None:
+            actions.append(set_rate(rate))
+        if target is not None:
+            actions.append(f"if (Math.abs(video.currentTime - {target}) > 1.5) video.currentTime = {target};")
+        if play:
+            actions.append("if (video.paused && !video.ended) { const playing = video.play(); "
+                           "if (playing && playing.catch) playing.catch(() => {}); }")
+        if pause:
+            actions.append("if (!video.paused) video.pause();")
+        probe = self.video_probe(selector).replace(
+            "if (!video) return null;", "if (!video || video.readyState < 1) return null;\n          "
+            + " ".join(actions)
+        )
+        if play or self.keep_playing:
+            self.expect_motion = True
+        if pause:
+            self.expect_motion = False
+        self.watch = (
+            self.watch_probe(selector) if self.expect_motion or self.skip_ads or self.rate is not None else None
+        )
         origin = [None]
 
-        def playing(item):
-            if not isinstance(item, dict):
+        def passed(value):
+            if not isinstance(value, dict):
                 return False
-            if item.get("ended"):
-                return True
-            if item.get("paused"):
+            if target is not None and (abs(value["time"] - target) > 1.5 or value["ready"] < 3):
                 return False
-            mark = item.get("time")
-            if origin[0] is None:
-                origin[0] = mark
+            if rate is not None and value["rate"] != rate:
                 return False
-            return mark != origin[0]
+            if pause and not value["paused"]:
+                return False
+            if play and not value["ended"]:
+                if value["paused"]:
+                    return False
+                if origin[0] is None:
+                    origin[0] = value["time"]
+                    return False
+                return value["time"] != origin[0]
+            return True
 
-        ok, value = self.until(lambda: self.sample(expression), playing)
-        if ok is True:
-            self.playing = expression
-            return {"ok": True, "video": value}
-        result = {"ok": False, "video": value}
+        ok, value = self.until(lambda: self.sample(probe), passed)
+        result = {"ok": ok is True, "video": value}
         if self.fail_reason:
-            result["reason"] = "fail"
-            result["value"] = {"fail": self.fail_reason}
+            result.update(reason="fail", value={"fail": self.fail_reason})
         return result
 
-    def do_seek(self, step):
-        target = float(step["time"])
-        expression = f"""(() => {{
-          const video = document.querySelector({json.dumps(step.get("selector", "video"))});
-          if (!video || video.readyState < 1) return null;
-          if (Math.abs(video.currentTime - {target}) > 1.5) video.currentTime = {target};
-          return Math.round(video.currentTime * 10) / 10;
-        }})()"""
+    def do_wait(self, step):
+        selector = step.get("selector", "video")
+        probe = self.video_probe(selector)
+        if "seconds" in step:
+            end = time.monotonic() + step["seconds"]
+            ok, _ = self.until(lambda: time.monotonic() >= end, bool)
+            return {"ok": ok is True, "video": self.sample(probe)}
+        target = step["time"]
         ok, value = self.until(
-            lambda: self.sample(expression), lambda value: value is not None and abs(value - target) <= 1.5
+            lambda: self.sample(probe),
+            lambda value: isinstance(value, dict) and (value["time"] >= target or value["ended"]),
         )
-        return {"ok": ok, "time": value}
+        result = {"ok": ok is True, "video": value}
+        if self.fail_reason:
+            result.update(reason="fail", value={"fail": self.fail_reason})
+        return result
 
     def do_click(self, step):
         expression = f"""(() => {{
@@ -773,9 +889,10 @@ class Tab:
         ok, value = self.until(lambda: self.sample(expression), lambda value: value is not None)
         return {"ok": ok, "clicked": value}
 
-    def do_wait_overlay(self, step):
-        reject = {text.strip() for text in step.get("reject", ["翻译中"])}
-        reject_error = step.get("reject_error", True)
+    def do_overlay(self, step):
+        if not step.get("wait"):
+            value = self.remember(self.sample(OVERLAY))
+            return {"ok": value is not None, "overlay": value}
 
         def shown(line):
             return bool(line and not line["hidden"] and line["text"])
@@ -784,22 +901,37 @@ class Tab:
             if not value or not shown(value.get("original")) or not shown(value.get("translation")):
                 return False
             translation = value["translation"]
-            return translation["text"] not in reject and not (reject_error and translation["error"])
+            return translation["text"] != LOADING_TEXT and not translation["error"]
 
         ok, value = self.until(lambda: self.remember(self.sample(OVERLAY)), passed)
-        if ok:
-            pair = {"original": value["original"]["text"], "translation": value["translation"]["text"]}
-            return {"ok": True, "pair": pair, "time": value["time"]}
-        return {"ok": False, "last": value}
+        return {"ok": ok is True, "overlay": value}
 
-    def do_network_any(self, step):
-        hints = [hint.lower() for hint in step["hints"]]
+    def do_requests(self, step):
+        hints = [hint.lower() for hint in step.get("match", [])]
+        if not hints:
+            return {"ok": True, "count": len(self.requests), "urls": self.requests[:200]}
 
-        def match():
-            return next((url for url in self.requests if any(hint in url.lower() for hint in hints)), None)
+        def matches():
+            return [url for url in self.requests if any(hint in url.lower() for hint in hints)]
 
-        ok, value = self.until(match, lambda value: value is not None)
-        return {"ok": ok, "url": value} if ok else {"ok": False, "requests": len(self.requests)}
+        ok, value = self.until(matches, bool)
+        return {"ok": ok is True, "count": len(self.requests), "urls": (value or [])[:50]}
+
+    def do_focus(self, _step):
+        try:
+            self.chrome.call("Target.activateTarget", {"targetId": self.target_id})
+        except CdpError as error:
+            return {"ok": False, "error": str(error)}
+        problem = activate_chrome()
+        limit = min(self.deadline, time.monotonic() + FOCUS_SECONDS)
+        visibility = self.sample("document.visibilityState")
+        while visibility != "visible" and time.monotonic() < limit:
+            self.chrome.idle(0.3)
+            visibility = self.sample("document.visibilityState")
+        result = {"ok": visibility == "visible", "visibility": visibility}
+        if problem:
+            result["note"] = problem
+        return result
 
     def do_evaluate(self, step):
         def passed(value):
@@ -911,10 +1043,75 @@ class Holder:
         self.server.listen(8)
         self.port = self.server.getsockname()[1]
         self.started = time.time()
+        self.tabs = {}
+        self.opened = 0
+        self.watchers = []
+        self.temporary = []
+        chrome.listener = self.dispatch
 
-    def publish(self, tab=None):
+    def dispatch(self, event):
+        for tab in list(self.tabs.values()):
+            tab.on_event(event)
+        for watcher in list(self.watchers):
+            watcher(event)
+
+    def publish(self):
+        targets = [tab.target_id for tab in self.tabs.values()] + self.temporary
         write_state({"pid": os.getpid(), "port": self.port, "token": self.token,
-                     "owner": self.owner, "chrome_port": self.chrome_port, "tab": tab})
+                     "owner": self.owner, "chrome_port": self.chrome_port, "tabs": targets})
+
+    def open_tab(self, url, trace, deadline, progress):
+        target_id = self.chrome.call("Target.createTarget", {"url": "about:blank"})["targetId"]
+        try:
+            session = self.chrome.call(
+                "Target.attachToTarget", {"targetId": target_id, "flatten": True}
+            )["sessionId"]
+        except CdpError:
+            self.close_target(target_id)
+            raise
+        tab = Tab(self.chrome, target_id, session, deadline, progress)
+        self.opened += 1
+        tab.id, tab.url = f"t{self.opened}", url
+        self.tabs[tab.id] = tab
+        self.publish()
+        try:
+            self.chrome.call("Network.enable", session=session)
+            self.chrome.call("Inspector.enable", session=session)
+            self.chrome.call("Page.enable", session=session)
+            self.chrome.call("Page.addScriptToEvaluateOnNewDocument", {"source": MUTE_MEDIA}, session=session)
+            if trace:
+                tab.watch_worker()
+            navigated = self.chrome.call("Page.navigate", {"url": url}, session=session)
+            if navigated.get("errorText"):
+                raise CdpError(f"navigation failed: {navigated['errorText']}")
+            if not tab.loaded():
+                raise CdpError("page did not commit within the budget")
+            if tab.run_id:
+                tab.await_worker()
+        except (CdpError, TabGone):
+            self.close_tab(tab)
+            raise
+        return tab
+
+    def close_target(self, target_id):
+        try:
+            self.chrome.call("Target.closeTarget", {"targetId": target_id}, timeout=10)
+        except CdpError:
+            pass
+
+    def close_tab(self, tab):
+        if not tab.gone:
+            tab.restore()
+        self.tabs.pop(tab.id, None)
+        tab.stop_worker(keep_discovery=any(other.run_id for other in self.tabs.values()))
+        self.close_target(tab.target_id)
+        self.publish()
+
+    def close_idle_tabs(self):
+        for tab in list(self.tabs.values()):
+            if time.monotonic() - tab.used > TAB_IDLE_SECONDS:
+                log(f"Closing tab {tab.id} after {TAB_IDLE_SECONDS} s without a request.")
+                self.close_tab(tab)
 
     def serve(self):
         idle_until = time.monotonic() + IDLE_SECONDS
@@ -926,6 +1123,7 @@ class Holder:
             ready, _, _ = select.select([self.server, self.chrome.sock], [], [], min(left, 30))
             if self.chrome.sock in ready:
                 self.chrome.pump(0)
+            self.close_idle_tabs()
             if self.server in ready:
                 client, _ = self.server.accept()
                 with client:
@@ -948,16 +1146,25 @@ class Holder:
             return
         client.settimeout(None)
         method = request.get("method")
+        params = request.get("params") or {}
         if method != "Session.status" and request.get("owner") != self.owner:
             reply(client, {"done": True, "ok": False, "error": "Holder belongs to another session"})
             return
         if method == "Session.status":
+            tabs = [{"tab": tab.id, "url": tab.url, "idle": round(time.monotonic() - tab.used)}
+                    for tab in self.tabs.values()]
             reply(client, {"done": True, "ok": True, "pid": os.getpid(), "chrome_port": self.chrome_port,
-                           "started": self.started, "idle_minutes": IDLE_SECONDS // 60})
+                           "started": self.started, "idle_minutes": IDLE_SECONDS // 60, "tabs": tabs})
         elif method == "Session.run":
-            self.run(client, (request.get("params") or {}).get("checks"))
+            self.run(client, params.get("checks"))
+        elif method == "Session.open":
+            self.open(client, params)
+        elif method == "Session.do":
+            self.do(client, params)
+        elif method == "Session.close":
+            self.close(client, params)
         elif method == "Session.reload":
-            self.reload(client, (request.get("params") or {}).get("extension"))
+            self.reload(client, params.get("extension"))
         else:
             reply(client, {"done": True, "ok": False, "error": f"unknown method {method!r}"})
 
@@ -980,8 +1187,8 @@ class Holder:
 
         def popup():
             target = self.chrome.call("Target.createTarget", {"url": f"{origin}/popup.html"})["targetId"]
-            opened.append(target)
-            self.publish(target)
+            self.temporary.append(target)
+            self.publish()
             session = self.chrome.call("Target.attachToTarget", {"targetId": target, "flatten": True})["sessionId"]
             deadline = time.monotonic() + 10
             while time.monotonic() < deadline:
@@ -995,8 +1202,7 @@ class Holder:
             return session, None
 
         log(f"Reloading {origin}.")
-        opened = []
-        self.chrome.listener = watch
+        self.watchers.append(watch)
         try:
             self.chrome.call("Target.setDiscoverTargets", {"discover": True})
             session, name = popup()
@@ -1018,16 +1224,15 @@ class Holder:
             log(f"Reload failed: {error}")
             reply(client, {"done": True, "ok": False, "error": str(error)})
         finally:
-            self.chrome.listener = None
-            try:
-                self.chrome.call("Target.setDiscoverTargets", {"discover": False}, timeout=5)
-            except CdpError:
-                pass
-            for target in opened:
+            self.watchers.remove(watch)
+            if not any(tab.run_id for tab in self.tabs.values()):
                 try:
-                    self.chrome.call("Target.closeTarget", {"targetId": target}, timeout=5)
+                    self.chrome.call("Target.setDiscoverTargets", {"discover": False}, timeout=5)
                 except CdpError:
                     pass
+            for target in self.temporary:
+                self.close_target(target)
+            self.temporary.clear()
             self.publish()
 
     def run(self, client, checks):
@@ -1044,35 +1249,66 @@ class Holder:
             reply(client, report)
         reply(client, {"done": True, "ok": passed == len(checks), "passed": passed, "total": len(checks)})
 
+    def open(self, client, params):
+        url, timeout = params.get("url"), params.get("timeout", 60)
+        if not isinstance(url, str) or not url.startswith(("https://", "http://")):
+            reply(client, {"done": True, "ok": False, "error": "url must start with http:// or https://"})
+            return
+        if not isinstance(timeout, (int, float)) or isinstance(timeout, bool) or not 1 <= timeout <= 600:
+            reply(client, {"done": True, "ok": False, "error": "timeout must be 1-600 seconds"})
+            return
+        try:
+            tab = self.open_tab(url, bool(params.get("trace")), time.monotonic() + timeout, lambda _event: None)
+        except (CdpError, TabGone) as error:
+            reply(client, {"done": True, "ok": False, "error": str(error)})
+            return
+        tab.used = time.monotonic()
+        reply(client, {"done": True, "ok": True, "tab": tab.id, "url": url, "trace": bool(tab.run_id),
+                       "title": str(tab.sample("document.title") or "")[:120]})
+
+    def do(self, client, params):
+        tab = self.tabs.get(params.get("tab"))
+        if tab is None:
+            reply(client, {"done": True, "ok": False, "error": f"no open tab {params.get('tab')!r}"})
+            return
+        step, timeout = params.get("step"), params.get("timeout", 60)
+        problems = validate_step(step, "step")
+        if not isinstance(timeout, (int, float)) or isinstance(timeout, bool) or not 1 <= timeout <= 900:
+            problems.append("timeout must be 1-900 seconds")
+        if not problems and step["action"] == "trace" and not tab.run_id:
+            problems.append("trace needs a tab opened with --trace")
+        if problems:
+            reply(client, {"done": True, "ok": False, "error": "; ".join(problems)})
+            return
+        tab.deadline = time.monotonic() + timeout
+        tab.progress = lambda event: reply(client, {"progress": event})
+        try:
+            result = tab.run(step, {"check": tab.id, "step": 1, "of": 1, "action": step["action"]})
+        finally:
+            tab.progress = lambda _event: None
+            tab.used = time.monotonic()
+        message = {"done": True, "ok": result["ok"], "tab": tab.id, "result": result}
+        if tab.gone:
+            message["closed"] = tab.gone
+            self.close_tab(tab)
+        reply(client, message)
+
+    def close(self, client, params):
+        tab = self.tabs.get(params.get("tab"))
+        if tab is None:
+            reply(client, {"done": True, "ok": False, "error": f"no open tab {params.get('tab')!r}"})
+            return
+        self.close_tab(tab)
+        reply(client, {"done": True, "ok": True, "tab": tab.id})
+
     def check(self, check, progress):
         started = time.monotonic()
         report = {"name": check["name"], "ok": False, "url": check["url"], "steps": []}
-        target_id = None
         tab = None
         try:
             try:
-                target_id = self.chrome.call("Target.createTarget", {"url": "about:blank"})["targetId"]
-                self.publish(target_id)
-                session = self.chrome.call(
-                    "Target.attachToTarget", {"targetId": target_id, "flatten": True}
-                )["sessionId"]
-                tab = Tab(self.chrome, target_id, session, started + check["budget"], progress)
-                self.chrome.listener = tab.on_event
-                self.chrome.call("Network.enable", session=session)
-                self.chrome.call("Inspector.enable", session=session)
-                self.chrome.call("Page.enable", session=session)
-                self.chrome.call(
-                    "Page.addScriptToEvaluateOnNewDocument", {"source": MUTE_MEDIA}, session=session
-                )
-                if any(step.get("action") == "trace" for step in check["steps"]):
-                    tab.watch_worker()
-                navigated = self.chrome.call("Page.navigate", {"url": check["url"]}, session=session)
-                if navigated.get("errorText"):
-                    raise CdpError(f"navigation failed: {navigated['errorText']}")
-                if not tab.loaded():
-                    raise CdpError("page did not commit within the budget")
-                if tab.run_id:
-                    tab.await_worker()
+                trace = any(step.get("action") == "trace" for step in check["steps"])
+                tab = self.open_tab(check["url"], trace, started + check["budget"], progress)
                 steps = check["steps"]
                 for index, step in enumerate(steps, 1):
                     label = {"check": check["name"], "step": index, "of": len(steps), "action": step["action"]}
@@ -1089,15 +1325,8 @@ class Holder:
             if tab:
                 self.wrap_up(check, tab, report)
         finally:
-            self.chrome.listener = None
-            if tab:
-                tab.stop_worker()
-            if target_id:
-                try:
-                    self.chrome.call("Target.closeTarget", {"targetId": target_id}, timeout=10)
-                except CdpError:
-                    pass
-                self.publish()
+            if tab and tab.id in self.tabs:
+                self.close_tab(tab)
         if tab:
             if tab.gone and not report["ok"]:
                 report["error"] = tab.gone
@@ -1171,18 +1400,26 @@ def main():
     for number in (signal.SIGTERM, signal.SIGHUP):
         signal.signal(number, lambda *_: sys.exit(0))
     try:
-        if previous and previous.get("tab") and previous.get("owner") == holder.owner:
-            try:
-                chrome.call("Target.closeTarget", {"targetId": previous["tab"]}, timeout=5)
-                log("Closed the tab a stopped holder left open.")
-            except CdpError:
-                pass
+        if previous and previous.get("owner") == holder.owner:
+            leftovers = previous.get("tabs") or ([previous["tab"]] if previous.get("tab") else [])
+            for target in leftovers:
+                try:
+                    chrome.call("Target.closeTarget", {"targetId": target}, timeout=5)
+                    log("Closed a tab a stopped holder left open.")
+                except CdpError:
+                    pass
         holder.publish()
         log(f"Ready. Chrome port {port}, holder port {holder.port}.")
         holder.serve()
     except ChromeClosed as error:
         log(f"{error}. Exiting.")
+        holder.tabs.clear()
     finally:
+        for tab in list(holder.tabs.values()):
+            try:
+                holder.close_tab(tab)
+            except ChromeClosed:
+                break
         remove_state()
         holder.server.close()
         chrome.close()

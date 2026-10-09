@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 import secrets
+import shutil
 import signal
 import socket
 import subprocess
@@ -21,6 +22,54 @@ STATE = Path(
 LOG = STATE.with_suffix(".log")
 START_SECONDS = 75
 
+ACTIONS_HELP = """Actions
+  Each step is a JSON object with an action and that action's fields.
+
+  media            Optional time, rate, play, pause, keep_playing, skip_ads, selector
+                   (default video). Seeks to time, sets playbackRate to rate (0.25-4),
+                   and plays or pauses, then waits until the video reports all of
+                   them; a seek also waits for data at the new time, and play waits
+                   for currentTime to advance or the video to end. With no fields it
+                   only reports the video. The rate goes through YouTube's player
+                   when the page has one, since YouTube resets the video element to
+                   its own rate every second; it is applied again during later steps
+                   and undone when the tab closes. keep_playing resumes the video
+                   whenever it pauses during later steps; pause turns it off.
+                   skip_ads clicks YouTube's Skip button during later steps.
+                   Returns time, paused, ended, ad, rate, ready and visible.
+  wait             seconds, or time with optional selector. Waits that many wall
+                   seconds, or until the video reaches time or ends.
+  evaluate         expression or expression_file; optional save.
+                   Evaluate page JavaScript, await Promises, return JSON.
+                   Truthy values pass; falsy values retry every second.
+                   An object with a fail key ends the step as failed.
+                   Each attempt waits up to 8 seconds for the expression.
+  click            selector. Click the first matching document element.
+  overlay          Optional wait. Reports Subline's overlay: original and translation
+                   lines with hidden, text and error. With wait, waits until both
+                   lines show text and the translation is neither the loading
+                   placeholder nor an error.
+  requests         Optional match, a list of substrings. Lists this tab's request
+                   URLs, or waits until one matches.
+  trace            seconds; optional selector, default video; optional save.
+                   Needs a tab that watches Subline (run adds this when a check has
+                   a trace step; open needs --trace). Collects Subline timing events
+                   for seconds of played video, or to the end. Reports lag, loading,
+                   coverage, states, firstCaptionAt, firstReadyAt and batches; lag
+                   and loading use video time. The end line prints from, played,
+                   wall, playbackRate, visible, coverage, missed and lag max. clock is
+                   "throttled" when the tab was mostly hidden or played/wall diverges
+                   from playbackRate. save writes the stats with every sentence,
+                   batch and view.
+  screenshot       path. JPEG for .jpg/.jpeg, otherwise PNG.
+  focus            Brings the tab and Chrome to the front and waits up to 5 s for the
+                   page to become visible. This takes focus from other apps.
+
+  media, wait and trace fail when a video that should be moving stays at the same
+  time for 20 s; the reason says whether it was paused. Buffering waits.
+  save, path and fail_screenshot must be absolute paths.
+"""
+
 RUN_HELP = """Input
   Each FILE contains a JSON list of checks:
     [{"name": "page", "url": "https://example.com", "budget": 30,
@@ -29,53 +78,29 @@ RUN_HELP = """Input
   name             Check id, selected by --only NAME.
   url              HTTP or HTTPS page to open in a new check tab.
   budget           Total wall seconds per check, 1-600, including navigation.
-  steps            Non-empty action list, executed in order.
+  steps            Non-empty action list, executed in order. A failed step ends
+                   the check.
   on_fail          Optional page expression, evaluated once before tab cleanup.
   fail_screenshot  Optional screenshot path, captured before failed-tab cleanup.
 
-Actions
-  evaluate         expression or expression_file; optional save.
-                   Evaluate page JavaScript, await Promises, return JSON.
-                   Truthy values pass; falsy values retry every second.
-                   An object with a fail key ends the check as failed.
-                   Each attempt waits up to 8 seconds for the expression.
-  screenshot       path. JPEG for .jpg/.jpeg, otherwise PNG.
-  click            selector. Click the first matching document element.
-  seek             time; optional selector, default video. Seek within 1.5 s.
-  play             Optional selector, default video. Mute and request playback.
-                   Passes when the video has ended or currentTime advances.
-                   A playable video that does not advance for 20 s fails with
-                   its time and readyState. Buffering waits. Later polls keep
-                   playing and skip YouTube ads, so this action overrides manual
-                   pauses. Read playbackRate. Do not set it.
-  network-any      hints. Match any substring of this tab's recorded request URLs.
-  wait-overlay     Optional reject, default ["翻译中"]; reject_error, default true.
-                   Wait for a visible, nonempty Subline original/translation pair.
-  trace            seconds; optional selector, default video; optional save.
-                   Collect Subline timing events for playback seconds or to end.
-                   seconds must be 1-600 and below the check budget.
-                   Requires a Subline build with tracing and a caption source.
-                   Collects events from navigation; keeps its worker awake.
-                   Reports lag, loading, coverage, and batches. Lag and loading
-                   use video time; lag percentiles exclude never-ready captions.
-                   The end line prints from, played, wall, playbackRate, visible,
-                   coverage, missed, and lag max. stats.batches.opening is the
-                   first three batches. together counts batches whose first item
-                   arrived with the whole batch. clock is "throttled" when the tab
-                   was mostly hidden or played/wall diverges from playbackRate.
-                   Exit 0 means collection finished. A playable video that does
-                   not advance for 20 s fails. Buffering waits.
-
-Paths and reports
-  run mutes audio/video elements from navigation through tab cleanup, including
-  newly added media. Unmute attempts are ignored. Playback and pauses stay under
-  the check's control.
-  expression_file resolves from FILE's folder; output paths resolve from cwd.
-  evaluate with save writes the full value; without it, reports cap at 20,000 chars.
+""" + ACTIONS_HELP + """
+Reports
   stdout emits one JSON report per check, then a summary; stderr carries progress.
-  A failed step ends its check. Remaining checks still run. Check tabs always close.
-  Reports include step values/stats and reason/error on failure. Request URLs omit
-  query strings. Exit 0: all steps passed; 1: failed check/holder; 2: invalid input.
+  Remaining checks still run after a failed one. Check tabs always close.
+  expression_file resolves from FILE's folder. evaluate with save writes the full
+  value; without it, reports cap at 20,000 chars. Request URLs omit query strings.
+  Exit 0: all steps passed; 1: failed check/holder; 2: invalid input.
+"""
+
+DO_HELP = """STEP is one JSON object, for example
+  '{"action": "media", "time": 150, "rate": 1.5, "play": true}'
+
+""" + ACTIONS_HELP + """
+Reports
+  stdout prints {"ok", "tab", "result"}; stderr carries progress for long steps.
+  expression_file resolves from the current folder. If the tab crashed or closed,
+  the report says so under closed and the tab is gone.
+  Exit 0: the step passed; 1: it failed or the holder did; 2: invalid input.
 """
 
 
@@ -336,6 +361,90 @@ def run(args):
     return 0 if done.get("ok") and not failed and len(reports) == len(checks) else 1
 
 
+def tab_request(method, params, timeout):
+    reply = {}
+    try:
+        for message in request(method, params, timeout=timeout):
+            if "progress" in message:
+                show_progress(message["progress"])
+                continue
+            reply = message
+    except NotRunning:
+        print(f"Holder is not running. Start it with: python3 {display(__file__)} start", file=sys.stderr)
+        return 1
+    except (OSError, ValueError) as error:
+        print(f"Lost the holder mid-request ({error}).", file=sys.stderr)
+        return 1
+    reply.pop("done", None)
+    print(json.dumps(reply, ensure_ascii=False), flush=True)
+    return 0 if reply.get("ok") else 1
+
+
+def open_tab(args):
+    return tab_request("Session.open", {"url": args.url, "trace": args.trace, "timeout": args.timeout},
+                       args.timeout + 30)
+
+
+def do_step(args):
+    try:
+        step = json.loads(args.step)
+    except ValueError as error:
+        invalid(f"STEP is not JSON: {error}")
+    if not isinstance(step, dict):
+        invalid("STEP must be a JSON object")
+    resolve(step, "path")
+    resolve(step, "save")
+    if step.get("action") == "evaluate":
+        inline(step, Path.cwd(), "STEP")
+    return tab_request("Session.do", {"tab": args.tab, "step": step, "timeout": args.timeout},
+                       args.timeout + 30)
+
+
+def close_tab(args):
+    return tab_request("Session.close", {"tab": args.tab}, 30)
+
+
+def build_files(folder):
+    return sorted(path for path in folder.rglob("*") if path.is_file())
+
+
+def fingerprint(folder):
+    digest = hashlib.sha256()
+    for path in build_files(folder):
+        digest.update(str(path.relative_to(folder)).encode())
+        digest.update(path.read_bytes())
+    return digest.hexdigest()[:12]
+
+
+def extension_name(folder):
+    try:
+        return json.loads((folder / "manifest.json").read_text()).get("name")
+    except (OSError, ValueError):
+        return None
+
+
+def sync(source, folder):
+    name = extension_name(source)
+    if not name:
+        invalid(f"{source} has no readable manifest.json")
+    if extension_name(folder) != name:
+        invalid(f"{folder} does not hold {name}; --from only replaces a folder Chrome loaded it from")
+    wanted = {path.relative_to(source) for path in build_files(source)}
+    for path in build_files(folder):
+        if path.relative_to(folder) not in wanted:
+            path.unlink()
+    for relative in sorted(wanted):
+        target = folder / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source / relative, target)
+    for path in sorted(folder.rglob("*"), reverse=True):
+        if path.is_dir() and not any(path.iterdir()):
+            path.rmdir()
+    if fingerprint(folder) != fingerprint(source):
+        print(f"{folder} does not match {source} after copying.", file=sys.stderr)
+        raise SystemExit(1)
+
+
 def extension_id(folder):
     digest = hashlib.sha256(str(folder).encode()).hexdigest()[:32]
     return "".join(chr(ord("a") + int(char, 16)) for char in digest)
@@ -343,6 +452,8 @@ def extension_id(folder):
 
 def reload(args):
     folder = Path(args.path).resolve() if args.path else HERE.parents[3] / "dist"
+    if args.source:
+        sync(Path(args.source).resolve(), folder)
     try:
         reply = next(request("Session.reload", {"extension": extension_id(folder)}, timeout=60))
     except NotRunning:
@@ -351,7 +462,8 @@ def reload(args):
     if not reply.get("ok"):
         print(f"Could not reload Subline from {folder}: {reply.get('error')}", file=sys.stderr)
         return 1
-    print(f"Reloaded {reply.get('name')} from {folder}. Refresh open YouTube, HBO and X tabs to use it there.")
+    print(f"Reloaded {reply.get('name')} from {folder}, build {fingerprint(folder)}. "
+          "Refresh open YouTube, HBO and X tabs to use it there.")
     return 0
 
 
@@ -408,12 +520,35 @@ def main():
     runner.add_argument("files", nargs="+", metavar="FILE", help="JSON check files")
     runner.add_argument("--only", action="append", metavar="NAME", help="run only this check; repeatable")
     runner.set_defaults(func=run)
+    opener = commands.add_parser(
+        "open", help="open a muted tab and keep it for do steps",
+        description="Open URL in a new muted tab owned by this session. The tab stays open for do "
+        "steps until close, stop, or 15 minutes without a request.",
+    )
+    opener.add_argument("url", metavar="URL")
+    opener.add_argument("--trace", action="store_true",
+                        help="watch Subline's worker from navigation so trace steps work")
+    opener.add_argument("--timeout", type=float, default=60, help="seconds to load the page (default 60)")
+    opener.set_defaults(func=open_tab)
+    doer = commands.add_parser(
+        "do", help="run one step in an open tab", epilog=DO_HELP,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    doer.add_argument("tab", metavar="TAB", help="tab id from open")
+    doer.add_argument("step", metavar="STEP", help="one JSON step")
+    doer.add_argument("--timeout", type=float, default=60, help="wall seconds for the step (default 60)")
+    doer.set_defaults(func=do_step)
+    closer = commands.add_parser("close", help="close an open tab and undo its rate change")
+    closer.add_argument("tab", metavar="TAB")
+    closer.set_defaults(func=close_tab)
     reloader = commands.add_parser(
         "reload", help="reload Subline in Chrome",
-        description="Reload Subline from Chrome's loaded folder; does not build it. "
-        "Existing site tabs need a refresh.",
+        description="Reload Subline from Chrome's loaded folder and print the build fingerprint; "
+        "does not build it. Existing site tabs need a refresh.",
     )
     reloader.add_argument("--path", help="folder Chrome loaded Subline from (default: this repository's dist)")
+    reloader.add_argument("--from", dest="source", metavar="DIR",
+                          help="copy this build into the loaded folder first, replacing its files")
     reloader.set_defaults(func=reload)
     commands.add_parser("status", help="report holder status").set_defaults(func=status)
     commands.add_parser("stop", help="close the Chrome socket and exit the holder").set_defaults(func=stop)
