@@ -1,14 +1,12 @@
-import {
-  readStoredTranslation,
-  type CaptionTranslation,
-  type PrefetchItem,
-} from '../shared/caption-translation';
+import { readStoredTranslation, type CaptionTranslation } from '../shared/caption-translation';
+import type { PlaybackCue } from '../shared/playback-plan';
 import { providerTimeoutMessage } from '../shared/provider-error';
 import type { ExtensionConnection } from './connection';
 import type { SubtitleOverlay } from './overlay';
 import { translatedCaptions, type TimedCaption } from './timeline';
 
 const LOADING_DELAY_MS = 300;
+const PLAN_REFRESH_SECONDS = 1;
 
 export type CaptionFrame = {
   readonly time: number;
@@ -37,6 +35,8 @@ export class CaptionTranslator {
   private result: CaptionTranslation | null = null;
   private checkedCache = false;
   private windowKey = '';
+  private holdKey = '';
+  private active = false;
   private prefetchedAt = 0;
   private playbackHeld = false;
   private timedOut = false;
@@ -75,6 +75,9 @@ export class CaptionTranslator {
     this.version++;
     this.forget();
     this.playbackHeld = false;
+    this.windowKey = '';
+    this.holdKey = '';
+    this.active = false;
   }
 
   show(frame: CaptionFrame): void {
@@ -123,17 +126,38 @@ export class CaptionTranslator {
       .catch(() => {});
   }
 
-  prefetch(items: readonly PrefetchItem[], force = false): void {
-    const key = JSON.stringify(items);
-    if (
-      !force &&
-      ((!this.windowKey && !items.length) ||
-        (key === this.windowKey && (!items.length || Date.now() - this.prefetchedAt < 15000)))
-    )
+  plan(time: number, rate: number, cues: readonly PlaybackCue[]): void {
+    const key = JSON.stringify(
+      cues.length
+        ? [Math.floor(time / PLAN_REFRESH_SECONDS) * PLAN_REFRESH_SECONDS, rate, cues]
+        : [rate, cues],
+    );
+    if (key === this.windowKey && (cues.length === 0 || Date.now() - this.prefetchedAt < 15000))
       return;
     this.windowKey = key;
+    this.holdKey = '';
+    this.active = cues.length > 0;
     this.prefetchedAt = Date.now();
-    void this.connection.sendMessage({ type: 'prefetch', items }).catch(() => {});
+    void this.connection.sendMessage({ type: 'prefetch', time, rate, cues }).catch(() => {});
+  }
+
+  hold(time: number): void {
+    const key = String(time);
+    if (key === this.holdKey) return;
+    this.holdKey = key;
+    this.windowKey = '';
+    this.active = true;
+    void this.connection.sendMessage({ type: 'prefetch-hold', time }).catch(() => {});
+  }
+
+  release(): void {
+    if (!this.active) return;
+    this.active = false;
+    this.windowKey = '';
+    this.holdKey = '';
+    void this.connection
+      .sendMessage({ type: 'prefetch', time: 0, rate: 1, cues: [] })
+      .catch(() => {});
   }
 
   private forget(): void {
@@ -163,6 +187,7 @@ export class CaptionTranslator {
   private request(cacheOnly: boolean): void {
     const { text, needsSplit, version } = this;
     this.requested = text;
+    this.active = true;
     if (cacheOnly) this.checkedCache = true;
     else if (this.overlay.failed || Date.now() - this.changedAt >= LOADING_DELAY_MS)
       this.overlay.showLoading();

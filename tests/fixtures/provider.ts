@@ -1,11 +1,29 @@
-import type { PrefetchItem } from '../../src/shared/caption-translation';
+import type { PlaybackCue } from '../../src/shared/playback-plan';
 
 export function prefetchItems(
   texts: readonly string[],
-  segment = 0,
+  startAt = 0,
   needsSplit = false,
-): PrefetchItem[] {
-  return texts.map((text) => ({ text, segment, needsSplit }));
+): PlaybackCue[] {
+  return texts.map((text, index) => {
+    const start = startAt + index * 4;
+    return { text, needsSplit, start, end: start + 4 };
+  });
+}
+
+export function packedCues(
+  items: readonly { text: string; needsSplit?: boolean }[],
+  start = 5,
+): PlaybackCue[] {
+  return items.map((item, index) => {
+    const at = start + index * 0.5;
+    return {
+      text: item.text,
+      needsSplit: item.needsSplit === true,
+      start: at,
+      end: at + 0.5,
+    };
+  });
 }
 
 export function requestedTexts(init: RequestInit): string[] {

@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { DEFAULT_SETTINGS, STORAGE_KEY } from '../src/shared/settings';
-import { providerReply, requestedTexts } from './fixtures/provider';
+import { packedCues, providerReply, requestedTexts } from './fixtures/provider';
 import { longCaption, longResult, structuredReply } from './fixtures/long-caption';
 
 afterEach(() => {
@@ -121,19 +121,19 @@ it('answers a prefetch with translations in the order asked, settling cues a lat
   });
   const opening = send({
     type: 'prefetch',
-    items: [
-      { text: 'A', segment: 0, needsSplit: false },
-      { text: 'B', segment: 0, needsSplit: false },
-      { text: 'A', segment: 0, needsSplit: false },
+    time: 0,
+    rate: 1,
+    cues: [
+      ...packedCues([{ text: 'A' }, { text: 'B' }]),
+      { text: 'A', start: 6, end: 6.5, needsSplit: false },
     ],
   });
   await vi.waitFor(() => expect(pending).toHaveLength(1));
   const sliding = send({
     type: 'prefetch',
-    items: [
-      { text: 'B', segment: 0, needsSplit: false },
-      { text: 'C', segment: 0, needsSplit: false },
-    ],
+    time: 0,
+    rate: 1,
+    cues: packedCues([{ text: 'B' }, { text: 'C' }]),
   });
   await vi.waitFor(() => expect(pending).toHaveLength(2));
   for (const request of pending)
@@ -143,10 +143,9 @@ it('answers a prefetch with translations in the order asked, settling cues a lat
   await expect(
     send({
       type: 'prefetch',
-      items: [
-        { text: 'A', segment: 0, needsSplit: false },
-        { text: 'C', segment: 0, needsSplit: false },
-      ],
+      time: 0,
+      rate: 1,
+      cues: packedCues([{ text: 'A' }, { text: 'C' }]),
     }),
   ).resolves.toEqual({
     ok: true,
@@ -167,17 +166,17 @@ it('starts a new page in the same tab without the pause the previous page left',
     model: 'model',
   });
   const first = { documentId: 'first-page' };
-  await send({ type: 'prefetch', items: [{ text: 'Old.', segment: 0, needsSplit: false }] }, first);
+  await send({ type: 'prefetch', time: 0, rate: 1, cues: packedCues([{ text: 'Old.' }]) }, first);
   await expect(send({ type: 'prefetch-pause' }, first)).resolves.toEqual({ ok: true });
   const next = send(
-    { type: 'prefetch', items: [{ text: 'New.', segment: 0, needsSplit: false }] },
+    { type: 'prefetch', time: 0, rate: 1, cues: packedCues([{ text: 'New.' }]) },
     { url: 'https://www.youtube.com/watch?v=next', documentId: 'next-page' },
   );
   await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
   await expect(next).resolves.toEqual({ ok: true, data: ['New. 译文'] });
 });
 
-it('batches a prefetch by the segment of each caption and rejects malformed segment numbers', async () => {
+it('packs a prefetch by slack and rejects a snapshot without usable times', async () => {
   const pending: string[][] = [];
   const fetch = vi.fn((_url: string, init: RequestInit) => {
     pending.push(requestedTexts(init));
@@ -189,24 +188,34 @@ it('batches a prefetch by the segment of each caption and rejects malformed segm
     apiKey: 'key',
     model: 'model',
   });
-  for (const segment of [undefined, -1, 1.5, 'segments'])
-    await expect(
-      send({ type: 'prefetch', items: [{ text: 'A', segment, needsSplit: false }] }),
-    ).resolves.toEqual({
+  for (const cues of [
+    [{ text: 'A', needsSplit: false }],
+    [{ text: 'A', start: -1, end: 1, needsSplit: false }],
+    [{ text: 'A', start: 2, end: 2, needsSplit: false }],
+    [{ text: 'A', start: 0, end: 1, needsSplit: 'yes' }],
+  ])
+    await expect(send({ type: 'prefetch', time: 0, rate: 1, cues })).resolves.toEqual({
       ok: false,
       error: '预加载字幕内容无效。',
     });
+  await expect(
+    send({ type: 'prefetch', time: 0, rate: 0, cues: packedCues([{ text: 'A' }]) }),
+  ).resolves.toEqual({
+    ok: false,
+    error: '预加载字幕内容无效。',
+  });
   expect(fetch).not.toHaveBeenCalled();
   void send({
     type: 'prefetch',
-    items: [
-      { text: 'A', segment: 0, needsSplit: false },
-      { text: 'B', segment: 0, needsSplit: false },
-      { text: 'A', segment: 0, needsSplit: false },
-      { text: 'C', segment: 1, needsSplit: false },
+    time: 0,
+    rate: 1,
+    cues: [
+      ...packedCues([{ text: 'A' }, { text: 'B' }]),
+      { text: 'A', start: 6, end: 6.5, needsSplit: false },
+      { text: 'C', start: 80, end: 81, needsSplit: false },
     ],
   });
-  await vi.waitFor(() => expect(pending).toEqual([['A', 'B'], ['C']]));
+  await vi.waitFor(() => expect(pending).toEqual([['A', 'B']]));
 });
 
 it('validates split flags and keeps split and unsplit duplicates separate across messages', async () => {
@@ -219,7 +228,12 @@ it('validates split flags and keeps split and unsplit duplicates separate across
   const send = await loadBackground({ ...DEFAULT_SETTINGS, apiKey: 'key', model: 'model' });
   for (const needsSplit of [undefined, [true], 1])
     await expect(
-      send({ type: 'prefetch', items: [{ text: longCaption, segment: 0, needsSplit }] }),
+      send({
+        type: 'prefetch',
+        time: 0,
+        rate: 1,
+        cues: [{ text: longCaption, start: 0, end: 1, needsSplit }],
+      }),
     ).resolves.toMatchObject({ ok: false });
   await expect(
     send({ type: 'translate', text: longCaption, needsSplit: [] }),
@@ -227,11 +241,13 @@ it('validates split flags and keeps split and unsplit duplicates separate across
   expect(fetch).not.toHaveBeenCalled();
   const reply = await send({
     type: 'prefetch',
-    items: [
-      { text: longCaption, segment: 0, needsSplit: false },
-      { text: longCaption, segment: 0, needsSplit: true },
-      { text: longCaption, segment: 0, needsSplit: true },
-    ],
+    time: 0,
+    rate: 1,
+    cues: packedCues([
+      { text: longCaption, needsSplit: false },
+      { text: longCaption, needsSplit: true },
+      { text: longCaption, needsSplit: true },
+    ]),
   });
   expect(reply.ok).toBe(true);
   const data = reply.data as unknown[];

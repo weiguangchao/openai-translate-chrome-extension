@@ -1,4 +1,10 @@
 export const translationBatchLimit = 4;
-export const prefetchBatchCount = 4;
-export const prefetchSentenceCount = translationBatchLimit * prefetchBatchCount;
-export const prefetchWindowLimit = 1 + 2 * (prefetchSentenceCount + 1);
+export const planSentenceCap = 16;
+export const planLookaheadSeconds = 60;
+export const planLookaheadCues = 24;
+export const maxInFlightRequests = 2;
+export const latencyDefaultMs = 4000;
+export const latencyMinMs = 2000;
+export const latencyMaxMs = 12000;
+export const latencySampleLimit = 8;
+export const behindGraceSeconds = 0.5;

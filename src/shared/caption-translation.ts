@@ -19,12 +19,6 @@ export interface TranslationInput {
   readonly needsSplit: boolean;
 }
 
-export interface PrefetchItem extends TranslationInput {
-  readonly segment: number;
-  readonly solo?: boolean;
-  readonly batch?: number;
-}
-
 const letterLike = /[\p{L}\p{N}]/u;
 
 interface SubtitleUnit {

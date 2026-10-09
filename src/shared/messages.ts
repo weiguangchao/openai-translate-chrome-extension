@@ -1,5 +1,5 @@
-import type { PrefetchItem } from './caption-translation';
-import { prefetchWindowLimit } from './limits';
+import { planLookaheadCues } from './limits';
+import type { PlaybackCue } from './playback-plan';
 import type { PublicSettings } from './settings';
 import type { TraceRequest } from './trace';
 
@@ -18,13 +18,21 @@ export interface TranslateRequest {
 
 export interface PrefetchRequest {
   type: 'prefetch';
-  items: readonly PrefetchItem[];
+  time: number;
+  rate: number;
+  cues: readonly PlaybackCue[];
+}
+
+export interface PrefetchHoldRequest {
+  type: 'prefetch-hold';
+  time: number;
 }
 
 export type ContentRequest =
   | { type: 'settings' }
   | TranslateRequest
   | PrefetchRequest
+  | PrefetchHoldRequest
   | TraceRequest
   | { type: 'prefetch-pause' }
   | { type: 'prefetch-resume' };
@@ -60,33 +68,37 @@ export function readTranslateRequest(message: object): Required<TranslateRequest
   };
 }
 
+function finiteTime(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0;
+}
+
+export function readHoldRequest(message: object): PrefetchHoldRequest {
+  const { time } = message as Record<string, unknown>;
+  if (!finiteTime(time)) throw new Error('预加载字幕内容无效。');
+  return { type: 'prefetch-hold', time };
+}
+
 export function readPrefetchRequest(message: object): PrefetchRequest {
-  const { items } = message as Record<string, unknown>;
-  if (!Array.isArray(items) || items.length > prefetchWindowLimit)
+  const { time, rate, cues } = message as Record<string, unknown>;
+  if (!finiteTime(time) || !finiteTime(rate) || rate === 0 || !Array.isArray(cues))
     throw new Error('预加载字幕内容无效。');
+  if (cues.length > planLookaheadCues) throw new Error('预加载字幕内容无效。');
   return {
     type: 'prefetch',
-    items: items.map((item: unknown): PrefetchItem => {
-      if (!item || typeof item !== 'object') throw new Error('预加载字幕内容无效。');
-      const { text, segment, needsSplit, solo, batch } = item as Record<string, unknown>;
+    time,
+    rate,
+    cues: cues.map((cue: unknown): PlaybackCue => {
+      if (!cue || typeof cue !== 'object') throw new Error('预加载字幕内容无效。');
+      const { text, start, end, needsSplit } = cue as Record<string, unknown>;
       if (
         !validText(text) ||
-        typeof segment !== 'number' ||
-        !Number.isSafeInteger(segment) ||
-        segment < 0 ||
-        typeof needsSplit !== 'boolean' ||
-        (solo !== undefined && typeof solo !== 'boolean') ||
-        (batch !== undefined &&
-          (typeof batch !== 'number' || !Number.isSafeInteger(batch) || batch < 0))
+        !finiteTime(start) ||
+        !finiteTime(end) ||
+        end <= start ||
+        typeof needsSplit !== 'boolean'
       )
         throw new Error('预加载字幕内容无效。');
-      return {
-        text,
-        segment,
-        needsSplit,
-        ...(solo ? { solo } : {}),
-        ...(batch !== undefined ? { batch } : {}),
-      };
+      return { text, start, end, needsSplit };
     }),
   };
 }

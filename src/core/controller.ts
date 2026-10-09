@@ -6,7 +6,7 @@ import { selectedTrack } from './native';
 import { SubtitleOverlay } from './overlay';
 import type { CaptionSource, LiveCaption, Platform, PlatformFactory } from './platform';
 import { PlaybackGate } from './playback';
-import { captionWindow, timedCaptions } from './timeline';
+import { captionAt, playbackCues, timedCaptions } from './timeline';
 import { TraceReporter, type TraceCaption } from './trace';
 import { CaptionTranslator } from './translator';
 
@@ -62,7 +62,6 @@ export class CaptionController {
   private mode: SourceMode | null = null;
   private source = '';
   private nativeTrack: TextTrack | undefined;
-  private batchOrigin = 0;
   private destroyed = false;
   private onMediaChange = (event: Event) => {
     if (event.type === 'seeking' || event.type === 'seeked') this.gate.hold();
@@ -85,7 +84,7 @@ export class CaptionController {
     );
     this.gate = new PlaybackGate({
       hold: () => {
-        this.translator.prefetch([]);
+        this.translator.hold(this.video?.currentTime ?? 0);
         this.translator.cancel();
         this.overlay.clearLoading();
       },
@@ -122,7 +121,7 @@ export class CaptionController {
   }
 
   private unmount(): void {
-    this.translator.prefetch([], Boolean(this.video));
+    this.translator.release();
     this.mode = null;
     for (const event of MEDIA_EVENTS) this.video?.removeEventListener(event, this.onMediaChange);
     this.overlay.unmount();
@@ -132,7 +131,6 @@ export class CaptionController {
     this.nativeTrack = undefined;
     this.translator.reset();
     this.gate.reset();
-    this.batchOrigin = 0;
   }
 
   private mount(video: HTMLVideoElement, player: HTMLElement): void {
@@ -149,7 +147,7 @@ export class CaptionController {
 
   private hasReadyCaption(source: CaptionSource, time: number): boolean {
     const captions = source.kind === 'timeline' ? timedCaptions(source.cues) : null;
-    const caption = currentCaption(source, captions ? captionWindow(captions, time).current : '');
+    const caption = currentCaption(source, captions ? captionAt(captions, time) : '');
     const cue = captions?.find(
       (item) => item.startTime <= time && time < item.endTime && item.text === caption.text,
     );
@@ -194,7 +192,7 @@ export class CaptionController {
     if (this.video !== video || this.overlay.player !== player || !this.overlay.connected)
       this.mount(video, player);
     if (source.mode !== this.mode) {
-      this.translator.prefetch([], this.translator.requesting);
+      this.translator.release();
       this.clearCaption();
       this.mode = source.mode;
     }
@@ -211,29 +209,16 @@ export class CaptionController {
     if (sourceId !== this.source || track !== this.nativeTrack) {
       this.source = sourceId;
       this.nativeTrack = track;
-      this.gate.restartLead();
       this.translator.invalidate();
       this.clearCaption();
-      this.translator.prefetch([]);
+      this.translator.release();
     }
     const captions = source.kind === 'timeline' ? timedCaptions(source.cues) : null;
     const usesModel = source.mode === 'model';
-    const scheduling = Boolean(captions) && usesModel && !video.paused && !this.gate.settling;
-    const translationTime = scheduling ? this.gate.lead(time, true) : time;
-    if (scheduling && captions && this.gate.consumeOpening()) {
-      const anchor = captions.findIndex((caption) => caption.endTime > translationTime);
-      if (anchor >= 0) this.batchOrigin = anchor;
-    }
-    const current = captions ? captionWindow(captions, time, this.batchOrigin) : null;
-    const upcoming =
-      captions && translationTime !== time
-        ? captionWindow(captions, translationTime, this.batchOrigin)
-        : current;
-    const caption = currentCaption(source, current?.current ?? '');
+    const caption = currentCaption(source, captions ? captionAt(captions, time) : '');
     this.translator.notePlayback(video.paused);
-    const items =
-      usesModel && !video.paused ? (this.gate.settling ? [] : (upcoming?.items ?? [])) : [];
-    if (!video.paused) this.translator.prefetch(items);
+    if (usesModel && !video.paused && !this.gate.settling && captions)
+      this.translator.plan(time, video.playbackRate || 1, playbackCues(captions, time));
     this.overlay.hide(caption.layers);
     video.classList.toggle('subline-native', caption.nativeTrack);
     const cueIndex =
@@ -257,11 +242,8 @@ export class CaptionController {
     this.translator.show({
       ...(cue?.needsSplit ? { kind: 'split', cue } : { kind: 'ordinary', text: caption.text }),
       time,
-      cacheOnly:
-        video.paused ||
-        Boolean(cue && time < this.gate.leadUntil && cue.endTime <= this.gate.leadUntil) ||
-        this.gate.settling,
-      debounce: current ? 0 : 300,
+      cacheOnly: video.paused || this.gate.settling,
+      debounce: captions ? 0 : 300,
     });
   }
 }

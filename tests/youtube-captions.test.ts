@@ -147,9 +147,9 @@ it('joins ASR fragments, uses word timestamps within a cue and preserves the fin
   expect(captionWindow(timedCaptions(cues), 1.5)).toEqual({
     current: 'We are ready.',
     items: [
-      { text: 'We are ready.', segment: 0, needsSplit: false, batch: 0 },
-      { text: 'Are you?', segment: 0, needsSplit: false, batch: 0 },
-      { text: 'Let’s go', segment: 0, needsSplit: false, batch: 0 },
+      { text: 'We are ready.', start: 0, end: 2, needsSplit: false },
+      { text: 'Are you?', start: 2, end: 3, needsSplit: false },
+      { text: 'Let’s go', start: 3, end: 4, needsSplit: false },
     ],
   });
   expect(captionWindow(timedCaptions(cues), 2).current).toBe('Are you?');
@@ -353,10 +353,10 @@ it('flags a long cue shown on its own for a Provider split, but not overlapping 
     [long, true],
   ]);
   expect(captionWindow(captions, 0).items).toEqual([
-    { text: first, segment: 0, needsSplit: false, batch: 0 },
-    { text: `${first}\n${second}`, segment: 0, needsSplit: false, batch: 0 },
-    { text: second, segment: 0, needsSplit: false, batch: 0 },
-    { text: long, segment: 0, needsSplit: true, batch: 0 },
+    { text: first, start: 2, end: 4, needsSplit: false },
+    { text: `${first}\n${second}`, start: 4, end: 6, needsSplit: false },
+    { text: second, start: 6, end: 8, needsSplit: false },
+    { text: long, start: 8, end: 12, needsSplit: true },
   ]);
 });
 

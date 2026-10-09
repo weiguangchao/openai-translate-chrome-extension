@@ -1,6 +1,12 @@
-import { prefetchBatchCount, translationBatchLimit } from '../shared/limits';
+import {
+  behindGraceSeconds,
+  planLookaheadCues,
+  planLookaheadSeconds,
+  translationBatchLimit,
+} from '../shared/limits';
+import type { PlaybackCue } from '../shared/playback-plan';
 import { needsSubtitleSegmentation } from '../shared/subtitle-segmentation';
-import type { PrefetchItem, TranslationPart } from '../shared/caption-translation';
+import type { TranslationPart } from '../shared/caption-translation';
 import type { TimedCue } from './cues';
 
 export type SourceSentence = TimedCue & { readonly kind?: never };
@@ -95,36 +101,50 @@ export function captionAt(cues: readonly TimedCue[], time: number): string {
   return joinedText(activeAt(cues, time));
 }
 
+export function playbackCues(captions: readonly TimedCaption[], time: number): PlaybackCue[] {
+  const first = captions.findIndex((caption) => caption.endTime > time - behindGraceSeconds);
+  if (first < 0) return [];
+  const horizon = time + planLookaheadSeconds;
+  const pool = captions
+    .slice(first)
+    .filter((caption) => caption.endTime > time - behindGraceSeconds && caption.startTime < horizon)
+    .slice(0, planLookaheadCues);
+  if (!pool.length) return [];
+  const points = [
+    ...new Set([time, ...pool.flatMap((caption) => [caption.startTime, caption.endTime])]),
+  ]
+    .filter((at) => at <= horizon)
+    .sort((left, right) => left - right);
+  const units: PlaybackCue[] = [];
+  for (let index = 0; index < points.length; index++) {
+    const at = points[index];
+    const active = activeAt(pool, at);
+    const text = joinedText(active);
+    if (!text) continue;
+    const next = points[index + 1] ?? Math.max(...active.map((cue) => cue.endTime));
+    const end = Math.min(next, ...active.map((cue) => cue.endTime));
+    const needsSplit = active.length === 1 && active[0].needsSplit === true;
+    const start = at;
+    const previous = units[units.length - 1];
+    if (
+      previous &&
+      previous.end === start &&
+      previous.text === text &&
+      previous.needsSplit === needsSplit
+    ) {
+      units[units.length - 1] = { ...previous, end: Math.max(previous.end, end) };
+      continue;
+    }
+    if (end <= time - behindGraceSeconds) continue;
+    units.push({ text, start, end, needsSplit });
+    if (units.length >= planLookaheadCues) break;
+  }
+  return units;
+}
+
 export function captionWindow(
   captions: readonly TimedCaption[],
   time: number,
-  origin = -1,
-): { current: string; items: readonly PrefetchItem[] } {
-  const first = captions.findIndex((caption) => caption.endTime > time);
-  if (first < 0) return { current: '', items: [] };
-  const originIndex = origin < 0 || origin > first ? first : origin;
-  const batchAtPlayhead = Math.floor((first - originIndex) / translationBatchLimit);
-  const end = Math.min(
-    captions.length,
-    originIndex + (batchAtPlayhead + prefetchBatchCount) * translationBatchLimit,
-  );
-  const remaining = captions.slice(first, end);
-  const boundaries = [...new Set(remaining.flatMap((cue) => [cue.startTime, cue.endTime]))]
-    .filter((at) => at > time)
-    .sort((a, b) => a - b);
-  const items: PrefetchItem[] = [];
-  for (const at of [time, ...boundaries]) {
-    const active = activeAt(remaining, at);
-    const text = joinedText(active);
-    const split = active.length === 1 && active[0].needsSplit === true;
-    if (!text || items.some((item) => item.text === text && item.needsSplit === split)) continue;
-    const sentenceIndex = captions.indexOf(active[0]);
-    items.push({
-      text,
-      segment: active[0].segment,
-      needsSplit: split,
-      batch: Math.floor((sentenceIndex - originIndex) / translationBatchLimit),
-    });
-  }
-  return { current: captionAt(remaining, time), items };
+): { current: string; items: readonly PlaybackCue[] } {
+  return { current: captionAt(captions, time), items: playbackCues(captions, time) };
 }

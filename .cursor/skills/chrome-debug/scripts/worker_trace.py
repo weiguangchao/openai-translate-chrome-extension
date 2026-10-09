@@ -4,6 +4,7 @@ GAP_SECONDS = 3
 CUE_SLACK_SECONDS = 0.5
 FLASH_SECONDS = 0.3
 TOGETHER_SECONDS = 0.3
+SCHEDULE_FIELDS = ("videoTime", "playbackRate", "start", "end", "predictedMs", "slack", "inFlight", "blocked", "atRisk")
 
 
 def r1(value):
@@ -28,6 +29,7 @@ def collect_batches(events, tab):
             latest.pop(number, None)
             if event.get("tab") == tab:
                 batch = {"id": number, "seg": event.get("seg"), "size": event.get("size"), "queued": stamp}
+                batch.update({key: event[key] for key in SCHEDULE_FIELDS if key in event})
                 batches.append(batch)
                 latest[number] = batch
         elif kind in ("sent", "first", "done") and number in latest:
@@ -139,6 +141,7 @@ def batch_view(batch):
         return r2((batch[b] - batch[a]) / 1000) if a in batch and b in batch else None
 
     return {"id": batch["id"], "seg": batch["seg"], "size": batch["size"], "result": batch.get("result"),
+            **{key: batch[key] for key in SCHEDULE_FIELDS if key in batch},
             "wait": between("queued", "sent"), "first": between("sent", "first"),
             "roundTrip": between("sent", "done")}
 
@@ -154,7 +157,10 @@ def summarize(events, run, started, played):
     for sentence in sentences:
         sentence["lag"] = lag_of(sentence)
         ready_by = sentence["readyStamp"] or math.inf
-        matching = [b for b in batches if b["seg"] == sentence["seg"] and b["queued"] <= ready_by]
+        matching = [b for b in batches if b["queued"] <= ready_by and (
+            b["start"] <= sentence["start"] < b["end"] if "start" in b and "end" in b
+            else b["seg"] == sentence["seg"]
+        )]
         sentence["batch"] = batch_view(matching[-1]) if matching else None
     lags = [s["lag"] for s in sentences if s["lag"] is not None]
     shown_batches = [batch_view(batch) for batch in batches]

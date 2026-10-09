@@ -5,7 +5,7 @@ import {
   translationSendsPerSecond,
 } from '../src/shared/provider/transport';
 import { DEFAULT_SETTINGS } from '../src/shared/settings';
-import { providerReply, requestedTexts } from './fixtures/provider';
+import { prefetchItems, providerReply, requestedTexts } from './fixtures/provider';
 
 let api: typeof import('../src/shared/api');
 let TranslationQueue: typeof import('../src/extension/queue').TranslationQueue;
@@ -39,7 +39,9 @@ it.each([400, 422])(
     });
     vi.stubGlobal('fetch', fetch);
     const queue = new TranslationQueue();
-    const work = ['A', 'B', 'C'].map((text) => queue.request(text, settings, text));
+    const work = ['A', 'B', 'C'].map((text) =>
+      queue.request(text, { ...settings, model: `${settings.model}-${text}` }, text),
+    );
     await vi.advanceTimersByTimeAsync(999);
     expect(sends).toHaveLength(3);
     await vi.advanceTimersByTimeAsync(4001);
@@ -125,18 +127,13 @@ it('prioritizes the visible caption when the next send window opens', async () =
   const prefetch = queue.prefetch(
     'window',
     settings,
-    Array.from({ length: 4 }, (_, segment) => ({
-      text: `Future ${segment}`,
-      segment,
-      needsSplit: false,
-    })),
+    prefetchItems(Array.from({ length: 4 }, (_, index) => `Future ${index}`)),
   );
   const current = queue.request('current', settings, 'Visible');
   await vi.advanceTimersByTimeAsync(1000);
-  expect(sent.slice(3)).toEqual(['Visible', 'Future 0', 'Future 1']);
+  expect(sent.slice(3)).toEqual(['Visible', 'Future 0']);
   await expect(current).resolves.toBe('完成');
-  await vi.advanceTimersByTimeAsync(1000);
-  await expect(prefetch).resolves.toEqual(['完成', '完成', '完成', '完成']);
+  await expect(prefetch).resolves.toEqual(['完成']);
 });
 
 it('replaces unsent work when a consumer moves to a disjoint window', async () => {
@@ -151,12 +148,8 @@ it('replaces unsent work when a consumer moves to a disjoint window', async () =
   );
   const queue = new TranslationQueue();
   await Promise.all(['A', 'B', 'C'].map((text) => queue.request(text, settings, text)));
-  const old = queue.prefetch('window', settings, [
-    { text: 'Obsolete', segment: 0, needsSplit: false },
-  ]);
-  const next = queue.prefetch('window', settings, [
-    { text: 'Needed', segment: 1, needsSplit: false },
-  ]);
+  const old = queue.prefetch('window', settings, prefetchItems(['Obsolete']));
+  const next = queue.prefetch('window', settings, prefetchItems(['Needed']));
   await vi.advanceTimersByTimeAsync(1000);
   await expect(old).resolves.toEqual([null]);
   await expect(next).resolves.toEqual(['完成']);
