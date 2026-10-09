@@ -13,11 +13,11 @@
 - Body: the problem in a sentence or two, then how you fixed it.
 - UI changes need before/after images. Motion or timing needs a short video.
 
-## Test
+## Verifying
 
-In a real-browser check, report the metrics below for each build at 1x, 1.25x, 1.5x and 2x. For each build and rate, seek once to a segment with no cached translations, trace 45 s from the landing point, then keep playing and trace 180 s. Durations are video seconds.
+In a real-browser check, report the metrics below for each build on YouTube, HBO Max and X at 1x, 1.25x, 1.5x and 2x. Each run seeks once into a segment with no cached translations, traces 45 s from the landing point, then keeps playing and traces 180 s; durations are video seconds. Most X videos are too short for both traces, so use the X video in the chrome-debug smoke checks.
 
-A run counts only if its traces report the tested `playbackRate`, none is marked `throttled` (keep Chrome in front), and the landing trace starts at the seek target; YouTube may resume at the last watched position instead.
+A run counts only if its traces report the tested `playbackRate`, none is marked `throttled` (keep Chrome in front), and the landing trace starts at the seek target rather than where YouTube or HBO Max last stopped.
 
 - Loading while playing: the share of subtitle time that shows the loading placeholder instead of a translation, from the 180 s trace: `states.loading / (states.loading + states.ready)`.
 - Wait after seeking: the seconds a viewer waits after the seek until the first subtitle on screen shows its translation, from the 45 s trace: `(firstReadyAt - firstCaptionAt) / playbackRate`.

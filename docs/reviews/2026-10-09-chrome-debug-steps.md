@@ -1,6 +1,6 @@
 # chrome-debug 改为逐步控制标签页并支持倍速
 
-AGENTS.md 的 Test 一节要求在 1x、1.25x、1.5x 和 2x 下测量真实浏览器指标，但 chrome-debug skill 写着 "Read playbackRate. Do not set it."，无法测 1x 以外的倍速。检查还是写死的步骤列表，跑完就关标签页：YouTube 跳回上次播放位置、trace 被节流时，Agent 只能等整轮结束再重跑。`reload` 也只能重载 Chrome 已加载的文件夹，对比新旧构建时要手动覆盖 `dist`，加载失败也不容易发现。
+AGENTS.md 的 Verifying 一节要求在 1x、1.25x、1.5x 和 2x 下测量真实浏览器指标，但 chrome-debug skill 写着 "Read playbackRate. Do not set it."，无法测 1x 以外的倍速。检查还是写死的步骤列表，跑完就关标签页：YouTube 跳回上次播放位置、trace 被节流时，Agent 只能等整轮结束再重跑。`reload` 也只能重载 Chrome 已加载的文件夹，对比新旧构建时要手动覆盖 `dist`，加载失败也不容易发现。
 
 ## 改动
 
@@ -22,7 +22,7 @@ AGENTS.md 的 Test 一节要求在 1x、1.25x、1.5x 和 2x 下测量真实浏�
 
 ## 用新 skill 重跑的浏览器验证
 
-按 AGENTS.md 的 Test 一节，在用户的 Chrome 中用 `open`、`do`、`close` 交替测量旧版 `7708ec0` 和新版（PR #28）的构建。每个倍速用一段此前没有翻译缓存的 TED 演讲，两版各占一段，轮流先测。每次运行先 `focus`，播放后拖动一次并设倍速，立即记录 45 秒落点 trace，接着记录 180 秒播放 trace。计入的运行都满足：两段 trace 报告的倍速等于目标倍速，没有被标记为 `throttled`，落点 trace 从拖动目标后 5 秒内开始。
+按 AGENTS.md 的 Verifying 一节，在用户的 Chrome 中用 `open`、`do`、`close` 交替测量旧版 `7708ec0` 和新版（PR #28）的构建。每个倍速用一段此前没有翻译缓存的 TED 演讲，两版各占一段，轮流先测。每次运行先 `focus`，播放后拖动一次并设倍速，立即记录 45 秒落点 trace，接着记录 180 秒播放 trace。计入的运行都满足：两段 trace 报告的倍速等于目标倍速，没有被标记为 `throttled`，落点 trace 从拖动目标后 5 秒内开始。
 
 | 倍速  | 构建 | 视频          | Loading while playing | Wait after seeking | Loading after seeking | 整句错过 | 请求（中止） | Provider 耗时 p50 / p90 |
 | ----- | ---- | ------------- | --------------------- | ------------------ | --------------------- | -------- | ------------ | ----------------------- |

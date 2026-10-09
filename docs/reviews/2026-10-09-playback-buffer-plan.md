@@ -58,7 +58,7 @@
 
 ## 真实 Chrome 验证
 
-通过 [chrome-debug skill](../../.cursor/skills/chrome-debug/SKILL.md) 在用户已登录的 Chrome 中交替加载旧版 `7708ec0` 和新版的 `dist`，指标按 [AGENTS.md](../../AGENTS.md) 的 Test 一节计算。三段 TED 演讲（`iCvmsMzlF7o`、`Ks-_Mh1QhMc`、`86x-u-tz0MA`）各测两段互不重叠、此前没有翻译缓存的片段，两版轮流占前一段。媒体保持静音，播放速度为 1，所有计入的 trace 都没有被 CLI 标记为 `throttled`。
+通过 [chrome-debug skill](../../.cursor/skills/chrome-debug/SKILL.md) 在用户已登录的 Chrome 中交替加载旧版 `7708ec0` 和新版的 `dist`，指标按 [AGENTS.md](../../AGENTS.md) 的 Verifying 一节计算。三段 TED 演讲（`iCvmsMzlF7o`、`Ks-_Mh1QhMc`、`86x-u-tz0MA`）各测两段互不重叠、此前没有翻译缓存的片段，两版轮流占前一段。媒体保持静音，播放速度为 1，所有计入的 trace 都没有被 CLI 标记为 `throttled`。
 
 每轮拖到目标位置后先记录 45 秒落点 trace，播放不中断，再记录 180 秒稳态 trace。前三轮的检查为了绕开 YouTube 的续播位置，拖到目标后三秒又拖回同一位置，第二次拖动会中止刚发出的落点请求，因此这三轮只保留稳态数据，落点指标改用单次拖动在同一视频的其他未缓存片段重测。重测中有两次页面可见比例只有 0.35 和 0.59，被标记为 `throttled`，未计入。
 
