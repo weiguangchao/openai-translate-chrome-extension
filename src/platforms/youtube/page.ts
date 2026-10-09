@@ -134,7 +134,7 @@ servePageTimeline('youtube', {
           signal: AbortSignal.any([signal, AbortSignal.timeout(15000)]),
         });
         if (!response.ok) throw new Error('Caption track unavailable');
-        const cues = parseYoutubeCaptions(await response.json(), source.kind);
+        const cues = parseYoutubeCaptions(await response.json(), source.kind, sourceLanguage);
         if (!cues.length) throw new Error('Empty caption track');
         return cues;
       });

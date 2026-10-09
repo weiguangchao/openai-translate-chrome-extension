@@ -1,0 +1,731 @@
+{
+ "counted": [
+  {
+   "name": "old-y100",
+   "target": 300,
+   "landing_from": 301.1,
+   "rate": [
+    1,
+    1
+   ],
+   "clock": [
+    "ok",
+    "ok"
+   ],
+   "visible": [
+    1.0,
+    1.0
+   ],
+   "loading_while_playing": 0.0,
+   "wait_after_seeking": 0.0,
+   "loading_after_seeking": 21.1,
+   "missed": "0/28",
+   "singles": 24,
+   "requests": 34,
+   "results": {
+    "ok": 32,
+    "aborted": 2
+   },
+   "round_trip_p50_p90": [
+    7.69,
+    14.68
+   ],
+   "site": "youtube",
+   "video": "arj7oStGLkU",
+   "build": "main 8620dbf (6a634a9fae60)"
+  },
+  {
+   "name": "new-y100",
+   "target": 300,
+   "landing_from": 301.5,
+   "rate": [
+    1,
+    1
+   ],
+   "clock": [
+    "ok",
+    "ok"
+   ],
+   "visible": [
+    1.0,
+    1.0
+   ],
+   "loading_while_playing": 0.0,
+   "wait_after_seeking": 0.0,
+   "loading_after_seeking": 5.8,
+   "missed": "0/28",
+   "singles": 23,
+   "requests": 33,
+   "results": {
+    "ok": 32,
+    "aborted": 1
+   },
+   "round_trip_p50_p90": [
+    2.92,
+    5.81
+   ],
+   "site": "youtube",
+   "video": "arj7oStGLkU",
+   "build": "branch (5e8f71971a54)"
+  },
+  {
+   "name": "old-y125",
+   "target": 600,
+   "landing_from": 603.0,
+   "rate": [
+    1.25,
+    1.25
+   ],
+   "clock": [
+    "ok",
+    "ok"
+   ],
+   "visible": [
+    1.0,
+    1.0
+   ],
+   "loading_while_playing": 0.0,
+   "wait_after_seeking": 9.1,
+   "loading_after_seeking": 62.8,
+   "missed": "0/32",
+   "singles": 22,
+   "requests": 32,
+   "results": {
+    "aborted": 4,
+    "ok": 26,
+    "null": 2
+   },
+   "round_trip_p50_p90": [
+    7.68,
+    12.04
+   ],
+   "site": "youtube",
+   "video": "c0KYU2j0TM4",
+   "build": "main 8620dbf (6a634a9fae60)"
+  },
+  {
+   "name": "new-y125",
+   "target": 600,
+   "landing_from": 603.0,
+   "rate": [
+    1.25,
+    1.25
+   ],
+   "clock": [
+    "ok",
+    "ok"
+   ],
+   "visible": [
+    1.0,
+    1.0
+   ],
+   "loading_while_playing": 0.0,
+   "wait_after_seeking": 0.6,
+   "loading_after_seeking": 2.2,
+   "missed": "0/32",
+   "singles": 23,
+   "requests": 33,
+   "results": {
+    "ok": 31,
+    "aborted": 1,
+    "null": 1
+   },
+   "round_trip_p50_p90": [
+    2.93,
+    4.42
+   ],
+   "site": "youtube",
+   "video": "c0KYU2j0TM4",
+   "build": "branch (5e8f71971a54)"
+  },
+  {
+   "name": "old-y150",
+   "target": 600,
+   "landing_from": 603.5,
+   "rate": [
+    1.5,
+    1.5
+   ],
+   "clock": [
+    "ok",
+    "ok"
+   ],
+   "visible": [
+    1.0,
+    1.0
+   ],
+   "loading_while_playing": 4.0,
+   "wait_after_seeking": 7.7,
+   "loading_after_seeking": 82.4,
+   "missed": "2/62",
+   "singles": 25,
+   "requests": 29,
+   "results": {
+    "aborted": 3,
+    "ok": 22,
+    "invalid": 2,
+    "null": 2
+   },
+   "round_trip_p50_p90": [
+    9.73,
+    19.77
+   ],
+   "site": "youtube",
+   "video": "D9Ihs241zeg",
+   "build": "main 8620dbf (6a634a9fae60)"
+  },
+  {
+   "name": "new-y150",
+   "target": 600,
+   "landing_from": 603.7,
+   "rate": [
+    1.5,
+    1.5
+   ],
+   "clock": [
+    "ok",
+    "ok"
+   ],
+   "visible": [
+    1.0,
+    1.0
+   ],
+   "loading_while_playing": 0.0,
+   "wait_after_seeking": 3.6,
+   "loading_after_seeking": 42.9,
+   "missed": "0/64",
+   "singles": 28,
+   "requests": 32,
+   "results": {
+    "ok": 30,
+    "aborted": 1,
+    "null": 1
+   },
+   "round_trip_p50_p90": [
+    3.28,
+    7.49
+   ],
+   "site": "youtube",
+   "video": "D9Ihs241zeg",
+   "build": "branch (5e8f71971a54)"
+  },
+  {
+   "name": "old-y200c",
+   "target": 750,
+   "landing_from": 750,
+   "rate": [
+    2,
+    2
+   ],
+   "clock": [
+    "ok",
+    "ok"
+   ],
+   "visible": [
+    1.0,
+    1.0
+   ],
+   "loading_while_playing": 13.7,
+   "wait_after_seeking": 13.4,
+   "loading_after_seeking": 50.4,
+   "missed": "3/61",
+   "singles": 18,
+   "requests": 33,
+   "results": {
+    "aborted": 4,
+    "ok": 27,
+    "null": 2
+   },
+   "round_trip_p50_p90": [
+    5.2,
+    10.59
+   ],
+   "site": "youtube",
+   "video": "qp0HIF3SfI4",
+   "build": "main 8620dbf (6a634a9fae60)"
+  },
+  {
+   "name": "new-y200c",
+   "target": 750,
+   "landing_from": 750.0,
+   "rate": [
+    2,
+    2
+   ],
+   "clock": [
+    "ok",
+    "ok"
+   ],
+   "visible": [
+    1.0,
+    0.91
+   ],
+   "loading_while_playing": 0.0,
+   "wait_after_seeking": 6.2,
+   "loading_after_seeking": 76.6,
+   "missed": "0/60",
+   "singles": 20,
+   "requests": 34,
+   "results": {
+    "ok": 30,
+    "aborted": 2,
+    "invalid": 1,
+    "null": 1
+   },
+   "round_trip_p50_p90": [
+    3.18,
+    4.24
+   ],
+   "site": "youtube",
+   "video": "qp0HIF3SfI4",
+   "build": "branch (5e8f71971a54)"
+  },
+  {
+   "name": "old-h100",
+   "target": 120,
+   "landing_from": 122.4,
+   "rate": [
+    1,
+    1
+   ],
+   "clock": [
+    "ok",
+    "ok"
+   ],
+   "visible": [
+    1.0,
+    1.0
+   ],
+   "loading_while_playing": 0.0,
+   "wait_after_seeking": 14.1,
+   "loading_after_seeking": 39.0,
+   "missed": "0/77",
+   "singles": 7,
+   "requests": 34,
+   "results": {
+    "aborted": 3,
+    "ok": 30,
+    "invalid": 1
+   },
+   "round_trip_p50_p90": [
+    2.86,
+    7.54
+   ],
+   "site": "hbo",
+   "video": "44805ae8-7771-4238-ad89-2c629a30db4d",
+   "build": "main 8620dbf (6a634a9fae60)"
+  },
+  {
+   "name": "new-h100",
+   "target": 120,
+   "landing_from": 122.5,
+   "rate": [
+    1,
+    1
+   ],
+   "clock": [
+    "ok",
+    "ok"
+   ],
+   "visible": [
+    1.0,
+    1.0
+   ],
+   "loading_while_playing": 0.0,
+   "wait_after_seeking": 9.9,
+   "loading_after_seeking": 28.0,
+   "missed": "0/77",
+   "singles": 6,
+   "requests": 34,
+   "results": {
+    "aborted": 2,
+    "ok": 31,
+    "null": 1
+   },
+   "round_trip_p50_p90": [
+    2.78,
+    6.08
+   ],
+   "site": "hbo",
+   "video": "44805ae8-7771-4238-ad89-2c629a30db4d",
+   "build": "branch (5e8f71971a54)"
+  },
+  {
+   "name": "old-h125",
+   "target": 420,
+   "landing_from": 421.6,
+   "rate": [
+    1.25,
+    1.25
+   ],
+   "clock": [
+    "ok",
+    "ok"
+   ],
+   "visible": [
+    1.0,
+    1.0
+   ],
+   "loading_while_playing": 0.0,
+   "wait_after_seeking": 1.2,
+   "loading_after_seeking": 20.3,
+   "missed": "0/72",
+   "singles": 10,
+   "requests": 39,
+   "results": {
+    "aborted": 3,
+    "ok": 33,
+    "invalid": 1,
+    "null": 2
+   },
+   "round_trip_p50_p90": [
+    2.93,
+    4.9
+   ],
+   "site": "hbo",
+   "video": "44805ae8-7771-4238-ad89-2c629a30db4d",
+   "build": "main 8620dbf (6a634a9fae60)"
+  },
+  {
+   "name": "new-h125",
+   "target": 420,
+   "landing_from": 421.5,
+   "rate": [
+    1.25,
+    1.25
+   ],
+   "clock": [
+    "ok",
+    "ok"
+   ],
+   "visible": [
+    1.0,
+    1.0
+   ],
+   "loading_while_playing": 0.0,
+   "wait_after_seeking": 1.4,
+   "loading_after_seeking": 3.6,
+   "missed": "0/72",
+   "singles": 6,
+   "requests": 35,
+   "results": {
+    "aborted": 2,
+    "ok": 31,
+    "invalid": 1,
+    "null": 1
+   },
+   "round_trip_p50_p90": [
+    2.77,
+    5.71
+   ],
+   "site": "hbo",
+   "video": "44805ae8-7771-4238-ad89-2c629a30db4d",
+   "build": "branch (5e8f71971a54)"
+  },
+  {
+   "name": "old-h150",
+   "target": 720,
+   "landing_from": 720.2,
+   "rate": [
+    1.5,
+    1.5
+   ],
+   "clock": [
+    "ok",
+    "ok"
+   ],
+   "visible": [
+    1.0,
+    1.0
+   ],
+   "loading_while_playing": 0.0,
+   "wait_after_seeking": 3.9,
+   "loading_after_seeking": 46.4,
+   "missed": "0/68",
+   "singles": 30,
+   "requests": 48,
+   "results": {
+    "aborted": 8,
+    "ok": 35,
+    "invalid": 4,
+    "null": 1
+   },
+   "round_trip_p50_p90": [
+    2.86,
+    6.47
+   ],
+   "site": "hbo",
+   "video": "44805ae8-7771-4238-ad89-2c629a30db4d",
+   "build": "main 8620dbf (6a634a9fae60)"
+  },
+  {
+   "name": "new-h150",
+   "target": 720,
+   "landing_from": 721.7,
+   "rate": [
+    1.5,
+    1.5
+   ],
+   "clock": [
+    "ok",
+    "ok"
+   ],
+   "visible": [
+    1.0,
+    1.0
+   ],
+   "loading_while_playing": 0.0,
+   "wait_after_seeking": 3.4,
+   "loading_after_seeking": 10.7,
+   "missed": "0/70",
+   "singles": 10,
+   "requests": 34,
+   "results": {
+    "aborted": 5,
+    "ok": 26,
+    "invalid": 2,
+    "null": 1
+   },
+   "round_trip_p50_p90": [
+    3.57,
+    8.28
+   ],
+   "site": "hbo",
+   "video": "44805ae8-7771-4238-ad89-2c629a30db4d",
+   "build": "branch (5e8f71971a54)"
+  },
+  {
+   "name": "old-h200",
+   "target": 1020,
+   "landing_from": 1020.7,
+   "rate": [
+    2,
+    2
+   ],
+   "clock": [
+    "ok",
+    "ok"
+   ],
+   "visible": [
+    1.0,
+    1.0
+   ],
+   "loading_while_playing": 2.2,
+   "wait_after_seeking": 1.7,
+   "loading_after_seeking": 3.7,
+   "missed": "4/74",
+   "singles": 7,
+   "requests": 40,
+   "results": {
+    "aborted": 5,
+    "ok": 32,
+    "invalid": 2,
+    "null": 1
+   },
+   "round_trip_p50_p90": [
+    2.6,
+    5.14
+   ],
+   "site": "hbo",
+   "video": "44805ae8-7771-4238-ad89-2c629a30db4d",
+   "build": "main 8620dbf (6a634a9fae60)"
+  },
+  {
+   "name": "new-h200",
+   "target": 1020,
+   "landing_from": 1020.7,
+   "rate": [
+    2,
+    2
+   ],
+   "clock": [
+    "ok",
+    "ok"
+   ],
+   "visible": [
+    1.0,
+    1.0
+   ],
+   "loading_while_playing": 0.0,
+   "wait_after_seeking": 2.4,
+   "loading_after_seeking": 5.8,
+   "missed": "0/74",
+   "singles": 4,
+   "requests": 33,
+   "results": {
+    "aborted": 3,
+    "ok": 28,
+    "invalid": 1,
+    "null": 1
+   },
+   "round_trip_p50_p90": [
+    2.62,
+    3.8
+   ],
+   "site": "hbo",
+   "video": "44805ae8-7771-4238-ad89-2c629a30db4d",
+   "build": "branch (5e8f71971a54)"
+  }
+ ],
+ "excluded": [
+  {
+   "name": "old-y200",
+   "target": 600,
+   "landing_from": 600.2,
+   "rate": [
+    2,
+    2
+   ],
+   "clock": [
+    "ok",
+    "ok"
+   ],
+   "visible": [
+    1.0,
+    1.0
+   ],
+   "loading_while_playing": 3.7,
+   "wait_after_seeking": 5.8,
+   "loading_after_seeking": 49.6,
+   "missed": "8/56",
+   "singles": 108,
+   "requests": 207,
+   "results": {
+    "aborted": 176,
+    "ok": 29,
+    "null": 2
+   },
+   "round_trip_p50_p90": [
+    5.89,
+    16.56
+   ],
+   "site": "youtube",
+   "video": "qp0HIF3SfI4",
+   "build": "old",
+   "reason": "chrome-debug media step re-seeked to 600 s about once a second while YouTube buffered at 2x (89 and 66 seek events)"
+  },
+  {
+   "name": "old-y200b",
+   "target": 300,
+   "landing_from": 303.6,
+   "rate": [
+    2,
+    2
+   ],
+   "clock": [
+    "ok",
+    "ok"
+   ],
+   "visible": [
+    1.0,
+    1.0
+   ],
+   "loading_while_playing": 0.0,
+   "wait_after_seeking": 0.0,
+   "loading_after_seeking": 0.0,
+   "missed": "0/57",
+   "singles": 25,
+   "requests": 37,
+   "results": {
+    "ok": 35,
+    "null": 2
+   },
+   "round_trip_p50_p90": [
+    4.12,
+    8.67
+   ],
+   "site": "youtube",
+   "video": "qp0HIF3SfI4",
+   "build": "old",
+   "reason": "runner waited for 301 s before tracing, so the landing trace started 3.6 s after the seek"
+  },
+  {
+   "name": "new-y200",
+   "target": 600,
+   "landing_from": 602.5,
+   "rate": [
+    2,
+    2
+   ],
+   "clock": [
+    "ok",
+    "ok"
+   ],
+   "visible": [
+    1.0,
+    1.0
+   ],
+   "loading_while_playing": 0.0,
+   "wait_after_seeking": 2.4,
+   "loading_after_seeking": 32.0,
+   "missed": "0/57",
+   "singles": 83,
+   "requests": 162,
+   "results": {
+    "aborted": 132,
+    "ok": 29,
+    "null": 1
+   },
+   "round_trip_p50_p90": [
+    4.0,
+    9.14
+   ],
+   "site": "youtube",
+   "video": "qp0HIF3SfI4",
+   "build": "new",
+   "reason": "chrome-debug media step re-seeked to 600 s about once a second while YouTube buffered at 2x (89 and 66 seek events)"
+  },
+  {
+   "name": "new-y200b",
+   "target": 300,
+   "landing_from": 303.9,
+   "rate": [
+    2,
+    2
+   ],
+   "clock": [
+    "ok",
+    "ok"
+   ],
+   "visible": [
+    1.0,
+    1.0
+   ],
+   "loading_while_playing": 0.0,
+   "wait_after_seeking": 0.6,
+   "loading_after_seeking": 3.4,
+   "missed": "0/56",
+   "singles": 25,
+   "requests": 38,
+   "results": {
+    "aborted": 1,
+    "ok": 36,
+    "null": 1
+   },
+   "round_trip_p50_p90": [
+    2.15,
+    6.32
+   ],
+   "site": "youtube",
+   "video": "qp0HIF3SfI4",
+   "build": "new",
+   "reason": "runner waited for 301 s before tracing, so the landing trace started 3.6 s after the seek"
+  }
+ ],
+ "segments": {
+  "arj7oStGLkU@300": "17 of 38 sentences over 80 columns",
+  "c0KYU2j0TM4@600": "21 of 38",
+  "D9Ihs241zeg@600": "18 of 26",
+  "qp0HIF3SfI4@750": "20 of 47"
+ },
+ "final_build_smoke": {
+  "build": "e25876151de7",
+  "youtube": "overlay ok in 3.0 s",
+  "hbo": "overlay ok in 5.0 s",
+  "x": "overlay ok in 10.1 s"
+ },
+ "x_smoke": {
+  "old": "overlay ok in 16.1 s",
+  "new": "overlay ok in 9.1 s"
+ }
+}

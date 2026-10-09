@@ -1,5 +1,5 @@
 import type { CueTiming, TimedCue } from './cues';
-import { needsSubtitleSegmentation } from '../shared/subtitle-segmentation';
+import { needsSubtitleSegmentation, segmenterFor } from '../shared/segmenter';
 
 interface SentenceInput extends TimedCue {
   parts?: TimedCue[];
@@ -11,25 +11,6 @@ interface TextSpan extends TimedCue {
   wordTimed: boolean;
 }
 const cjk = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Thai}]/u;
-
-function sentenceStops(text: string): number[] {
-  const stops: number[] = [];
-  for (const match of text.matchAll(/[.!?。！？؟।]+["'”’」』）)\]]*/gu)) {
-    const end = match.index + match[0].length;
-    const punctuation = match[0][0];
-    if (punctuation === '.') {
-      const before = text.slice(0, match.index);
-      const after = text.slice(end);
-      if (/\d$/.test(before) && /^\d/.test(after)) continue;
-      if (/\b(?:Mr|Mrs|Ms|Dr|Prof|Sr|Jr|St|vs|etc|e\.g|i\.e)$/i.test(before)) continue;
-      if (/(?:^|\s)[A-Z]$/.test(before) && /^\s+[A-Z]/.test(after)) continue;
-      if (/\b(?:[A-Za-z]\.)+[A-Za-z]$/.test(before) && /^\s+\p{Ll}/u.test(after)) continue;
-    }
-    if (end < text.length && !/\s/.test(text[end]) && /[.!?]/.test(punctuation)) continue;
-    stops.push(end);
-  }
-  return stops;
-}
 
 function requestWindows(text: string): number[] {
   if (text.length <= 5000) return [text.length];
@@ -44,7 +25,11 @@ function requestWindows(text: string): number[] {
   return [...stops, text.length];
 }
 
-export function subtitleSentences(events: readonly SentenceInput[], automatic = false): TimedCue[] {
+export function subtitleSentences(
+  events: readonly SentenceInput[],
+  language: string,
+  automatic = false,
+): TimedCue[] {
   const spans: TextSpan[] = [];
   const pauses: number[] = [];
   let text = '';
@@ -77,7 +62,7 @@ export function subtitleSentences(events: readonly SentenceInput[], automatic = 
       if (part.text.trim()) spans.push({ ...part, from, to: text.length, wordTimed });
     }
   }
-  const naturalStops = new Set(sentenceStops(text));
+  const naturalStops = new Set(segmenterFor(language).sentenceEnds(text));
   if (automatic || !naturalStops.size) for (const pause of pauses) naturalStops.add(pause);
   const boundaries = [...new Set([...naturalStops, text.length])].sort((a, b) => a - b);
   const sentences: TimedCue[] = [];
@@ -137,12 +122,12 @@ export function subtitleSentences(events: readonly SentenceInput[], automatic = 
   return sentences;
 }
 
-export function authoredSubtitleSentences(cues: readonly TimedCue[]): TimedCue[] {
+export function authoredSubtitleSentences(cues: readonly TimedCue[], language: string): TimedCue[] {
   const sentences: TimedCue[] = [];
   let run: TimedCue[] = [];
   let latestEnd = -Infinity;
   const flush = () => {
-    sentences.push(...subtitleSentences(run));
+    sentences.push(...subtitleSentences(run, language));
     run = [];
   };
   cues.forEach((cue, index) => {

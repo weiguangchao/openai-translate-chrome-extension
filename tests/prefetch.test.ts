@@ -239,7 +239,7 @@ it('renders a late split at the current time, follows estimated boundaries, and 
   expect(requested).toEqual([[longCaption], ['After.']]);
 });
 
-it('shows the whole long sentence for its full duration when the Provider split does not match the source', async () => {
+it('shows the whole long sentence for its full duration when the Provider returns one translation for all its lines', async () => {
   Object.defineProperty(video, 'textTracks', {
     value: [
       {
@@ -256,17 +256,7 @@ it('shows the whole long sentence for its full duration when the Provider split 
   });
   controller = new CaptionController(createHboPlatform, publicSettings(saved));
   await advance(3);
-  pending[0].resolve(
-    structuredReply([
-      {
-        id: 0,
-        parts: longCaptionParts.map((source, index) => ({
-          source: source.replace(' old', ''),
-          translation: longTranslations[index],
-        })),
-      },
-    ]),
-  );
+  pending[0].resolve(structuredReply([{ id: 0, translation: longTranslations.join('') }]));
   await vi.advanceTimersByTimeAsync(0);
   expect(original()?.textContent).toBe(longCaption);
   expect(translated()?.textContent).toBe(longTranslations.join(''));

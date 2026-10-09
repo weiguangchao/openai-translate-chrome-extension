@@ -6,8 +6,13 @@ import { translationSendsPerSecond } from '../src/shared/provider/transport';
 let TranslationQueue: typeof import('../src/extension/queue').TranslationQueue;
 import { DEFAULT_SETTINGS } from '../src/shared/settings';
 import { providerReply, requestedTexts } from './fixtures/provider';
-import { readCaptionTranslation, translationInput } from '../src/shared/caption-translation';
-import { longCaption, longResult, structuredReply } from './fixtures/long-caption';
+import {
+  longCaption,
+  longCaptionParts,
+  longResult,
+  longSplit,
+  structuredReply,
+} from './fixtures/long-caption';
 import type { TraceEvent } from '../src/shared/trace';
 
 beforeEach(async () => {
@@ -52,7 +57,7 @@ it('caches all split parts under their parent and separates split and unsplit ve
   requests[0].resolve(
     structuredReply([{ id: 0, parts: [{ translation: '整句译文' }] }, longResult(1)]),
   );
-  const split = readCaptionTranslation(translationInput(longCaption, true), longResult());
+  const split = longSplit();
   await expect(pending).resolves.toEqual(['整句译文', split]);
   await expect(queue.request('tab', settings, longCaption, true)).resolves.toEqual(split);
   await expect(queue.request('tab', settings, longCaption)).resolves.toBe('整句译文');
@@ -85,14 +90,10 @@ it('retries only an invalid split with the split flag intact, keeping ordinary n
   ]);
   expect(
     JSON.parse(JSON.parse(fetch.mock.calls[1][1].body as string).messages[1].content)[0],
-  ).toMatchObject({ id: 0, split: true });
+  ).toMatchObject({ id: 0, parts: longCaptionParts });
   await expect(queue.lookup(settings, 'Before.')).resolves.toBe('之前。');
   requests[1].resolve(structuredReply([longResult()]));
-  await expect(pending).resolves.toEqual([
-    '之前。',
-    readCaptionTranslation(translationInput(longCaption, true), longResult()),
-    '之后。',
-  ]);
+  await expect(pending).resolves.toEqual(['之前。', longSplit(), '之后。']);
   expect(fetch).toHaveBeenCalledTimes(2);
 });
 
@@ -639,7 +640,7 @@ it('keeps the well-formed results of a reply with malformed JSON and retries onl
     settings,
     packedCues([{ text: longCaption, needsSplit: true }, { text: 'Middle.' }, { text: 'After.' }]),
   );
-  const broken = (result: unknown) => JSON.stringify(result).replace(/\}\]\}$/, '} stray]}');
+  const broken = (result: unknown) => JSON.stringify(result).replace(/\]\}$/, ' stray]}');
   const results = [
     broken(longResult(0)),
     JSON.stringify({ id: 1, parts: [{ translation: '中间。' }] }),
@@ -658,15 +659,11 @@ it('keeps the well-formed results of a reply with malformed JSON and retries onl
   ]);
   expect(
     JSON.parse(JSON.parse(fetch.mock.calls[1][1].body as string).messages[1].content)[0],
-  ).toMatchObject({ id: 0, split: true });
+  ).toMatchObject({ id: 0, parts: longCaptionParts });
   await expect(queue.lookup(settings, 'Middle.')).resolves.toBe('中间。');
   requests[1].resolve(structuredReply([longResult()]));
   requests[2].resolve(providerReply(['After.'], () => '之后。'));
-  await expect(pending).resolves.toEqual([
-    readCaptionTranslation(translationInput(longCaption, true), longResult()),
-    '中间。',
-    '之后。',
-  ]);
+  await expect(pending).resolves.toEqual([longSplit(), '中间。', '之后。']);
   expect(fetch).toHaveBeenCalledTimes(3);
 });
 

@@ -25,18 +25,6 @@ export const LANGUAGES = [
   { value: 'en', label: '英语', native: 'English', english: 'English' },
   { value: 'zh-CN', label: '简体中文', native: '简体中文', english: 'Simplified Chinese' },
   { value: 'zh-TW', label: '繁体中文', native: '繁體中文', english: 'Traditional Chinese' },
-  { value: 'ja', label: '日语', native: '日本語', english: 'Japanese' },
-  { value: 'ko', label: '韩语', native: '한국어', english: 'Korean' },
-  { value: 'fr', label: '法语', native: 'Français', english: 'French' },
-  { value: 'de', label: '德语', native: 'Deutsch', english: 'German' },
-  { value: 'es', label: '西班牙语', native: 'Español', english: 'Spanish' },
-  { value: 'pt', label: '葡萄牙语', native: 'Português', english: 'Portuguese' },
-  { value: 'it', label: '意大利语', native: 'Italiano', english: 'Italian' },
-  { value: 'ru', label: '俄语', native: 'Русский', english: 'Russian' },
-  { value: 'ar', label: '阿拉伯语', native: 'العربية', english: 'Arabic' },
-  { value: 'hi', label: '印地语', native: 'हिन्दी', english: 'Hindi' },
-  { value: 'th', label: '泰语', native: 'ไทย', english: 'Thai' },
-  { value: 'vi', label: '越南语', native: 'Tiếng Việt', english: 'Vietnamese' },
 ];
 export const DEFAULT_SETTINGS: Settings = {
   enabled: true,
@@ -63,6 +51,11 @@ export function normalizeSettings(value: unknown): Settings {
     if (typeof input[key] === 'string') result[key] = input[key];
   for (const key of ['sourceLanguage', 'targetLanguage'] as const)
     if (LANGUAGES.some((l) => l.value === input[key])) result[key] = input[key]!;
+  const replaced = (['targetLanguage', 'sourceLanguage'] as const).find(
+    (key) => result[key] !== input[key],
+  );
+  if (replaced && result.sourceLanguage === result.targetLanguage)
+    result[replaced] = LANGUAGES.find((l) => l.value !== result[replaced])!.value;
   for (const key of ['original', 'translation'] as const) {
     if (/^#[\da-f]{6}$/i.test(input[key]?.color ?? '')) result[key].color = input[key]!.color;
     if (Number.isFinite(input[key]?.size))

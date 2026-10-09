@@ -70,19 +70,29 @@ it('saves each language immediately and retains the latest provider and style se
   stored.model = 'provider/new-model';
   stored.apiKey = 'new-key';
   stored.translation.size = 32;
-  await choose('source', 'ja');
-  await choose('target', 'ko');
+  await choose('source', 'zh-TW');
+  await choose('target', 'en');
   expect(stored).toMatchObject({
-    sourceLanguage: 'ja',
-    targetLanguage: 'ko',
+    sourceLanguage: 'zh-TW',
+    targetLanguage: 'en',
     model: 'provider/new-model',
     apiKey: 'new-key',
     translation: { size: 32 },
   });
-  expect(select('source').value).toBe('ja');
-  expect(select('target').value).toBe('ko');
+  expect(select('source').value).toBe('zh-TW');
+  expect(select('target').value).toBe('en');
   expect(document.querySelector('.popup-model-id')?.textContent).toBe('provider/new-model');
   expect(document.querySelector('[role="status"]')?.textContent).toBe('已保存');
+});
+
+it('offers only English, Simplified Chinese and Traditional Chinese', async () => {
+  await render();
+  for (const kind of ['source', 'target'] as const)
+    expect([...select(kind).options].map((option) => [option.value, option.text])).toEqual([
+      ['en', '英语'],
+      ['zh-CN', '简体中文'],
+      ['zh-TW', '繁体中文'],
+    ]);
 });
 
 it('swaps both languages in one save and prevents selecting identical languages', async () => {
@@ -102,11 +112,11 @@ it('swaps both languages in one save and prevents selecting identical languages'
 
 it('rejects a language that conflicts with a newer settings change', async () => {
   await render();
-  stored.targetLanguage = 'ja';
-  await choose('source', 'ja');
+  stored.targetLanguage = 'zh-TW';
+  await choose('source', 'zh-TW');
   expect(saveSettings).not.toHaveBeenCalled();
   expect(select('source').value).toBe('en');
-  expect(select('target').value).toBe('ja');
+  expect(select('target').value).toBe('zh-TW');
   expect(document.querySelector('[role="alert"]')?.textContent).toBe('原文和译文语言需要不同。');
 });
 
@@ -143,13 +153,13 @@ it('locks quick controls until a save finishes', async () => {
 it('restores the saved language after a write failure and clears the error after retrying', async () => {
   await render();
   vi.mocked(saveSettings).mockRejectedValueOnce(new Error('Storage unavailable'));
-  await choose('source', 'fr');
+  await choose('source', 'zh-TW');
   expect(stored.sourceLanguage).toBe('en');
   expect(select('source').value).toBe('en');
   expect(document.querySelector('[role="alert"]')?.textContent).toBe('保存失败，请重试。');
   expect(select('source').matches(':disabled')).toBe(false);
-  await choose('source', 'fr');
-  expect(stored.sourceLanguage).toBe('fr');
+  await choose('source', 'zh-TW');
+  expect(stored.sourceLanguage).toBe('zh-TW');
   expect(document.querySelector('[role="alert"]')).toBeNull();
 });
 
