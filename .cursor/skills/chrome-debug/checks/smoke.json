@@ -3,18 +3,27 @@
     "name": "youtube",
     "url": "https://www.youtube.com/watch?v=H14bBuluwB8",
     "budget": 50,
-    "steps": [{ "action": "play" }, { "action": "wait-overlay" }]
+    "steps": [
+      { "action": "media", "play": true, "keep_playing": true, "skip_ads": true },
+      { "action": "overlay", "wait": true }
+    ]
   },
   {
     "name": "hbo",
     "url": "https://play.hbomax.com/video/watch/44805ae8-7771-4238-ad89-2c629a30db4d",
     "budget": 50,
-    "steps": [{ "action": "play" }, { "action": "wait-overlay" }]
+    "steps": [
+      { "action": "media", "play": true, "keep_playing": true },
+      { "action": "overlay", "wait": true }
+    ]
   },
   {
     "name": "x",
     "url": "https://x.com/NASA/status/2085101081260904717",
     "budget": 90,
-    "steps": [{ "action": "play" }, { "action": "wait-overlay" }]
+    "steps": [
+      { "action": "media", "play": true, "keep_playing": true },
+      { "action": "overlay", "wait": true }
+    ]
   }
 ]
