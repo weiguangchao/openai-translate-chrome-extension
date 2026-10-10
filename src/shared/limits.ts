@@ -11,3 +11,4 @@ export const latencyMinMs = 2000;
 export const latencyMaxMs = 12000;
 export const latencySampleLimit = 8;
 export const behindGraceSeconds = 0.5;
+export const sentencePauseSeconds = 2;

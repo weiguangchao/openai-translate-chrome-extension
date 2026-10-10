@@ -27,12 +27,12 @@ A run counts only if its traces report the tested `playbackRate` and none is mar
 
 ### Sentence
 
-A sentence is one cue in the timeline Subline rebuilds from downloaded subtitles: cues are rejoined, then split where sentences end. Overlapping cues are left as they are.
+A sentence is text Subline rejoins from downloaded subtitle cues and splits where sentences end: at sentence-ending punctuation, at a silence of at least `sentencePauseSeconds`, and around lyric lines (♪) and sound tags ([…]), which stand alone. Overlapping cues are left as they are.
 
 ### Caption
 
-An input caption is a whole sentence; the source language's segmenter splits one over 80 display columns into display captions, at clause punctuation first, then between words, but overlapping sentences and captions read from the page DOM stay whole. The Provider translates an input's display captions in one request and never chooses the breaks. Each caption shows its source only together with its translation, at times derived from the source cues.
+A caption is what Subline translates and shows. A sentence over `captionDisplayLimit` display columns is cut into captions no wider than that: at clause punctuation or between source cues first, then between words, into the fewest balanced pieces, each ending where the next begins. Overlapping cues and captions read from the page DOM stay whole. The Provider translates each caption as its own input and never chooses the breaks. A caption shows its source only together with its translation.
 
 ### Segment
 
-A segment is four consecutive input captions, numbered from zero and recorded in traces as `seg`. It only labels the timeline and doesn't decide Provider requests: each request carries up to four upcoming input captions within 10 s of video, whichever segments they belong to. Display captions don't count toward the four.
+A segment is four consecutive captions, numbered from zero and recorded in traces as `seg`. It only labels the timeline and doesn't decide Provider requests: each request carries up to four upcoming captions within 10 s of video, whichever segments they belong to.

@@ -12,7 +12,6 @@ export interface Reply<T> {
 export interface TranslateRequest {
   type: 'translate';
   text: string;
-  needsSplit?: boolean;
   cacheOnly?: boolean;
 }
 
@@ -57,15 +56,9 @@ function validText(value: unknown): value is string {
 }
 
 export function readTranslateRequest(message: object): Required<TranslateRequest> {
-  const { text, needsSplit, cacheOnly } = message as Record<string, unknown>;
-  if (!validText(text) || (needsSplit !== undefined && typeof needsSplit !== 'boolean'))
-    throw new Error('字幕内容无效。');
-  return {
-    type: 'translate',
-    text,
-    needsSplit: needsSplit === true,
-    cacheOnly: cacheOnly === true,
-  };
+  const { text, cacheOnly } = message as Record<string, unknown>;
+  if (!validText(text)) throw new Error('字幕内容无效。');
+  return { type: 'translate', text, cacheOnly: cacheOnly === true };
 }
 
 function finiteTime(value: unknown): value is number {
@@ -89,16 +82,10 @@ export function readPrefetchRequest(message: object): PrefetchRequest {
     rate,
     cues: cues.map((cue: unknown): PlaybackCue => {
       if (!cue || typeof cue !== 'object') throw new Error('预加载字幕内容无效。');
-      const { text, start, end, needsSplit } = cue as Record<string, unknown>;
-      if (
-        !validText(text) ||
-        !finiteTime(start) ||
-        !finiteTime(end) ||
-        end <= start ||
-        typeof needsSplit !== 'boolean'
-      )
+      const { text, start, end } = cue as Record<string, unknown>;
+      if (!validText(text) || !finiteTime(start) || !finiteTime(end) || end <= start)
         throw new Error('预加载字幕内容无效。');
-      return { text, start, end, needsSplit };
+      return { text, start, end };
     }),
   };
 }

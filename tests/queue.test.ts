@@ -6,13 +6,7 @@ import { translationSendsPerSecond } from '../src/shared/provider/transport';
 let TranslationQueue: typeof import('../src/extension/queue').TranslationQueue;
 import { DEFAULT_SETTINGS } from '../src/shared/settings';
 import { providerReply, requestedTexts } from './fixtures/provider';
-import {
-  longCaption,
-  longCaptionParts,
-  longResult,
-  longSplit,
-  structuredReply,
-} from './fixtures/long-caption';
+import { structuredReply } from './fixtures/long-caption';
 import type { TraceEvent } from '../src/shared/trace';
 
 beforeEach(async () => {
@@ -43,70 +37,38 @@ function pendingProvider() {
 }
 const settings = { ...DEFAULT_SETTINGS, apiKey: 'test-key', model: 'test-model' };
 
-it('caches all split parts under their parent and separates split and unsplit versions of the same text', async () => {
+it('retries only an invalid result, keeping its neighbors cached', async () => {
   const { fetch, requests } = pendingProvider();
   const queue = new TranslationQueue();
-  const pending = queue.prefetch(
-    'tab',
-    settings,
-    packedCues([
-      { text: longCaption, needsSplit: false },
-      { text: longCaption, needsSplit: true },
-    ]),
-  );
-  requests[0].resolve(
-    structuredReply([{ id: 0, parts: [{ translation: '整句译文' }] }, longResult(1)]),
-  );
-  const split = longSplit();
-  await expect(pending).resolves.toEqual(['整句译文', split]);
-  await expect(queue.request('tab', settings, longCaption, true)).resolves.toEqual(split);
-  await expect(queue.request('tab', settings, longCaption)).resolves.toBe('整句译文');
-  expect(fetch).toHaveBeenCalledTimes(1);
-});
-
-it('retries only an invalid split with the split flag intact, keeping ordinary neighbors cached', async () => {
-  const { fetch, requests } = pendingProvider();
-  const queue = new TranslationQueue();
-  const pending = queue.prefetch(
-    'tab',
-    settings,
-    packedCues([
-      { text: 'Before.', needsSplit: false },
-      { text: longCaption, needsSplit: true },
-      { text: 'After.', needsSplit: false },
-    ]),
-  );
+  const pending = queue.prefetch('tab', settings, packedCues(['Before.', 'Middle.', 'After.']));
   requests[0].resolve(
     structuredReply([
-      { id: 0, parts: [{ translation: '之前。' }] },
-      { id: 1, parts: longResult().parts.slice(0, 2) },
-      { id: 2, parts: [{ translation: '之后。' }] },
+      { id: 0, translation: '之前。' },
+      { id: 1, translation: '' },
+      { id: 2, translation: '之后。' },
     ]),
   );
   await flush();
   expect(requests.map((request) => request.texts)).toEqual([
-    ['Before.', longCaption, 'After.'],
-    [longCaption],
+    ['Before.', 'Middle.', 'After.'],
+    ['Middle.'],
   ]);
-  expect(
-    JSON.parse(JSON.parse(fetch.mock.calls[1][1].body as string).messages[1].content)[0],
-  ).toMatchObject({ id: 0, parts: longCaptionParts });
   await expect(queue.lookup(settings, 'Before.')).resolves.toBe('之前。');
-  requests[1].resolve(structuredReply([longResult()]));
-  await expect(pending).resolves.toEqual(['之前。', longSplit(), '之后。']);
+  requests[1].resolve(providerReply(['Middle.'], () => '中间。'));
+  await expect(pending).resolves.toEqual(['之前。', '中间。', '之后。']);
   expect(fetch).toHaveBeenCalledTimes(2);
 });
 
-it('stops after one corrective retry for a persistently invalid split and never caches it', async () => {
-  const fetch = vi.fn().mockImplementation(async () => structuredReply([{ id: 0, parts: [] }]));
+it('stops after one corrective retry for a persistently invalid result and never caches it', async () => {
+  const fetch = vi
+    .fn()
+    .mockImplementation(async () => structuredReply([{ id: 0, translation: '' }]));
   vi.stubGlobal('fetch', fetch);
   const queue = new TranslationQueue();
-  await expect(queue.request('tab', settings, longCaption, true)).rejects.toThrow(
-    '模型返回的译文无效',
-  );
+  await expect(queue.request('tab', settings, 'Broken.')).rejects.toThrow('模型返回的译文无效');
   await vi.advanceTimersByTimeAsync(3000);
   expect(fetch).toHaveBeenCalledTimes(2);
-  await expect(queue.lookup(settings, longCaption, true)).resolves.toBeNull();
+  await expect(queue.lookup(settings, 'Broken.')).resolves.toBeNull();
 });
 
 it('shares in-flight work within the request cap and serves a completed cue from the cache', async () => {
@@ -192,9 +154,10 @@ it('does not cache a failed request, but still serves cached cues while the prov
   await expect(queue.request('tab', settings, 'Cached')).resolves.toBe('已缓存');
   await expect(queue.request('tab', settings, 'First')).rejects.toThrow('请求过于频繁');
   await expect(queue.request('tab', settings, 'Cached')).resolves.toBe('已缓存');
-  await expect(
-    queue.prefetch('tab', settings, packedCues([{ text: 'Cached' }, { text: 'First' }])),
-  ).resolves.toEqual(['已缓存', null]);
+  await expect(queue.prefetch('tab', settings, packedCues(['Cached', 'First']))).resolves.toEqual([
+    '已缓存',
+    null,
+  ]);
   expect(fetch).toHaveBeenCalledTimes(2);
   await vi.advanceTimersByTimeAsync(15000);
   await expect(queue.request('tab', settings, 'First')).rejects.toThrow('请求过于频繁');
@@ -236,16 +199,17 @@ it('forgets the oldest translations beyond the cache limit', async () => {
 it('answers a prefetch in order, nulls a cue the next plan drops, and reuses the cache', async () => {
   const { batches, reply } = pendingProvider();
   const queue = new TranslationQueue();
-  const opening = queue.prefetch('tab', settings, packedCues([{ text: 'A' }, { text: 'B' }]));
-  const sliding = queue.prefetch('tab', settings, packedCues([{ text: 'B' }, { text: 'C' }]));
+  const opening = queue.prefetch('tab', settings, packedCues(['A', 'B']));
+  const sliding = queue.prefetch('tab', settings, packedCues(['B', 'C']));
   expect(batches()).toEqual([['A', 'B'], ['C']]);
   reply(0);
   reply(1);
   await expect(opening).resolves.toEqual([null, 'B 译文']);
   await expect(sliding).resolves.toEqual(['B 译文', 'C 译文']);
-  await expect(
-    queue.prefetch('tab', settings, packedCues([{ text: 'A' }, { text: 'C' }])),
-  ).resolves.toEqual(['A 译文', 'C 译文']);
+  await expect(queue.prefetch('tab', settings, packedCues(['A', 'C']))).resolves.toEqual([
+    'A 译文',
+    'C 译文',
+  ]);
   expect(batches()).toHaveLength(2);
 });
 
@@ -273,16 +237,8 @@ it('keeps at most two requests in flight and gives the next slot to a visible ca
 it('sends a newly near cue without waiting for the pack already in flight', async () => {
   const { batches, requests } = pendingProvider();
   const queue = new TranslationQueue();
-  queue.prefetch(
-    'tab',
-    settings,
-    packedCues([{ text: 'Cue 1' }, { text: 'Cue 2' }, { text: 'Cue 3' }, { text: 'Cue 4' }]),
-  );
-  queue.prefetch(
-    'tab',
-    settings,
-    packedCues([{ text: 'Cue 2' }, { text: 'Cue 3' }, { text: 'Cue 4' }, { text: 'Cue 5' }]),
-  );
+  queue.prefetch('tab', settings, packedCues(['Cue 1', 'Cue 2', 'Cue 3', 'Cue 4']));
+  queue.prefetch('tab', settings, packedCues(['Cue 2', 'Cue 3', 'Cue 4', 'Cue 5']));
   expect(batches()).toEqual([['Cue 1', 'Cue 2', 'Cue 3', 'Cue 4'], ['Cue 5']]);
   expect(requests[0].signal.aborted).toBe(false);
 });
@@ -332,8 +288,8 @@ it('aborts a sent pack when the seek lands in a gap between its cues', () => {
   const { requests } = pendingProvider();
   const queue = new TranslationQueue();
   queue.prefetch('tab', settings, [
-    { text: 'Before gap', start: 5, end: 5.5, needsSplit: false },
-    { text: 'After gap', start: 7, end: 7.5, needsSplit: false },
+    { text: 'Before gap', start: 5, end: 5.5 },
+    { text: 'After gap', start: 7, end: 7.5 },
   ]);
   expect(requests).toHaveLength(1);
   queue.hold('tab', 6);
@@ -358,7 +314,7 @@ it("does not let another playing tab send a paused tab's transport-pending pack"
   reply(0);
   reply(1);
   await flush();
-  queue.prefetch('paused-tab', settings, packedCues([{ text: 'Paused cue' }], 2));
+  queue.prefetch('paused-tab', settings, packedCues(['Paused cue'], 2));
   queue.pause('paused-tab');
   queue.request('playing-tab', settings, 'Playing cue');
   await vi.advanceTimersByTimeAsync(1000);
@@ -396,7 +352,7 @@ it('does not send a cue outside the buffer or a cue that is already translated',
 it('retries each cue on its own when the batch reply cannot be matched to the cues', async () => {
   const { fetch, requests, batches } = pendingProvider();
   const queue = new TranslationQueue();
-  queue.prefetch('tab', settings, packedCues([{ text: 'First' }, { text: 'Second' }]));
+  queue.prefetch('tab', settings, packedCues(['First', 'Second']));
   const first = queue.request('tab', settings, 'First');
   requests[0].resolve(Response.json({ choices: [{ message: { content: '第一句\n第二句' } }] }));
   await flush();
@@ -411,8 +367,8 @@ it('retries each cue on its own when the batch reply cannot be matched to the cu
 it('keeps a batch running while any of its cues is still needed, caches all of its replies, and cancels it once none are', async () => {
   const { fetch, requests, batches } = pendingProvider();
   const queue = new TranslationQueue();
-  queue.prefetch('tab', settings, packedCues([{ text: 'Shared cue' }, { text: 'Next cue' }]));
-  queue.prefetch('other-tab', settings, packedCues([{ text: 'Shared cue' }]));
+  queue.prefetch('tab', settings, packedCues(['Shared cue', 'Next cue']));
+  queue.prefetch('other-tab', settings, packedCues(['Shared cue']));
   const visible = queue.request('other-tab', settings, 'Shared cue');
   const dropped = queue.request('tab', settings, 'Next cue').catch((error) => error.message);
   queue.prefetch('tab', settings, []);
@@ -424,8 +380,8 @@ it('keeps a batch running while any of its cues is still needed, caches all of i
   await expect(visible).resolves.toBe('共享字幕');
   await expect(queue.request('tab-3', settings, 'Next cue')).resolves.toBe('下一句');
   expect(fetch).toHaveBeenCalledTimes(1);
-  queue.prefetch('tab', settings, packedCues([{ text: 'A' }, { text: 'B' }], 3));
-  queue.prefetch('tab', settings, packedCues([{ text: 'B' }, { text: 'C' }], 3));
+  queue.prefetch('tab', settings, packedCues(['A', 'B'], 3));
+  queue.prefetch('tab', settings, packedCues(['B', 'C'], 3));
   expect(batches().slice(1)).toEqual([['A', 'B'], ['C']]);
   expect(requests[1].signal.aborted).toBe(false);
   queue.prefetch('tab', settings, []);
@@ -511,18 +467,14 @@ it('does not send a pack that leaves the plan before a slot opens', async () => 
 it('cancels an in-flight batch when playback leaves and does not retry it', async () => {
   const { fetch, requests } = pendingProvider();
   const queue = new TranslationQueue();
-  const pending = queue.prefetch(
-    'tab',
-    settings,
-    packedCues([{ text: 'First' }, { text: longCaption, needsSplit: true }]),
-  );
+  const pending = queue.prefetch('tab', settings, packedCues(['First', 'Second']));
   await flush();
   expect(fetch).toHaveBeenCalledTimes(1);
   queue.prefetch('tab', settings, []);
   expect(requests[0].signal.aborted).toBe(true);
   await expect(pending).resolves.toEqual([null, null]);
   await expect(queue.lookup(settings, 'First')).resolves.toBeNull();
-  await expect(queue.lookup(settings, longCaption, true)).resolves.toBeNull();
+  await expect(queue.lookup(settings, 'Second')).resolves.toBeNull();
   await vi.advanceTimersByTimeAsync(1000);
   expect(fetch).toHaveBeenCalledTimes(1);
 });
@@ -530,11 +482,7 @@ it('cancels an in-flight batch when playback leaves and does not retry it', asyn
 it('resolves a batch together when the response arrives and serves a cue from the cache', async () => {
   const { fetch, requests } = pendingProvider();
   const queue = new TranslationQueue();
-  const pending = queue.prefetch(
-    'tab',
-    settings,
-    packedCues([{ text: 'First' }, { text: 'Second' }]),
-  );
+  const pending = queue.prefetch('tab', settings, packedCues(['First', 'Second']));
   const first = queue.request('tab', settings, 'First');
   await flush();
   let secondSettled = false;
@@ -581,11 +529,7 @@ it('caches only the final reply after a truncated draft without retrying', async
 it('does not cache either cue when the batch is aborted before the response', async () => {
   const { fetch, requests } = pendingProvider();
   const queue = new TranslationQueue();
-  const pending = queue.prefetch(
-    'tab',
-    settings,
-    packedCues([{ text: 'First' }, { text: 'Second' }]),
-  );
+  const pending = queue.prefetch('tab', settings, packedCues(['First', 'Second']));
   const first = queue.request('tab', settings, 'First');
   const second = queue.request('tab', settings, 'Second');
   await flush();
@@ -602,11 +546,7 @@ it('does not cache either cue when the batch is aborted before the response', as
 it('retries only the cue that was not committed when the batch reply is short', async () => {
   const { fetch, requests } = pendingProvider();
   const queue = new TranslationQueue();
-  const pending = queue.prefetch(
-    'tab',
-    settings,
-    packedCues([{ text: 'First' }, { text: 'Second' }]),
-  );
+  const pending = queue.prefetch('tab', settings, packedCues(['First', 'Second']));
   const first = queue.request('tab', settings, 'First');
   await flush();
   requests[0].resolve(
@@ -635,16 +575,12 @@ it('retries only the cue that was not committed when the batch reply is short', 
 it('keeps the well-formed results of a reply with malformed JSON and retries only the broken ones', async () => {
   const { fetch, requests } = pendingProvider();
   const queue = new TranslationQueue();
-  const pending = queue.prefetch(
-    'tab',
-    settings,
-    packedCues([{ text: longCaption, needsSplit: true }, { text: 'Middle.' }, { text: 'After.' }]),
-  );
-  const broken = (result: unknown) => JSON.stringify(result).replace(/\]\}$/, ' stray]}');
+  const pending = queue.prefetch('tab', settings, packedCues(['Before.', 'Middle.', 'After.']));
+  const broken = (result: unknown) => JSON.stringify(result).replace(/\}$/, ' stray}');
   const results = [
-    broken(longResult(0)),
-    JSON.stringify({ id: 1, parts: [{ translation: '中间。' }] }),
-    broken({ id: 2, parts: [{ translation: '之后。' }] }),
+    broken({ id: 0, translation: '之前。' }),
+    JSON.stringify({ id: 1, translation: '中间。' }),
+    broken({ id: 2, translation: '之后。' }),
   ];
   requests[0].resolve(
     Response.json({
@@ -653,25 +589,22 @@ it('keeps the well-formed results of a reply with malformed JSON and retries onl
   );
   await flush();
   expect(requests.map((request) => request.texts)).toEqual([
-    [longCaption, 'Middle.', 'After.'],
-    [longCaption],
+    ['Before.', 'Middle.', 'After.'],
+    ['Before.'],
     ['After.'],
   ]);
-  expect(
-    JSON.parse(JSON.parse(fetch.mock.calls[1][1].body as string).messages[1].content)[0],
-  ).toMatchObject({ id: 0, parts: longCaptionParts });
   await expect(queue.lookup(settings, 'Middle.')).resolves.toBe('中间。');
-  requests[1].resolve(structuredReply([longResult()]));
+  requests[1].resolve(providerReply(['Before.'], () => '之前。'));
   requests[2].resolve(providerReply(['After.'], () => '之后。'));
-  await expect(pending).resolves.toEqual([longSplit(), '中间。', '之后。']);
+  await expect(pending).resolves.toEqual(['之前。', '中间。', '之后。']);
   expect(fetch).toHaveBeenCalledTimes(3);
 });
 
 it('packs a short list without padding it to four and never mixes tabs', () => {
   const { batches } = pendingProvider();
   const queue = new TranslationQueue();
-  queue.prefetch('tab', settings, packedCues([{ text: 'Cue 1' }, { text: 'Cue 2' }]));
-  queue.prefetch('other-tab', settings, packedCues([{ text: 'Other 1' }, { text: 'Other 2' }]));
+  queue.prefetch('tab', settings, packedCues(['Cue 1', 'Cue 2']));
+  queue.prefetch('other-tab', settings, packedCues(['Other 1', 'Other 2']));
   expect(batches()).toEqual([
     ['Cue 1', 'Cue 2'],
     ['Other 1', 'Other 2'],

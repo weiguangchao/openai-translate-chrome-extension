@@ -14,7 +14,6 @@ export interface PlaybackCue {
   readonly text: string;
   readonly start: number;
   readonly end: number;
-  readonly needsSplit: boolean;
 }
 
 export interface PlannedRequest {

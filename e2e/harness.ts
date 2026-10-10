@@ -14,7 +14,7 @@ import {
 import { planSentenceCap, translationBatchLimit } from '../src/shared/limits';
 import type { Settings } from '../src/shared/settings';
 import { TRACE_PREFIX, type TraceEvent } from '../src/shared/trace';
-import { longCaption, longResult } from '../tests/fixtures/long-caption';
+import { longCaption, longCaptionParts, longTranslations } from '../tests/fixtures/long-caption';
 
 export type Platform = 'youtube' | 'hbo' | 'x';
 export const providerUrl = 'https://www.youtube.com/__e2e_provider__/v1/chat/completions';
@@ -60,8 +60,7 @@ declare global {
 }
 interface Input {
   id: number;
-  text?: string;
-  parts?: string[];
+  text: string;
 }
 interface Post {
   inputs: Input[];
@@ -259,23 +258,19 @@ export class Player {
     const post = this.posts[index];
     expect(post.released).toBe(false);
     post.released = true;
-    const results = post.inputs.map((input) => {
-      if (input.parts?.join(' ') === longCaption) return longResult(input.id);
-      const text = input.text!;
+    const results = post.inputs.map(({ id, text }) => {
+      const part = longCaptionParts.indexOf(text);
+      if (part >= 0) return { id, translation: longTranslations[part] };
       const sentence = /^Sentence (\d+)\.$/.exec(text);
-      if (sentence)
-        return {
-          id: input.id,
-          parts: [{ translation: denseCue(Number(sentence[1]) - 1).translation }],
-        };
+      if (sentence) return { id, translation: denseCue(Number(sentence[1]) - 1).translation };
       expect(translations[text], `Known Provider input: ${text}`).toBeTruthy();
-      return { id: input.id, parts: [{ translation: translations[text] }] };
+      return { id, translation: translations[text] };
     });
     let content = JSON.stringify({ results });
     if (this.options.draft) {
-      const drafts = post.inputs.map((input) => ({
-        id: input.id,
-        parts: [{ translation: `${draftPrefix}${input.text}` }],
+      const drafts = post.inputs.map(({ id, text }) => ({
+        id,
+        translation: `${draftPrefix}${text}`,
       }));
       const draft = JSON.stringify({ results: drafts });
       content = `${this.options.draft === 'truncated' ? draft.slice(0, -2) : draft}\nFinal\n${content}`;
@@ -289,7 +284,7 @@ export class Player {
     if (kind === 'asr') return [{ start: 0, end: 90, text: asrSource }];
     if (id === 'second') return [{ start: 0, end: 90, text: nextSource }];
     if (id === 'third') return [{ start: 0, end: 90, text: thirdSource }];
-    if (this.options.long) return [{ start: 0, end: 90, text: longCaption }];
+    if (this.options.long) return [{ start: 36, end: 45, text: longCaption }];
     if (this.options.dense)
       return Array.from({ length: planSentenceCap + translationBatchLimit }, (_, index) => {
         const cue = denseCue(index);

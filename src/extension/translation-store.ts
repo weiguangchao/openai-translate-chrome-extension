@@ -1,15 +1,13 @@
-import { readStoredTranslation, type CaptionTranslation } from '../shared/caption-translation';
+import { readStoredTranslation } from '../shared/caption-translation';
 import type { TranslationQueue, TranslationStore } from './queue';
 
-const PREFIX = 'subline.translation.v1:';
+const PREFIX = 'subline.translation.v2:';
 
-function readEntry(key: string, value: unknown): [string, CaptionTranslation] | null {
+function readEntry(key: string, value: unknown): [string, string] | null {
   try {
     const parsed: unknown = JSON.parse(key);
-    if (!Array.isArray(parsed) || parsed.length !== 6) return null;
-    const [, , , , text, needsSplit] = parsed;
-    if (typeof text !== 'string' || typeof needsSplit !== 'boolean') return null;
-    const translation = readStoredTranslation({ text, needsSplit }, value);
+    if (!Array.isArray(parsed) || parsed.length !== 5 || typeof parsed[4] !== 'string') return null;
+    const translation = readStoredTranslation(value);
     return translation === null ? null : [key, translation];
   } catch {
     return null;
@@ -17,7 +15,7 @@ function readEntry(key: string, value: unknown): [string, CaptionTranslation] | 
 }
 
 function sessionStore(): TranslationStore {
-  const saves = new Map<string, CaptionTranslation>();
+  const saves = new Map<string, string>();
   const removals = new Set<string>();
   let timer: ReturnType<typeof setTimeout> | undefined;
   const flush = () => {

@@ -1,41 +1,35 @@
 import ts from 'typescript';
 import { expect, it } from 'vitest';
 
-it('rejects contradictory caption states, unverified display parts, and writes outside source ownership', () => {
+it('rejects split caption states, per-word timings, and writes outside source ownership', () => {
   const filePath = ts.sys.resolvePath('tests/caption-types.fixture.ts');
   const setup = `
 import type { CaptionFrame } from '../src/core/translator';
-import type { DisplayCaption, TimedCaption } from '../src/core/timeline';
-import { timedCaptions, translatedCaptions } from '../src/core/timeline';
-import type { TranslationPart } from '../src/shared/caption-translation';
+import type { TimedCaption } from '../src/core/timeline';
+import { timedCaptions } from '../src/core/timeline';
 import type { PlaybackCue } from '../src/shared/playback-plan';
 import type { PrefetchRequest } from '../src/shared/messages';
 import type { SourceCache } from '../src/core/bridge/source-cache';
-declare const cue: TimedCaption & { needsSplit: true };
-declare const display: DisplayCaption;
-declare const part: TranslationPart;
+declare const caption: TimedCaption;
 declare const item: PlaybackCue;
 declare const cache: SourceCache;
-const ordinary: CaptionFrame = { kind: 'ordinary', text: 'DOM caption.', time: 0, cacheOnly: false, debounce: 0 };
-const split: CaptionFrame = { kind: 'split', cue, time: 0, cacheOnly: false, debounce: 0 };
-const request: PrefetchRequest = { type: 'prefetch', time: 0, rate: 1, cues: [{ text: item.text, start: 0, end: 1, needsSplit: item.needsSplit }] };
-translatedCaptions(cue, [part]);
+const frame: CaptionFrame = { text: 'DOM caption.', cacheOnly: false, debounce: 0 };
+const request: PrefetchRequest = { type: 'prefetch', time: 0, rate: 1, cues: [{ text: item.text, start: 0, end: 1 }] };
+timedCaptions([{ startTime: 0, endTime: 1, text: 'A' }]);
 `;
   const invalid = [
-    `const missingCue: CaptionFrame = { kind: 'split', time: 0, cacheOnly: false, debounce: 0 };`,
-    `const conflictingSource: CaptionFrame = { kind: 'split', cue, text: 'Different source.', time: 0, cacheOnly: false, debounce: 0 };`,
-    `const parallelArrays: PrefetchRequest = { type: 'prefetch', texts: ['A'], segments: [0], needsSplit: [false] };`,
-    `const missingTime: PlaybackCue = { text: 'A', needsSplit: false };`,
-    `const oldGrouping: PlaybackCue = { text: 'A', start: 0, end: 1, needsSplit: false, batch: 0 };`,
+    `const oldSplit: CaptionFrame = { kind: 'split', text: 'A', cacheOnly: false, debounce: 0 };`,
+    `const missingText: CaptionFrame = { cacheOnly: false, debounce: 0 };`,
+    `const parallelArrays: PrefetchRequest = { type: 'prefetch', texts: ['A'], segments: [0] };`,
+    `const missingTime: PlaybackCue = { text: 'A' };`,
+    `const oldSplitFlag: PlaybackCue = { text: 'A', start: 0, end: 1, needsSplit: false };`,
     `item.start = 1;`,
+    `caption.segment = 1;`,
+    `const timing = caption.timing;`,
     `cache.state = { mode: 'model', source: null };`,
     `cache.revision = 0;`,
-    `cache.state.source?.push(cue);`,
+    `cache.state.source?.push(caption);`,
     `if (cache.state.source) cache.state.source[0].text = 'Mutated';`,
-    `if (cache.state.source?.[0].timing) cache.state.source[0].timing[0].to = 0;`,
-    `translatedCaptions(cue, [{ from: 0, to: 1, translation: 'Unverified' }]);`,
-    `timedCaptions([display]);`,
-    `timedCaptions([cue]);`,
   ];
   const source = setup + invalid.join('\n');
   const options: ts.CompilerOptions = {

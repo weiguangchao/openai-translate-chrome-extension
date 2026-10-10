@@ -107,7 +107,7 @@ it('drives any platform through the waiting, live and timeline caption sources',
     type: 'prefetch',
     time: 0,
     rate: 1,
-    cues: [{ text: 'Timed cue.', start: 0, end: 10, needsSplit: false }],
+    cues: [{ text: 'Timed cue.', start: 0, end: 10 }],
   });
 
   controller.destroy();

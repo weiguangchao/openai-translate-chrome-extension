@@ -1,5 +1,5 @@
 import type { TimedCue } from '../../core/cues';
-import { subtitleSentences } from '../../core/sentences';
+import { subtitleCaptions } from '../../core/sentences';
 
 export type YoutubeCaptionKind = 'authored' | 'asr';
 
@@ -77,7 +77,7 @@ export function parseYoutubeCaptions(
       previous.segments = [{ utf8: previous.text }];
     } else grouped.push(event);
   }
-  return subtitleSentences(
+  return subtitleCaptions(
     grouped.flatMap((event, index) => {
       const endTime = Math.min(event.endTime, grouped[index + 1]?.startTime ?? Infinity);
       if (endTime <= event.startTime) return [];

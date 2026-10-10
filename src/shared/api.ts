@@ -4,12 +4,7 @@ import { translationBatchLimit } from './limits';
 import { englishLanguageName, validateBaseUrl, validateSettings, type Settings } from './settings';
 import { addTokenUsage, readProviderUsage } from './token-usage';
 import { modelAnswer, parseModelJson, scanTranslationResults } from './model-json';
-import { segmenterFor } from './segmenter';
-import {
-  readCaptionTranslation,
-  type CaptionTranslation,
-  type TranslationInput,
-} from './caption-translation';
+import { readCaptionTranslation } from './caption-translation';
 
 class HttpError extends Error {
   constructor(
@@ -253,28 +248,18 @@ export async function translate(
 
 export async function translateCaptionBatch(
   settings: Settings,
-  inputs: readonly TranslationInput[],
+  texts: readonly string[],
   signal?: AbortSignal,
-  onTranslation?: (index: number, translation: CaptionTranslation) => void,
+  onTranslation?: (index: number, translation: string) => void,
   policy?: ProviderSendPolicy,
-): Promise<CaptionTranslation[] | null> {
-  inputs.forEach((input) => checkText(input.text));
-  if (!inputs.length || inputs.length > translationBatchLimit)
+): Promise<string[] | null> {
+  texts.forEach(checkText);
+  if (!texts.length || texts.length > translationBatchLimit)
     throw new Error('单次翻译的字幕过多。');
-  const segmenter = segmenterFor(settings.sourceLanguage);
-  const lines = inputs.map((input) => (input.needsSplit ? segmenter.lines(input.text) : []));
   const response = await complete(
     settings,
-    `The input is a JSON array of ordered captions from one passage. Use neighboring captions only as context; never move content between captions. Return only JSON {"results":[...]} with exactly one result per input id, in input order.
-- {"id":0,"text":"..."} becomes {"id":0,"translation":"..."}.
-- {"id":1,"parts":["...","..."]} is one sentence shown as consecutive subtitle lines. It becomes {"id":1,"parts":["...","..."]} with one translation per line, in the same order. Translate each line in the context of the whole sentence, but keep each line's content in its own translation.`,
-    JSON.stringify(
-      inputs.map((input, id) =>
-        lines[id].length > 1
-          ? { id, parts: lines[id].map(({ from, to }) => input.text.slice(from, to)) }
-          : { id, text: input.text },
-      ),
-    ),
+    `The input is a JSON array of ordered captions from one passage. Use neighboring captions only as context; never move content between captions. Return only JSON {"results":[...]} with exactly one result per input id, in input order: {"id":0,"text":"..."} becomes {"id":0,"translation":"..."}.`,
+    JSON.stringify(texts.map((text, id) => ({ id, text }))),
     65536,
     signal,
     true,
@@ -287,25 +272,25 @@ export async function translateCaptionBatch(
   } catch {
     values = scanTranslationResults(response);
   }
-  const aligned = alignResultIds(values, inputs.length);
+  const aligned = alignResultIds(values, texts.length);
   const ids = aligned.map(resultId);
-  const accepted = new Map<number, CaptionTranslation>();
+  const accepted = new Map<number, string>();
   for (const value of aligned) {
     signal?.throwIfAborted();
     const id = resultId(value);
     if (
       id === null ||
       id < 0 ||
-      id >= inputs.length ||
+      id >= texts.length ||
       ids.filter((other) => other === id).length !== 1
     )
       continue;
-    const translation = readCaptionTranslation(inputs[id].text, lines[id], normalizeResult(value));
+    const translation = readCaptionTranslation(value);
     if (translation === null) continue;
     accepted.set(id, translation);
     onTranslation?.(id, translation);
   }
-  return accepted.size === inputs.length ? inputs.map((_, index) => accepted.get(index)!) : null;
+  return accepted.size === texts.length ? texts.map((_, index) => accepted.get(index)!) : null;
 }
 
 function resultId(value: unknown): number | null {
@@ -330,14 +315,6 @@ function alignResultIds(values: unknown[], count: number): unknown[] {
   return values.map((value) =>
     value && typeof value === 'object' ? { ...value, id: resultId(value)! - 1 } : value,
   );
-}
-
-function normalizeResult(value: unknown): unknown {
-  if (!value || typeof value !== 'object') return value;
-  const record = value as { parts?: unknown; translation?: unknown; text?: unknown };
-  if (Array.isArray(record.parts)) return value;
-  const translation = typeof record.translation === 'string' ? record.translation : record.text;
-  return typeof translation === 'string' ? { ...record, parts: [{ translation }] } : value;
 }
 
 function translationPayloads(value: unknown): unknown[] {

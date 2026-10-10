@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { PlaybackGate, seekJumpSeconds, seekSettleMs } from '../src/core/playback';
+import { authoredSubtitleCaptions } from '../src/core/sentences';
 import { captionAt, captionWindow, playbackCues, timedCaptions } from '../src/core/timeline';
 import {
   behindGraceSeconds,
@@ -48,16 +49,15 @@ it('snapshots cues that can still reach the playhead within the next minute', ()
       .slice(0, planLookaheadCues);
     const items = captionWindow(captions, time).items;
     expect(items.map((item) => item.text)).toEqual(expected.map((cue) => cue.text));
-    expect(
-      items.every((item) => item.end > item.start && typeof item.needsSplit === 'boolean'),
-    ).toBe(true);
+    expect(items.every((item) => item.end > item.start)).toBe(true);
   }
   expect(captionWindow(captions, 0).items.length).toBeLessThanOrEqual(planLookaheadCues);
   expect(captionWindow(captions, 9999)).toEqual({ current: '', items: [] });
 });
 
-it('counts a long sentence as one caption when it numbers segments', () => {
-  const long = ['a', 'b', 'c'].map((letter) => letter.repeat(60)).join(', ');
+it('numbers segments over the captions a long sentence is cut into', () => {
+  const pieces = ['a', 'b', 'c'].map((letter) => letter.repeat(60));
+  const long = `${pieces.join(', ')}.`;
   const ordinary = translationBatchLimit * 2;
   const list = [
     ...Array.from({ length: ordinary }, (_, index) => ({
@@ -72,13 +72,14 @@ it('counts a long sentence as one caption when it numbers segments', () => {
       text: `After ${index + 1}.`,
     })),
   ];
-  const captions = timedCaptions(list);
+  const captions = timedCaptions(authoredSubtitleCaptions(list, 'en'));
+  expect(captions.slice(ordinary, ordinary + 3).map((caption) => caption.text)).toEqual([
+    `${pieces[0]},`,
+    `${pieces[1]},`,
+    `${pieces[2]}.`,
+  ]);
   expect(captions.map((caption) => caption.segment)).toEqual(
     captions.map((_, index) => Math.floor(index / translationBatchLimit)),
-  );
-  expect(captions[ordinary]).toMatchObject({ text: long, needsSplit: true });
-  expect(captionWindow(captions, 0).items.find((item) => item.text === long)?.needsSplit).toBe(
-    true,
   );
 });
 
@@ -101,8 +102,8 @@ it('keeps a silent gap between repeated text in a snapshot', () => {
     { startTime: 4, endTime: 5, text: 'Again' },
   ]);
   expect(playbackCues(captions, 0)).toEqual([
-    { text: 'Again', start: 0, end: 1, needsSplit: false },
-    { text: 'Again', start: 4, end: 5, needsSplit: false },
+    { text: 'Again', start: 0, end: 1 },
+    { text: 'Again', start: 4, end: 5 },
   ]);
 });
 

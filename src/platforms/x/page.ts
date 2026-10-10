@@ -1,7 +1,7 @@
 import { servePageTimeline } from '../../core/bridge/page';
 import { mediaIdentity } from '../../core/bridge/source-cache';
 import { languageTrack } from '../../core/languages';
-import { authoredSubtitleSentences } from '../../core/sentences';
+import { authoredSubtitleCaptions } from '../../core/sentences';
 import { fetchSubtitleText, loadWebVtt } from '../../core/webvtt';
 import { parseXSubtitlePlaylist, xMediaUrl } from './captions';
 import { activeXVideo, xVideoId } from './player';
@@ -67,7 +67,7 @@ servePageTimeline('x', {
       cache.load(playlist, async (signal) => {
         const files = parseXSubtitlePlaylist(await fetchSubtitleText(playlist, signal), playlist);
         if (!files.length) throw new Error('Empty subtitle playlist');
-        return authoredSubtitleSentences(
+        return authoredSubtitleCaptions(
           await loadWebVtt(
             files.map((url) => ({ url, offset: 0 })),
             signal,

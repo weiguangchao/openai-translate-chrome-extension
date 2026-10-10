@@ -148,10 +148,7 @@ export class CaptionController {
   private hasReadyCaption(source: CaptionSource, time: number): boolean {
     const captions = source.kind === 'timeline' ? timedCaptions(source.cues) : null;
     const caption = currentCaption(source, captions ? captionAt(captions, time) : '');
-    const cue = captions?.find(
-      (item) => item.startTime <= time && time < item.endTime && item.text === caption.text,
-    );
-    return this.translator.hasTranslation(caption.text, cue?.needsSplit === true);
+    return this.translator.hasTranslation(caption.text);
   }
 
   private tick(): void {
@@ -240,8 +237,7 @@ export class CaptionController {
       }),
     };
     this.translator.show({
-      ...(cue?.needsSplit ? { kind: 'split', cue } : { kind: 'ordinary', text: caption.text }),
-      time,
+      text: caption.text,
       cacheOnly: video.paused || this.gate.settling,
       debounce: captions ? 0 : 300,
     });

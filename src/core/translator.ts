@@ -1,25 +1,17 @@
-import { readStoredTranslation, type CaptionTranslation } from '../shared/caption-translation';
+import { readStoredTranslation } from '../shared/caption-translation';
 import type { PlaybackCue } from '../shared/playback-plan';
 import { providerTimeoutMessage } from '../shared/provider-error';
 import type { ExtensionConnection } from './connection';
 import type { SubtitleOverlay } from './overlay';
-import { translatedCaptions, type TimedCaption } from './timeline';
 
 const LOADING_DELAY_MS = 300;
 const PLAN_REFRESH_SECONDS = 1;
 
-export type CaptionFrame = {
-  readonly time: number;
+export interface CaptionFrame {
+  readonly text: string;
   readonly cacheOnly: boolean;
   readonly debounce: number;
-} & (
-  | { readonly kind: 'ordinary'; readonly text: string; readonly cue?: never }
-  | {
-      readonly kind: 'split';
-      readonly cue: TimedCaption & { readonly needsSplit: true };
-      readonly text?: never;
-    }
-);
+}
 
 type CaptionView =
   | { kind: 'waiting' }
@@ -28,11 +20,10 @@ type CaptionView =
 
 export class CaptionTranslator {
   private text = '';
-  private needsSplit = false;
   private changedAt = 0;
   private requested = '';
   private version = 0;
-  private result: CaptionTranslation | null = null;
+  private result: string | null = null;
   private checkedCache = false;
   private windowKey = '';
   private holdKey = '';
@@ -51,8 +42,8 @@ export class CaptionTranslator {
     return this.requested !== '';
   }
 
-  hasTranslation(text: string, needsSplit: boolean): boolean {
-    return this.result !== null && this.text === text && this.needsSplit === needsSplit;
+  hasTranslation(text: string): boolean {
+    return this.result !== null && this.text === text;
   }
 
   invalidate(): void {
@@ -81,13 +72,11 @@ export class CaptionTranslator {
   }
 
   show(frame: CaptionFrame): void {
-    const text = frame.kind === 'split' ? frame.cue.text : frame.text;
-    const needsSplit = frame.kind === 'split';
-    if (text !== this.text || needsSplit !== this.needsSplit) {
+    const { text } = frame;
+    if (text !== this.text) {
       this.version++;
       this.forget();
       this.text = text;
-      this.needsSplit = needsSplit;
       this.changedAt = Date.now();
       this.overlay.hideTranslation();
     }
@@ -162,7 +151,6 @@ export class CaptionTranslator {
 
   private forget(): void {
     this.text = '';
-    this.needsSplit = false;
     this.requested = '';
     this.result = null;
     this.checkedCache = false;
@@ -170,22 +158,12 @@ export class CaptionTranslator {
   }
 
   private view(frame: CaptionFrame): CaptionView {
-    const text = frame.kind === 'split' ? frame.cue.text : frame.text;
-    if (!this.result)
-      return this.overlay.failed ? { kind: 'failed', original: text } : { kind: 'waiting' };
-    if (typeof this.result === 'string')
-      return { kind: 'ready', original: text, translation: this.result };
-    if (frame.kind === 'ordinary') return { kind: 'waiting' };
-    const active = translatedCaptions(frame.cue, this.result.parts).find(
-      (part) => part.startTime <= frame.time && frame.time < part.endTime,
-    );
-    return active
-      ? { kind: 'ready', original: active.text, translation: active.translation }
-      : { kind: 'waiting' };
+    if (this.result) return { kind: 'ready', original: frame.text, translation: this.result };
+    return this.overlay.failed ? { kind: 'failed', original: frame.text } : { kind: 'waiting' };
   }
 
   private request(cacheOnly: boolean): void {
-    const { text, needsSplit, version } = this;
+    const { text, version } = this;
     this.requested = text;
     this.active = true;
     if (cacheOnly) this.checkedCache = true;
@@ -195,7 +173,6 @@ export class CaptionTranslator {
       .sendMessage<unknown>({
         type: 'translate',
         text,
-        ...(needsSplit ? { needsSplit: true } : {}),
         ...(cacheOnly ? { cacheOnly: true } : {}),
       })
       .then((response) => {
@@ -209,7 +186,7 @@ export class CaptionTranslator {
           this.changed();
           return;
         }
-        const translation = readStoredTranslation({ text, needsSplit }, data);
+        const translation = readStoredTranslation(data);
         if (!response?.ok || translation === null)
           throw new Error(response?.error ?? '翻译未完成，请检查扩展配置。');
         this.result = translation;

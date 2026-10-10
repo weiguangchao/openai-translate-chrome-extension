@@ -1,4 +1,4 @@
-import { subtitleDisplayLength, subtitleDisplayLimit } from './width';
+import { captionDisplayLimit, subtitleDisplayLength } from './width';
 
 export interface TextRange {
   readonly from: number;
@@ -7,7 +7,7 @@ export interface TextRange {
 
 export interface LanguageSegmenter {
   sentenceEnds(text: string): number[];
-  lines(text: string, limit?: number, breaks?: readonly number[]): TextRange[];
+  captions(text: string, cueBreaks?: readonly number[]): TextRange[];
 }
 
 export interface WordBreak {
@@ -65,30 +65,25 @@ function clauses(text: string, range: TextRange, breaks: readonly number[]): Tex
   return cut(text, range, kept);
 }
 
-function fewestLines(
-  text: string,
-  range: TextRange,
-  candidates: readonly WordBreak[],
-  limit: number,
-): number[] {
+function fewestPieces(text: string, range: TextRange, candidates: readonly WordBreak[]): number[] {
   const points = [
     { at: range.from, cost: 0 },
     ...candidates.filter((point) => point.at > range.from && point.at < range.to),
     { at: range.to, cost: 0 },
   ];
-  const target = width(text, range) / Math.ceil(width(text, range) / limit);
+  const target = width(text, range) / Math.ceil(width(text, range) / captionDisplayLimit);
   const best = [0];
   const previous = [0];
   for (let end = 1; end < points.length; end++) {
     best[end] = Infinity;
     for (let start = end - 1; start >= 0; start--) {
       const columns = width(text, trimmed(text, points[start].at, points[end].at));
-      if (columns > limit && start < end - 1) break;
+      if (columns > captionDisplayLimit && start < end - 1) break;
       const cost =
         best[start] +
         lineCost +
-        Math.max(0, columns - limit) * overflowCost +
-        balanceCost * ((columns - target) / limit) ** 2 +
+        Math.max(0, columns - captionDisplayLimit) * overflowCost +
+        balanceCost * ((columns - target) / captionDisplayLimit) ** 2 +
         (end < points.length - 1 ? points[end].cost : 0);
       if (cost < best[end]) {
         best[end] = cost;
@@ -102,21 +97,21 @@ function fewestLines(
   return breaks;
 }
 
-export function fitLines(
+export function fitCaptions(
   text: string,
   rules: BreakRules,
-  limit = subtitleDisplayLimit,
-  breaks: readonly number[] = [],
+  cueBreaks: readonly number[] = [],
 ): TextRange[] {
   const range = trimmed(text, 0, text.length);
   if (range.to === range.from) return [];
-  if (width(text, range) <= limit) return [range];
+  if (width(text, range) <= captionDisplayLimit) return [range];
   const words = rules.wordBreaks(text);
-  const pieces = clauses(text, range, [...rules.clauseBreaks(text), ...breaks]).flatMap((clause) =>
-    width(text, clause) > limit
-      ? cut(text, clause, fewestLines(text, clause, words, limit))
-      : [clause],
+  const pieces = clauses(text, range, [...rules.clauseBreaks(text), ...cueBreaks]).flatMap(
+    (clause) =>
+      width(text, clause) > captionDisplayLimit
+        ? cut(text, clause, fewestPieces(text, clause, words))
+        : [clause],
   );
   const joins = pieces.slice(1).map((piece) => ({ at: piece.from, cost: 0 }));
-  return cut(text, range, fewestLines(text, range, joins, limit));
+  return cut(text, range, fewestPieces(text, range, joins));
 }

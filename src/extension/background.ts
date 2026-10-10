@@ -64,10 +64,8 @@ async function contentRequest(
   }
   if (type === 'translate') {
     requireEnabled(platform);
-    const { text, needsSplit, cacheOnly } = readTranslateRequest(message);
-    return cacheOnly
-      ? queue.lookup(settings, text, needsSplit)
-      : queue.request(consumer, settings, text, needsSplit);
+    const { text, cacheOnly } = readTranslateRequest(message);
+    return cacheOnly ? queue.lookup(settings, text) : queue.request(consumer, settings, text);
   }
   throw new Error('不支持的请求。');
 }

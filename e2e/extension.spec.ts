@@ -81,16 +81,17 @@ for (const platform of ['youtube', 'hbo', 'x'] as const) {
     });
   });
 
-  test(`${platform}: delayed split stays hidden and style changes preserve in-flight work`, async ({}, info) => {
+  test(`${platform}: a long sentence goes out as separate captions and style changes preserve in-flight work`, async ({}, info) => {
     await withPlayer(
       platform,
       info,
       async (p) => {
         await p.seek(40);
         await p.play();
-        await expect.poll(() => p.posts.length).toBe(1);
-        expect(p.posts[0].inputs).toEqual([{ id: 0, parts: longCaptionParts }]);
+        await expect.poll(() => p.posts.length).toBeGreaterThan(0);
+        expect(p.posts[0].inputs).toEqual([{ id: 0, text: longCaptionParts[1] }]);
         await p.pause();
+        const sent = p.posts.length;
         const host = await p.overlay.elementHandle();
         const downloads = p.downloads.length;
         await p.settings({ original: { color: '#FFFFFF', size: 32 } });
@@ -98,12 +99,15 @@ for (const platform of ['youtube', 'hbo', 'x'] as const) {
         expect(
           await host!.evaluate((node) => node === document.querySelector('[data-subline-overlay]')),
         ).toBe(true);
-        expect(p.posts).toHaveLength(1);
+        expect(p.posts).toHaveLength(sent);
         expect(p.downloads).toHaveLength(downloads);
         await expect(p.original).toBeHidden();
-        await p.release(0);
+        for (let index = 0; index < sent; index++) await p.release(index);
         await p.pair(longCaptionParts[1], longTranslations[1]);
-        expect(p.posts).toHaveLength(1);
+        expect(p.posts).toHaveLength(sent);
+        const inputs = p.posts.flatMap((post) => post.inputs.map((input) => input.text));
+        expect(inputs).not.toContain(longCaption);
+        expect(inputs.every((text) => longCaptionParts.includes(text))).toBe(true);
         expect(p.failed.filter((r) => r.url.includes('__e2e_provider__'))).toEqual([]);
         const frames = await p.frames();
         expect(frames.some((f) => f.original === longCaption)).toBe(false);

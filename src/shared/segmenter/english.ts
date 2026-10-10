@@ -1,4 +1,4 @@
-import { fitLines, type LanguageSegmenter, type WordBreak } from './lines';
+import { fitCaptions, type LanguageSegmenter, type WordBreak } from './lines';
 
 const leading = new Set(
   'and but or nor so yet because although though while whereas unless until since if when whenever where wherever whether which who whom whose that than'.split(
@@ -61,5 +61,5 @@ function wordBreaks(text: string): WordBreak[] {
 
 export const english: LanguageSegmenter = {
   sentenceEnds,
-  lines: (text, limit, breaks) => fitLines(text, { clauseBreaks, wordBreaks }, limit, breaks),
+  captions: (text, cueBreaks) => fitCaptions(text, { clauseBreaks, wordBreaks }, cueBreaks),
 };
