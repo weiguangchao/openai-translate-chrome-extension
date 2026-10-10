@@ -1,0 +1,1870 @@
+{
+ "build": "e25876151de7",
+ "runs": [
+  {
+   "run": "yt-1x",
+   "url": "https://www.youtube.com/watch?v=arj7oStGLkU&t=0s",
+   "seekTarget": 300,
+   "seeks": 1,
+   "opening": {
+    "from": 0,
+    "to": 43.5,
+    "played": 44.4,
+    "wall": 42.5,
+    "views": 38,
+    "counted": 43.5,
+    "states": {
+     "empty": 12.7,
+     "ready": 30.8
+    },
+    "coverage": 99.9,
+    "firstCaptionAt": 12.7,
+    "firstReadyAt": 12.7,
+    "firstCaptionWall": 15.6,
+    "firstReadyWall": 15.6,
+    "loading": {
+     "episodes": 0,
+     "seconds": 0,
+     "longest": 0,
+     "flashes": 0
+    },
+    "lag": {
+     "sentences": 6,
+     "measured": 6,
+     "missed": 0,
+     "p50": 0.0,
+     "p90": 0.1,
+     "max": 0.1,
+     "over1s": 0
+    },
+    "batches": {
+     "count": 9,
+     "results": {
+      "ok": 9
+     },
+     "p50": 1.81,
+     "p90": 3.6,
+     "max": 3.6,
+     "firstItemP50": 1.81,
+     "waitMax": 0.01,
+     "together": 9
+    },
+    "before": 1.0,
+    "since": "open",
+    "playbackRate": 1,
+    "visible": 0.94
+   },
+   "landing": {
+    "from": 300,
+    "to": 344.0,
+    "played": 44.4,
+    "wall": 42.4,
+    "views": 40,
+    "counted": 44.0,
+    "states": {
+     "empty": 3.2,
+     "loading": 1.2,
+     "ready": 39.6
+    },
+    "coverage": 96.1,
+    "firstCaptionAt": 300,
+    "firstReadyAt": 301.6,
+    "firstCaptionWall": 0.4,
+    "firstReadyWall": 2.0,
+    "loading": {
+     "episodes": 1,
+     "seconds": 1.2,
+     "longest": 1.2,
+     "flashes": 0
+    },
+    "lag": {
+     "sentences": 10,
+     "measured": 10,
+     "missed": 0,
+     "p50": 0.1,
+     "p90": 0.1,
+     "max": 1.6,
+     "over1s": 1
+    },
+    "batches": {
+     "count": 20,
+     "results": {
+      "ok": 20
+     },
+     "p50": 1.81,
+     "p90": 3.58,
+     "max": 3.63,
+     "firstItemP50": 1.81,
+     "waitMax": 0.01,
+     "together": 20
+    },
+    "before": 1.6,
+    "since": "seek",
+    "playbackRate": 1,
+    "visible": 0.97
+   },
+   "playing": {
+    "from": 346.0,
+    "to": 526.1,
+    "played": 180.5,
+    "wall": 180.2,
+    "views": 133,
+    "counted": 180.1,
+    "states": {
+     "empty": 3.5,
+     "ready": 176.6
+    },
+    "coverage": 100.0,
+    "firstCaptionAt": 346.0,
+    "firstReadyAt": 346.0,
+    "firstCaptionWall": 0.0,
+    "firstReadyWall": 0.0,
+    "loading": {
+     "episodes": 0,
+     "seconds": 0,
+     "longest": 0,
+     "flashes": 0
+    },
+    "lag": {
+     "sentences": 28,
+     "measured": 28,
+     "missed": 0,
+     "p50": 0.1,
+     "p90": 0.1,
+     "max": 0.1,
+     "over1s": 0
+    },
+    "batches": {
+     "count": 41,
+     "results": {
+      "ok": 41
+     },
+     "p50": 1.76,
+     "p90": 3.63,
+     "max": 5.03,
+     "firstItemP50": 1.76,
+     "waitMax": 0.01,
+     "together": 41
+    },
+    "playbackRate": 1,
+    "visible": 0.99
+   }
+  },
+  {
+   "run": "yt-1.25x",
+   "url": "https://www.youtube.com/watch?v=c0KYU2j0TM4&t=0s",
+   "seekTarget": 600,
+   "seeks": 1,
+   "opening": {
+    "from": 0,
+    "to": 46.0,
+    "played": 44.1,
+    "wall": 35.2,
+    "views": 34,
+    "counted": 46.0,
+    "states": {
+     "empty": 15.7,
+     "ready": 30.3
+    },
+    "coverage": 99.9,
+    "firstCaptionAt": 15.4,
+    "firstReadyAt": 15.4,
+    "firstCaptionWall": 14.5,
+    "firstReadyWall": 14.6,
+    "loading": {
+     "episodes": 0,
+     "seconds": 0,
+     "longest": 0,
+     "flashes": 0
+    },
+    "lag": {
+     "sentences": 6,
+     "measured": 6,
+     "missed": 0,
+     "p50": 0.1,
+     "p90": 0.2,
+     "max": 0.2,
+     "over1s": 0
+    },
+    "batches": {
+     "count": 10,
+     "results": {
+      "ok": 9,
+      "pending": 1
+     },
+     "p50": 3.13,
+     "p90": 6.97,
+     "max": 6.97,
+     "firstItemP50": 3.13,
+     "waitMax": 0.01,
+     "together": 9
+    },
+    "before": 2.0,
+    "since": "open",
+    "playbackRate": 1.25,
+    "visible": 1.0
+   },
+   "landing": {
+    "from": 600,
+    "to": 644.0,
+    "played": 44.2,
+    "wall": 33.9,
+    "views": 28,
+    "counted": 44.0,
+    "states": {
+     "empty": 0.5,
+     "loading": 2.8,
+     "ready": 40.7
+    },
+    "coverage": 92.4,
+    "firstCaptionAt": 600,
+    "firstReadyAt": 603.3,
+    "firstCaptionWall": 1.7,
+    "firstReadyWall": 4.4,
+    "loading": {
+     "episodes": 1,
+     "seconds": 2.8,
+     "longest": 2.8,
+     "flashes": 0
+    },
+    "lag": {
+     "sentences": 7,
+     "measured": 7,
+     "missed": 0,
+     "p50": 0.1,
+     "p90": 3.3,
+     "max": 3.3,
+     "over1s": 1
+    },
+    "batches": {
+     "count": 23,
+     "results": {
+      "ok": 20,
+      "aborted": 1,
+      "invalid": 1,
+      "pending": 1
+     },
+     "p50": 1.71,
+     "p90": 3.35,
+     "max": 6.97,
+     "firstItemP50": 1.71,
+     "waitMax": 0.01,
+     "together": 21
+    },
+    "before": 1.6,
+    "since": "seek",
+    "playbackRate": 1.25,
+    "visible": 1.0
+   },
+   "playing": {
+    "from": 646.7,
+    "to": 824.4,
+    "played": 180.8,
+    "wall": 142.8,
+    "views": 116,
+    "counted": 177.8,
+    "states": {
+     "ready": 170.2,
+     "empty": 7.6
+    },
+    "coverage": 99.9,
+    "firstCaptionAt": 646.7,
+    "firstReadyAt": 646.7,
+    "firstCaptionWall": 0.6,
+    "firstReadyWall": 0.6,
+    "loading": {
+     "episodes": 0,
+     "seconds": 0,
+     "longest": 0,
+     "flashes": 0
+    },
+    "lag": {
+     "sentences": 32,
+     "measured": 32,
+     "missed": 0,
+     "p50": 0.1,
+     "p90": 0.2,
+     "max": 0.2,
+     "over1s": 0
+    },
+    "batches": {
+     "count": 44,
+     "results": {
+      "ok": 41,
+      "aborted": 1,
+      "invalid": 1,
+      "pending": 1
+     },
+     "p50": 1.71,
+     "p90": 3.35,
+     "max": 6.97,
+     "firstItemP50": 1.38,
+     "waitMax": 0.01,
+     "together": 42
+    },
+    "playbackRate": 1.25,
+    "visible": 1.0
+   }
+  },
+  {
+   "run": "yt-1.5x",
+   "url": "https://www.youtube.com/watch?v=D9Ihs241zeg&t=0s",
+   "seekTarget": 600,
+   "seeks": 1,
+   "opening": {
+    "from": 0,
+    "to": 43.1,
+    "played": 44.0,
+    "wall": 27.7,
+    "views": 28,
+    "counted": 43.1,
+    "states": {
+     "empty": 15.2,
+     "ready": 27.9
+    },
+    "coverage": 99.8,
+    "firstCaptionAt": 12.3,
+    "firstReadyAt": 12.3,
+    "firstCaptionWall": 9.8,
+    "firstReadyWall": 9.8,
+    "loading": {
+     "episodes": 0,
+     "seconds": 0,
+     "longest": 0,
+     "flashes": 0
+    },
+    "lag": {
+     "sentences": 6,
+     "measured": 6,
+     "missed": 0,
+     "p50": 0.1,
+     "p90": 0.2,
+     "max": 0.2,
+     "over1s": 0
+    },
+    "batches": {
+     "count": 7,
+     "results": {
+      "ok": 6,
+      "pending": 1
+     },
+     "p50": 1.53,
+     "p90": 9.85,
+     "max": 9.85,
+     "firstItemP50": 1.52,
+     "waitMax": 0.01,
+     "together": 6
+    },
+    "before": 1.5,
+    "since": "open",
+    "playbackRate": 1.5,
+    "visible": 1.0
+   },
+   "landing": {
+    "from": 600,
+    "to": 643.3,
+    "played": 44.0,
+    "wall": 27.3,
+    "views": 25,
+    "counted": 43.3,
+    "states": {
+     "empty": 3.5,
+     "loading": 3.5,
+     "ready": 36.4
+    },
+    "coverage": 90.0,
+    "firstCaptionAt": 600,
+    "firstReadyAt": 604,
+    "firstCaptionWall": 0.4,
+    "firstReadyWall": 3.2,
+    "loading": {
+     "episodes": 1,
+     "seconds": 3.5,
+     "longest": 3.5,
+     "flashes": 0
+    },
+    "lag": {
+     "sentences": 5,
+     "measured": 5,
+     "missed": 0,
+     "p50": 0.1,
+     "p90": 4,
+     "max": 4,
+     "over1s": 1
+    },
+    "batches": {
+     "count": 16,
+     "results": {
+      "ok": 14,
+      "aborted": 1,
+      "pending": 1
+     },
+     "p50": 1.76,
+     "p90": 4.35,
+     "max": 9.85,
+     "firstItemP50": 1.52,
+     "waitMax": 0.01,
+     "together": 14
+    },
+    "before": 2.4,
+    "since": "seek",
+    "playbackRate": 1.5,
+    "visible": 1.0
+   },
+   "playing": {
+    "from": 646.5,
+    "to": 825.4,
+    "played": 180.6,
+    "wall": 119.3,
+    "views": 98,
+    "counted": 178.9,
+    "states": {
+     "ready": 168.3,
+     "empty": 10.6
+    },
+    "coverage": 99.9,
+    "firstCaptionAt": 646.5,
+    "firstReadyAt": 646.5,
+    "firstCaptionWall": 0.0,
+    "firstReadyWall": 0.0,
+    "loading": {
+     "episodes": 0,
+     "seconds": 0,
+     "longest": 0,
+     "flashes": 0
+    },
+    "lag": {
+     "sentences": 23,
+     "measured": 23,
+     "missed": 0,
+     "p50": 0.1,
+     "p90": 0.2,
+     "max": 0.2,
+     "over1s": 0
+    },
+    "batches": {
+     "count": 37,
+     "results": {
+      "ok": 35,
+      "aborted": 1,
+      "pending": 1
+     },
+     "p50": 1.59,
+     "p90": 3.75,
+     "max": 9.85,
+     "firstItemP50": 1.59,
+     "waitMax": 0.01,
+     "together": 35
+    },
+    "playbackRate": 1.5,
+    "visible": 1.0
+   }
+  },
+  {
+   "run": "yt-2x",
+   "url": "https://www.youtube.com/watch?v=qp0HIF3SfI4&t=0s",
+   "seekTarget": 600,
+   "seeks": 1,
+   "opening": {
+    "from": 0,
+    "to": 45.5,
+    "played": 44.4,
+    "wall": 22.0,
+    "views": 29,
+    "counted": 45.5,
+    "states": {
+     "empty": 17.1,
+     "ready": 22.1,
+     "loading": 6.3
+    },
+    "coverage": 76.1,
+    "firstCaptionAt": 16.3,
+    "firstReadyAt": 16.3,
+    "firstCaptionWall": 10.3,
+    "firstReadyWall": 10.3,
+    "loading": {
+     "episodes": 1,
+     "seconds": 6.3,
+     "longest": 6.3,
+     "flashes": 0
+    },
+    "lag": {
+     "sentences": 8,
+     "measured": 7,
+     "missed": 1,
+     "p50": 0.2,
+     "p90": 0.2,
+     "max": 0.2,
+     "over1s": 0
+    },
+    "batches": {
+     "count": 10,
+     "results": {
+      "ok": 7,
+      "aborted": 1,
+      "pending": 2
+     },
+     "p50": 3.18,
+     "p90": 13.66,
+     "max": 13.66,
+     "firstItemP50": 3.17,
+     "waitMax": 0.0,
+     "together": 7
+    },
+    "before": 1.5,
+    "since": "open",
+    "playbackRate": 2,
+    "visible": 1.0
+   },
+   "landing": {
+    "from": 600,
+    "to": 643.8,
+    "played": 42.4,
+    "wall": 20.3,
+    "views": 31,
+    "counted": 43.8,
+    "states": {
+     "empty": 5.0,
+     "loading": 2.1,
+     "ready": 36.7
+    },
+    "coverage": 91.0,
+    "firstCaptionAt": 600,
+    "firstReadyAt": 603.6,
+    "firstCaptionWall": 0.4,
+    "firstReadyWall": 2.3,
+    "loading": {
+     "episodes": 2,
+     "seconds": 2.1,
+     "longest": 1.4,
+     "flashes": 0
+    },
+    "lag": {
+     "sentences": 11,
+     "measured": 9,
+     "missed": 2,
+     "p50": 0.1,
+     "p90": 1.4,
+     "max": 1.4,
+     "over1s": 1
+    },
+    "batches": {
+     "count": 22,
+     "results": {
+      "ok": 19,
+      "aborted": 3
+     },
+     "p50": 1.84,
+     "p90": 5.71,
+     "max": 13.66,
+     "firstItemP50": 1.84,
+     "waitMax": 0.0,
+     "together": 19
+    },
+    "before": 3.1,
+    "since": "seek",
+    "playbackRate": 2,
+    "visible": 1.0
+   },
+   "playing": {
+    "from": 647.9,
+    "to": 825.5,
+    "played": 181.3,
+    "wall": 90.0,
+    "views": 96,
+    "counted": 177.6,
+    "states": {
+     "ready": 170.9,
+     "empty": 6.7
+    },
+    "coverage": 99.8,
+    "firstCaptionAt": 647.9,
+    "firstReadyAt": 647.9,
+    "firstCaptionWall": 1.2,
+    "firstReadyWall": 1.2,
+    "loading": {
+     "episodes": 0,
+     "seconds": 0,
+     "longest": 0,
+     "flashes": 0
+    },
+    "lag": {
+     "sentences": 33,
+     "measured": 33,
+     "missed": 0,
+     "p50": 0.1,
+     "p90": 0.2,
+     "max": 0.3,
+     "over1s": 0
+    },
+    "batches": {
+     "count": 42,
+     "results": {
+      "ok": 38,
+      "aborted": 3,
+      "pending": 1
+     },
+     "p50": 2.1,
+     "p90": 6.54,
+     "max": 13.66,
+     "firstItemP50": 1.94,
+     "waitMax": 0.01,
+     "together": 38
+    },
+    "playbackRate": 2,
+    "visible": 1.0
+   }
+  },
+  {
+   "run": "hbo-1x",
+   "url": "https://play.hbomax.com/video/watch/44805ae8-7771-4238-ad89-2c629a30db4d",
+   "seekTarget": 120,
+   "seeks": 1,
+   "opening": {
+    "from": 1135.8,
+    "to": 1181.2,
+    "played": 44.3,
+    "wall": 44.1,
+    "views": 62,
+    "counted": 45.3,
+    "states": {
+     "empty": 12.2,
+     "loading": 1.6,
+     "ready": 31.5
+    },
+    "coverage": 93.0,
+    "firstCaptionAt": 1135.8,
+    "firstReadyAt": 1140.3,
+    "firstCaptionWall": 0.0,
+    "firstReadyWall": 4.5,
+    "loading": {
+     "episodes": 1,
+     "seconds": 1.5,
+     "longest": 1.5,
+     "flashes": 1
+    },
+    "lag": {
+     "sentences": 21,
+     "measured": 19,
+     "missed": 2,
+     "p50": 0.0,
+     "p90": 0.1,
+     "max": 0.1,
+     "over1s": 0
+    },
+    "batches": {
+     "count": 11,
+     "results": {
+      "aborted": 2,
+      "ok": 9
+     },
+     "p50": 2.36,
+     "p90": 3.15,
+     "max": 6.16,
+     "firstItemP50": 2.45,
+     "waitMax": 0.0,
+     "together": 9
+    },
+    "before": 1.3,
+    "since": "open",
+    "playbackRate": 1,
+    "visible": 1.0
+   },
+   "landing": {
+    "from": 120,
+    "to": 164.7,
+    "played": 44.3,
+    "wall": 43.7,
+    "views": 49,
+    "counted": 44.7,
+    "states": {
+     "empty": 7.2,
+     "loading": 16.0,
+     "ready": 21.5
+    },
+    "coverage": 56.6,
+    "firstCaptionAt": 120,
+    "firstReadyAt": 136.5,
+    "firstCaptionWall": 1.0,
+    "firstReadyWall": 17.6,
+    "loading": {
+     "episodes": 1,
+     "seconds": 16.0,
+     "longest": 16.0,
+     "flashes": 0
+    },
+    "lag": {
+     "sentences": 12,
+     "measured": 11,
+     "missed": 1,
+     "p50": 0.1,
+     "p90": 0.1,
+     "max": 0.1,
+     "over1s": 0
+    },
+    "batches": {
+     "count": 22,
+     "results": {
+      "aborted": 3,
+      "ok": 16,
+      "invalid": 1,
+      "pending": 2
+     },
+     "p50": 2.45,
+     "p90": 6.16,
+     "max": 16.57,
+     "firstItemP50": 2.57,
+     "waitMax": 0.02,
+     "together": 17
+    },
+    "before": 1.0,
+    "since": "seek",
+    "playbackRate": 1,
+    "visible": 1.0
+   },
+   "playing": {
+    "from": 166.8,
+    "to": 344.9,
+    "played": 180.3,
+    "wall": 179.6,
+    "views": 234,
+    "counted": 178.1,
+    "states": {
+     "empty": 45.5,
+     "ready": 132.6
+    },
+    "coverage": 99.9,
+    "firstCaptionAt": 174.0,
+    "firstReadyAt": 174.0,
+    "firstCaptionWall": 8.7,
+    "firstReadyWall": 8.7,
+    "loading": {
+     "episodes": 0,
+     "seconds": 0,
+     "longest": 0,
+     "flashes": 0
+    },
+    "lag": {
+     "sentences": 76,
+     "measured": 76,
+     "missed": 0,
+     "p50": 0.1,
+     "p90": 0.1,
+     "max": 0.2,
+     "over1s": 0
+    },
+    "batches": {
+     "count": 45,
+     "results": {
+      "aborted": 3,
+      "ok": 41,
+      "invalid": 1
+     },
+     "p50": 2.36,
+     "p90": 7.71,
+     "max": 16.57,
+     "firstItemP50": 2.28,
+     "waitMax": 0.02,
+     "together": 42
+    },
+    "playbackRate": 1,
+    "visible": 1.0
+   }
+  },
+  {
+   "run": "hbo-1.25x",
+   "url": "https://play.hbomax.com/video/watch/44805ae8-7771-4238-ad89-2c629a30db4d",
+   "seekTarget": 420,
+   "seeks": 1,
+   "opening": {
+    "from": 943.7,
+    "to": 989.1,
+    "played": 44.0,
+    "wall": 35.1,
+    "views": 51,
+    "counted": 45.4,
+    "states": {
+     "empty": 5.5,
+     "loading": 0.7,
+     "ready": 39.2
+    },
+    "coverage": 94.9,
+    "firstCaptionAt": 943.7,
+    "firstReadyAt": 946.0,
+    "firstCaptionWall": 0.0,
+    "firstReadyWall": 1.9,
+    "loading": {
+     "episodes": 1,
+     "seconds": 0.4,
+     "longest": 0.4,
+     "flashes": 2
+    },
+    "lag": {
+     "sentences": 15,
+     "measured": 13,
+     "missed": 2,
+     "p50": 0.1,
+     "p90": 0.2,
+     "max": 0.8,
+     "over1s": 0
+    },
+    "batches": {
+     "count": 10,
+     "results": {
+      "aborted": 1,
+      "ok": 8,
+      "pending": 1
+     },
+     "p50": 2.72,
+     "p90": 7.0,
+     "max": 7.0,
+     "firstItemP50": 2.72,
+     "waitMax": 0.0,
+     "together": 8
+    },
+    "before": 1.5,
+    "since": "open",
+    "playbackRate": 1.25,
+    "visible": 1.0
+   },
+   "landing": {
+    "from": 420,
+    "to": 466.2,
+    "played": 44.2,
+    "wall": 36.2,
+    "views": 51,
+    "counted": 46.2,
+    "states": {
+     "empty": 6.3,
+     "loading": 2.4,
+     "ready": 37.5
+    },
+    "coverage": 92.0,
+    "firstCaptionAt": 420,
+    "firstReadyAt": 423.4,
+    "firstCaptionWall": 1.3,
+    "firstReadyWall": 4.1,
+    "loading": {
+     "episodes": 2,
+     "seconds": 2.4,
+     "longest": 1.4,
+     "flashes": 0
+    },
+    "lag": {
+     "sentences": 16,
+     "measured": 15,
+     "missed": 1,
+     "p50": 0.1,
+     "p90": 0.2,
+     "max": 1.9,
+     "over1s": 1
+    },
+    "batches": {
+     "count": 20,
+     "results": {
+      "aborted": 2,
+      "ok": 17,
+      "pending": 1
+     },
+     "p50": 2.43,
+     "p90": 6.36,
+     "max": 7.0,
+     "firstItemP50": 2.56,
+     "waitMax": 0.0,
+     "together": 17
+    },
+    "before": 2.1,
+    "since": "seek",
+    "playbackRate": 1.25,
+    "visible": 1.0
+   },
+   "playing": {
+    "from": 468.9,
+    "to": 646.0,
+    "played": 180.1,
+    "wall": 143.8,
+    "views": 210,
+    "counted": 177.2,
+    "states": {
+     "empty": 47.0,
+     "ready": 130.2
+    },
+    "coverage": 99.9,
+    "firstCaptionAt": 469.2,
+    "firstReadyAt": 469.2,
+    "firstCaptionWall": 2.4,
+    "firstReadyWall": 2.4,
+    "loading": {
+     "episodes": 0,
+     "seconds": 0,
+     "longest": 0,
+     "flashes": 0
+    },
+    "lag": {
+     "sentences": 72,
+     "measured": 72,
+     "missed": 0,
+     "p50": 0.1,
+     "p90": 0.2,
+     "max": 0.2,
+     "over1s": 0
+    },
+    "batches": {
+     "count": 42,
+     "results": {
+      "aborted": 2,
+      "ok": 39,
+      "pending": 1
+     },
+     "p50": 2.63,
+     "p90": 5.79,
+     "max": 21.15,
+     "firstItemP50": 2.65,
+     "waitMax": 0.01,
+     "together": 39
+    },
+    "playbackRate": 1.25,
+    "visible": 1.0
+   }
+  },
+  {
+   "run": "hbo-1.5x",
+   "url": "https://play.hbomax.com/video/watch/44805ae8-7771-4238-ad89-2c629a30db4d",
+   "seekTarget": 720,
+   "seeks": 1,
+   "opening": {
+    "from": 314.3,
+    "to": 358.8,
+    "played": 43.8,
+    "wall": 28.2,
+    "views": 71,
+    "counted": 44.5,
+    "states": {
+     "empty": 10.6,
+     "loading": 4.5,
+     "ready": 29.4
+    },
+    "coverage": 78.3,
+    "firstCaptionAt": 314.3,
+    "firstReadyAt": 317.9,
+    "firstCaptionWall": 0.0,
+    "firstReadyWall": 2.5,
+    "loading": {
+     "episodes": 5,
+     "seconds": 4.3,
+     "longest": 1.8,
+     "flashes": 1
+    },
+    "lag": {
+     "sentences": 28,
+     "measured": 21,
+     "missed": 7,
+     "p50": 0.1,
+     "p90": 0.2,
+     "max": 0.2,
+     "over1s": 0
+    },
+    "batches": {
+     "count": 13,
+     "results": {
+      "aborted": 3,
+      "ok": 8,
+      "pending": 2
+     },
+     "p50": 1.57,
+     "p90": 5.74,
+     "max": 9.91,
+     "firstItemP50": 1.45,
+     "waitMax": 0.0,
+     "together": 8
+    },
+    "before": 2.3,
+    "since": "open",
+    "playbackRate": 1.5,
+    "visible": 1.0
+   },
+   "landing": {
+    "from": 720,
+    "to": 762.7,
+    "played": 43.9,
+    "wall": 27.3,
+    "views": 71,
+    "counted": 42.7,
+    "states": {
+     "empty": 8.7,
+     "loading": 6.2,
+     "ready": 27.8
+    },
+    "coverage": 73.2,
+    "firstCaptionAt": 720,
+    "firstReadyAt": 729.6,
+    "firstCaptionWall": 0.7,
+    "firstReadyWall": 7.2,
+    "loading": {
+     "episodes": 6,
+     "seconds": 6.1,
+     "longest": 1.6,
+     "flashes": 1
+    },
+    "lag": {
+     "sentences": 27,
+     "measured": 19,
+     "missed": 8,
+     "p50": 0.1,
+     "p90": 0.2,
+     "max": 0.7,
+     "over1s": 0
+    },
+    "batches": {
+     "count": 21,
+     "results": {
+      "aborted": 6,
+      "ok": 15
+     },
+     "p50": 1.93,
+     "p90": 6.36,
+     "max": 9.91,
+     "firstItemP50": 1.57,
+     "waitMax": 0.0,
+     "together": 15
+    },
+    "before": 1.8,
+    "since": "seek",
+    "playbackRate": 1.5,
+    "visible": 1.0
+   },
+   "playing": {
+    "from": 765.9,
+    "to": 945.4,
+    "played": 181.9,
+    "wall": 119.8,
+    "views": 149,
+    "counted": 179.5,
+    "states": {
+     "ready": 141.7,
+     "empty": 37.8
+    },
+    "coverage": 99.9,
+    "firstCaptionAt": 765.9,
+    "firstReadyAt": 765.9,
+    "firstCaptionWall": 0.1,
+    "firstReadyWall": 0.1,
+    "loading": {
+     "episodes": 0,
+     "seconds": 0,
+     "longest": 0,
+     "flashes": 0
+    },
+    "lag": {
+     "sentences": 46,
+     "measured": 46,
+     "missed": 0,
+     "p50": 0.1,
+     "p90": 0.2,
+     "max": 0.2,
+     "over1s": 0
+    },
+    "batches": {
+     "count": 40,
+     "results": {
+      "aborted": 6,
+      "ok": 33,
+      "invalid": 1
+     },
+     "p50": 2.06,
+     "p90": 7.13,
+     "max": 9.91,
+     "firstItemP50": 1.93,
+     "waitMax": 0.01,
+     "together": 34
+    },
+    "playbackRate": 1.5,
+    "visible": 1.0
+   }
+  },
+  {
+   "run": "hbo-2x",
+   "url": "https://play.hbomax.com/video/watch/44805ae8-7771-4238-ad89-2c629a30db4d",
+   "seekTarget": 1020,
+   "seeks": 1,
+   "opening": {
+    "from": 597.3,
+    "to": 640.8,
+    "played": 44.3,
+    "wall": 20.4,
+    "views": 41,
+    "counted": 43.4,
+    "states": {
+     "empty": 13.8,
+     "loading": 2.7,
+     "ready": 27.0
+    },
+    "coverage": 85.2,
+    "firstCaptionAt": 597.3,
+    "firstReadyAt": 605.0,
+    "firstCaptionWall": 0.0,
+    "firstReadyWall": 3.9,
+    "loading": {
+     "episodes": 1,
+     "seconds": 2.4,
+     "longest": 2.4,
+     "flashes": 2
+    },
+    "lag": {
+     "sentences": 17,
+     "measured": 14,
+     "missed": 3,
+     "p50": 0.1,
+     "p90": 0.2,
+     "max": 0.3,
+     "over1s": 0
+    },
+    "batches": {
+     "count": 16,
+     "results": {
+      "aborted": 2,
+      "ok": 12,
+      "invalid": 1,
+      "pending": 1
+     },
+     "p50": 1.41,
+     "p90": 2.69,
+     "max": 4.98,
+     "firstItemP50": 1.41,
+     "waitMax": 0.02,
+     "together": 13
+    },
+    "before": 2.7,
+    "since": "open",
+    "playbackRate": 2,
+    "visible": 1.0
+   },
+   "landing": {
+    "from": 1020,
+    "to": 1061.8,
+    "played": 42.3,
+    "wall": 19.3,
+    "views": 41,
+    "counted": 41.8,
+    "states": {
+     "empty": 18.2,
+     "loading": 1.1,
+     "ready": 22.5
+    },
+    "coverage": 90.3,
+    "firstCaptionAt": 1020,
+    "firstReadyAt": 1025.0,
+    "firstCaptionWall": 1.4,
+    "firstReadyWall": 3.9,
+    "loading": {
+     "episodes": 2,
+     "seconds": 1.1,
+     "longest": 0.8,
+     "flashes": 0
+    },
+    "lag": {
+     "sentences": 14,
+     "measured": 13,
+     "missed": 1,
+     "p50": 0.2,
+     "p90": 0.3,
+     "max": 1.0,
+     "over1s": 1
+    },
+    "batches": {
+     "count": 26,
+     "results": {
+      "aborted": 3,
+      "ok": 22,
+      "invalid": 1
+     },
+     "p50": 1.41,
+     "p90": 2.66,
+     "max": 4.98,
+     "firstItemP50": 1.42,
+     "waitMax": 0.02,
+     "together": 23
+    },
+    "before": 3.2,
+    "since": "seek",
+    "playbackRate": 2,
+    "visible": 1.0
+   },
+   "playing": {
+    "from": 1066.1,
+    "to": 1245.7,
+    "played": 181.5,
+    "wall": 90.1,
+    "views": 181,
+    "counted": 179.1,
+    "states": {
+     "empty": 43.9,
+     "ready": 135.2
+    },
+    "coverage": 99.8,
+    "firstCaptionAt": 1067.7,
+    "firstReadyAt": 1067.7,
+    "firstCaptionWall": 1.1,
+    "firstReadyWall": 1.1,
+    "loading": {
+     "episodes": 0,
+     "seconds": 0,
+     "longest": 0,
+     "flashes": 0
+    },
+    "lag": {
+     "sentences": 70,
+     "measured": 70,
+     "missed": 0,
+     "p50": 0.1,
+     "p90": 0.2,
+     "max": 0.3,
+     "over1s": 0
+    },
+    "batches": {
+     "count": 47,
+     "results": {
+      "aborted": 3,
+      "ok": 42,
+      "invalid": 1,
+      "pending": 1
+     },
+     "p50": 1.63,
+     "p90": 3.52,
+     "max": 11.48,
+     "firstItemP50": 1.72,
+     "waitMax": 0.02,
+     "together": 43
+    },
+    "playbackRate": 2,
+    "visible": 1.0
+   }
+  },
+  {
+   "run": "x-1x",
+   "url": "https://x.com/theo/status/2107935187825008691",
+   "seekTarget": 300,
+   "seeks": 1,
+   "opening": {
+    "from": 0,
+    "to": 44.0,
+    "played": 44.4,
+    "wall": 42.9,
+    "views": 32,
+    "counted": 44.0,
+    "states": {
+     "empty": 0.9,
+     "loading": 9.9,
+     "ready": 33.1
+    },
+    "coverage": 76.3,
+    "firstCaptionAt": 0.6,
+    "firstReadyAt": 10.8,
+    "firstCaptionWall": 1.1,
+    "firstReadyWall": 11.4,
+    "loading": {
+     "episodes": 1,
+     "seconds": 9.9,
+     "longest": 9.9,
+     "flashes": 0
+    },
+    "lag": {
+     "sentences": 5,
+     "measured": 5,
+     "missed": 0,
+     "p50": 0.1,
+     "p90": 10.7,
+     "max": 10.7,
+     "over1s": 1
+    },
+    "batches": {
+     "count": 4,
+     "results": {
+      "ok": 3,
+      "pending": 1
+     },
+     "p50": 6.36,
+     "p90": 10.26,
+     "max": 10.26,
+     "firstItemP50": 6.35,
+     "waitMax": 0.03,
+     "together": 3
+    },
+    "before": 1.0,
+    "since": "open",
+    "playbackRate": 1,
+    "visible": 1.0
+   },
+   "landing": {
+    "from": 300,
+    "to": 344.4,
+    "played": 44.3,
+    "wall": 43.2,
+    "views": 43,
+    "counted": 44.4,
+    "states": {
+     "empty": 3.9,
+     "loading": 31.3,
+     "ready": 9.2
+    },
+    "coverage": 21.1,
+    "firstCaptionAt": 300,
+    "firstReadyAt": 334.8,
+    "firstCaptionWall": 0.7,
+    "firstReadyWall": 35.6,
+    "loading": {
+     "episodes": 5,
+     "seconds": 31.1,
+     "longest": 17.5,
+     "flashes": 1
+    },
+    "lag": {
+     "sentences": 14,
+     "measured": 4,
+     "missed": 10,
+     "p50": 0.0,
+     "p90": 0.3,
+     "max": 0.3,
+     "over1s": 0
+    },
+    "batches": {
+     "count": 14,
+     "results": {
+      "ok": 5,
+      "aborted": 7,
+      "pending": 2
+     },
+     "p50": 7.17,
+     "p90": 19.02,
+     "max": 22.29,
+     "firstItemP50": 7.15,
+     "waitMax": 0.03,
+     "together": 5
+    },
+    "before": 1.3,
+    "since": "seek",
+    "playbackRate": 1,
+    "visible": 1.0
+   },
+   "playing": {
+    "from": 346.5,
+    "to": 525.0,
+    "played": 180.5,
+    "wall": 180.3,
+    "views": 190,
+    "counted": 178.2,
+    "states": {
+     "ready": 155.5,
+     "empty": 10.1,
+     "loading": 12.5
+    },
+    "coverage": 91.3,
+    "firstCaptionAt": 346.5,
+    "firstReadyAt": 346.5,
+    "firstCaptionWall": 0.9,
+    "firstReadyWall": 0.9,
+    "loading": {
+     "episodes": 5,
+     "seconds": 12.5,
+     "longest": 6.1,
+     "flashes": 0
+    },
+    "lag": {
+     "sentences": 54,
+     "measured": 49,
+     "missed": 5,
+     "p50": 0.0,
+     "p90": 0.3,
+     "max": 6.5,
+     "over1s": 1
+    },
+    "batches": {
+     "count": 36,
+     "results": {
+      "ok": 23,
+      "aborted": 12,
+      "invalid": 1
+     },
+     "p50": 9.99,
+     "p90": 22.29,
+     "max": 29.46,
+     "firstItemP50": 10.26,
+     "waitMax": 0.04,
+     "together": 24
+    },
+    "playbackRate": 1,
+    "visible": 1.0
+   }
+  },
+  {
+   "run": "x-1.25x",
+   "url": "https://x.com/theo/status/2107935187825008691",
+   "seekTarget": 600,
+   "seeks": 1,
+   "opening": {
+    "from": 0,
+    "to": 45.1,
+    "played": 44.2,
+    "wall": 34.7,
+    "views": 28,
+    "counted": 45.1,
+    "states": {
+     "empty": 1.2,
+     "loading": 26.4,
+     "ready": 17.4
+    },
+    "coverage": 39.3,
+    "firstCaptionAt": 0.7,
+    "firstReadyAt": 27.6,
+    "firstCaptionWall": 1.1,
+    "firstReadyWall": 22.6,
+    "loading": {
+     "episodes": 1,
+     "seconds": 26.4,
+     "longest": 26.4,
+     "flashes": 0
+    },
+    "lag": {
+     "sentences": 5,
+     "measured": 4,
+     "missed": 1,
+     "p50": 0.0,
+     "p90": 0.2,
+     "max": 0.2,
+     "over1s": 0
+    },
+    "batches": {
+     "count": 6,
+     "results": {
+      "aborted": 1,
+      "ok": 3,
+      "pending": 2
+     },
+     "p50": 3.27,
+     "p90": 21.78,
+     "max": 21.78,
+     "firstItemP50": 3.25,
+     "waitMax": 0.04,
+     "together": 3
+    },
+    "before": 1.8,
+    "since": "open",
+    "playbackRate": 1.25,
+    "visible": 1.0
+   },
+   "landing": {
+    "from": 600,
+    "to": 645.3,
+    "played": 44.1,
+    "wall": 34.6,
+    "views": 29,
+    "counted": 45.3,
+    "states": {
+     "empty": 1.7,
+     "loading": 8.5,
+     "ready": 35.2
+    },
+    "coverage": 78.9,
+    "firstCaptionAt": 600,
+    "firstReadyAt": 609.4,
+    "firstCaptionWall": 0.3,
+    "firstReadyWall": 7.9,
+    "loading": {
+     "episodes": 1,
+     "seconds": 8.5,
+     "longest": 8.5,
+     "flashes": 0
+    },
+    "lag": {
+     "sentences": 6,
+     "measured": 5,
+     "missed": 1,
+     "p50": 0.1,
+     "p90": 9.0,
+     "max": 9.0,
+     "over1s": 1
+    },
+    "batches": {
+     "count": 15,
+     "results": {
+      "aborted": 3,
+      "ok": 10,
+      "pending": 2
+     },
+     "p50": 7.15,
+     "p90": 15.87,
+     "max": 21.78,
+     "firstItemP50": 7.15,
+     "waitMax": 0.04,
+     "together": 10
+    },
+    "before": 2.1,
+    "since": "seek",
+    "playbackRate": 1.25,
+    "visible": 1.0
+   },
+   "playing": {
+    "from": 648.0,
+    "to": 825.5,
+    "played": 180.3,
+    "wall": 143.4,
+    "views": 172,
+    "counted": 177.6,
+    "states": {
+     "ready": 170.3,
+     "empty": 6.8,
+     "loading": 0.4
+    },
+    "coverage": 99.3,
+    "firstCaptionAt": 648.0,
+    "firstReadyAt": 648.0,
+    "firstCaptionWall": 1.4,
+    "firstReadyWall": 1.4,
+    "loading": {
+     "episodes": 1,
+     "seconds": 0.4,
+     "longest": 0.4,
+     "flashes": 0
+    },
+    "lag": {
+     "sentences": 54,
+     "measured": 53,
+     "missed": 1,
+     "p50": 0.1,
+     "p90": 0.3,
+     "max": 0.9,
+     "over1s": 0
+    },
+    "batches": {
+     "count": 39,
+     "results": {
+      "aborted": 3,
+      "ok": 33,
+      "invalid": 2,
+      "pending": 1
+     },
+     "p50": 8.89,
+     "p90": 16.79,
+     "max": 22.28,
+     "firstItemP50": 9.44,
+     "waitMax": 0.04,
+     "together": 34
+    },
+    "playbackRate": 1.25,
+    "visible": 1.0
+   }
+  },
+  {
+   "run": "x-1.5x",
+   "url": "https://x.com/theo/status/2107935187825008691",
+   "seekTarget": 900,
+   "seeks": 1,
+   "opening": {
+    "from": 0,
+    "to": 45.2,
+    "played": 43.8,
+    "wall": 29.1,
+    "views": 25,
+    "counted": 45.2,
+    "states": {
+     "empty": 1.5,
+     "loading": 11.4,
+     "ready": 32.3
+    },
+    "coverage": 73.0,
+    "firstCaptionAt": 1.0,
+    "firstReadyAt": 12.9,
+    "firstCaptionWall": 1.1,
+    "firstReadyWall": 9.0,
+    "loading": {
+     "episodes": 1,
+     "seconds": 11.4,
+     "longest": 11.4,
+     "flashes": 0
+    },
+    "lag": {
+     "sentences": 5,
+     "measured": 5,
+     "missed": 0,
+     "p50": 0.1,
+     "p90": 11.9,
+     "max": 11.9,
+     "over1s": 1
+    },
+    "batches": {
+     "count": 6,
+     "results": {
+      "ok": 4,
+      "pending": 2
+     },
+     "p50": 4.88,
+     "p90": 7.93,
+     "max": 7.93,
+     "firstItemP50": 4.88,
+     "waitMax": 0.02,
+     "together": 4
+    },
+    "before": 1.6,
+    "since": "open",
+    "playbackRate": 1.5,
+    "visible": 1.0
+   },
+   "landing": {
+    "from": 900,
+    "to": 945.5,
+    "played": 43.8,
+    "wall": 28.7,
+    "views": 45,
+    "counted": 45.5,
+    "states": {
+     "empty": 5.5,
+     "loading": 8.8,
+     "ready": 31.2
+    },
+    "coverage": 72.7,
+    "firstCaptionAt": 900.3,
+    "firstReadyAt": 903.7,
+    "firstCaptionWall": 0.6,
+    "firstReadyWall": 2.9,
+    "loading": {
+     "episodes": 4,
+     "seconds": 8.8,
+     "longest": 3.9,
+     "flashes": 1
+    },
+    "lag": {
+     "sentences": 15,
+     "measured": 11,
+     "missed": 4,
+     "p50": 0.1,
+     "p90": 3.8,
+     "max": 4.5,
+     "over1s": 2
+    },
+    "batches": {
+     "count": 17,
+     "results": {
+      "ok": 11,
+      "aborted": 3,
+      "invalid": 1,
+      "pending": 2
+     },
+     "p50": 4.69,
+     "p90": 7.55,
+     "max": 7.93,
+     "firstItemP50": 4.85,
+     "waitMax": 0.02,
+     "together": 12
+    },
+    "before": 2.5,
+    "since": "seek",
+    "playbackRate": 1.5,
+    "visible": 1.0
+   },
+   "playing": {
+    "from": 947.3,
+    "to": 1127.6,
+    "played": 181.4,
+    "wall": 120.8,
+    "views": 168,
+    "counted": 180.3,
+    "states": {
+     "empty": 6.4,
+     "ready": 173.9
+    },
+    "coverage": 99.7,
+    "firstCaptionAt": 947.3,
+    "firstReadyAt": 947.3,
+    "firstCaptionWall": 0.7,
+    "firstReadyWall": 0.7,
+    "loading": {
+     "episodes": 0,
+     "seconds": 0,
+     "longest": 0,
+     "flashes": 0
+    },
+    "lag": {
+     "sentences": 58,
+     "measured": 57,
+     "missed": 1,
+     "p50": 0.1,
+     "p90": 0.2,
+     "max": 0.5,
+     "over1s": 0
+    },
+    "batches": {
+     "count": 45,
+     "results": {
+      "ok": 39,
+      "aborted": 3,
+      "invalid": 3
+     },
+     "p50": 4.86,
+     "p90": 11.45,
+     "max": 20.05,
+     "firstItemP50": 4.88,
+     "waitMax": 0.02,
+     "together": 42
+    },
+    "playbackRate": 1.5,
+    "visible": 1.0
+   }
+  },
+  {
+   "run": "x-2x",
+   "url": "https://x.com/theo/status/2107935187825008691",
+   "seekTarget": 1200,
+   "seeks": 1,
+   "opening": {
+    "from": 0,
+    "to": 46.3,
+    "played": 44.3,
+    "wall": 22.1,
+    "views": 23,
+    "counted": 46.3,
+    "states": {
+     "empty": 2.5,
+     "loading": 5.0,
+     "ready": 38.8
+    },
+    "coverage": 86.9,
+    "firstCaptionAt": 1.3,
+    "firstReadyAt": 7.2,
+    "firstCaptionWall": 1.1,
+    "firstReadyWall": 4.0,
+    "loading": {
+     "episodes": 1,
+     "seconds": 5.0,
+     "longest": 5.0,
+     "flashes": 0
+    },
+    "lag": {
+     "sentences": 5,
+     "measured": 5,
+     "missed": 0,
+     "p50": 0.2,
+     "p90": 5.8,
+     "max": 5.8,
+     "over1s": 1
+    },
+    "batches": {
+     "count": 6,
+     "results": {
+      "ok": 4,
+      "pending": 2
+     },
+     "p50": 2.91,
+     "p90": 8.15,
+     "max": 8.15,
+     "firstItemP50": 2.91,
+     "waitMax": 0.02,
+     "together": 4
+    },
+    "before": 2.0,
+    "since": "open",
+    "playbackRate": 2,
+    "visible": 1.0
+   },
+   "landing": {
+    "from": 1200,
+    "to": 1246.4,
+    "played": 44.4,
+    "wall": 22.1,
+    "views": 31,
+    "counted": 46.4,
+    "states": {
+     "empty": 3.2,
+     "loading": 26.0,
+     "ready": 17.3
+    },
+    "coverage": 37.8,
+    "firstCaptionAt": 1200,
+    "firstReadyAt": 1208.0,
+    "firstCaptionWall": 0.8,
+    "firstReadyWall": 4.9,
+    "loading": {
+     "episodes": 2,
+     "seconds": 25.9,
+     "longest": 19.1,
+     "flashes": 1
+    },
+    "lag": {
+     "sentences": 10,
+     "measured": 8,
+     "missed": 2,
+     "p50": 0.1,
+     "p90": 19.8,
+     "max": 19.8,
+     "over1s": 1
+    },
+    "batches": {
+     "count": 13,
+     "results": {
+      "ok": 8,
+      "aborted": 3,
+      "pending": 2
+     },
+     "p50": 7.3,
+     "p90": 12.7,
+     "max": 13.01,
+     "firstItemP50": 4.55,
+     "waitMax": 0.02,
+     "together": 8
+    },
+    "before": 2.3,
+    "since": "seek",
+    "playbackRate": 2,
+    "visible": 1.0
+   },
+   "playing": {
+    "from": 1247.0,
+    "to": 1426.7,
+    "played": 181.2,
+    "wall": 90.0,
+    "views": 140,
+    "counted": 179.7,
+    "states": {
+     "empty": 8.2,
+     "loading": 7.0,
+     "ready": 164.5
+    },
+    "coverage": 94.5,
+    "firstCaptionAt": 1247.0,
+    "firstReadyAt": 1252,
+    "firstCaptionWall": 0.2,
+    "firstReadyWall": 2.7,
+    "loading": {
+     "episodes": 3,
+     "seconds": 7.0,
+     "longest": 4.3,
+     "flashes": 0
+    },
+    "lag": {
+     "sentences": 50,
+     "measured": 48,
+     "missed": 2,
+     "p50": 0.1,
+     "p90": 0.3,
+     "max": 5.2,
+     "over1s": 1
+    },
+    "batches": {
+     "count": 37,
+     "results": {
+      "ok": 32,
+      "aborted": 4,
+      "pending": 1
+     },
+     "p50": 6.38,
+     "p90": 12.95,
+     "max": 19.51,
+     "firstItemP50": 5.54,
+     "waitMax": 0.05,
+     "together": 32
+    },
+    "playbackRate": 2,
+    "visible": 1.0
+   }
+  }
+ ]
+}

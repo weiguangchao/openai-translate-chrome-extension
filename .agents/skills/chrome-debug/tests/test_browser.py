@@ -172,6 +172,45 @@ class Trace(BrowserCase):
         self.assertGreater(stats["firstReadyAt"], stats["firstCaptionAt"])
         self.assertEqual(stats["playbackRate"], 1.5)
 
+    def test_landing_trace_starts_at_the_seek_target(self):
+        """43d03e2b and docs/reviews/2026-10-09-chrome-debug-high-rate.md.
+
+        media returns once playback resumes, so without since the trace started
+        1.7-4.3 s of video after the target and the wait after seeking read low.
+        """
+        tab = self.open("since-seek", trace=True)
+        self.result(self.do(tab, action="media", time=40, rate=2, play=True))
+        stats = self.result(self.do(tab, action="trace", seconds=6, since="seek"))["stats"]
+        self.assertLessEqual(abs(stats["from"] - 40), 1.0, stats)
+        self.assertEqual(stats["since"], "seek")
+        self.assertGreaterEqual(stats["played"] + stats["before"], 6)
+
+    def test_opening_trace_reports_the_wait_after_opening(self):
+        """AGENTS.md: wait after opening is (firstReadyAt - firstCaptionAt) / playbackRate from the open."""
+        tab = self.open("since-open", trace=True, delay=5000)
+        self.result(self.do(tab, action="media", rate=1.5, play=True))
+        stats = self.result(self.do(tab, action="trace", seconds=12, since="open"))["stats"]
+        self.assertLessEqual(stats["from"], 1.0, stats)
+        self.assertGreater(stats["firstReadyAt"], stats["firstCaptionAt"])
+        self.assertLess(stats["firstCaptionWall"], stats["firstReadyWall"])
+
+    def test_opening_trace_starts_where_the_video_settled(self):
+        """HBO Max resumes where the viewer stopped; the opening trace counts from there."""
+        tab = self.open("since-resume", trace=True)
+        self.result(self.do(tab, action="media", time=30, play=True))
+        stats = self.result(self.do(tab, action="trace", seconds=4, since="open"))["stats"]
+        self.assertLessEqual(abs(stats["from"] - 30), 1.0, stats)
+
+    def test_since_seek_fails_when_the_video_left_the_target(self):
+        tab = self.open("since-left", trace=True)
+        self.result(self.do(tab, action="media", time=40, play=True))
+        self.result(self.do(tab, action="evaluate", expression="(document.querySelector('video').currentTime = 5) && 1"))
+        failed = self.result(self.do(tab, action="trace", seconds=5, since="seek"), ok=False)
+        self.assertRegex(failed["value"]["fail"], r"^video at \d(\.\d+)? s, out of reach of 40(\.0)? s since the seek$")
+        missing = self.result(self.do(self.open("since-none", trace=True), action="trace", seconds=5, since="seek"),
+                              ok=False)
+        self.assertEqual(missing["value"]["fail"], "since seek needs an earlier media step with time")
+
 
 class Run(BrowserCase):
 

@@ -16,7 +16,8 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from live import STATE, alive, load_state, session_id
-from worker_trace import clock as clock_stats, continuous, summarize as summarize_worker, trace_line
+from worker_trace import (MARK_SLACK_SECONDS, MAX_RATE, clock as clock_stats, continuous, settled,
+                          summarize as summarize_worker, trace_line)
 
 PORT_FILE = Path(
     os.environ.get("CHROME_DEBUG_PORT_FILE")
@@ -382,7 +383,7 @@ STEP_FIELDS = {
     "overlay": ({}, {"wait": bool}),
     "requests": ({}, {"match": list}),
     "evaluate": ({"expression": str}, {"save": str}),
-    "trace": ({"seconds": NUMBER}, {"selector": str, "save": str}),
+    "trace": ({"seconds": NUMBER}, {"selector": str, "save": str, "since": str}),
     "screenshot": ({"path": str}, {}),
     "focus": ({}, {}),
 }
@@ -431,6 +432,8 @@ def validate_step(step, where):
         problems.append(f"{where}: match must not be empty")
     if action == "trace" and not 1 <= step["seconds"] <= 600:
         problems.append(f"{where}: trace seconds must be 1-600")
+    if action == "trace" and step.get("since", "open") not in ("open", "seek"):
+        problems.append(f"{where}: since must be open or seek")
     return problems
 
 
@@ -529,6 +532,7 @@ class Tab:
         self.worker_targets = []
         self.worker_events = []
         self.saw_view = False
+        self.seek_mark = None
 
     def on_event(self, event):
         method = event.get("method")
@@ -842,11 +846,13 @@ class Tab:
 
         def sample():
             due = seeking["due"]
+            stamp = time.time() * 1000
             value = self.sample(seek_probe if due else probe)
             if due and isinstance(value, dict):
                 seeking["due"] = False
                 seeking["at"] = time.monotonic()
                 seeking["count"] += value["seeked"]
+                self.seek_mark = (stamp, value["time"])
             return value
         if play or self.keep_playing:
             self.expect_motion = True
@@ -984,22 +990,42 @@ class Tab:
     def do_trace(self, step):
         self.expect_motion = True
         started = time.time() * 1000
+        count_from = step.get("since")
+        if count_from == "seek" and self.seek_mark is None:
+            return {"ok": False, "reason": "fail", "value": {"fail": "since seek needs an earlier media step with time"}}
         selector = json.dumps(step.get("selector", "video"))
         probe = f"""(() => {{
           const video = document.querySelector({selector});
           if (!video) return null;
           {video_report()}
         }})()"""
-        progress = {"played": 0.0, "last": None, "last_at": None, "playing_since": None, "milestone": TRACE_MILESTONE}
+        progress = {"played": 0.0, "mark": None, "before": None, "last": None, "last_at": None,
+                    "playing_since": None, "milestone": TRACE_MILESTONE}
 
         def summary():
-            return summarize_worker(self.worker_events, self.run_id, started, progress["played"])
+            before = progress["before"] or 0.0
+            full = summarize_worker(self.worker_events, self.run_id, started, progress["played"] - before,
+                                    since=progress["mark"], before=before)
+            if count_from:
+                full["stats"]["since"] = count_from
+            return full
 
         def passed(value):
             if not isinstance(value, dict):
                 return False
             self.remember(value)
             moving = not value["paused"] and not value["ad"]
+            if moving and count_from and progress["before"] is None:
+                now = time.time() * 1000
+                mark = self.seek_mark if count_from == "seek" else settled(self.worker_events, self.run_id, now)
+                if mark:
+                    offset = value["time"] - mark[1]
+                    reach = (now - mark[0]) / 1000 * MAX_RATE + MARK_SLACK_SECONDS
+                    if count_from == "seek" and not -MARK_SLACK_SECONDS <= offset <= reach:
+                        self.fail_reason = f"video at {value['time']} s, out of reach of {mark[1]} s since the seek"
+                        return FAIL
+                    progress["mark"] = mark
+                    progress["before"] = progress["played"] = max(0.0, offset)
             last, now = progress["last"], time.monotonic()
             if moving and last is not None and continuous(value["time"] - last, now - progress["last_at"]):
                 progress["played"] += value["time"] - last

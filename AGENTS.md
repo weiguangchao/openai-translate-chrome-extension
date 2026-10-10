@@ -15,13 +15,14 @@
 
 ## Verifying
 
-In a real-browser check, report the metrics below for each build on YouTube, HBO Max and X at 1x, 1.25x, 1.5x and 2x. Each run seeks once into a segment with no cached translations, traces 45 s from the landing point, then keeps playing and traces 180 s; durations are video seconds. Most X videos are too short for both traces, so use the X video in the chrome-debug smoke checks.
+In a real-browser check, report the metrics below for each build on YouTube, HBO Max and X at 1x, 1.25x, 1.5x and 2x. Each run reloads Subline so no translation is cached, opens the video, sets the rate and traces 45 s with `"since": "open"`. It then seeks once into a segment with no cached translations, away from where the opening trace played, traces 45 s with `"since": "seek"` for the landing trace, then keeps playing and traces 180 s; durations are video seconds. Open YouTube videos with `t=0s`, and use an X video long enough for all three traces, such as the one in the chrome-debug smoke checks. HBO Max resumes where the episode last stopped, so its opening trace starts there.
 
-A run counts only if its traces report the tested `playbackRate`, none is marked `throttled` (keep Chrome in front), and the landing trace starts at the seek target rather than where YouTube or HBO Max last stopped.
+A run counts only if its traces report the tested `playbackRate`, none is marked `throttled` (keep Chrome in front), and the opening trace starts at 0 s, or on HBO Max at the resume position. The landing trace fails by itself when the video leaves the seek target.
 
 - Loading while playing: the share of subtitle time that shows the loading placeholder instead of a translation, from the 180 s trace: `states.loading / (states.loading + states.ready)`.
-- Wait after seeking: the seconds a viewer waits after the seek until the first subtitle on screen shows its translation, from the 45 s trace: `(firstReadyAt - firstCaptionAt) / playbackRate`.
-- Loading after seeking: the same share as Loading while playing, from the 45 s trace.
+- Wait after opening: the seconds a viewer waits after opening the video until the first subtitle on screen shows its translation, from the opening trace: `(firstReadyAt - firstCaptionAt) / playbackRate`.
+- Wait after seeking: the seconds a viewer waits after the seek until the first subtitle on screen shows its translation, from the landing trace: `(firstReadyAt - firstCaptionAt) / playbackRate`.
+- Loading after seeking: the same share as Loading while playing, from the landing trace.
 
 ## Glossary
 
