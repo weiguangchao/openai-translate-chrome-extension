@@ -5,6 +5,10 @@
 - Any prose surface → the unslop skill. Your reply is a prose surface. Write it per Writing the reply.
 - Before commit → the deslop skill
 
+## Git
+
+- When Codex creates a commit, append `Co-authored-by: Codex <noreply@openai.com>` to the commit message.
+
 ## Pull requests
 
 - Never make a PR unless the developer explicitly asks you to do so.
