@@ -165,7 +165,7 @@ def batch_view(batch):
 
 
 def settled(events, run, until):
-    # The first view after the last jump up to until, such as a site's resume or the end of a pre-roll ad.
+    # The first view after the last jump up to until, such as a resume or the end of a pre-roll ad.
     views = [(stamp, event) for stamp, event in events
              if event.get("e") == "view" and event.get("run") == run and stamp <= until and not event.get("seeking")]
     start = None

@@ -58,9 +58,8 @@ ACTIONS_HELP = """Actions
                    Needs a tab that watches Subline (run adds this when a check has
                    a trace step; open needs --trace). Collects Subline timing events
                    for seconds of played video, or to the end. since "open" counts
-                   from where the video settled after the tab opened: the last jump
-                   before the trace, such as the site's resume or the end of a
-                   pre-roll ad. since "seek" counts from the last media step with
+                   from where the video settled after the tab opened, past any jump
+                   or pre-roll ad. since "seek" counts from the last media step with
                    time, and fails when the video is not where it could have played
                    to from there. With since, seconds include the video played
                    before the step, reported as before. Reports lag, loading,

@@ -15,9 +15,9 @@
 
 ## Verifying
 
-In a real-browser check, report the metrics below for each build on YouTube, HBO Max and X at 1x, 1.25x, 1.5x and 2x. Each run reloads Subline so no translation is cached, opens the video, sets the rate and traces 45 s with `"since": "open"`. It then seeks once into a segment with no cached translations, away from where the opening trace played, traces 45 s with `"since": "seek"` for the landing trace, then keeps playing and traces 180 s; durations are video seconds. Open YouTube videos with `t=0s`, and use an X video long enough for all three traces, such as the one in the chrome-debug smoke checks. HBO Max resumes where the episode last stopped, so its opening trace starts there.
+In a real-browser check, report the metrics below for each build on YouTube, HBO Max and X at 1x, 1.25x, 1.5x and 2x. Each run reloads Subline so no translation is cached, opens the video, sets the rate and traces 45 s with `"since": "open"`. It then seeks once into a segment with no cached translations, away from where the opening trace played, traces 45 s with `"since": "seek"` for the landing trace, then keeps playing and traces 180 s; durations are video seconds. Use an X video long enough for all three traces, such as the one in the chrome-debug smoke checks.
 
-A run counts only if its traces report the tested `playbackRate`, none is marked `throttled` (keep Chrome in front), and the opening trace starts at 0 s, or on HBO Max at the resume position. The landing trace fails by itself when the video leaves the seek target.
+A run counts only if its traces report the tested `playbackRate` and none is marked `throttled` (keep Chrome in front). The landing trace fails by itself when the video leaves the seek target.
 
 - Wait after opening: the seconds a viewer waits after opening the video until the first subtitle on screen shows its translation, from the opening trace: `(firstReadyAt - firstCaptionAt) / playbackRate`.
 - Wait after seeking: the seconds a viewer waits after the seek until the first subtitle on screen shows its translation, from the landing trace: `(firstReadyAt - firstCaptionAt) / playbackRate`.

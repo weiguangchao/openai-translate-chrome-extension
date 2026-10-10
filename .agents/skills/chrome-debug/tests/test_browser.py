@@ -195,7 +195,7 @@ class Trace(BrowserCase):
         self.assertLess(stats["firstCaptionWall"], stats["firstReadyWall"])
 
     def test_opening_trace_starts_where_the_video_settled(self):
-        """HBO Max resumes where the viewer stopped; the opening trace counts from there."""
+        """A site may start the video elsewhere; the opening trace counts from where it settled."""
         tab = self.open("since-resume", trace=True)
         self.result(self.do(tab, action="media", time=30, play=True))
         stats = self.result(self.do(tab, action="trace", seconds=4, since="open"))["stats"]
