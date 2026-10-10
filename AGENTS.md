@@ -11,7 +11,7 @@
 - Never make a PR unless the developer explicitly asks you to do so.
 - Conventional commit titles, plain language: fix(web): new threads no longer spike CPU.
 - Body: the problem in a sentence or two, then how you fixed it.
-- UI changes need before/after images. Motion or timing needs a short video.
+- UI changes need before/after images.
 
 ## Verifying
 
