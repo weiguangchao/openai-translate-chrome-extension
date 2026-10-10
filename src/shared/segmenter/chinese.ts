@@ -1,4 +1,4 @@
-import { fitLines, type LanguageSegmenter, type WordBreak } from './lines';
+import { fitCaptions, type LanguageSegmenter, type WordBreak } from './lines';
 
 interface ChineseScript {
   readonly locale: 'zh-Hans' | 'zh-Hant';
@@ -50,7 +50,10 @@ function chinese(script: ChineseScript): LanguageSegmenter {
     }
     return breaks;
   };
-  return { sentenceEnds, lines: (text) => fitLines(text, { clauseBreaks, wordBreaks }) };
+  return {
+    sentenceEnds,
+    captions: (text, cueBreaks) => fitCaptions(text, { clauseBreaks, wordBreaks }, cueBreaks),
+  };
 }
 
 export const simplifiedChinese = chinese({

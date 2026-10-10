@@ -21,12 +21,7 @@ it('selects the final JSON once for both its return value and publications', asy
   respond(`${payload([result(0, '草稿')])}\nFinal\n${payload([result(0, '最终')])}`);
   const published = vi.fn();
   await expect(
-    translateCaptionBatch(
-      settings,
-      [{ text: 'Original.', needsSplit: false }],
-      undefined,
-      published,
-    ),
+    translateCaptionBatch(settings, ['Original.'], undefined, published),
   ).resolves.toEqual(['最终']);
   expect(published.mock.calls).toEqual([[0, '最终']]);
 });
@@ -41,12 +36,7 @@ it.each([
   respond(`${draft}\nFinal\n${payload([result(0, '最终')])}`);
   const published = vi.fn();
   await expect(
-    translateCaptionBatch(
-      settings,
-      [{ text: 'Original.', needsSplit: false }],
-      undefined,
-      published,
-    ),
+    translateCaptionBatch(settings, ['Original.'], undefined, published),
   ).resolves.toEqual(['最终']);
   expect(published.mock.calls).toEqual([[0, '最终']]);
 });
@@ -60,15 +50,7 @@ it.each([
     respond(payload(values));
     const published = vi.fn();
     await expect(
-      translateCaptionBatch(
-        settings,
-        [
-          { text: 'One.', needsSplit: false },
-          { text: 'Two.', needsSplit: false },
-        ],
-        undefined,
-        published,
-      ),
+      translateCaptionBatch(settings, ['One.', 'Two.'], undefined, published),
     ).resolves.toBeNull();
     expect(published.mock.calls).toEqual([[values.length === 3 ? 1 : 0, '有效']]);
   },
@@ -80,15 +62,7 @@ it.each([{ values: [result(1, '歧义')] }, { values: [result('9007199254740993'
     respond(payload(values));
     const published = vi.fn();
     await expect(
-      translateCaptionBatch(
-        settings,
-        [
-          { text: 'One.', needsSplit: false },
-          { text: 'Two.', needsSplit: false },
-        ],
-        undefined,
-        published,
-      ),
+      translateCaptionBatch(settings, ['One.', 'Two.'], undefined, published),
     ).resolves.toBeNull();
     expect(published).not.toHaveBeenCalled();
   },
@@ -96,19 +70,14 @@ it.each([{ values: [result(1, '歧义')] }, { values: [result('9007199254740993'
 
 it('aligns an unordered complete one-based list', async () => {
   respond(payload([result('2', '乙'), result('1', '甲')]));
-  await expect(
-    translateCaptionBatch(settings, [
-      { text: 'One.', needsSplit: false },
-      { text: 'Two.', needsSplit: false },
-    ]),
-  ).resolves.toEqual(['甲', '乙']);
+  await expect(translateCaptionBatch(settings, ['One.', 'Two.'])).resolves.toEqual(['甲', '乙']);
 });
 
 it('does not treat an invalid single ID as a missing ID', async () => {
   respond(payload([result('bad', '无效')]));
   const published = vi.fn();
   await expect(
-    translateCaptionBatch(settings, [{ text: 'Only.', needsSplit: false }], undefined, published),
+    translateCaptionBatch(settings, ['Only.'], undefined, published),
   ).resolves.toBeNull();
   expect(published).not.toHaveBeenCalled();
 });
@@ -117,15 +86,7 @@ it('recovers complete results from a truncated response only after parsing fails
   respond('{"results":[' + JSON.stringify(result(0, '完整')) + ',{"id":1,"parts":[');
   const published = vi.fn();
   await expect(
-    translateCaptionBatch(
-      settings,
-      [
-        { text: 'One.', needsSplit: false },
-        { text: 'Two.', needsSplit: false },
-      ],
-      undefined,
-      published,
-    ),
+    translateCaptionBatch(settings, ['One.', 'Two.'], undefined, published),
   ).resolves.toBeNull();
   expect(published.mock.calls).toEqual([[0, '完整']]);
 });
@@ -134,12 +95,7 @@ it('does not publish a parts array from an incomplete result as a standalone rep
   respond('{"results":[{"id":0,"parts":[{"translation":"未完成"}]');
   const published = vi.fn();
   await expect(
-    translateCaptionBatch(
-      settings,
-      [{ text: 'Original.', needsSplit: false }],
-      undefined,
-      published,
-    ),
+    translateCaptionBatch(settings, ['Original.'], undefined, published),
   ).resolves.toBeNull();
   expect(published).not.toHaveBeenCalled();
 });
@@ -171,15 +127,7 @@ it.each(
     respond(`${draft}\nFinal\n${final}`);
     const publish = vi.fn();
     await expect(
-      translateCaptionBatch(
-        settings,
-        [
-          { text: 'One.', needsSplit: false },
-          { text: 'Two.', needsSplit: false },
-        ],
-        undefined,
-        publish,
-      ),
+      translateCaptionBatch(settings, ['One.', 'Two.'], undefined, publish),
     ).resolves.toBeNull();
     expect(publish.mock.calls).toEqual(published);
   },
@@ -198,12 +146,7 @@ it('discards a response that arrives after cancellation even if the provider ign
   );
   const controller = new AbortController();
   const published = vi.fn();
-  const work = translateCaptionBatch(
-    settings,
-    [{ text: 'Old source.', needsSplit: false }],
-    controller.signal,
-    published,
-  );
+  const work = translateCaptionBatch(settings, ['Old source.'], controller.signal, published);
   controller.abort();
   finish(Response.json({ choices: [{ message: { content: payload([result(0, '旧译文')]) } }] }));
   await expect(work).rejects.toThrow();

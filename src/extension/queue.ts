@@ -1,5 +1,4 @@
 import { translateCaptionBatch, translationBatchLimit } from '../shared/api';
-import { translationInput, type CaptionTranslation } from '../shared/caption-translation';
 import { latencySampleLimit, maxInFlightRequests } from '../shared/limits';
 import {
   planPlayback,
@@ -15,7 +14,7 @@ import type { TraceEvent } from '../shared/trace';
 export const translationCacheLimit = 5000;
 
 export interface TranslationStore {
-  save(key: string, translation: CaptionTranslation): void;
+  save(key: string, translation: string): void;
   remove(key: string): void;
 }
 
@@ -24,11 +23,10 @@ interface Job {
   consumer: string;
   settings: Settings;
   text: string;
-  needsSplit: boolean;
   solo: boolean;
   pack?: string;
-  promise: Promise<CaptionTranslation>;
-  resolve: (value: CaptionTranslation) => void;
+  promise: Promise<string>;
+  resolve: (value: string) => void;
   reject: (error: Error) => void;
   controller?: AbortController;
   batch?: Job[];
@@ -58,7 +56,7 @@ interface Consumer {
 
 export class TranslationQueue {
   private jobs = new Map<string, Job>();
-  private finished = new Map<string, CaptionTranslation>();
+  private finished = new Map<string, string>();
   private consumers = new Map<string, Consumer>();
   private backoffUntil = 0;
   private backoffReason = '';
@@ -73,38 +71,32 @@ export class TranslationQueue {
     private trace: (event: TraceEvent) => void = () => {},
   ) {}
 
-  private key(settings: Settings, text: string, needsSplit = false): string {
+  private key(settings: Settings, text: string): string {
     return JSON.stringify([
       settings.baseUrl,
       settings.model,
       settings.sourceLanguage,
       settings.targetLanguage,
       text,
-      translationInput(text, needsSplit).needsSplit,
     ]);
   }
 
-  restore(entries: Iterable<readonly [string, CaptionTranslation]>, store: TranslationStore): void {
+  restore(entries: Iterable<readonly [string, string]>, store: TranslationStore): void {
     for (const [key, translation] of entries)
       if (!this.finished.has(key)) this.finished.set(key, translation);
     this.store = store;
     this.evict();
   }
 
-  lookup(settings: Settings, text: string, needsSplit = false): Promise<CaptionTranslation | null> {
-    const key = this.key(settings, text, needsSplit);
+  lookup(settings: Settings, text: string): Promise<string | null> {
+    const key = this.key(settings, text);
     return Promise.resolve(
       this.finished.get(key) ?? this.jobs.get(key)?.promise.catch(() => null) ?? null,
     );
   }
 
-  request(
-    consumer: string,
-    settings: Settings,
-    text: string,
-    needsSplit = false,
-  ): Promise<CaptionTranslation> {
-    const key = this.key(settings, text, needsSplit);
+  request(consumer: string, settings: Settings, text: string): Promise<string> {
+    const key = this.key(settings, text);
     const state: Consumer = this.consumers.get(consumer) ?? {
       packs: [],
       snapshot: [],
@@ -120,7 +112,7 @@ export class TranslationQueue {
     if (finished !== undefined) return Promise.resolve(finished);
     if (this.expired.has(key)) return Promise.reject(new ProviderTimeoutError());
     try {
-      const job = this.enqueue(key, settings, text, needsSplit, consumer);
+      const job = this.enqueue(key, settings, text, consumer);
       this.drain();
       return job.promise;
     } catch (error) {
@@ -134,7 +126,7 @@ export class TranslationQueue {
     cues: readonly PlaybackCue[],
     time = 0,
     rate = 1,
-  ): Promise<(CaptionTranslation | null)[]> {
+  ): Promise<(string | null)[]> {
     if (!cues.length) {
       this.consumers.delete(consumer);
       this.prune(true);
@@ -144,7 +136,7 @@ export class TranslationQueue {
     }
     const state = this.consumers.get(consumer);
     const snapshot = cues.map((cue) => ({
-      key: this.key(settings, cue.text, cue.needsSplit),
+      key: this.key(settings, cue.text),
       cue,
     }));
     const open = snapshot.filter(
@@ -159,14 +151,12 @@ export class TranslationQueue {
     });
     const packs: Pack[] = planned.map((request) => ({
       id: `${consumer}:${request.cues[0].start}:${request.cues[0].text}`,
-      keys: request.cues.map((cue) => this.key(settings, cue.text, cue.needsSplit)),
+      keys: request.cues.map((cue) => this.key(settings, cue.text)),
       cues: request.cues,
     }));
     const current = cues.some(
       (cue) =>
-        cue.start <= time &&
-        time < cue.end &&
-        this.key(settings, cue.text, cue.needsSplit) === state?.current,
+        cue.start <= time && time < cue.end && this.key(settings, cue.text) === state?.current,
     )
       ? state?.current
       : undefined;
@@ -186,7 +176,7 @@ export class TranslationQueue {
         request.cues.forEach((cue, cueIndex) => {
           const key = pack.keys[cueIndex];
           if (this.finished.has(key) || this.expired.has(key)) return;
-          const job = this.enqueue(key, settings, cue.text, cue.needsSplit, consumer, {
+          const job = this.enqueue(key, settings, cue.text, consumer, {
             pack: pack.id,
           });
           if (!job.controller) job.pack = pack.id;
@@ -243,7 +233,7 @@ export class TranslationQueue {
     this.sendTimer = undefined;
   }
 
-  private results(keys: string[]): Promise<(CaptionTranslation | null)[]> {
+  private results(keys: string[]): Promise<(string | null)[]> {
     return Promise.all(
       keys.map(
         (key) => this.finished.get(key) ?? this.jobs.get(key)?.promise.catch(() => null) ?? null,
@@ -260,7 +250,7 @@ export class TranslationQueue {
     for (const key of this.expired) if (!live.has(key)) this.expired.delete(key);
   }
 
-  private remember(key: string, translation: CaptionTranslation): void {
+  private remember(key: string, translation: string): void {
     this.finished.delete(key);
     this.finished.set(key, translation);
     this.store?.save(key, translation);
@@ -285,7 +275,6 @@ export class TranslationQueue {
     key: string,
     settings: Settings,
     text: string,
-    needsSplit: boolean,
     consumer: string,
     options?: { pack: string },
   ): Job {
@@ -298,7 +287,7 @@ export class TranslationQueue {
     }
     if (Date.now() < this.backoffUntil) throw new Error(this.backoffReason);
     let resolve!: Job['resolve'], reject!: Job['reject'];
-    const promise = new Promise<CaptionTranslation>((yes, no) => {
+    const promise = new Promise<string>((yes, no) => {
       resolve = yes;
       reject = no;
     });
@@ -308,7 +297,6 @@ export class TranslationQueue {
       consumer,
       settings,
       text,
-      needsSplit: translationInput(text, needsSplit).needsSplit,
       solo: false,
       ...(options?.pack ? { pack: options.pack } : {}),
       promise,
@@ -419,7 +407,7 @@ export class TranslationQueue {
       blocked: false,
       atRisk: predictedMs > Math.max(0, slack) * 1000,
     });
-    const deliver = (index: number, translation: CaptionTranslation) => {
+    const deliver = (index: number, translation: string) => {
       if (controller.signal.aborted) return;
       if (!delivered) {
         delivered = true;
@@ -435,7 +423,7 @@ export class TranslationQueue {
     };
     const work = translateCaptionBatch(
       first.settings,
-      batch.map((job) => translationInput(job.text, job.needsSplit)),
+      batch.map((job) => job.text),
       controller.signal,
       deliver,
       {

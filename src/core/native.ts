@@ -2,6 +2,7 @@ import type { TimelineState } from './bridge/protocol';
 import type { TimedCue } from './cues';
 import { languageTrack } from './languages';
 import type { LiveCaption } from './platform';
+import { authoredSubtitleCaptions } from './sentences';
 
 const cueTextCache = new WeakMap<TextTrackCue, { source: unknown; text: string }>();
 
@@ -39,6 +40,7 @@ export class NativeTimeline {
   private track: TextTrack | undefined;
   private language = '';
   private cues: TimedCue[] | null = null;
+  private captions: TimedCue[] | null = null;
 
   read(video: HTMLVideoElement, sourceLanguage: string): TimelineState {
     const track = selectedTrack(video, sourceLanguage);
@@ -71,8 +73,10 @@ export class NativeTimeline {
           cue.endTime !== this.cues![i].endTime ||
           cue.text !== this.cues![i].text,
       )
-    )
+    ) {
       this.cues = cues;
+      this.captions = cues && authoredSubtitleCaptions(cues, sourceLanguage);
+    }
     const otherLanguage =
       !track &&
       [...video.textTracks].some(
@@ -80,7 +84,7 @@ export class NativeTimeline {
       );
     return {
       mode: video.readyState >= 1 ? 'model' : 'checking',
-      source: otherLanguage ? [] : this.cues,
+      source: otherLanguage ? [] : this.captions,
     };
   }
 
@@ -90,5 +94,6 @@ export class NativeTimeline {
     this.track = undefined;
     this.language = '';
     this.cues = null;
+    this.captions = null;
   }
 }

@@ -1,7 +1,7 @@
 import { servePageTimeline } from '../../core/bridge/page';
 import { mediaIdentity } from '../../core/bridge/source-cache';
 import { languageTrack } from '../../core/languages';
-import { authoredSubtitleSentences } from '../../core/sentences';
+import { authoredSubtitleCaptions } from '../../core/sentences';
 import { fetchSubtitleText, loadWebVtt } from '../../core/webvtt';
 import { hboMediaUrl, parseHboManifest } from './captions';
 import { hboVideoId } from './player';
@@ -84,7 +84,7 @@ servePageTimeline('hbo', {
           );
           const source = languageTrack(preferred, (track) => track.language, language);
           return source
-            ? authoredSubtitleSentences(
+            ? authoredSubtitleCaptions(
                 await loadWebVtt(source.files, signal),
                 request.sourceLanguage,
               )

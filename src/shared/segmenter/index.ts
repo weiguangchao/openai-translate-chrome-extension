@@ -3,7 +3,7 @@ import { english } from './english';
 import type { LanguageSegmenter } from './lines';
 
 export type { LanguageSegmenter, TextRange } from './lines';
-export { needsSubtitleSegmentation, subtitleDisplayLength, subtitleDisplayLimit } from './width';
+export { captionDisplayLimit, subtitleDisplayLength } from './width';
 
 const segmenters = new Map<string, LanguageSegmenter>([
   ['en', english],

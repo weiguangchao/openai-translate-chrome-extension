@@ -22,7 +22,6 @@ function cues(count: number, gap = 4, from = 0) {
     text: `Cue ${index + 1}`,
     start: from + index * gap,
     end: from + index * gap + gap,
-    needsSplit: false,
   }));
 }
 
@@ -61,10 +60,10 @@ it('leaves a cue that is about to leave the screen to the visible caption reques
     time: 5,
     rate: 1,
     cues: [
-      { text: 'Gone', start: 0, end: 4, needsSplit: false },
-      { text: 'Ending', start: 4, end: 5 + minShowSeconds, needsSplit: false },
-      { text: 'Next', start: 6.5, end: 10, needsSplit: false },
-      { text: 'Later', start: 10, end: 14, needsSplit: false },
+      { text: 'Gone', start: 0, end: 4 },
+      { text: 'Ending', start: 4, end: 5 + minShowSeconds },
+      { text: 'Next', start: 6.5, end: 10 },
+      { text: 'Later', start: 10, end: 14 },
     ],
   });
   expect(texts(requests)).toEqual([['Next'], ['Later']]);
@@ -112,7 +111,7 @@ it('caps each request by the batch limit and pack span, and the plan by the sent
     rate: 1,
     cues: [
       ...cues(3, 3, 5),
-      { text: 'Long', start: 14, end: 14 + packSpanSeconds + 2, needsSplit: true },
+      { text: 'Long', start: 14, end: 14 + packSpanSeconds + 2 },
       ...cues(4, 1, 26).map((cue) => ({ ...cue, text: `After ${cue.text}` })),
     ],
   });
@@ -128,9 +127,9 @@ it('does not pack sentences across a long silence', () => {
     time: 0,
     rate: 1,
     cues: [
-      { text: 'Before', start: 5, end: 6, needsSplit: false },
-      { text: 'Still before', start: 6, end: 7, needsSplit: false },
-      { text: 'After the pause', start: 20, end: 21, needsSplit: false },
+      { text: 'Before', start: 5, end: 6 },
+      { text: 'Still before', start: 6, end: 7 },
+      { text: 'After the pause', start: 20, end: 21 },
     ],
   });
   expect(texts(requests)).toEqual([['Before', 'Still before']]);

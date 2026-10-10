@@ -3,12 +3,17 @@ import { CaptionController } from '../src/core/controller';
 import { createYoutubePlatform } from '../src/platforms/youtube/platform';
 import { DEFAULT_SETTINGS, publicSettings } from '../src/shared/settings';
 import { TranslationQueue } from '../src/extension/queue';
-import { githubCaption, githubCaptionTrack, githubCommaParts } from './fixtures/github-caption';
+import { githubCaption, githubCaptionTrack } from './fixtures/github-caption';
 import { providerReply, requestedTexts } from './fixtures/provider';
-import type { CaptionTranslation } from '../src/shared/caption-translation';
-import { structuredReply } from './fixtures/long-caption';
+
+const githubCaptions = [
+  'Myself, Mitchell the creator of Ghostie, and many other people are realizing',
+  'that GitHub might not be the safest place for us to be leaving our code now',
+  "that they're randomly reverting merges and having downtime that is measured in days.",
+];
 
 let controller: CaptionController | undefined;
+let clockStart = 0;
 let resourceEntries: (entries: PerformanceEntry[]) => void;
 afterEach(() => {
   controller?.destroy();
@@ -29,6 +34,8 @@ function prefetchTexts(sendMessage: { mock: { calls: unknown[][] } }): string[] 
 
 function setup() {
   vi.useFakeTimers();
+  clockStart = Math.max(Date.now(), clockStart) + 3_600_000;
+  vi.setSystemTime(clockStart);
   vi.stubGlobal(
     'PerformanceObserver',
     class {
@@ -64,10 +71,9 @@ function setup() {
       text?: string;
       time?: number;
       rate?: number;
-      cues?: { text: string; needsSplit: boolean; start: number; end: number }[];
+      cues?: { text: string; start: number; end: number }[];
       cacheOnly?: boolean;
-      needsSplit?: boolean;
-    }): Promise<{ ok: boolean; data?: CaptionTranslation | null }> =>
+    }): Promise<{ ok: boolean; data?: string | null }> =>
       Promise.resolve(
         message.type === 'translate' ? { ok: true, data: `译文：${message.text}` } : { ok: true },
       ),
@@ -94,7 +100,7 @@ async function playTo(video: HTMLVideoElement, time: number) {
   await vi.advanceTimersByTimeAsync(0);
 }
 
-it('prefetches a long subtitle as local lines and shows each line on time after a seek', async () => {
+it('prefetches a long subtitle as separate captions and shows each on time after a seek', async () => {
   const { video, player, sendMessage, lines } = setup();
   Object.assign(player, {
     getOption: () => ({ vssId: 'a.en' }),
@@ -114,17 +120,15 @@ it('prefetches a long subtitle as local lines and shows each line on time after 
       },
     }),
   });
-  let finish!: (value: Response) => void;
-  const requests: string[][] = [];
+  const pending: { texts: string[]; resolve: (value: Response) => void }[] = [];
   const providerInputs: unknown[] = [];
   vi.stubGlobal(
     'fetch',
     vi.fn(async (url: string, init?: RequestInit) => {
       if (url.includes('/api/timedtext')) return Response.json(githubCaptionTrack);
-      requests.push(requestedTexts(init!));
-      providerInputs.push(JSON.parse(JSON.parse(init!.body as string).messages[1].content));
+      providerInputs.push(...JSON.parse(JSON.parse(init!.body as string).messages[1].content));
       return new Promise<Response>((resolve) => {
-        finish = resolve;
+        pending.push({ texts: requestedTexts(init!), resolve });
       });
     }),
   );
@@ -135,8 +139,8 @@ it('prefetches a long subtitle as local lines and shows each line on time after 
       return {
         ok: true,
         data: await (message.cacheOnly
-          ? queue.lookup(saved, message.text!, message.needsSplit === true)
-          : queue.request('video', saved, message.text!, message.needsSplit === true)),
+          ? queue.lookup(saved, message.text!)
+          : queue.request('video', saved, message.text!)),
       };
     if (message.type === 'prefetch-hold') queue.hold('video', message.time ?? 0);
     if (message.type === 'prefetch') {
@@ -157,21 +161,26 @@ it('prefetches a long subtitle as local lines and shows each line on time after 
     [true, ''],
     [false, '翻译中'],
   ]);
-  expect(requests).toEqual([[githubCaption]]);
-  const split = [
-    githubCommaParts[0],
-    'and many other people are realizing that GitHub might not be the safest place',
-    "for us to be leaving our code now that they're randomly reverting merges",
-    'and having downtime that is measured in days instead of minutes.',
-  ];
-  expect(providerInputs).toEqual([[{ id: 0, parts: split }]]);
-  finish(structuredReply([{ id: 0, parts: split.map((line) => `译文：${line}`) }]));
+  const requested = pending.flatMap((request) => request.texts);
+  expect(requested).toEqual(githubCaptions);
+  expect(requested).not.toContain(githubCaption);
+  expect(providerInputs.every((input) => Object.keys(input as object).join() === 'id,text')).toBe(
+    true,
+  );
+  for (const request of pending)
+    request.resolve(providerReply(request.texts, (text) => `译文：${text}`));
   await vi.advanceTimersByTimeAsync(0);
-  expect([...lines()].map((line) => line.textContent)).toEqual([split[0], `译文：${split[0]}`]);
+  expect([...lines()].map((line) => line.textContent)).toEqual([
+    githubCaptions[0],
+    `译文：${githubCaptions[0]}`,
+  ]);
   video.currentTime = 6.75;
   video.dispatchEvent(new Event('seeked'));
   await vi.advanceTimersByTimeAsync(400);
-  expect([...lines()].map((line) => line.textContent)).toEqual([split[2], `译文：${split[2]}`]);
+  expect([...lines()].map((line) => line.textContent)).toEqual([
+    githubCaptions[1],
+    `译文：${githubCaptions[1]}`,
+  ]);
   const snapshots: string[][] = [];
   for (const time of [0, 3, 8.25, 2]) {
     video.currentTime = time;
@@ -179,13 +188,10 @@ it('prefetches a long subtitle as local lines and shows each line on time after 
     await vi.advanceTimersByTimeAsync(0);
     snapshots.push([...lines()].map((line) => line.textContent ?? ''));
   }
-  expect(snapshots).toEqual([
-    [split[0], `译文：${split[0]}`],
-    [split[1], `译文：${split[1]}`],
-    [split[3], `译文：${split[3]}`],
-    [split[1], `译文：${split[1]}`],
-  ]);
-  expect(requests).toEqual([[githubCaption]]);
+  expect(snapshots).toEqual(
+    [0, 1, 2, 0].map((index) => [githubCaptions[index], `译文：${githubCaptions[index]}`]),
+  );
+  expect(pending.flatMap((request) => request.texts)).toEqual(githubCaptions);
   video.currentTime = 11;
   video.dispatchEvent(new Event('timeupdate'));
   expect([...lines()].map((line) => line.hidden)).toEqual([true, true]);

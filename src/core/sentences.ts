@@ -1,7 +1,8 @@
-import type { CueTiming, TimedCue } from './cues';
-import { needsSubtitleSegmentation, segmenterFor } from '../shared/segmenter';
+import type { TimedCue } from './cues';
+import { sentencePauseSeconds } from '../shared/limits';
+import { segmenterFor } from '../shared/segmenter';
 
-interface SentenceInput extends TimedCue {
+interface CaptionInput extends TimedCue {
   parts?: TimedCue[];
   wordTimed?: boolean;
 }
@@ -11,27 +12,18 @@ interface TextSpan extends TimedCue {
   wordTimed: boolean;
 }
 const cjk = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Thai}]/u;
+const standalone = /^(?:♪[\s\S]*♪|\[[^\]]*\])$/u;
 
-function requestWindows(text: string): number[] {
-  if (text.length <= 5000) return [text.length];
-  const stops: number[] = [];
-  let from = 0;
-  for (const word of new Intl.Segmenter(undefined, { granularity: 'word' }).segment(text)) {
-    if (word.index + word.segment.length - from > 5000 && word.index > from) {
-      stops.push(word.index);
-      from = word.index;
-    }
-  }
-  return [...stops, text.length];
-}
-
-export function subtitleSentences(
-  events: readonly SentenceInput[],
+export function subtitleCaptions(
+  events: readonly CaptionInput[],
   language: string,
   automatic = false,
 ): TimedCue[] {
+  const segmenter = segmenterFor(language);
   const spans: TextSpan[] = [];
   const pauses: number[] = [];
+  const stops: number[] = [];
+  const cueStarts: number[] = [];
   let text = '';
   for (let index = 0; index < events.length; index++) {
     const event = events[index];
@@ -43,34 +35,41 @@ export function subtitleSentences(
       !(cjk.test(text.at(-1)!) && cjk.test(parts[0]?.text[0] ?? ''))
     )
       text += ' ';
+    if (index && [event, events[index - 1]].some((cue) => standalone.test(cue.text.trim())))
+      stops.push(text.length);
+    cueStarts.push(text.length);
     const wordTimed = event.wordTimed === true;
     for (const part of parts) {
       const previous = spans.at(-1);
       const words = previous?.text.trim().split(/\s+/).length ?? 0;
+      const gap = previous ? part.startTime - previous.endTime : 0;
       const wordPause =
         automatic &&
         previous?.wordTimed &&
         wordTimed &&
         words === 1 &&
         part.startTime - previous!.startTime >= 1.5;
-      if (previous && (part.startTime - previous.endTime >= 0.8 || wordPause)) {
+      if (previous && (gap >= 0.8 || wordPause)) {
         pauses.push(text.length);
         if (wordPause) previous.endTime = Math.min(previous.endTime, previous.startTime + 0.6);
       }
+      if (gap >= sentencePauseSeconds) stops.push(text.length);
       const from = text.length;
       text += part.text;
       if (part.text.trim()) spans.push({ ...part, from, to: text.length, wordTimed });
     }
   }
-  const naturalStops = new Set(segmenterFor(language).sentenceEnds(text));
+  const naturalStops = new Set(segmenter.sentenceEnds(text));
   if (automatic || !naturalStops.size) for (const pause of pauses) naturalStops.add(pause);
-  const boundaries = [...new Set([...naturalStops, text.length])].sort((a, b) => a - b);
-  const sentences: TimedCue[] = [];
+  const boundaries = [...new Set([...naturalStops, ...stops, text.length])].sort((a, b) => a - b);
+  const captions: TimedCue[] = [];
   let from = 0;
   let spanIndex = 0;
   for (const boundary of boundaries) {
-    const stops = requestWindows(text.slice(from, boundary)).map((offset) => from + offset);
-    for (const to of stops) {
+    const starts = cueStarts.filter((at) => at > from && at < boundary).map((at) => at - from);
+    const pieces = segmenter.captions(text.slice(from, boundary), starts);
+    const sentence: TimedCue[] = [];
+    for (const to of [...pieces.slice(1).map((piece) => from + piece.from), boundary]) {
       const raw = text.slice(from, to);
       const content = raw.replace(/\s+/g, ' ').trim();
       const first = from + raw.length - raw.trimStart().length;
@@ -89,45 +88,25 @@ export function subtitleSentences(
         };
         const startTime = at(startSpan, first);
         const endTime = at(endSpan, last);
-        if (endTime > startTime) {
-          const cue: TimedCue = { startTime, endTime, text: content };
-          if (needsSubtitleSegmentation(content)) {
-            const timing: CueTiming[] = [];
-            for (let index = spanIndex; index <= endIndex; index++) {
-              const span = spans[index];
-              const left = Math.max(
-                first,
-                span.from + span.text.length - span.text.trimStart().length,
-              );
-              const right = Math.min(
-                last,
-                span.to - (span.text.length - span.text.trimEnd().length),
-              );
-              if (right > left)
-                timing.push({
-                  from: text.slice(first, left).replace(/\s+/g, ' ').length,
-                  to: text.slice(first, right).replace(/\s+/g, ' ').length,
-                  startTime: at(span, left),
-                  endTime: at(span, right),
-                });
-            }
-            cue.timing = timing;
-          }
-          sentences.push(cue);
-        }
+        if (endTime > startTime) sentence.push({ startTime, endTime, text: content });
       }
       from = to;
     }
+    sentence.forEach((caption, index) => {
+      const next = sentence[index + 1];
+      if (next && next.startTime > caption.startTime) caption.endTime = next.startTime;
+    });
+    captions.push(...sentence);
   }
-  return sentences;
+  return captions;
 }
 
-export function authoredSubtitleSentences(cues: readonly TimedCue[], language: string): TimedCue[] {
-  const sentences: TimedCue[] = [];
+export function authoredSubtitleCaptions(cues: readonly TimedCue[], language: string): TimedCue[] {
+  const captions: TimedCue[] = [];
   let run: TimedCue[] = [];
   let latestEnd = -Infinity;
   const flush = () => {
-    sentences.push(...subtitleSentences(run, language));
+    captions.push(...subtitleCaptions(run, language));
     run = [];
   };
   cues.forEach((cue, index) => {
@@ -136,9 +115,9 @@ export function authoredSubtitleSentences(cues: readonly TimedCue[], language: s
     latestEnd = Math.max(latestEnd, cue.endTime);
     if (overlapping) {
       flush();
-      sentences.push({ ...cue, text: cue.text.replace(/\s+/g, ' ').trim() });
+      captions.push({ ...cue, text: cue.text.replace(/\s+/g, ' ').trim() });
     } else run.push(cue);
   });
   flush();
-  return sentences;
+  return captions;
 }

@@ -1,21 +1,20 @@
-# OpenAI Translate Chrome Extension
+# Subline
 
 ## Principle
 
 - Any prose surface → the unslop skill. Your reply is a prose surface. Write it per Writing the reply.
 - Before commit → the deslop skill
-- When the user asks for a real-browser check → the chrome-debug skill
 
 ## Pull requests
 
 - Never make a PR unless the developer explicitly asks you to do so.
 - Conventional commit titles, plain language: fix(web): new threads no longer spike CPU.
 - Body: the problem in a sentence or two, then how you fixed it.
-- UI changes need before/after images. Motion or timing needs a short video.
+- UI changes need before/after images.
 
 ## Verifying
 
-In a real-browser check, report the metrics below for each build on YouTube, HBO Max and X at 1x, 1.25x, 1.5x and 2x. Each run reloads Subline so no translation is cached, opens the video, sets the rate and traces 45 s with `"since": "open"`. It then seeks once into a segment with no cached translations, away from where the opening trace played, traces 45 s with `"since": "seek"` for the landing trace, then keeps playing and traces 180 s; durations are video seconds. Use an X video long enough for all three traces, such as the one in the chrome-debug smoke checks.
+When use the chrome-debug skill for a real-browser check, report the metrics below for each build on YouTube, HBO Max and X at 1x, 1.25x, 1.5x and 2x. Each run reloads Subline so no translation is cached, opens the video, sets the rate and traces 45 s with `"since": "open"`. It then seeks once into a segment with no cached translations, away from where the opening trace played, traces 45 s with `"since": "seek"` for the landing trace, then keeps playing and traces 180 s; durations are video seconds.
 
 A run counts only if its traces report the tested `playbackRate` and none is marked `throttled` (keep Chrome in front). The landing trace fails by itself when the video leaves the seek target.
 
@@ -28,12 +27,12 @@ A run counts only if its traces report the tested `playbackRate` and none is mar
 
 ### Sentence
 
-A sentence is one cue in the source subtitle timeline. YouTube timelines and HBO and X WebVTT timelines first rejoin cues and split them at the source language's sentence-ending punctuation; overlapping HBO and X cues retain their original intervals. Sentences over 80 display columns are split locally, except DOM-only or overlapping subtitles. The Provider never splits them.
+A sentence is text Subline rejoins from downloaded subtitle cues and splits where sentences end: at sentence-ending punctuation, at a silence of at least `sentencePauseSeconds`, and around lyric lines (♪) and sound tags ([…]), which stand alone. Overlapping cues are left as they are.
 
 ### Caption
 
-An input caption is a whole sentence. The source language's segmenter in `src/shared/segmenter` splits an input over 80 display columns into display captions: at clause punctuation first, then between words inside a clause that is still over 80 columns. The Provider translates each display caption of an input in the same request. No caption shows its source before its translation is ready; display captions then show matching source and translation together at times computed by the extension.
+A caption is what Subline translates and shows. A sentence over `captionDisplayLimit` display columns is cut into captions no wider than that: at clause punctuation or between source cues first, then between words, into the fewest balanced pieces, each ending where the next begins. Overlapping cues and captions read from the page DOM stay whole. The Provider translates each caption as its own input and never chooses the breaks. A caption shows its source only together with its translation.
 
 ### Segment
 
-A segment contains up to four consecutive input captions, one per sentence, sent in one Provider request; segments are numbered from zero. Each result maps to an input ID and may contain multiple display captions, so the limit applies before line splitting.
+A segment is four consecutive captions, numbered from zero and recorded in traces as `seg`. It only labels the timeline and doesn't decide Provider requests: each request carries up to four upcoming captions within 10 s of video, whichever segments they belong to.

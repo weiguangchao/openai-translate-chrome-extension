@@ -100,9 +100,7 @@ it('starts each provider deadline only when its HTTP request is sent', async () 
     providerReply(requestedTexts(init), () => '完成'),
   );
   vi.stubGlobal('fetch', fetch);
-  const work = ['A', 'B', 'C', 'D'].map((text) =>
-    api.translateCaptionBatch(settings, [{ text, needsSplit: false }]),
-  );
+  const work = ['A', 'B', 'C', 'D'].map((text) => api.translateCaptionBatch(settings, [text]));
   const immediate = Array.from({ length: translationSendsPerSecond }, () => [providerTimeoutMs]);
   expect(timeout.mock.calls).toEqual(immediate);
   await vi.advanceTimersByTimeAsync(providerSendWindowMs - 1);

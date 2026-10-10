@@ -16,7 +16,6 @@ const config = (): Settings => ({
   apiKey: 'private-test-key',
   model: 'subtitle-model',
 });
-const ordinary = (texts: string[]) => texts.map((text) => ({ text, needsSplit: false }));
 const resultsContent = (translations: string[]) =>
   JSON.stringify({
     results: translations.map((translation, id) => ({ id, parts: [{ translation }] })),
@@ -117,7 +116,7 @@ describe('OpenAI-compatible provider contract', () => {
       vi.stubGlobal('fetch', fetch);
       const texts = ['One.', 'Two "quoted"\nlines.', 'Three.'];
       await expect(
-        translateCaptionBatch(normalizeSettings({ ...config(), apiFormat }), ordinary(texts)),
+        translateCaptionBatch(normalizeSettings({ ...config(), apiFormat }), texts),
       ).resolves.toEqual(['第一句', '第二句', '第三句']);
       expect(fetch).toHaveBeenCalledTimes(1);
       expect(fetch.mock.calls[0][0]).toBe('https://provider.example/api/v1/chat/completions');
@@ -145,7 +144,7 @@ describe('OpenAI-compatible provider contract', () => {
   ])('reports an unusable batch reply with %s', async (_, content) => {
     const fetch = vi.fn().mockResolvedValue(Response.json({ choices: [{ message: { content } }] }));
     vi.stubGlobal('fetch', fetch);
-    await expect(translateCaptionBatch(config(), ordinary(['One.', 'Two.']))).resolves.toBeNull();
+    await expect(translateCaptionBatch(config(), ['One.', 'Two.'])).resolves.toBeNull();
     expect(JSON.parse(fetch.mock.calls[0][1].body).max_tokens).toBe(65536);
   });
 
@@ -155,7 +154,7 @@ describe('OpenAI-compatible provider contract', () => {
     await expect(
       translateCaptionBatch(
         config(),
-        ordinary(Array.from({ length: translationBatchLimit + 1 }, (_, index) => `${index}`)),
+        Array.from({ length: translationBatchLimit + 1 }, (_, index) => `${index}`),
       ),
     ).rejects.toThrow();
     expect(fetch).not.toHaveBeenCalled();
@@ -296,7 +295,7 @@ describe('batch replies', () => {
     await expect(
       translateCaptionBatch(
         { ...config(), model: 'json-batch' },
-        ordinary(['One.', 'Two.']),
+        ['One.', 'Two.'],
         undefined,
         (index, translation) => {
           if (typeof translation === 'string') seen.push([index, translation]);
@@ -330,7 +329,7 @@ describe('batch replies', () => {
     );
     vi.stubGlobal('fetch', fetch);
     await expect(
-      translateCaptionBatch({ ...config(), model: 'glm-thinking' }, ordinary(['One.', 'Two.'])),
+      translateCaptionBatch({ ...config(), model: 'glm-thinking' }, ['One.', 'Two.']),
     ).resolves.toEqual(['第一句', '第二句']);
   });
 
@@ -386,15 +385,12 @@ describe('batch replies', () => {
       );
     vi.stubGlobal('fetch', fetch);
     const settings = { ...config(), model: 'glm-shapes' };
-    await expect(translateCaptionBatch(settings, ordinary(['One.', 'Two.']))).resolves.toEqual([
-      '甲',
-      '乙',
-    ]);
-    await expect(translateCaptionBatch(settings, ordinary(['One.', 'Two.']))).resolves.toEqual([
+    await expect(translateCaptionBatch(settings, ['One.', 'Two.'])).resolves.toEqual(['甲', '乙']);
+    await expect(translateCaptionBatch(settings, ['One.', 'Two.'])).resolves.toEqual([
       '前一句',
       '后一句',
     ]);
-    await expect(translateCaptionBatch(settings, ordinary(['Only.']))).resolves.toEqual(['单独']);
+    await expect(translateCaptionBatch(settings, ['Only.'])).resolves.toEqual(['单独']);
   });
 
   it('reads a chat completion when upgrading a legacy completions setting', async () => {
@@ -408,7 +404,7 @@ describe('batch replies', () => {
     await expect(
       translateCaptionBatch(
         normalizeSettings({ ...config(), apiFormat: 'completions', model: 'legacy-json' }),
-        ordinary(['One.', 'Two.']),
+        ['One.', 'Two.'],
         undefined,
         (index, translation) => {
           if (typeof translation === 'string') seen.splice(index, 1, translation);
@@ -431,7 +427,7 @@ describe('batch replies', () => {
     await expect(
       translateCaptionBatch(
         { ...config(), model: 'partial-json' },
-        ordinary(['One.', 'Two.']),
+        ['One.', 'Two.'],
         undefined,
         (index, translation) => {
           if (typeof translation === 'string') seen.push([index, translation]);
@@ -455,7 +451,7 @@ describe('batch replies', () => {
     await expect(
       translateCaptionBatch(
         { ...config(), model: 'unparsed-batch' },
-        ordinary(['One.', 'Two.']),
+        ['One.', 'Two.'],
         undefined,
         () => seen.push(1),
       ),
@@ -472,14 +468,8 @@ describe('batch replies', () => {
       );
     vi.stubGlobal('fetch', fetch);
     const settings = { ...config(), model: 'no-json-batch' };
-    await expect(translateCaptionBatch(settings, ordinary(['A', 'B']))).resolves.toEqual([
-      '甲',
-      '乙',
-    ]);
-    await expect(translateCaptionBatch(settings, ordinary(['C', 'D']))).resolves.toEqual([
-      '甲',
-      '乙',
-    ]);
+    await expect(translateCaptionBatch(settings, ['A', 'B'])).resolves.toEqual(['甲', '乙']);
+    await expect(translateCaptionBatch(settings, ['C', 'D'])).resolves.toEqual(['甲', '乙']);
     const bodies = fetch.mock.calls.map((call) => JSON.parse(call[1].body));
     expect(bodies.map((body) => body.stream)).toEqual([false, false, false]);
     expect(bodies.map((body) => body.response_format)).toEqual([
@@ -504,14 +494,8 @@ describe('batch replies', () => {
     });
     vi.stubGlobal('fetch', fetch);
     const settings = { ...config(), model: 'no-reasoning-batch' };
-    await expect(translateCaptionBatch(settings, ordinary(['A', 'B']))).resolves.toEqual([
-      '甲',
-      '乙',
-    ]);
-    await expect(translateCaptionBatch(settings, ordinary(['C', 'D']))).resolves.toEqual([
-      '甲',
-      '乙',
-    ]);
+    await expect(translateCaptionBatch(settings, ['A', 'B'])).resolves.toEqual(['甲', '乙']);
+    await expect(translateCaptionBatch(settings, ['C', 'D'])).resolves.toEqual(['甲', '乙']);
     const bodies = fetch.mock.calls.map((call) => JSON.parse(call[1].body as string));
     expect(bodies.map((body) => [body.response_format?.type, body.reasoning_effort])).toEqual([
       ['json_object', 'low'],
@@ -573,7 +557,7 @@ describe('batch replies', () => {
     await expect(
       translateCaptionBatch(
         normalizeSettings({ ...config(), apiFormat: 'completions', model: 'legacy-400' }),
-        ordinary(['A', 'B']),
+        ['A', 'B'],
       ),
     ).rejects.toThrow('HTTP 400');
     expect(fetch).toHaveBeenCalledTimes(4);
