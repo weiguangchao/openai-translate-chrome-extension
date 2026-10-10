@@ -27,12 +27,12 @@ A run counts only if its traces report the tested `playbackRate`, none is marked
 
 ### Sentence
 
-A sentence is one cue in the source subtitle timeline. YouTube timelines and HBO and X WebVTT timelines first rejoin cues and split them at sentence-ending punctuation; overlapping HBO and X cues retain their original intervals. Sentences over 80 display columns are flagged for the Provider to split, except DOM-only or overlapping subtitles; the extension never splits them locally.
+A sentence is one cue in the source subtitle timeline. YouTube timelines and HBO and X WebVTT timelines first rejoin cues and split them at the source language's sentence-ending punctuation; overlapping HBO and X cues retain their original intervals. Sentences over 80 display columns are split locally, except DOM-only or overlapping subtitles. The Provider never splits them.
 
 ### Caption
 
-An input caption is a whole sentence. An input over 80 display columns is split and translated into display captions by the Provider in the same request. No caption shows its source before its translation is ready; Provider-split captions then show matching source and translation together at times computed by the extension.
+An input caption is a whole sentence. The source language's segmenter in `src/shared/segmenter` splits an input over 80 display columns into display captions: at clause punctuation first, then between words inside a clause that is still over 80 columns. The Provider translates each display caption of an input in the same request. No caption shows its source before its translation is ready; display captions then show matching source and translation together at times computed by the extension.
 
 ### Segment
 
-A segment contains up to four consecutive input captions, one per sentence, sent in one Provider request; segments are numbered from zero. Each result maps to an input ID and may contain multiple display captions, so the limit applies before Provider splitting.
+A segment contains up to four consecutive input captions, one per sentence, sent in one Provider request; segments are numbered from zero. Each result maps to an input ID and may contain multiple display captions, so the limit applies before line splitting.

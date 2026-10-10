@@ -135,18 +135,6 @@ const SAMPLES: Record<string, [string, string]> = {
   en: ['There’s a whole world waiting for us.', 'Some moments are worth slowing down for.'],
   'zh-CN': ['总有一个世界，等待着我们去探索。', '有些时刻，值得我们放慢脚步。'],
   'zh-TW': ['總有一個世界，等待著我們去探索。', '有些時刻，值得我們放慢腳步。'],
-  ja: ['私たちを待っている世界がある。', 'ゆっくり味わいたい瞬間がある。'],
-  ko: ['우리를 기다리는 세상이 있어요.', '천천히 음미할 가치가 있는 순간들이 있어요.'],
-  fr: ['Tout un monde nous attend.', 'Certains instants méritent de ralentir.'],
-  de: ['Eine ganze Welt wartet auf uns.', 'Für manche Momente lohnt es sich, langsamer zu werden.'],
-  es: ['Hay todo un mundo esperándonos.', 'Hay momentos que merecen disfrutarse sin prisa.'],
-  pt: ['Há um mundo inteiro à nossa espera.', 'Alguns momentos merecem ser vividos devagar.'],
-  it: ['C’è un mondo intero che ci aspetta.', 'Alcuni momenti meritano di rallentare.'],
-  ru: ['Нас ждёт целый мир.', 'Ради некоторых мгновений стоит замедлиться.'],
-  ar: ['هناك عالم كامل ينتظرنا.', 'بعض اللحظات تستحق أن نتمهل من أجلها.'],
-  hi: ['एक पूरी दुनिया हमारा इंतज़ार कर रही है।', 'कुछ पलों के लिए ठहरना अच्छा होता है।'],
-  th: ['มีโลกทั้งใบกำลังรอเราอยู่', 'บางช่วงเวลาก็คุ้มค่าที่จะค่อย ๆ ซึมซับ'],
-  vi: ['Cả một thế giới đang chờ chúng ta.', 'Có những khoảnh khắc đáng để sống chậm lại.'],
 };
 export function SubtitlePreview({ settings }: { settings: Settings }) {
   const [expanded, setExpanded] = useState(false);

@@ -622,7 +622,7 @@ it('keeps the HBO source across target/provider/style changes, seeks, blob renew
     vi.mocked(fetch).mock.calls.filter(([url]) => String(url).includes('h264.io'));
   expect(downloads()).toHaveLength(4);
   for (const next of [
-    { ...settings, targetLanguage: 'ja' },
+    { ...settings, targetLanguage: 'zh-TW' },
     { ...settings, model: 'other', baseUrl: 'https://other.example/v1', apiKey: 'other' },
     { ...settings, original: { ...settings.original, size: 36 } },
   ]) {
@@ -648,17 +648,17 @@ it('keeps the HBO source across target/provider/style changes, seeks, blob renew
 });
 
 it('replaces the HBO source for source-language, track-role and episode changes', async () => {
-  targetLanguage = 'es';
+  targetLanguage = 'zh-Hant';
   controller = new CaptionController(createHboPlatform, publicSettings(settings));
   await playTo(3);
   const manifests = () =>
     vi.mocked(fetch).mock.calls.filter(([url]) => new URL(String(url)).pathname.endsWith('.mpd'));
   expect(manifests()).toHaveLength(1);
-  controller.update(publicSettings({ ...settings, sourceLanguage: 'es' }));
+  controller.update(publicSettings({ ...settings, sourceLanguage: 'zh-TW' }));
   await vi.advanceTimersByTimeAsync(1200);
   expect(manifests()).toHaveLength(2);
   expect(requested.some((request) => request.texts.includes('已有字幕 1'))).toBe(true);
-  selected = { language: 'es', role: 'subtitle' };
+  selected = { language: 'zh-Hant', role: 'subtitle' };
   await vi.advanceTimersByTimeAsync(1200);
   expect(manifests()).toHaveLength(3);
   history.replaceState(null, '', '/video/watch/episode-2');

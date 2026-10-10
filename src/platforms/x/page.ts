@@ -72,6 +72,7 @@ servePageTimeline('x', {
             files.map((url) => ({ url, offset: 0 })),
             signal,
           ),
+          request.sourceLanguage,
         );
       });
   },

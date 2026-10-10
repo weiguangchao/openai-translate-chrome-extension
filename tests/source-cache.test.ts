@@ -29,7 +29,7 @@ it('keeps one completed source across reader restarts and credential changes, un
 it.each([
   ['other-video', 'track', 'en'],
   ['video', 'other-track', 'en'],
-  ['video', 'track', 'es'],
+  ['video', 'track', 'zh-TW'],
 ])(
   'replaces the source and ignores late downloads when identity changes to %s/%s/%s',
   async (video, track, language) => {

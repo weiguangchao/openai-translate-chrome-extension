@@ -31,7 +31,9 @@ export function requestedTexts(init: RequestInit): string[] {
     messages: { role: string; content: string }[];
   };
   if (messages[0].content.includes('{"results":'))
-    return (JSON.parse(messages[1].content) as { text: string }[]).map((item) => item.text);
+    return (JSON.parse(messages[1].content) as { text?: string; parts?: string[] }[]).map(
+      (item) => item.text ?? item.parts!.join(' '),
+    );
   return [messages[1].content];
 }
 

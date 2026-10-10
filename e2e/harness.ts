@@ -24,8 +24,8 @@ export const source = 'The moon is bright tonight.';
 export const translation = '今晚的月亮很明亮。';
 export const nextSource = 'We will meet at the station.';
 export const nextTranslation = '我们将在车站见面。';
-export const frenchSource = 'Le train arrive demain.';
-export const frenchTranslation = '火车明天到达。';
+export const traditionalSource = '火車明天到達。';
+export const traditionalTranslation = '火车明天到达。';
 export const asrSource = 'This is the automatic caption.';
 export const asrTranslation = '这是自动字幕。';
 export const thirdSource = 'The ferry leaves at noon.';
@@ -35,7 +35,7 @@ export const draftPrefix = '草稿：';
 const translations: Record<string, string> = {
   [source]: translation,
   [nextSource]: nextTranslation,
-  [frenchSource]: frenchTranslation,
+  [traditionalSource]: traditionalTranslation,
   [asrSource]: asrTranslation,
   [thirdSource]: thirdTranslation,
   [gardenSource]: '花园很安静。',
@@ -60,8 +60,8 @@ declare global {
 }
 interface Input {
   id: number;
-  text: string;
-  split?: true;
+  text?: string;
+  parts?: string[];
 }
 interface Post {
   inputs: Input[];
@@ -260,15 +260,16 @@ export class Player {
     expect(post.released).toBe(false);
     post.released = true;
     const results = post.inputs.map((input) => {
-      if (input.text === longCaption) return longResult(input.id);
-      const sentence = /^Sentence (\d+)\.$/.exec(input.text);
+      if (input.parts?.join(' ') === longCaption) return longResult(input.id);
+      const text = input.text!;
+      const sentence = /^Sentence (\d+)\.$/.exec(text);
       if (sentence)
         return {
           id: input.id,
           parts: [{ translation: denseCue(Number(sentence[1]) - 1).translation }],
         };
-      expect(translations[input.text], `Known Provider input: ${input.text}`).toBeTruthy();
-      return { id: input.id, parts: [{ translation: translations[input.text] }] };
+      expect(translations[text], `Known Provider input: ${text}`).toBeTruthy();
+      return { id: input.id, parts: [{ translation: translations[text] }] };
     });
     let content = JSON.stringify({ results });
     if (this.options.draft) {
@@ -284,7 +285,7 @@ export class Player {
   private cues(id: string, language: string, kind: string): Cue[] {
     if (language === 'zh-CN')
       throw new Error('Website target-language track must never be downloaded');
-    if (language === 'fr') return [{ start: 0, end: 90, text: frenchSource }];
+    if (language === 'zh-TW') return [{ start: 0, end: 90, text: traditionalSource }];
     if (kind === 'asr') return [{ start: 0, end: 90, text: asrSource }];
     if (id === 'second') return [{ start: 0, end: 90, text: nextSource }];
     if (id === 'third') return [{ start: 0, end: 90, text: thirdSource }];
@@ -359,7 +360,7 @@ export class Player {
       });
     }
     const resource = url.pathname.match(
-      /^\/e2e\/(first|second|third)\/(manifest\.mpd|en\.vtt|en-asr\.vtt|fr\.vtt|zh-CN\.vtt)$/,
+      /^\/e2e\/(first|second|third)\/(manifest\.mpd|en\.vtt|en-asr\.vtt|zh-TW\.vtt|zh-CN\.vtt)$/,
     );
     if (this.platform === 'hbo' && url.origin === this.origin && resource) {
       const [, id, file] = resource;
@@ -367,7 +368,7 @@ export class Player {
         await this.timeline;
         return route.fulfill({
           contentType: 'application/dash+xml',
-          body: `<MPD type="static" mediaPresentationDuration="PT90S"><Period start="PT0S" duration="PT90S">${['en', 'en-asr', 'fr', 'zh-CN'].map((lang) => `<AdaptationSet contentType="text" lang="${lang === 'en-asr' ? 'en' : lang}"><Role value="${lang === 'en-asr' ? 'caption' : 'subtitle'}"/><Representation id="${lang}" mimeType="text/vtt"><BaseURL>${lang}.vtt</BaseURL></Representation></AdaptationSet>`).join('')}</Period></MPD>`,
+          body: `<MPD type="static" mediaPresentationDuration="PT90S"><Period start="PT0S" duration="PT90S">${['en', 'en-asr', 'zh-TW', 'zh-CN'].map((lang) => `<AdaptationSet contentType="text" lang="${lang === 'en-asr' ? 'en' : lang}"><Role value="${lang === 'en-asr' ? 'caption' : 'subtitle'}"/><Representation id="${lang}" mimeType="text/vtt"><BaseURL>${lang}.vtt</BaseURL></Representation></AdaptationSet>`).join('')}</Period></MPD>`,
         });
       }
       const cues = this.cues(
@@ -378,7 +379,7 @@ export class Player {
       return route.fulfill({ contentType: 'text/vtt', body: webvtt(cues) });
     }
     const hls = url.pathname.match(
-      /^\/e2e\/(first|second|third)\/(pl\/s0|subs)\/(en|en-asr|fr|zh-CN)\.(m3u8|vtt)$/,
+      /^\/e2e\/(first|second|third)\/(pl\/s0|subs)\/(en|en-asr|zh-TW|zh-CN)\.(m3u8|vtt)$/,
     );
     if (this.platform === 'x' && url.origin === 'https://video.twimg.com' && hls) {
       const [, id, folder, file, extension] = hls;

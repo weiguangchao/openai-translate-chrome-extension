@@ -62,7 +62,11 @@ function timedParts(event: CaptionEvent, endTime: number): TimedCue[] {
   return parts;
 }
 
-export function parseYoutubeCaptions(value: unknown, kind: YoutubeCaptionKind): TimedCue[] {
+export function parseYoutubeCaptions(
+  value: unknown,
+  kind: YoutubeCaptionKind,
+  language: string,
+): TimedCue[] {
   const events = readEvents(value);
   const grouped: CaptionEvent[] = [];
   for (const event of events) {
@@ -89,6 +93,7 @@ export function parseYoutubeCaptions(value: unknown, kind: YoutubeCaptionKind): 
         },
       ];
     }),
+    language,
     kind === 'asr',
   );
 }

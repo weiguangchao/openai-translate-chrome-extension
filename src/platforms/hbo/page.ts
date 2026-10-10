@@ -83,7 +83,12 @@ servePageTimeline('hbo', {
             (a, b) => Number(b.role === role) - Number(a.role === role),
           );
           const source = languageTrack(preferred, (track) => track.language, language);
-          return source ? authoredSubtitleSentences(await loadWebVtt(source.files, signal)) : [];
+          return source
+            ? authoredSubtitleSentences(
+                await loadWebVtt(source.files, signal),
+                request.sourceLanguage,
+              )
+            : [];
         },
         selectedSource ? null : [],
       );
