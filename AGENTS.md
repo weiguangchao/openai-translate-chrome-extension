@@ -1,4 +1,4 @@
-# OpenAI Translate Chrome Extension
+# Subline
 
 ## Principle
 
