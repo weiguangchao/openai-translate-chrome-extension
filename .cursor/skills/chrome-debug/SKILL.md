@@ -45,3 +45,13 @@ Chrome must already be open with remote debugging enabled at `chrome://inspect/#
 - Do not evaluate custom code or enable Network in extension contexts. The holder only listens to Subline trace logs; `reload` uses fixed popup expressions.
 - Do not enable the page's Runtime domain. YouTube stops serving captions. `evaluate` works without it.
 - Preserve failed steps and report their findings. Do not relax assertions to obtain a pass.
+
+## Tests
+
+After changing `scripts/`, run from the repository root:
+
+```bash
+python3 -m unittest discover -s .cursor/skills/chrome-debug/tests
+```
+
+The browser tests launch their own headless Chromium from Playwright's cache (`npx playwright install chromium`, or set `CHROME_DEBUG_TEST_BROWSER`) with a Subline test double and a local player page; `CHROME_DEBUG_TEST_HEADED=1` shows its window. They never reach the user's Chrome or holder. A full run takes about five minutes; `-p 'test_[!bk]*.py'` runs only the tests that need no browser. `test_known_issues.py` holds problems the scripts still have as expected failures. When a fix makes one pass, remove its `expectedFailure`.

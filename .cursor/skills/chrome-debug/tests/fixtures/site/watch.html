@@ -1,0 +1,69 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>chrome-debug fixture</title>
+<div id="movie_player" style="position: relative; width: 640px; height: 360px">
+  <video src="/clip.webm" preload="auto" playsinline style="width: 100%; height: 100%"></video>
+</div>
+<script>
+  // Query parameters make the page behave like the sites chrome-debug has to cope with:
+  //   page=ID          label for the events this page beacons to /log
+  //   player=youtube   #movie_player.setPlaybackRate, and the element's rate is put back
+  //                    to the player's rate every second, as YouTube does
+  //   ratefight=1      put the element's rate back to 1 every second with no player API,
+  //                    as a speed extension in the user's Chrome did
+  //   pullback=once|always
+  //                    after a seek past 10 s, jump to 2 s, as YouTube does when it
+  //                    restores a resume position
+  //   stuck=1          play() does nothing, so the video never advances
+  //   unmute=1         unmute the video once it plays
+  const params = new URLSearchParams(location.search);
+  const video = document.querySelector('video');
+  const player = document.querySelector('#movie_player');
+  const log = (type) =>
+    navigator.sendBeacon(
+      '/log',
+      JSON.stringify({
+        page: params.get('page'),
+        type,
+        time: Math.round(video.currentTime * 100) / 100,
+        rate: video.playbackRate,
+        muted: video.muted,
+      }),
+    );
+  for (const type of ['seeking', 'ratechange', 'volumechange', 'playing', 'pause'])
+    video.addEventListener(type, () => log(type));
+
+  if (params.get('player') === 'youtube') {
+    let rate = 1;
+    player.setPlaybackRate = (value) => {
+      rate = value;
+      video.playbackRate = value;
+    };
+    setInterval(() => {
+      if (video.playbackRate !== rate) video.playbackRate = rate;
+    }, 1000);
+  }
+
+  if (params.has('ratefight'))
+    setInterval(() => {
+      video.playbackRate = 1;
+    }, 1000);
+
+  const pullback = params.get('pullback');
+  let pulled = 0;
+  video.addEventListener('seeked', () => {
+    if (!pullback || video.currentTime < 10 || (pullback === 'once' && pulled)) return;
+    pulled += 1;
+    setTimeout(() => {
+      video.currentTime = 2;
+    }, 100);
+  });
+
+  if (params.has('stuck')) HTMLMediaElement.prototype.play = () => Promise.resolve();
+
+  if (params.has('unmute'))
+    video.addEventListener('playing', () => {
+      video.muted = false;
+      log('unmute');
+    });
+</script>
