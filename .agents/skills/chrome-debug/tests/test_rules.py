@@ -34,7 +34,7 @@ class Validate(unittest.TestCase):
             {"action": "media", "time": 30, "rate": 2, "play": True, "keep_playing": True, "skip_ads": True},
             {"action": "wait", "time": 40},
             {"action": "overlay", "wait": True},
-            {"action": "trace", "seconds": 20, "save": "/tmp/trace.json"},
+            {"action": "trace", "seconds": 20, "save": "/tmp/trace.json", "since": "seek"},
             {"action": "evaluate", "expression": "1"},
             {"action": "requests", "match": [".vtt"]},
         ), [])
@@ -69,6 +69,7 @@ class Validate(unittest.TestCase):
         self.assertRejected("match has the wrong type", {"action": "requests", "match": [""]})
         self.assertRejected("save must be an absolute path", {"action": "evaluate", "expression": "1", "save": "out.json"})
         self.assertRejected("trace seconds must be 1-600", {"action": "trace", "seconds": 0})
+        self.assertRejected("since must be open or seek", {"action": "trace", "seconds": 5, "since": "play"})
         self.assertRejected("trace seconds must be below the budget", {"action": "trace", "seconds": 30})
 
 

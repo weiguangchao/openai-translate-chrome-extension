@@ -56,18 +56,6 @@ class Steps(BrowserCase):
         self.assertTrue(stats.get("clock") == "throttled" or stats["playbackRate"] != 1.5, stats)
 
     @unittest.expectedFailure
-    def test_landing_trace_starts_at_the_seek_target(self):
-        """43d03e2b and docs/reviews/2026-10-09-chrome-debug-high-rate.md.
-
-        media returns once playback resumes, so the trace starts 1.7-4.3 s of
-        video after the target and the wait after seeking reads low.
-        """
-        tab = self.open("late-landing", trace=True)
-        self.result(self.do(tab, action="media", time=40, rate=2, play=True))
-        stats = self.result(self.do(tab, action="trace", seconds=6))["stats"]
-        self.assertLessEqual(stats["from"] - 40, 1.0, stats)
-
-    @unittest.expectedFailure
     def test_each_trace_reports_its_own_clock(self):
         """Tab.rates, clock_samples and clock_visible add up over the tab's life.
 

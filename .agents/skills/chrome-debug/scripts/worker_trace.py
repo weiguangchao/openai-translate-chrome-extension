@@ -1,7 +1,9 @@
 import math
+from itertools import dropwhile
 
 GAP_SECONDS = 3
 MAX_RATE = 4
+MARK_SLACK_SECONDS = 1.5
 SPARSE_SHARE = 0.8
 CUE_SLACK_SECONDS = 0.5
 FLASH_SECONDS = 0.3
@@ -136,6 +138,7 @@ def trace_line(stats):
     text = ", ".join([
         f"from {stats.get('from')}",
         f"played {stats.get('played')}",
+        *([f"before {stats['before']}"] if "before" in stats else []),
         f"counted {stats.get('counted')}",
         f"wall {stats.get('wall')}",
         f"rate {stats.get('playbackRate')}",
@@ -161,11 +164,32 @@ def batch_view(batch):
             "roundTrip": between("sent", "done")}
 
 
-def summarize(events, run, started, played):
+def settled(events, run, until):
+    # The first view after the last jump up to until, such as a resume or the end of a pre-roll ad.
+    views = [(stamp, event) for stamp, event in events
+             if event.get("e") == "view" and event.get("run") == run and stamp <= until and not event.get("seeking")]
+    start = None
+    for (stamp, view), previous in zip(views, [None, *views]):
+        if previous is None or not continuous(view["t"] - previous[1]["t"], (stamp - previous[0]) / 1000):
+            start = (stamp, view["t"])
+    return start
+
+
+def reachable(stamp, view, mark):
+    mark_stamp, mark_time = mark
+    elapsed = max(0.0, (stamp - mark_stamp) / 1000)
+    return mark_time - MARK_SLACK_SECONDS <= view["t"] <= mark_time + MARK_SLACK_SECONDS + elapsed * MAX_RATE
+
+
+def summarize(events, run, started, played, since=None, before=0.0):
     views = [(stamp, event) for stamp, event in events if event.get("e") == "view" and event.get("run") == run]
     tab = views[0][1].get("tab") if views else None
     batches = collect_batches(events, tab)
-    window = [(stamp, view) for stamp, view in views if stamp >= started and not view.get("seeking")]
+    begin = since[0] if since else started
+    window = [(stamp, view) for stamp, view in views if stamp >= begin and not view.get("seeking")]
+    if since:
+        # A view of the position before a seek can arrive after its stamp; drop such leading views.
+        window = list(dropwhile(lambda item: not reachable(*item, since), window))
     states, caption_seconds, ready_seconds, sentences, everything, counted = walk(window)
     episodes = [e for e in everything if e["seconds"] >= FLASH_SECONDS]
 
@@ -211,7 +235,8 @@ def summarize(events, run, started, played):
         "coverage": r1(100 * ready_seconds / caption_seconds) if caption_seconds else None,
         "firstCaptionAt": r1(first_caption[1]["t"]) if first_caption else None,
         "firstReadyAt": r1(first_ready[1]["t"]) if first_ready else None,
-        "firstReadyWall": r1((first_ready[0] - started) / 1000) if first_ready else None,
+        "firstCaptionWall": r1((first_caption[0] - begin) / 1000) if first_caption else None,
+        "firstReadyWall": r1((first_ready[0] - begin) / 1000) if first_ready else None,
         "loading": {
             "episodes": len(episodes),
             "seconds": r1(sum(e["seconds"] for e in episodes)),
@@ -239,7 +264,9 @@ def summarize(events, run, started, played):
             "together": together,
         },
     }
-    if played and counted < SPARSE_SHARE * played:
+    if since:
+        stats["before"] = r1(before)
+    if played + before and counted < SPARSE_SHARE * (played + before):
         stats["sparse"] = True
     shown_sentences = [
         {"at": r1(s["ready"] if s["ready"] is not None else s["first"]), "lag": r1(s["lag"]), "seg": s["seg"],

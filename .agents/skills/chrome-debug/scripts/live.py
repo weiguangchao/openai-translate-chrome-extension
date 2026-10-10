@@ -54,18 +54,26 @@ ACTIONS_HELP = """Actions
                    placeholder nor an error.
   requests         Optional match, a list of substrings. Lists this tab's request
                    URLs, or waits until one matches.
-  trace            seconds; optional selector, default video; optional save.
+  trace            seconds; optional selector, default video; optional save, since.
                    Needs a tab that watches Subline (run adds this when a check has
                    a trace step; open needs --trace). Collects Subline timing events
-                   for seconds of played video, or to the end. Reports lag, loading,
+                   for seconds of played video, or to the end. since "open" counts
+                   from where the video settled after the tab opened, past any jump
+                   or pre-roll ad. since "seek" counts from the last media step with
+                   time, and fails when the video is not where it could have played
+                   to from there. With since, seconds include the video played
+                   before the step, reported as before. Reports lag, loading,
                    coverage, states, firstCaptionAt, firstReadyAt and batches; lag
-                   and loading use video time. counted is the video time the states
-                   cover; a gap counts when its wall time is under 3 s, whatever the
-                   rate. The end line prints from, played, counted, wall,
-                   playbackRate, visible, coverage, missed and lag max. clock is
-                   "throttled" when the tab was mostly hidden or played/wall diverges
-                   from playbackRate; "sparse" marks counted under 80% of played.
-                   save writes the stats with every sentence, batch and view.
+                   and loading use video time. firstCaptionWall and firstReadyWall
+                   are wall seconds from where the trace counts. counted is the
+                   video time the states cover; a gap counts when its wall time is
+                   under 3 s, whatever the rate. The end line prints from, played,
+                   before, counted, wall, playbackRate, visible, coverage, missed
+                   and lag max; played and wall cover the step alone. clock is
+                   "throttled" when the tab was mostly hidden or played/wall
+                   diverges from playbackRate; "sparse" marks counted under 80% of
+                   played plus before. save writes the stats with every sentence,
+                   batch and view.
   screenshot       path. JPEG for .jpg/.jpeg, otherwise PNG.
   focus            Brings the tab and Chrome to the front and waits up to 5 s for the
                    page to become visible. This takes focus from other apps.

@@ -111,6 +111,28 @@ class Summary(unittest.TestCase):
         loading, ready = stats["states"]["loading"], stats["states"].get("ready", 0)
         self.assertEqual(loading / (loading + ready), 1.0)
 
+    def test_since_counts_from_the_mark_without_the_old_position(self):
+        """docs/reviews/2026-10-09-chrome-debug-high-rate.md: the landing trace began 1.7-4.3 s after the target."""
+        stale = as_events(playing(1, [], start=12.0, stamp=100))
+        landed = as_events(playing(2, [1.0] * 6, start=40.0, stamp=600, state="loading"))
+        landed[-1][1]["state"] = "ready"
+        stats = wt.summarize(stale + landed, "r", 3000, 7.0, since=(0, 40.0), before=5.0)["stats"]
+        self.assertEqual((stats["from"], stats["firstCaptionAt"], stats["firstReadyAt"]), (40.0, 40.0, 52.0))
+        self.assertEqual((stats["firstCaptionWall"], stats["firstReadyWall"]), (0.6, 6.6))
+        self.assertEqual((stats["played"], stats["before"], stats["wall"]), (7.0, 5.0, 3.6),
+                         "played and wall stay the step's own for the clock")
+        self.assertNotIn("sparse", stats)
+        self.assertTrue(wt.summarize(stale + landed, "r", 3000, 11.0, since=(0, 40.0), before=5.0)["stats"]["sparse"])
+        self.assertEqual(wt.summarize(stale + landed, "r", 3000, 7.0)["stats"]["from"], 46.0)
+
+    def test_settled_skips_a_resume_and_a_pre_roll_ad(self):
+        resumed = as_events(playing(1, [1.0], start=0.0) + playing(1, [2.0, 2.0], start=1135.8, stamp=4000))
+        self.assertEqual(wt.settled(resumed, "r", 9000), (4000, 1135.8))
+        self.assertEqual(wt.settled(resumed, "r", 3000), (0, 0.0))
+        after_ad = as_events(playing(1, [2.0] * 3, start=9.0) + playing(1, [2.0], start=0.0, stamp=7000))
+        self.assertEqual(wt.settled(after_ad, "r", 9000), (7000, 0.0))
+        self.assertIsNone(wt.settled(resumed, "other", 9000))
+
     def test_sparse_when_states_cover_under_80_percent(self):
         views = as_events(playing(1, [2.0] * 4))
         self.assertNotIn("sparse", wt.summarize(views, "r", 0, 9.0)["stats"])
@@ -176,6 +198,10 @@ class Clock(unittest.TestCase):
 
     def test_reports_the_rate_seen_most(self):
         self.assertEqual(self.stats(played=20, wall=20, rates={1: 2, 2: 8})["playbackRate"], 2)
+
+    def test_end_line_shows_before_only_with_since(self):
+        self.assertIn("played 7.0, before 5.0, counted", wt.trace_line({"played": 7.0, "before": 5.0}))
+        self.assertNotIn("before", wt.trace_line({"played": 7.0}))
 
     def test_end_line_flags_throttled_and_sparse(self):
         line = wt.trace_line({"clock": "throttled", "sparse": True, "playbackRate": 2})
