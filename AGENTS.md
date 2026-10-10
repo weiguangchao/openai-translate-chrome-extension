@@ -28,12 +28,12 @@ A run counts only if its traces report the tested `playbackRate` and none is mar
 
 ### Sentence
 
-A sentence is one cue in the source subtitle timeline. YouTube timelines and HBO and X WebVTT timelines first rejoin cues and split them at the source language's sentence-ending punctuation; overlapping HBO and X cues retain their original intervals. A rejoined sentence still over 240 display columns is cut into sentences of at most 240 columns, between cues or at clause punctuation first, then between words. Sentences over 80 display columns are split locally, except DOM-only or overlapping subtitles. The Provider never splits them.
+A sentence is one cue in the timeline Subline rebuilds from downloaded subtitles: cues are rejoined, then split where sentences end. Overlapping cues are left as they are.
 
 ### Caption
 
-An input caption is a whole sentence. The source language's segmenter in `src/shared/segmenter` splits an input over 80 display columns into display captions: at clause punctuation first, then between words inside a clause that is still over 80 columns. The Provider translates each display caption of an input in the same request. No caption shows its source before its translation is ready; display captions then show matching source and translation together at times computed by the extension.
+An input caption is a whole sentence; the source language's segmenter splits one over 80 display columns into display captions, at clause punctuation first, then between words, but overlapping sentences and captions read from the page DOM stay whole. The Provider translates an input's display captions in one request and never chooses the breaks. Each caption shows its source only together with its translation, at times derived from the source cues.
 
 ### Segment
 
-A segment contains up to four consecutive input captions, one per sentence, sent in one Provider request; segments are numbered from zero. Each result maps to an input ID and may contain multiple display captions, so the limit applies before line splitting.
+A segment is four consecutive input captions, numbered from zero and recorded in traces as `seg`. It only labels the timeline and doesn't decide Provider requests: each request carries up to four upcoming input captions within 10 s of video, whichever segments they belong to. Display captions don't count toward the four.
