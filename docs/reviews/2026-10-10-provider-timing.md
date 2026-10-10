@@ -14,7 +14,7 @@ Provider p50 和 p90 取 180 秒播放 trace 内完成的成功请求，从 `sen
 
 ## 真实 Chrome 验证
 
-当前已完成 YouTube 和 HBO Max 的 8 轮。X 1x 的连续播放采样期间 Chrome 断开调试连接，等待恢复连接后重跑 X 的 4 轮。
+YouTube、HBO Max 和 X 的 12 轮均已完成，共 36 段 trace。每段报告的倍速都等于目标倍速，没有标记 `throttled`、`sparse` 或 `truncated`。每轮只拖动一次，落点 trace 均从拖动目标开始。
 
 每轮重新加载 Subline 清空翻译缓存，打开视频并设置倍速，记录 45 秒 `since: "open"`；再拖动一次，记录 45 秒 `since: "seek"`；随后继续播放并记录 180 秒。时长均为视频秒数，媒体保持静音。每段 trace 的 `playbackRate` 必须等于目标倍速，不得标记 `throttled`，本次也检查 `sparse`、采样时长及拖动次数。
 
@@ -30,6 +30,10 @@ Provider p50 和 p90 取 180 秒播放 trace 内完成的成功请求，从 `sen
 | HBO Max | 1.25x | 4.24 | 2.40 | 4.1% | 0.0% | 2.96 | 4.66 | 19 |
 | HBO Max | 1.5x | 9.33 | 4.33 | 28.6% | 0.0% | 4.88 | 11.27 | 12 |
 | HBO Max | 2x | 4.05 | 6.60 | 14.0% | 0.0% | 2.60 | 8.76 | 31 |
+| X | 1x | 3.80 | 2.50 | 3.9% | 4.2% | 4.86 | 24.85 | 31 |
+| X | 1.25x | 2.48 | 4.88 | 29.3% | 5.0% | 5.12 | 15.55 | 33 |
+| X | 1.5x | 1.53 | 3.67 | 11.1% | 1.7% | 3.55 | 12.63 | 28 |
+| X | 2x | 2.60 | 1.50 | 11.6% | 2.8% | 4.12 | 12.16 | 30 |
 
 | 网站 | 倍速 | 打开起点 / 拖动目标 秒 | 播放请求结果 |
 | --- | --- | --- | --- |
@@ -41,19 +45,26 @@ Provider p50 和 p90 取 180 秒播放 trace 内完成的成功请求，从 `sen
 | HBO Max | 1.25x | 314.0 / 720 | {"ok": 19, "pending": 1} |
 | HBO Max | 1.5x | 898.9 / 720 | {"ok": 12} |
 | HBO Max | 2x | 943.9 / 120 | {"invalid": 1, "ok": 31, "pending": 1} |
+| X | 1x | 0 / 300 | {"ok": 31, "invalid": 1, "aborted": 1, "pending": 1} |
+| X | 1.25x | 0 / 600 | {"aborted": 2, "ok": 33, "pending": 2} |
+| X | 1.5x | 0 / 900 | {"ok": 28, "invalid": 1, "pending": 2} |
+| X | 2x | 0 / 1200 | {"ok": 30, "aborted": 1, "pending": 2} |
 
 YouTube 的四个视频依次为 `arj7oStGLkU`、`c0KYU2j0TM4`、`D9Ihs241zeg` 和 `qp0HIF3SfI4`。HBO Max 使用《老友记》同一集，X 使用 [同一个 33 分钟视频](https://x.com/theo/status/2107935187825008691)。完整 URL、每段 trace 的统计及逐请求耗时在 [验证数据](assets/provider-timing-summary.json)。
 
 HBO Max 打开时恢复上次播放位置。1.25x 原定 420 秒、2x 原定 1020 秒的落点距离打开窗口太近，因此分别改为 720 秒和 120 秒，以免命中刚预取的译文。每轮仍只拖动一次。各轮打开位置不同，YouTube 还使用不同视频，这些单次采样不能用来判断倍速对 Provider 耗时的影响。
 
+X 的四轮在 Chrome 恢复连接后的会话中测量，与 YouTube、HBO Max 的采样时间相隔数小时。每轮开始时间记录在验证数据中。各平台的耗时差异也可能来自 Provider 在不同时间的波动。
+
 ## 未计入的尝试
 
-- 首次 YouTube 1x 已完成打开 trace 和一次拖动，临时运行脚本从错误的字段读取 `seeks`，因此提前结束。修正运行脚本后重新加载扩展，完整重跑该轮。该次不是扩展或 chrome-debug 的拖动失败。
-- 首次 X 1x 完成打开和落点 trace 后，在 180 秒播放 trace 中断开连接。日志记录 `Chrome closed the DevTools socket`，最后的进度为播放位置 375.45 秒。这轮没有完整播放统计，不计入结果。重新连接也在 60 秒后超时，等待 Chrome 接受连接。
+- 首次 YouTube 1x 已完成打开 trace 和一次拖动，临时运行脚本从错误的字段读取 `seeks`，因此提前结束。修正运行脚本后重新加载扩展，完整重跑该轮。
+- 首次 X 1x 完成打开和落点 trace 后，在 180 秒播放 trace 中断开连接。日志记录 `Chrome closed the DevTools socket`，最后的进度为播放位置 375.45 秒。这轮没有完整播放统计，不计入结果。重新连接在 60 秒后超时。用户点击 Allow 后，重新加载扩展，完整重跑了 X 的四个倍速，上表采用重跑结果。
+- X 2x 第一次重跑也在连续播放阶段断开调试连接，最后的进度为 1306.67 秒。这轮同样不计入结果。再次连接成功后，重新加载扩展并完整重跑 2x。两次 X 中断均保存在验证数据的 `excludedRuns` 中。
 
 ## 自动验证
 
-- `python3 -m unittest discover -s .agents/skills/chrome-debug/tests`，90 项，83 项通过，7 项原有问题仍为预期失败。此前“混入 trace 开始前已完成请求”的预期失败测试已转为正式回归测试。
+- `python3 -m unittest discover -s .agents/skills/chrome-debug/tests`，90 项，83 项通过，7 项原有问题仍为预期失败。此前关于混入 trace 开始前已完成请求的预期失败测试已转为正式回归测试。
 - 新增测试覆盖成功样本筛选、跨窗口请求的完整耗时、`since` 起点、无样本返回 `null`，以及保留 Caption 与此前请求的关联。
 - `npm run check` 和 `npm run build` 通过。
-- 已完成的 24 段 trace 均已按逐请求耗时独立复算分位数，并核对样本数和请求结果计数。
+- 全部 36 段 trace 均已按逐请求耗时独立复算分位数，并核对样本数和请求结果计数。
