@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "Subline test double",
+  "version": "1.0",
+  "description": "Speaks the parts of Subline's page and worker protocol that chrome-debug reads.",
+  "background": { "service_worker": "background.js" },
+  "action": { "default_popup": "popup.html" },
+  "content_scripts": [
+    {
+      "matches": ["http://127.0.0.1/*"],
+      "js": ["content.js"],
+      "run_at": "document_end"
+    }
+  ]
+}
