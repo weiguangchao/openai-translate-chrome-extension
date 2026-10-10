@@ -22,6 +22,8 @@ A run counts only if its traces report the tested `playbackRate` and none is mar
 - Wait after seeking: the seconds a viewer waits after the seek until the first subtitle on screen shows its translation, from the landing trace: `(firstReadyAt - firstCaptionAt) / playbackRate`.
 - Loading while playing: the share of subtitle time that shows the loading placeholder instead of a translation, from the 180 s trace: `states.loading / (states.loading + states.ready)`.
 - Loading after seeking: the same share as Loading while playing, from the landing trace.
+- Provider duration p50: the median wall seconds from `sent` to `done` for successful Provider requests completed during the 180 s trace, from `batches.p50`. Exclude queue time, failed, aborted and pending requests. Include the full duration when a request was sent before this trace but completed within it.
+- Provider duration p90: the 90th percentile of the same requests, from `batches.p90`. Both percentiles use nearest rank and are not divided by playback rate. Report the sample count from `batches.measured` and the outcome counts from `batches.results`; no samples means unavailable, not zero.
 
 ## Glossary
 

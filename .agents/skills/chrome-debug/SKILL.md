@@ -33,6 +33,8 @@ Steps are the same in `do` and `run`: `media` seeks, sets the playback rate, pla
 
 Use `open`, `do` and `close` to react to what the page does, for example to seek again when a site jumps elsewhere or to bring Chrome to the front when a trace reports `throttled`. `media` reports `seeks`, the number of times it moved the video, and a trace marks `sparse` when its states cover under 80% of the played time. A trace counts from its own step unless `since` sets `open`, where the video settled after the tab opened, or `seek`, the last `media` seek; only then does it cover the first seconds that play while `media` waits. Use `run` to repeat a fixed check. A tab that gets no request for 15 minutes closes by itself.
 
+Report Provider duration p50 and p90 from the 180 s trace's `batches.p50` and `batches.p90`, with the sample count `batches.measured` and outcome counts `batches.results`. These are nearest-rank percentiles of wall seconds from `sent` to `done` for successful requests completed in that trace. A request sent earlier contributes its full duration if it completes in the window. Queue time and failed, aborted or pending requests do not enter the percentiles. No samples produces `null`.
+
 Chrome must already be open with remote debugging enabled at `chrome://inspect/#remote-debugging`. `start` tries to accept Chrome's Allow dialog; if it remains open, ask the user to click Allow once. Before checking a build, run `npm run build` in the repository that owns Chrome's loaded folder, then `start` and `reload`; rebuild and reload after source changes. `reload` unloads Subline from existing site tabs until they are refreshed.
 
 ## Constraints

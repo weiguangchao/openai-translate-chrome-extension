@@ -202,12 +202,14 @@ def summarize(events, run, started, played, since=None, before=0.0):
         )]
         sentence["batch"] = batch_view(matching[-1]) if matching else None
     lags = [s["lag"] for s in sentences if s["lag"] is not None]
+    batches = [batch for batch in batches if batch.get("done", math.inf) >= begin]
     shown_batches = [batch_view(batch) for batch in batches]
 
     def timings(field):
         return [b[field] for b in shown_batches if b[field] is not None]
 
-    round_trips, first_items, waits = timings("roundTrip"), timings("first"), timings("wait")
+    round_trips = [b["roundTrip"] for b in shown_batches if b["result"] == "ok" and b["roundTrip"] is not None]
+    first_items, waits = timings("first"), timings("wait")
     results = {}
     for batch in batches:
         result = batch.get("result", "pending")
@@ -255,6 +257,7 @@ def summarize(events, run, started, played, since=None, before=0.0):
         "batches": {
             "count": len(batches),
             "results": results,
+            "measured": len(round_trips),
             "p50": r2(nearest_rank(round_trips, 0.5)),
             "p90": r2(nearest_rank(round_trips, 0.9)),
             "max": r2(max(round_trips, default=None)),

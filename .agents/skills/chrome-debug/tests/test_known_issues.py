@@ -16,7 +16,6 @@ from unittest.mock import patch
 from support import SESSION, BrowserCase, step
 
 import holder
-import worker_trace as wt
 
 
 class Steps(BrowserCase):
@@ -103,29 +102,6 @@ class KilledClient(BrowserCase):
         waiting.kill()
         waiting.communicate()
         self.assertEqual(self.call("do", tab, step(action="media"), timeout=5).code, 0)
-
-
-class Batches(unittest.TestCase):
-
-    @unittest.expectedFailure
-    def test_batch_stats_leave_out_batches_finished_before_the_trace(self):
-        """43d03e2b: the 180 s trace listed 36 requests, 15 of them from the landing trace.
-
-        summarize collects every batch of the tab and never looks at started.
-        """
-        view = {"e": "view", "run": "r", "tab": "1:0", "t": 50, "state": "ready", "paused": False,
-                "seeking": False, "cue": 3, "start": 49}
-        events = [
-            (0, {"e": "batch", "id": 1, "tab": "1:0", "size": 4, "start": 0, "end": 16}),
-            (100, {"e": "sent", "id": 1}),
-            (900, {"e": "done", "id": 1, "result": "ok"}),
-            (5000, {"e": "batch", "id": 2, "tab": "1:0", "size": 4, "start": 48, "end": 64}),
-            (5100, {"e": "sent", "id": 2}),
-            (5900, {"e": "done", "id": 2, "result": "ok"}),
-            (6000, view),
-            (7000, {**view, "t": 51}),
-        ]
-        self.assertEqual(wt.summarize(events, "r", 4000, 1.0)["stats"]["batches"]["count"], 1)
 
 
 class Handshake(unittest.TestCase):

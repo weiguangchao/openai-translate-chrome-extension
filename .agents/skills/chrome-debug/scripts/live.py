@@ -73,7 +73,12 @@ ACTIONS_HELP = """Actions
                    "throttled" when the tab was mostly hidden or played/wall
                    diverges from playbackRate; "sparse" marks counted under 80% of
                    played plus before. save writes the stats with every sentence,
-                   batch and view.
+                   batch and view. batches excludes requests completed before the
+                   trace's start or since mark. Its p50, p90 and max use successful
+                   requests completed in this window, measured is their count, and
+                   results counts all outcomes, including pending requests. Durations
+                   are wall seconds from sent to done, including the full request
+                   when sent before the window; percentiles use nearest rank.
   screenshot       path. JPEG for .jpg/.jpeg, otherwise PNG.
   focus            Brings the tab and Chrome to the front and waits up to 5 s for the
                    page to become visible. This takes focus from other apps.
