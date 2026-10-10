@@ -28,7 +28,7 @@
 
 ## 用户 Chrome 验证
 
-通过 [chrome-debug skill](../../.cursor/skills/chrome-debug/SKILL.md) 在用户已登录的 Chrome 中重新加载主仓库的 `dist`，测试 YouTube 视频 `H14bBuluwB8`。媒体保持静音，实际播放速度为一倍。连续跳到 80、160、240、280 秒，每次间隔一百毫秒，落点后译文恢复。
+通过 [chrome-debug skill](../../.agents/skills/chrome-debug/SKILL.md) 在用户已登录的 Chrome 中重新加载主仓库的 `dist`，测试 YouTube 视频 `H14bBuluwB8`。媒体保持静音，实际播放速度为一倍。连续跳到 80、160、240、280 秒，每次间隔一百毫秒，落点后译文恢复。
 
 重连前的两轮真实浏览器检查均通过。最近一轮页面始终可见，译文出现后开播采样十五秒，拖动后采样二十秒。
 

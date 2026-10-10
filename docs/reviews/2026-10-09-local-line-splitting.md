@@ -43,7 +43,7 @@ Provider 请求里，长句改为发送已经切好的行，模型逐行返回�
 
 ## 真实 Chrome 验证
 
-通过 [chrome-debug skill](../../.cursor/skills/chrome-debug/SKILL.md) 在用户已登录的 Chrome 中交替加载旧版 `8620dbf`（构建 `6a634a9fae60`）和新版（构建 `5e8f71971a54`）。每次切换构建都会重新加载扩展，会话缓存随之清空，所以两版在同一倍速下测同一段视频。指标按 [AGENTS.md](../../AGENTS.md) 的 Verifying 一节计算。每轮拖动一次，立即记录 45 秒落点 trace，播放不中断，再记录 180 秒播放 trace。下表所有 trace 报告的倍速都等于目标倍速，没有被标记为 `throttled`，落点 trace 都从拖动目标后 4 秒视频时间内开始。媒体保持静音，每个倍速两版轮流先测。
+通过 [chrome-debug skill](../../.agents/skills/chrome-debug/SKILL.md) 在用户已登录的 Chrome 中交替加载旧版 `8620dbf`（构建 `6a634a9fae60`）和新版（构建 `5e8f71971a54`）。每次切换构建都会重新加载扩展，会话缓存随之清空，所以两版在同一倍速下测同一段视频。指标按 [AGENTS.md](../../AGENTS.md) 的 Verifying 一节计算。每轮拖动一次，立即记录 45 秒落点 trace，播放不中断，再记录 180 秒播放 trace。下表所有 trace 报告的倍速都等于目标倍速，没有被标记为 `throttled`，落点 trace 都从拖动目标后 4 秒视频时间内开始。媒体保持静音，每个倍速两版轮流先测。
 
 YouTube 用四段 TED 演讲，测量片段里超过 80 列的句子分别占 17/38、21/38、18/26 和 20/47。HBO Max 用《老友记》"The One with the Thumb"，台词大多是短句。
 

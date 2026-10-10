@@ -4,4 +4,5 @@ dist/
 *.local
 coverage/
 .artifacts/
-.claude/
+.claude/*
+!.claude/skills/
