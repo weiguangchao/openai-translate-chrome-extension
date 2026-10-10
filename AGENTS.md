@@ -19,9 +19,9 @@ In a real-browser check, report the metrics below for each build on YouTube, HBO
 
 A run counts only if its traces report the tested `playbackRate`, none is marked `throttled` (keep Chrome in front), and the opening trace starts at 0 s, or on HBO Max at the resume position. The landing trace fails by itself when the video leaves the seek target.
 
-- Loading while playing: the share of subtitle time that shows the loading placeholder instead of a translation, from the 180 s trace: `states.loading / (states.loading + states.ready)`.
 - Wait after opening: the seconds a viewer waits after opening the video until the first subtitle on screen shows its translation, from the opening trace: `(firstReadyAt - firstCaptionAt) / playbackRate`.
 - Wait after seeking: the seconds a viewer waits after the seek until the first subtitle on screen shows its translation, from the landing trace: `(firstReadyAt - firstCaptionAt) / playbackRate`.
+- Loading while playing: the share of subtitle time that shows the loading placeholder instead of a translation, from the 180 s trace: `states.loading / (states.loading + states.ready)`.
 - Loading after seeking: the same share as Loading while playing, from the landing trace.
 
 ## Glossary
