@@ -1,6 +1,8 @@
 import math
 
 GAP_SECONDS = 3
+MAX_RATE = 4
+SPARSE_SHARE = 0.8
 CUE_SLACK_SECONDS = 0.5
 FLASH_SECONDS = 0.3
 TOGETHER_SECONDS = 0.3
@@ -39,6 +41,10 @@ def collect_batches(events, tab):
     return batches
 
 
+def continuous(video_step, wall_step):
+    return 0 <= wall_step <= GAP_SECONDS and 0 <= video_step <= wall_step * MAX_RATE + 0.5
+
+
 def caption_key(view):
     if "cue" in view:
         return ("cue", view["cue"])
@@ -47,13 +53,15 @@ def caption_key(view):
 
 def walk(window):
     states = {}
-    caption_seconds = ready_seconds = 0.0
+    caption_seconds = ready_seconds = counted = 0.0
     sentences, episodes = [], []
     current = episode = None
     for index, (stamp, view) in enumerate(window):
-        following = window[index + 1][1] if index + 1 < len(window) else None
-        step = following["t"] - view["t"] if following else 0
-        lasting = step if 0 <= step <= GAP_SECONDS and not view.get("paused") else 0
+        following = window[index + 1] if index + 1 < len(window) else None
+        step = following[1]["t"] - view["t"] if following else 0
+        wall = (following[0] - stamp) / 1000 if following else 0
+        lasting = step if following and continuous(step, wall) and not view.get("paused") else 0
+        counted += lasting
         state = view.get("state")
         states[state] = states.get(state, 0) + lasting
         key = caption_key(view)
@@ -61,7 +69,9 @@ def walk(window):
             caption_seconds += lasting
             if state == "ready":
                 ready_seconds += lasting
-        jumped = current is not None and not 0 <= view["t"] - current["last"] <= GAP_SECONDS
+        jumped = current is not None and not continuous(
+            view["t"] - current["last"], (stamp - current["lastStamp"]) / 1000
+        )
         if key is None or current is None or key != current["key"] or jumped:
             current = None
             if key is not None:
@@ -69,6 +79,7 @@ def walk(window):
                     "key": key,
                     "first": view["t"],
                     "last": view["t"],
+                    "lastStamp": stamp,
                     "start": view.get("start", view["t"]),
                     "seg": view.get("seg"),
                     "text": view.get("text", ""),
@@ -79,6 +90,7 @@ def walk(window):
                 sentences.append(current)
         if current is not None:
             current["last"] = view["t"]
+            current["lastStamp"] = stamp
             if state == "ready" and current["ready"] is None:
                 current["ready"], current["readyStamp"] = view["t"], stamp
         if state == "loading":
@@ -90,7 +102,7 @@ def walk(window):
         elif episode is not None:
             episode["then"] = state
             episode = None
-    return states, caption_seconds, ready_seconds, sentences, episodes
+    return states, caption_seconds, ready_seconds, sentences, episodes, counted
 
 
 def lag_of(sentence):
@@ -124,6 +136,7 @@ def trace_line(stats):
     text = ", ".join([
         f"from {stats.get('from')}",
         f"played {stats.get('played')}",
+        f"counted {stats.get('counted')}",
         f"wall {stats.get('wall')}",
         f"rate {stats.get('playbackRate')}",
         f"visible {stats.get('visible')}",
@@ -133,6 +146,8 @@ def trace_line(stats):
     ])
     if stats.get("clock") == "throttled":
         text += ", throttled"
+    if stats.get("sparse"):
+        text += ", sparse"
     return text
 
 
@@ -151,7 +166,7 @@ def summarize(events, run, started, played):
     tab = views[0][1].get("tab") if views else None
     batches = collect_batches(events, tab)
     window = [(stamp, view) for stamp, view in views if stamp >= started and not view.get("seeking")]
-    states, caption_seconds, ready_seconds, sentences, everything = walk(window)
+    states, caption_seconds, ready_seconds, sentences, everything, counted = walk(window)
     episodes = [e for e in everything if e["seconds"] >= FLASH_SECONDS]
 
     for sentence in sentences:
@@ -191,6 +206,7 @@ def summarize(events, run, started, played):
         "played": r1(played),
         "wall": r1((window[-1][0] - started) / 1000) if window else None,
         "views": len(window),
+        "counted": r1(counted),
         "states": {state: r1(seconds) for state, seconds in states.items()},
         "coverage": r1(100 * ready_seconds / caption_seconds) if caption_seconds else None,
         "firstCaptionAt": r1(first_caption[1]["t"]) if first_caption else None,
@@ -223,6 +239,8 @@ def summarize(events, run, started, played):
             "together": together,
         },
     }
+    if played and counted < SPARSE_SHARE * played:
+        stats["sparse"] = True
     shown_sentences = [
         {"at": r1(s["ready"] if s["ready"] is not None else s["first"]), "lag": r1(s["lag"]), "seg": s["seg"],
          "text": s["text"], "batch": s["batch"]}

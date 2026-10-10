@@ -29,14 +29,17 @@ ACTIONS_HELP = """Actions
                    (default video). Seeks to time, sets playbackRate to rate (0.25-4),
                    and plays or pauses, then waits until the video reports all of
                    them; a seek also waits for data at the new time, and play waits
-                   for currentTime to advance or the video to end. With no fields it
+                   for currentTime to advance or the video to end. It seeks once and
+                   seeks again only when the video leaves the stretch it could have
+                   played since then, at most 3 times. With no fields it
                    only reports the video. The rate goes through YouTube's player
                    when the page has one, since YouTube resets the video element to
                    its own rate every second; it is applied again during later steps
                    and undone when the tab closes. keep_playing resumes the video
                    whenever it pauses during later steps; pause turns it off.
                    skip_ads clicks YouTube's Skip button during later steps.
-                   Returns time, paused, ended, ad, rate, ready and visible.
+                   Returns time, paused, ended, ad, rate, ready and visible, plus
+                   seeks, the number of times it moved currentTime, when time is set.
   wait             seconds, or time with optional selector. Waits that many wall
                    seconds, or until the video reaches time or ends.
   evaluate         expression or expression_file; optional save.
@@ -56,11 +59,13 @@ ACTIONS_HELP = """Actions
                    a trace step; open needs --trace). Collects Subline timing events
                    for seconds of played video, or to the end. Reports lag, loading,
                    coverage, states, firstCaptionAt, firstReadyAt and batches; lag
-                   and loading use video time. The end line prints from, played,
-                   wall, playbackRate, visible, coverage, missed and lag max. clock is
+                   and loading use video time. counted is the video time the states
+                   cover; a gap counts when its wall time is under 3 s, whatever the
+                   rate. The end line prints from, played, counted, wall,
+                   playbackRate, visible, coverage, missed and lag max. clock is
                    "throttled" when the tab was mostly hidden or played/wall diverges
-                   from playbackRate. save writes the stats with every sentence,
-                   batch and view.
+                   from playbackRate; "sparse" marks counted under 80% of played.
+                   save writes the stats with every sentence, batch and view.
   screenshot       path. JPEG for .jpg/.jpeg, otherwise PNG.
   focus            Brings the tab and Chrome to the front and waits up to 5 s for the
                    page to become visible. This takes focus from other apps.

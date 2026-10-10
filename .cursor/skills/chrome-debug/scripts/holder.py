@@ -16,7 +16,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from live import STATE, alive, load_state, session_id
-from worker_trace import clock as clock_stats, summarize as summarize_worker, trace_line
+from worker_trace import clock as clock_stats, continuous, summarize as summarize_worker, trace_line
 
 PORT_FILE = Path(
     os.environ.get("CHROME_DEBUG_PORT_FILE")
@@ -39,6 +39,7 @@ WORKER_WAIT_SECONDS = 20
 WORKER_QUIET_SECONDS = 30
 WORKER_EVENTS = 50000
 STALL_SECONDS = 20
+MEDIA_SEEKS = 3
 FOCUS_SECONDS = 5
 TAB_IDLE_SECONDS = 900
 LOADING_TEXT = "翻译中"
@@ -818,17 +819,35 @@ class Tab:
         actions = []
         if rate is not None:
             actions.append(set_rate(rate))
-        if target is not None:
-            actions.append(f"if (Math.abs(video.currentTime - {target}) > 1.5) video.currentTime = {target};")
         if play:
             actions.append("if (video.paused && !video.ended) { const playing = video.play(); "
                            "if (playing && playing.catch) playing.catch(() => {}); }")
         if pause:
             actions.append("if (!video.paused) video.pause();")
-        probe = self.video_probe(selector).replace(
-            "if (!video) return null;", "if (!video || video.readyState < 1) return null;\n          "
-            + " ".join(actions)
-        )
+
+        def media_probe(seek):
+            jump = (f"if (Math.abs(video.currentTime - {target}) > 1.5) {{ video.currentTime = {target}; seeked = true; }}"
+                    if seek else "")
+            return f"""(() => {{
+          const video = document.querySelector({json.dumps(selector)});
+          if (!video || video.readyState < 1) return null;
+          {" ".join(actions)}
+          let seeked = false;
+          {jump}
+          return {{...(() => {{ {video_report()} }})(), seeked}};
+        }})()"""
+
+        probe, seek_probe = media_probe(False), media_probe(True)
+        seeking = {"due": target is not None, "count": 0, "at": None}
+
+        def sample():
+            due = seeking["due"]
+            value = self.sample(seek_probe if due else probe)
+            if due and isinstance(value, dict):
+                seeking["due"] = False
+                seeking["at"] = time.monotonic()
+                seeking["count"] += value["seeked"]
+            return value
         if play or self.keep_playing:
             self.expect_motion = True
         if pause:
@@ -841,8 +860,16 @@ class Tab:
         def passed(value):
             if not isinstance(value, dict):
                 return False
-            if target is not None and (abs(value["time"] - target) > 1.5 or value["ready"] < 3):
-                return False
+            if target is not None:
+                played = (time.monotonic() - seeking["at"]) * max(value["rate"], rate or 0)
+                if not target - 1.5 <= value["time"] <= target + 1.5 + played:
+                    if seeking["count"] >= MEDIA_SEEKS:
+                        self.fail_reason = f"video left {target} s after {seeking['count']} seeks, now at {value['time']} s"
+                        return FAIL
+                    seeking["due"] = True
+                    return False
+                if value["ready"] < 3:
+                    return False
             if rate is not None and value["rate"] != rate:
                 return False
             if pause and not value["paused"]:
@@ -856,8 +883,12 @@ class Tab:
                 return value["time"] != origin[0]
             return True
 
-        ok, value = self.until(lambda: self.sample(probe), passed)
+        ok, value = self.until(sample, passed)
+        if isinstance(value, dict):
+            value.pop("seeked", None)
         result = {"ok": ok is True, "video": value}
+        if target is not None:
+            result["seeks"] = seeking["count"]
         if self.fail_reason:
             result.update(reason="fail", value={"fail": self.fail_reason})
         return result
@@ -959,7 +990,7 @@ class Tab:
           if (!video) return null;
           {video_report()}
         }})()"""
-        progress = {"played": 0.0, "last": None, "playing_since": None, "milestone": TRACE_MILESTONE}
+        progress = {"played": 0.0, "last": None, "last_at": None, "playing_since": None, "milestone": TRACE_MILESTONE}
 
         def summary():
             return summarize_worker(self.worker_events, self.run_id, started, progress["played"])
@@ -969,10 +1000,11 @@ class Tab:
                 return False
             self.remember(value)
             moving = not value["paused"] and not value["ad"]
-            last = progress["last"]
-            if moving and last is not None and 0 <= value["time"] - last <= 3:
+            last, now = progress["last"], time.monotonic()
+            if moving and last is not None and continuous(value["time"] - last, now - progress["last_at"]):
                 progress["played"] += value["time"] - last
             progress["last"] = value["time"] if moving else None
+            progress["last_at"] = now
             if moving and progress["playing_since"] is None:
                 progress["playing_since"] = time.monotonic()
             if progress["played"] >= progress["milestone"]:
