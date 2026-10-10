@@ -1,0 +1,4196 @@
+{
+  "build": "b4d4eee4c2f3",
+  "source": "4b4d055",
+  "date": "2026-10-10",
+  "providerWindow": "successful requests completed during the 180 s playing trace",
+  "providerDuration": "wall seconds from sent to done; nearest-rank percentiles",
+  "runs": [
+    {
+      "name": "youtube-1",
+      "site": "youtube",
+      "rate": 1,
+      "url": "https://www.youtube.com/watch?v=arj7oStGLkU",
+      "started": "2026-10-10T13:51:21.665741+00:00",
+      "target": 300,
+      "seeks": 1,
+      "opening": {
+        "stats": {
+          "from": 0,
+          "to": 44.2,
+          "played": 44.0,
+          "wall": 50.8,
+          "views": 47,
+          "counted": 44.1,
+          "states": {
+            "empty": 13.1,
+            "loading": 0.2,
+            "ready": 30.8
+          },
+          "coverage": 98.0,
+          "firstCaptionAt": 12.7,
+          "firstReadyAt": 13.2,
+          "firstCaptionWall": 19.9,
+          "firstReadyWall": 20.4,
+          "loading": {
+            "episodes": 0,
+            "seconds": 0,
+            "longest": 0,
+            "flashes": 1
+          },
+          "lag": {
+            "sentences": 10,
+            "measured": 10,
+            "missed": 0,
+            "p50": 0.0,
+            "p90": 0.1,
+            "max": 0.6,
+            "over1s": 0
+          },
+          "batches": {
+            "count": 11,
+            "results": {
+              "ok": 11
+            },
+            "measured": 11,
+            "p50": 6.9,
+            "p90": 16.99,
+            "max": 17.09,
+            "firstItemP50": 6.9,
+            "waitMax": 0.0,
+            "opening": [
+              {
+                "seg": null,
+                "size": 2,
+                "result": "ok",
+                "wait": 0.0,
+                "first": 16.99,
+                "roundTrip": 16.99
+              },
+              {
+                "seg": null,
+                "size": 3,
+                "result": "ok",
+                "wait": 0.0,
+                "first": 17.09,
+                "roundTrip": 17.09
+              },
+              {
+                "seg": null,
+                "size": 3,
+                "result": "ok",
+                "wait": 0.0,
+                "first": 13.58,
+                "roundTrip": 13.58
+              }
+            ],
+            "together": 11
+          },
+          "before": 1.3,
+          "since": "open",
+          "playbackRate": 1,
+          "visible": 0.8
+        },
+        "requests": [
+          {
+            "id": 1,
+            "result": "ok",
+            "roundTrip": 16.99
+          },
+          {
+            "id": 2,
+            "result": "ok",
+            "roundTrip": 17.09
+          },
+          {
+            "id": 3,
+            "result": "ok",
+            "roundTrip": 13.58
+          },
+          {
+            "id": 4,
+            "result": "ok",
+            "roundTrip": 13.84
+          },
+          {
+            "id": 5,
+            "result": "ok",
+            "roundTrip": 11.93
+          },
+          {
+            "id": 6,
+            "result": "ok",
+            "roundTrip": 5.98
+          },
+          {
+            "id": 7,
+            "result": "ok",
+            "roundTrip": 3.89
+          },
+          {
+            "id": 8,
+            "result": "ok",
+            "roundTrip": 6.9
+          },
+          {
+            "id": 9,
+            "result": "ok",
+            "roundTrip": 4.12
+          },
+          {
+            "id": 10,
+            "result": "ok",
+            "roundTrip": 4.83
+          },
+          {
+            "id": 11,
+            "result": "ok",
+            "roundTrip": 5.82
+          }
+        ]
+      },
+      "landing": {
+        "stats": {
+          "from": 300,
+          "to": 344.3,
+          "played": 43.8,
+          "wall": 44.2,
+          "views": 45,
+          "counted": 44.2,
+          "states": {
+            "empty": 5.2,
+            "loading": 19.8,
+            "ready": 19.1
+          },
+          "coverage": 45.9,
+          "firstCaptionAt": 300,
+          "firstReadyAt": 312.3,
+          "firstCaptionWall": 0.4,
+          "firstReadyWall": 14.4,
+          "loading": {
+            "episodes": 8,
+            "seconds": 19.8,
+            "longest": 4.1,
+            "flashes": 0
+          },
+          "lag": {
+            "sentences": 14,
+            "measured": 6,
+            "missed": 8,
+            "p50": 0.0,
+            "p90": 0.1,
+            "max": 0.1,
+            "over1s": 0
+          },
+          "batches": {
+            "count": 10,
+            "results": {
+              "aborted": 3,
+              "invalid": 1,
+              "ok": 4,
+              "pending": 2
+            },
+            "measured": 4,
+            "p50": 4.3,
+            "p90": 5.25,
+            "max": 5.25,
+            "firstItemP50": 4.82,
+            "waitMax": 0.0,
+            "opening": [
+              {
+                "seg": null,
+                "size": 1,
+                "result": "aborted",
+                "wait": 0.0,
+                "first": null,
+                "roundTrip": 1.84
+              },
+              {
+                "seg": null,
+                "size": 3,
+                "result": "invalid",
+                "wait": 0.0,
+                "first": 7.2,
+                "roundTrip": 7.2
+              },
+              {
+                "seg": null,
+                "size": 3,
+                "result": "ok",
+                "wait": 0.0,
+                "first": 4.3,
+                "roundTrip": 4.3
+              }
+            ],
+            "together": 5
+          },
+          "before": 1.6,
+          "since": "seek",
+          "playbackRate": 1,
+          "visible": 0.86
+        },
+        "requests": [
+          {
+            "id": 12,
+            "result": "aborted",
+            "roundTrip": 1.84
+          },
+          {
+            "id": 13,
+            "result": "invalid",
+            "roundTrip": 7.2
+          },
+          {
+            "id": 14,
+            "result": "ok",
+            "roundTrip": 4.3
+          },
+          {
+            "id": 15,
+            "result": "ok",
+            "roundTrip": 5.25
+          },
+          {
+            "id": 16,
+            "result": "ok",
+            "roundTrip": 4.82
+          },
+          {
+            "id": 17,
+            "result": "aborted",
+            "roundTrip": 2.75
+          },
+          {
+            "id": 18,
+            "result": "aborted",
+            "roundTrip": 31.47
+          },
+          {
+            "id": 19,
+            "result": null,
+            "roundTrip": null
+          },
+          {
+            "id": 20,
+            "result": "ok",
+            "roundTrip": 2.75
+          },
+          {
+            "id": 21,
+            "result": null,
+            "roundTrip": null
+          }
+        ]
+      },
+      "playing": {
+        "stats": {
+          "from": 346.1,
+          "to": 524.2,
+          "played": 180.6,
+          "wall": 182.7,
+          "views": 172,
+          "counted": 178.1,
+          "states": {
+            "empty": 13.1,
+            "loading": 4.2,
+            "ready": 160.7
+          },
+          "coverage": 97.1,
+          "firstCaptionAt": 346.1,
+          "firstReadyAt": 350.7,
+          "firstCaptionWall": 0.6,
+          "firstReadyWall": 5.1,
+          "loading": {
+            "episodes": 1,
+            "seconds": 4.2,
+            "longest": 4.2,
+            "flashes": 0
+          },
+          "lag": {
+            "sentences": 52,
+            "measured": 51,
+            "missed": 1,
+            "p50": 0.1,
+            "p90": 0.1,
+            "max": 0.1,
+            "over1s": 0
+          },
+          "batches": {
+            "count": 25,
+            "results": {
+              "aborted": 1,
+              "ok": 24
+            },
+            "measured": 24,
+            "p50": 5.07,
+            "p90": 16.3,
+            "max": 20.55,
+            "firstItemP50": 5.07,
+            "waitMax": 0.0,
+            "opening": [
+              {
+                "seg": null,
+                "size": 2,
+                "result": "aborted",
+                "wait": 0.0,
+                "first": null,
+                "roundTrip": 38.25
+              },
+              {
+                "seg": null,
+                "size": 2,
+                "result": "ok",
+                "wait": 0.0,
+                "first": 2.08,
+                "roundTrip": 2.09
+              },
+              {
+                "seg": null,
+                "size": 3,
+                "result": "ok",
+                "wait": 0.0,
+                "first": 3.08,
+                "roundTrip": 3.08
+              }
+            ],
+            "together": 24
+          },
+          "playbackRate": 1,
+          "visible": 0.93
+        },
+        "requests": [
+          {
+            "id": 19,
+            "result": "aborted",
+            "roundTrip": 38.25
+          },
+          {
+            "id": 21,
+            "result": "ok",
+            "roundTrip": 2.09
+          },
+          {
+            "id": 22,
+            "result": "ok",
+            "roundTrip": 3.08
+          },
+          {
+            "id": 23,
+            "result": "ok",
+            "roundTrip": 16.23
+          },
+          {
+            "id": 24,
+            "result": "ok",
+            "roundTrip": 9.52
+          },
+          {
+            "id": 25,
+            "result": "ok",
+            "roundTrip": 2.37
+          },
+          {
+            "id": 26,
+            "result": "ok",
+            "roundTrip": 2.45
+          },
+          {
+            "id": 27,
+            "result": "ok",
+            "roundTrip": 6.09
+          },
+          {
+            "id": 28,
+            "result": "ok",
+            "roundTrip": 16.3
+          },
+          {
+            "id": 29,
+            "result": "ok",
+            "roundTrip": 3.86
+          },
+          {
+            "id": 30,
+            "result": "ok",
+            "roundTrip": 10.04
+          },
+          {
+            "id": 31,
+            "result": "ok",
+            "roundTrip": 6.21
+          },
+          {
+            "id": 32,
+            "result": "ok",
+            "roundTrip": 2.48
+          },
+          {
+            "id": 33,
+            "result": "ok",
+            "roundTrip": 6.3
+          },
+          {
+            "id": 34,
+            "result": "ok",
+            "roundTrip": 5.07
+          },
+          {
+            "id": 35,
+            "result": "ok",
+            "roundTrip": 18.49
+          },
+          {
+            "id": 36,
+            "result": "ok",
+            "roundTrip": 20.55
+          },
+          {
+            "id": 37,
+            "result": "ok",
+            "roundTrip": 5.82
+          },
+          {
+            "id": 38,
+            "result": "ok",
+            "roundTrip": 2.38
+          },
+          {
+            "id": 39,
+            "result": "ok",
+            "roundTrip": 4.66
+          },
+          {
+            "id": 40,
+            "result": "ok",
+            "roundTrip": 1.8
+          },
+          {
+            "id": 41,
+            "result": "ok",
+            "roundTrip": 6.23
+          },
+          {
+            "id": 42,
+            "result": "ok",
+            "roundTrip": 13.89
+          },
+          {
+            "id": 43,
+            "result": "ok",
+            "roundTrip": 3.63
+          },
+          {
+            "id": 44,
+            "result": "ok",
+            "roundTrip": 3.03
+          }
+        ]
+      },
+      "metrics": {
+        "waitAfterOpeningSeconds": 0.5,
+        "waitAfterSeekingSeconds": 12.3,
+        "loadingAfterSeekingPercent": 50.9,
+        "loadingWhilePlayingPercent": 2.5,
+        "providerP50Seconds": 5.07,
+        "providerP90Seconds": 16.3,
+        "providerSamples": 24
+      }
+    },
+    {
+      "name": "youtube-1.25",
+      "site": "youtube",
+      "rate": 1.25,
+      "url": "https://www.youtube.com/watch?v=c0KYU2j0TM4",
+      "started": "2026-10-10T13:56:17.734260+00:00",
+      "target": 600,
+      "seeks": 1,
+      "opening": {
+        "stats": {
+          "from": 0,
+          "to": 43.3,
+          "played": 44.2,
+          "wall": 33.7,
+          "views": 40,
+          "counted": 43.3,
+          "states": {
+            "empty": 16.1,
+            "ready": 21.2,
+            "loading": 5.9
+          },
+          "coverage": 76.1,
+          "firstCaptionAt": 15.3,
+          "firstReadyAt": 15.3,
+          "firstCaptionWall": 20.5,
+          "firstReadyWall": 20.6,
+          "loading": {
+            "episodes": 2,
+            "seconds": 5.9,
+            "longest": 3.6,
+            "flashes": 0
+          },
+          "lag": {
+            "sentences": 9,
+            "measured": 8,
+            "missed": 1,
+            "p50": 0.1,
+            "p90": 4.1,
+            "max": 4.1,
+            "over1s": 1
+          },
+          "batches": {
+            "count": 6,
+            "results": {
+              "ok": 4,
+              "pending": 2
+            },
+            "measured": 4,
+            "p50": 8.99,
+            "p90": 28.87,
+            "max": 28.87,
+            "firstItemP50": 8.99,
+            "waitMax": 0.0,
+            "opening": [
+              {
+                "seg": null,
+                "size": 2,
+                "result": "ok",
+                "wait": 0.0,
+                "first": 10.41,
+                "roundTrip": 10.41
+              },
+              {
+                "seg": null,
+                "size": 3,
+                "result": "ok",
+                "wait": 0.0,
+                "first": 28.87,
+                "roundTrip": 28.87
+              },
+              {
+                "seg": null,
+                "size": 2,
+                "result": "ok",
+                "wait": 0.0,
+                "first": 8.99,
+                "roundTrip": 8.99
+              }
+            ],
+            "together": 4
+          },
+          "before": 1.1,
+          "since": "open",
+          "playbackRate": 1.25,
+          "visible": 1.0
+        },
+        "requests": [
+          {
+            "id": 1,
+            "result": "ok",
+            "roundTrip": 10.41
+          },
+          {
+            "id": 2,
+            "result": "ok",
+            "roundTrip": 28.87
+          },
+          {
+            "id": 3,
+            "result": "ok",
+            "roundTrip": 8.99
+          },
+          {
+            "id": 4,
+            "result": "ok",
+            "roundTrip": 6.62
+          },
+          {
+            "id": 5,
+            "result": null,
+            "roundTrip": null
+          },
+          {
+            "id": 6,
+            "result": null,
+            "roundTrip": null
+          }
+        ]
+      },
+      "landing": {
+        "stats": {
+          "from": 600,
+          "to": 643.9,
+          "played": 44.1,
+          "wall": 33.7,
+          "views": 38,
+          "counted": 43.9,
+          "states": {
+            "empty": 1.7,
+            "loading": 7.8,
+            "ready": 34.4
+          },
+          "coverage": 78.4,
+          "firstCaptionAt": 600,
+          "firstReadyAt": 609.4,
+          "firstCaptionWall": 0.6,
+          "firstReadyWall": 8.2,
+          "loading": {
+            "episodes": 3,
+            "seconds": 7.8,
+            "longest": 3.4,
+            "flashes": 0
+          },
+          "lag": {
+            "sentences": 15,
+            "measured": 11,
+            "missed": 4,
+            "p50": 0.0,
+            "p90": 0.2,
+            "max": 0.2,
+            "over1s": 0
+          },
+          "batches": {
+            "count": 16,
+            "results": {
+              "aborted": 4,
+              "ok": 10,
+              "pending": 2
+            },
+            "measured": 10,
+            "p50": 3.36,
+            "p90": 10.41,
+            "max": 15.51,
+            "firstItemP50": 3.36,
+            "waitMax": 0.0,
+            "opening": [
+              {
+                "seg": null,
+                "size": 2,
+                "result": "aborted",
+                "wait": 0.0,
+                "first": null,
+                "roundTrip": 15.21
+              },
+              {
+                "seg": null,
+                "size": 2,
+                "result": "aborted",
+                "wait": 0.0,
+                "first": null,
+                "roundTrip": 12.36
+              },
+              {
+                "seg": null,
+                "size": 1,
+                "result": "aborted",
+                "wait": 0.0,
+                "first": null,
+                "roundTrip": 2.51
+              }
+            ],
+            "together": 10
+          },
+          "before": 1.8,
+          "since": "seek",
+          "playbackRate": 1.25,
+          "visible": 1.0
+        },
+        "requests": [
+          {
+            "id": 5,
+            "result": "aborted",
+            "roundTrip": 15.21
+          },
+          {
+            "id": 6,
+            "result": "aborted",
+            "roundTrip": 12.36
+          },
+          {
+            "id": 7,
+            "result": "aborted",
+            "roundTrip": 2.51
+          },
+          {
+            "id": 8,
+            "result": "aborted",
+            "roundTrip": 7.48
+          },
+          {
+            "id": 9,
+            "result": "ok",
+            "roundTrip": 3.79
+          },
+          {
+            "id": 10,
+            "result": "ok",
+            "roundTrip": 2.9
+          },
+          {
+            "id": 11,
+            "result": "ok",
+            "roundTrip": 1.86
+          },
+          {
+            "id": 12,
+            "result": "ok",
+            "roundTrip": 4.07
+          },
+          {
+            "id": 13,
+            "result": "ok",
+            "roundTrip": 2.3
+          },
+          {
+            "id": 14,
+            "result": "ok",
+            "roundTrip": 10.41
+          },
+          {
+            "id": 15,
+            "result": "ok",
+            "roundTrip": 15.51
+          },
+          {
+            "id": 16,
+            "result": "ok",
+            "roundTrip": 3.27
+          },
+          {
+            "id": 17,
+            "result": null,
+            "roundTrip": null
+          },
+          {
+            "id": 18,
+            "result": "ok",
+            "roundTrip": 3.36
+          },
+          {
+            "id": 19,
+            "result": "ok",
+            "roundTrip": 3.48
+          },
+          {
+            "id": 20,
+            "result": null,
+            "roundTrip": null
+          }
+        ]
+      },
+      "playing": {
+        "stats": {
+          "from": 646.5,
+          "to": 824.3,
+          "played": 180.4,
+          "wall": 142.6,
+          "views": 142,
+          "counted": 177.8,
+          "states": {
+            "ready": 149.4,
+            "empty": 9.2,
+            "loading": 19.2
+          },
+          "coverage": 87.7,
+          "firstCaptionAt": 646.5,
+          "firstReadyAt": 646.5,
+          "firstCaptionWall": 0.4,
+          "firstReadyWall": 0.4,
+          "loading": {
+            "episodes": 4,
+            "seconds": 19.2,
+            "longest": 5.8,
+            "flashes": 0
+          },
+          "lag": {
+            "sentences": 50,
+            "measured": 47,
+            "missed": 3,
+            "p50": 0.1,
+            "p90": 0.2,
+            "max": 5.7,
+            "over1s": 1
+          },
+          "batches": {
+            "count": 25,
+            "results": {
+              "aborted": 2,
+              "ok": 22,
+              "pending": 1
+            },
+            "measured": 22,
+            "p50": 5.37,
+            "p90": 19.15,
+            "max": 24.82,
+            "firstItemP50": 5.37,
+            "waitMax": 0.0,
+            "opening": [
+              {
+                "seg": null,
+                "size": 2,
+                "result": "aborted",
+                "wait": 0.0,
+                "first": null,
+                "roundTrip": 27.77
+              },
+              {
+                "seg": null,
+                "size": 1,
+                "result": "ok",
+                "wait": 0.0,
+                "first": 19.15,
+                "roundTrip": 19.15
+              },
+              {
+                "seg": null,
+                "size": 1,
+                "result": "aborted",
+                "wait": 0.0,
+                "first": null,
+                "roundTrip": 20.89
+              }
+            ],
+            "together": 22
+          },
+          "playbackRate": 1.25,
+          "visible": 1.0
+        },
+        "requests": [
+          {
+            "id": 17,
+            "result": "aborted",
+            "roundTrip": 27.77
+          },
+          {
+            "id": 20,
+            "result": "ok",
+            "roundTrip": 19.15
+          },
+          {
+            "id": 21,
+            "result": "aborted",
+            "roundTrip": 20.89
+          },
+          {
+            "id": 22,
+            "result": "ok",
+            "roundTrip": 24.82
+          },
+          {
+            "id": 23,
+            "result": "ok",
+            "roundTrip": 4.01
+          },
+          {
+            "id": 24,
+            "result": "ok",
+            "roundTrip": 4.43
+          },
+          {
+            "id": 25,
+            "result": "ok",
+            "roundTrip": 12.69
+          },
+          {
+            "id": 26,
+            "result": "ok",
+            "roundTrip": 15.14
+          },
+          {
+            "id": 27,
+            "result": "ok",
+            "roundTrip": 4.89
+          },
+          {
+            "id": 28,
+            "result": "ok",
+            "roundTrip": 2.82
+          },
+          {
+            "id": 29,
+            "result": "ok",
+            "roundTrip": 3.89
+          },
+          {
+            "id": 30,
+            "result": "ok",
+            "roundTrip": 5.37
+          },
+          {
+            "id": 31,
+            "result": "ok",
+            "roundTrip": 1.54
+          },
+          {
+            "id": 32,
+            "result": "ok",
+            "roundTrip": 3.95
+          },
+          {
+            "id": 33,
+            "result": "ok",
+            "roundTrip": 6.17
+          },
+          {
+            "id": 34,
+            "result": "ok",
+            "roundTrip": 20.64
+          },
+          {
+            "id": 35,
+            "result": "ok",
+            "roundTrip": 1.86
+          },
+          {
+            "id": 36,
+            "result": "ok",
+            "roundTrip": 7.02
+          },
+          {
+            "id": 37,
+            "result": "ok",
+            "roundTrip": 8.78
+          },
+          {
+            "id": 38,
+            "result": "ok",
+            "roundTrip": 10.83
+          },
+          {
+            "id": 39,
+            "result": "ok",
+            "roundTrip": 8.0
+          },
+          {
+            "id": 40,
+            "result": "ok",
+            "roundTrip": 13.5
+          },
+          {
+            "id": 41,
+            "result": "ok",
+            "roundTrip": 3.19
+          },
+          {
+            "id": 42,
+            "result": "ok",
+            "roundTrip": 3.33
+          },
+          {
+            "id": 43,
+            "result": null,
+            "roundTrip": null
+          }
+        ]
+      },
+      "metrics": {
+        "waitAfterOpeningSeconds": 0.0,
+        "waitAfterSeekingSeconds": 7.52,
+        "loadingAfterSeekingPercent": 18.5,
+        "loadingWhilePlayingPercent": 11.4,
+        "providerP50Seconds": 5.37,
+        "providerP90Seconds": 19.15,
+        "providerSamples": 22
+      }
+    },
+    {
+      "name": "youtube-1.5",
+      "site": "youtube",
+      "rate": 1.5,
+      "url": "https://www.youtube.com/watch?v=D9Ihs241zeg",
+      "started": "2026-10-10T14:00:07.486316+00:00",
+      "target": 600,
+      "seeks": 1,
+      "opening": {
+        "stats": {
+          "from": 0,
+          "to": 43,
+          "played": 44.0,
+          "wall": 27.7,
+          "views": 38,
+          "counted": 43.0,
+          "states": {
+            "empty": 16.3,
+            "loading": 8.6,
+            "ready": 18.1
+          },
+          "coverage": 64.1,
+          "firstCaptionAt": 12.2,
+          "firstReadyAt": 23.0,
+          "firstCaptionWall": 22.6,
+          "firstReadyWall": 29.8,
+          "loading": {
+            "episodes": 3,
+            "seconds": 8.6,
+            "longest": 4.5,
+            "flashes": 0
+          },
+          "lag": {
+            "sentences": 8,
+            "measured": 5,
+            "missed": 3,
+            "p50": 0.0,
+            "p90": 0.1,
+            "max": 0.1,
+            "over1s": 0
+          },
+          "batches": {
+            "count": 11,
+            "results": {
+              "aborted": 1,
+              "ok": 9,
+              "pending": 1
+            },
+            "measured": 9,
+            "p50": 4.0,
+            "p90": 11.56,
+            "max": 11.56,
+            "firstItemP50": 4.0,
+            "waitMax": 0.0,
+            "opening": [
+              {
+                "seg": null,
+                "size": 3,
+                "result": "aborted",
+                "wait": 0.0,
+                "first": null,
+                "roundTrip": 25.2
+              },
+              {
+                "seg": null,
+                "size": 3,
+                "result": "ok",
+                "wait": 0.0,
+                "first": 3.15,
+                "roundTrip": 3.15
+              },
+              {
+                "seg": null,
+                "size": 1,
+                "result": "ok",
+                "wait": 0.0,
+                "first": 11.56,
+                "roundTrip": 11.56
+              }
+            ],
+            "together": 9
+          },
+          "before": 1.5,
+          "since": "open",
+          "playbackRate": 1.5,
+          "visible": 1.0
+        },
+        "requests": [
+          {
+            "id": 1,
+            "result": "aborted",
+            "roundTrip": 25.2
+          },
+          {
+            "id": 2,
+            "result": "ok",
+            "roundTrip": 3.15
+          },
+          {
+            "id": 3,
+            "result": "ok",
+            "roundTrip": 11.56
+          },
+          {
+            "id": 4,
+            "result": "ok",
+            "roundTrip": 1.68
+          },
+          {
+            "id": 5,
+            "result": "ok",
+            "roundTrip": 4.0
+          },
+          {
+            "id": 6,
+            "result": "ok",
+            "roundTrip": 2.1
+          },
+          {
+            "id": 7,
+            "result": "ok",
+            "roundTrip": 4.3
+          },
+          {
+            "id": 8,
+            "result": "ok",
+            "roundTrip": 4.16
+          },
+          {
+            "id": 9,
+            "result": "ok",
+            "roundTrip": 4.52
+          },
+          {
+            "id": 10,
+            "result": "ok",
+            "roundTrip": 1.81
+          },
+          {
+            "id": 11,
+            "result": null,
+            "roundTrip": null
+          }
+        ]
+      },
+      "landing": {
+        "stats": {
+          "from": 600,
+          "to": 644.8,
+          "played": 42.6,
+          "wall": 28.1,
+          "views": 31,
+          "counted": 44.8,
+          "states": {
+            "empty": 6.0,
+            "loading": 19.9,
+            "ready": 18.8
+          },
+          "coverage": 45.0,
+          "firstCaptionAt": 600,
+          "firstReadyAt": 619.3,
+          "firstCaptionWall": 0.3,
+          "firstReadyWall": 13.3,
+          "loading": {
+            "episodes": 6,
+            "seconds": 19.9,
+            "longest": 4.7,
+            "flashes": 0
+          },
+          "lag": {
+            "sentences": 11,
+            "measured": 5,
+            "missed": 6,
+            "p50": 0.1,
+            "p90": 0.2,
+            "max": 0.2,
+            "over1s": 0
+          },
+          "batches": {
+            "count": 12,
+            "results": {
+              "aborted": 5,
+              "ok": 5,
+              "pending": 2
+            },
+            "measured": 5,
+            "p50": 3.29,
+            "p90": 6.94,
+            "max": 6.94,
+            "firstItemP50": 3.29,
+            "waitMax": 0.0,
+            "opening": [
+              {
+                "seg": null,
+                "size": 3,
+                "result": "aborted",
+                "wait": 0.0,
+                "first": null,
+                "roundTrip": 0.9
+              },
+              {
+                "seg": null,
+                "size": 1,
+                "result": "aborted",
+                "wait": 0.0,
+                "first": null,
+                "roundTrip": 2.18
+              },
+              {
+                "seg": null,
+                "size": 2,
+                "result": "aborted",
+                "wait": 0.0,
+                "first": null,
+                "roundTrip": 7.13
+              }
+            ],
+            "together": 5
+          },
+          "before": 2.6,
+          "since": "seek",
+          "playbackRate": 1.5,
+          "visible": 1.0
+        },
+        "requests": [
+          {
+            "id": 11,
+            "result": "aborted",
+            "roundTrip": 0.9
+          },
+          {
+            "id": 12,
+            "result": "aborted",
+            "roundTrip": 2.18
+          },
+          {
+            "id": 13,
+            "result": "aborted",
+            "roundTrip": 7.13
+          },
+          {
+            "id": 14,
+            "result": "aborted",
+            "roundTrip": 10.65
+          },
+          {
+            "id": 15,
+            "result": "ok",
+            "roundTrip": 2.23
+          },
+          {
+            "id": 16,
+            "result": "aborted",
+            "roundTrip": 10.37
+          },
+          {
+            "id": 17,
+            "result": "ok",
+            "roundTrip": 3.41
+          },
+          {
+            "id": 18,
+            "result": "ok",
+            "roundTrip": 3.29
+          },
+          {
+            "id": 19,
+            "result": "ok",
+            "roundTrip": 6.94
+          },
+          {
+            "id": 20,
+            "result": "ok",
+            "roundTrip": 1.6
+          },
+          {
+            "id": 21,
+            "result": null,
+            "roundTrip": null
+          },
+          {
+            "id": 22,
+            "result": null,
+            "roundTrip": null
+          }
+        ]
+      },
+      "playing": {
+        "stats": {
+          "from": 647.9,
+          "to": 825.2,
+          "played": 180.3,
+          "wall": 119.9,
+          "views": 126,
+          "counted": 177.3,
+          "states": {
+            "ready": 167.5,
+            "empty": 9.8
+          },
+          "coverage": 99.8,
+          "firstCaptionAt": 647.9,
+          "firstReadyAt": 647.9,
+          "firstCaptionWall": 1.7,
+          "firstReadyWall": 1.7,
+          "loading": {
+            "episodes": 0,
+            "seconds": 0,
+            "longest": 0,
+            "flashes": 0
+          },
+          "lag": {
+            "sentences": 41,
+            "measured": 41,
+            "missed": 0,
+            "p50": 0.1,
+            "p90": 0.2,
+            "max": 0.2,
+            "over1s": 0
+          },
+          "batches": {
+            "count": 27,
+            "results": {
+              "ok": 26,
+              "invalid": 1
+            },
+            "measured": 26,
+            "p50": 3.04,
+            "p90": 7.54,
+            "max": 15.99,
+            "firstItemP50": 3.16,
+            "waitMax": 0.0,
+            "opening": [
+              {
+                "seg": null,
+                "size": 1,
+                "result": "ok",
+                "wait": 0.0,
+                "first": 15.99,
+                "roundTrip": 15.99
+              },
+              {
+                "seg": null,
+                "size": 1,
+                "result": "ok",
+                "wait": 0.0,
+                "first": 6.13,
+                "roundTrip": 6.13
+              },
+              {
+                "seg": null,
+                "size": 1,
+                "result": "ok",
+                "wait": 0.0,
+                "first": 1.49,
+                "roundTrip": 1.49
+              }
+            ],
+            "together": 27
+          },
+          "playbackRate": 1.5,
+          "visible": 1.0
+        },
+        "requests": [
+          {
+            "id": 21,
+            "result": "ok",
+            "roundTrip": 15.99
+          },
+          {
+            "id": 22,
+            "result": "ok",
+            "roundTrip": 6.13
+          },
+          {
+            "id": 23,
+            "result": "ok",
+            "roundTrip": 1.49
+          },
+          {
+            "id": 24,
+            "result": "ok",
+            "roundTrip": 1.43
+          },
+          {
+            "id": 25,
+            "result": "ok",
+            "roundTrip": 1.73
+          },
+          {
+            "id": 26,
+            "result": "ok",
+            "roundTrip": 6.37
+          },
+          {
+            "id": 27,
+            "result": "ok",
+            "roundTrip": 7.04
+          },
+          {
+            "id": 28,
+            "result": "ok",
+            "roundTrip": 2.89
+          },
+          {
+            "id": 29,
+            "result": "ok",
+            "roundTrip": 10.1
+          },
+          {
+            "id": 30,
+            "result": "ok",
+            "roundTrip": 2.75
+          },
+          {
+            "id": 31,
+            "result": "ok",
+            "roundTrip": 2.96
+          },
+          {
+            "id": 32,
+            "result": "ok",
+            "roundTrip": 5.48
+          },
+          {
+            "id": 33,
+            "result": "ok",
+            "roundTrip": 3.04
+          },
+          {
+            "id": 34,
+            "result": "ok",
+            "roundTrip": 2.07
+          },
+          {
+            "id": 35,
+            "result": "ok",
+            "roundTrip": 2.55
+          },
+          {
+            "id": 36,
+            "result": "ok",
+            "roundTrip": 3.68
+          },
+          {
+            "id": 37,
+            "result": "ok",
+            "roundTrip": 2.12
+          },
+          {
+            "id": 38,
+            "result": "ok",
+            "roundTrip": 7.54
+          },
+          {
+            "id": 39,
+            "result": "ok",
+            "roundTrip": 6.88
+          },
+          {
+            "id": 40,
+            "result": "invalid",
+            "roundTrip": 8.46
+          },
+          {
+            "id": 41,
+            "result": "ok",
+            "roundTrip": 5.88
+          },
+          {
+            "id": 42,
+            "result": "ok",
+            "roundTrip": 4.03
+          },
+          {
+            "id": 43,
+            "result": "ok",
+            "roundTrip": 1.58
+          },
+          {
+            "id": 44,
+            "result": "ok",
+            "roundTrip": 3.16
+          },
+          {
+            "id": 45,
+            "result": "ok",
+            "roundTrip": 2.39
+          },
+          {
+            "id": 46,
+            "result": "ok",
+            "roundTrip": 4.41
+          },
+          {
+            "id": 47,
+            "result": "ok",
+            "roundTrip": 1.53
+          }
+        ]
+      },
+      "metrics": {
+        "waitAfterOpeningSeconds": 7.2,
+        "waitAfterSeekingSeconds": 12.87,
+        "loadingAfterSeekingPercent": 51.4,
+        "loadingWhilePlayingPercent": 0.0,
+        "providerP50Seconds": 3.04,
+        "providerP90Seconds": 7.54,
+        "providerSamples": 26
+      }
+    },
+    {
+      "name": "youtube-2",
+      "site": "youtube",
+      "rate": 2,
+      "url": "https://www.youtube.com/watch?v=qp0HIF3SfI4",
+      "started": "2026-10-10T14:03:26.515471+00:00",
+      "target": 600,
+      "seeks": 1,
+      "opening": {
+        "stats": {
+          "from": 0,
+          "to": 42.5,
+          "played": 41.7,
+          "wall": 19.6,
+          "views": 32,
+          "counted": 41.9,
+          "states": {
+            "empty": 16.6,
+            "ready": 25.3
+          },
+          "coverage": 98.8,
+          "firstCaptionAt": 16.3,
+          "firstReadyAt": 16.3,
+          "firstCaptionWall": 16.5,
+          "firstReadyWall": 16.5,
+          "loading": {
+            "episodes": 0,
+            "seconds": 0,
+            "longest": 0,
+            "flashes": 0
+          },
+          "lag": {
+            "sentences": 9,
+            "measured": 9,
+            "missed": 0,
+            "p50": 0.2,
+            "p90": 0.3,
+            "max": 0.3,
+            "over1s": 0
+          },
+          "batches": {
+            "count": 11,
+            "results": {
+              "ok": 8,
+              "aborted": 1,
+              "pending": 2
+            },
+            "measured": 8,
+            "p50": 2.94,
+            "p90": 7.58,
+            "max": 7.58,
+            "firstItemP50": 2.94,
+            "waitMax": 0.0,
+            "opening": [
+              {
+                "seg": null,
+                "size": 2,
+                "result": "ok",
+                "wait": 0.0,
+                "first": 2.74,
+                "roundTrip": 2.74
+              },
+              {
+                "seg": null,
+                "size": 2,
+                "result": "ok",
+                "wait": 0.0,
+                "first": 3.97,
+                "roundTrip": 3.97
+              },
+              {
+                "seg": null,
+                "size": 3,
+                "result": "ok",
+                "wait": 0.0,
+                "first": 4.1,
+                "roundTrip": 4.1
+              }
+            ],
+            "together": 8
+          },
+          "before": 3.4,
+          "since": "open",
+          "playbackRate": 2,
+          "visible": 1.0
+        },
+        "requests": [
+          {
+            "id": 1,
+            "result": "ok",
+            "roundTrip": 2.74
+          },
+          {
+            "id": 2,
+            "result": "ok",
+            "roundTrip": 3.97
+          },
+          {
+            "id": 3,
+            "result": "ok",
+            "roundTrip": 4.1
+          },
+          {
+            "id": 4,
+            "result": "ok",
+            "roundTrip": 2.94
+          },
+          {
+            "id": 5,
+            "result": "ok",
+            "roundTrip": 7.58
+          },
+          {
+            "id": 6,
+            "result": "ok",
+            "roundTrip": 4.25
+          },
+          {
+            "id": 7,
+            "result": "ok",
+            "roundTrip": 2.04
+          },
+          {
+            "id": 8,
+            "result": "ok",
+            "roundTrip": 1.36
+          },
+          {
+            "id": 9,
+            "result": "aborted",
+            "roundTrip": 2.9
+          },
+          {
+            "id": 10,
+            "result": null,
+            "roundTrip": null
+          },
+          {
+            "id": 11,
+            "result": null,
+            "roundTrip": null
+          }
+        ]
+      },
+      "landing": {
+        "stats": {
+          "from": 600,
+          "to": 643.6,
+          "played": 42.3,
+          "wall": 20.2,
+          "views": 38,
+          "counted": 43.6,
+          "states": {
+            "empty": 5.9,
+            "loading": 3.0,
+            "ready": 34.7
+          },
+          "coverage": 86.3,
+          "firstCaptionAt": 600,
+          "firstReadyAt": 604.1,
+          "firstCaptionWall": 0.4,
+          "firstReadyWall": 2.5,
+          "loading": {
+            "episodes": 3,
+            "seconds": 3.0,
+            "longest": 1.5,
+            "flashes": 0
+          },
+          "lag": {
+            "sentences": 16,
+            "measured": 14,
+            "missed": 2,
+            "p50": 0.1,
+            "p90": 1.4,
+            "max": 1.8,
+            "over1s": 2
+          },
+          "batches": {
+            "count": 15,
+            "results": {
+              "aborted": 2,
+              "ok": 11,
+              "pending": 2
+            },
+            "measured": 11,
+            "p50": 2.72,
+            "p90": 4.49,
+            "max": 4.91,
+            "firstItemP50": 2.72,
+            "waitMax": 0.0,
+            "opening": [
+              {
+                "seg": null,
+                "size": 2,
+                "result": "aborted",
+                "wait": 0.0,
+                "first": null,
+                "roundTrip": 4.19
+              },
+              {
+                "seg": null,
+                "size": 2,
+                "result": "aborted",
+                "wait": 0.0,
+                "first": null,
+                "roundTrip": 2.51
+              },
+              {
+                "seg": null,
+                "size": 1,
+                "result": "ok",
+                "wait": 0.0,
+                "first": 1.67,
+                "roundTrip": 1.67
+              }
+            ],
+            "together": 11
+          },
+          "before": 3.3,
+          "since": "seek",
+          "playbackRate": 2,
+          "visible": 1.0
+        },
+        "requests": [
+          {
+            "id": 10,
+            "result": "aborted",
+            "roundTrip": 4.19
+          },
+          {
+            "id": 11,
+            "result": "aborted",
+            "roundTrip": 2.51
+          },
+          {
+            "id": 12,
+            "result": "ok",
+            "roundTrip": 1.67
+          },
+          {
+            "id": 13,
+            "result": "ok",
+            "roundTrip": 2.45
+          },
+          {
+            "id": 14,
+            "result": "ok",
+            "roundTrip": 3.08
+          },
+          {
+            "id": 15,
+            "result": "ok",
+            "roundTrip": 2.72
+          },
+          {
+            "id": 16,
+            "result": "ok",
+            "roundTrip": 2.29
+          },
+          {
+            "id": 17,
+            "result": "ok",
+            "roundTrip": 2.32
+          },
+          {
+            "id": 18,
+            "result": "ok",
+            "roundTrip": 3.84
+          },
+          {
+            "id": 19,
+            "result": "ok",
+            "roundTrip": 4.49
+          },
+          {
+            "id": 20,
+            "result": "ok",
+            "roundTrip": 4.91
+          },
+          {
+            "id": 21,
+            "result": "ok",
+            "roundTrip": 3.75
+          },
+          {
+            "id": 22,
+            "result": "ok",
+            "roundTrip": 2.09
+          },
+          {
+            "id": 23,
+            "result": null,
+            "roundTrip": null
+          },
+          {
+            "id": 24,
+            "result": null,
+            "roundTrip": null
+          }
+        ]
+      },
+      "playing": {
+        "stats": {
+          "from": 647.5,
+          "to": 827.1,
+          "played": 181.4,
+          "wall": 90.7,
+          "views": 128,
+          "counted": 179.7,
+          "states": {
+            "empty": 6.5,
+            "ready": 173.2
+          },
+          "coverage": 99.9,
+          "firstCaptionAt": 647.5,
+          "firstReadyAt": 647.5,
+          "firstCaptionWall": 0.8,
+          "firstReadyWall": 0.8,
+          "loading": {
+            "episodes": 0,
+            "seconds": 0,
+            "longest": 0,
+            "flashes": 0
+          },
+          "lag": {
+            "sentences": 55,
+            "measured": 55,
+            "missed": 0,
+            "p50": 0.1,
+            "p90": 0.2,
+            "max": 0.3,
+            "over1s": 0
+          },
+          "batches": {
+            "count": 25,
+            "results": {
+              "ok": 22,
+              "invalid": 2,
+              "pending": 1
+            },
+            "measured": 22,
+            "p50": 3.75,
+            "p90": 12.03,
+            "max": 17.07,
+            "firstItemP50": 3.75,
+            "waitMax": 0.0,
+            "opening": [
+              {
+                "seg": null,
+                "size": 3,
+                "result": "ok",
+                "wait": 0.0,
+                "first": 12.64,
+                "roundTrip": 12.64
+              },
+              {
+                "seg": null,
+                "size": 2,
+                "result": "ok",
+                "wait": 0.0,
+                "first": 1.71,
+                "roundTrip": 1.71
+              },
+              {
+                "seg": null,
+                "size": 2,
+                "result": "ok",
+                "wait": 0.0,
+                "first": 8.27,
+                "roundTrip": 8.27
+              }
+            ],
+            "together": 24
+          },
+          "playbackRate": 2,
+          "visible": 1.0
+        },
+        "requests": [
+          {
+            "id": 23,
+            "result": "ok",
+            "roundTrip": 12.64
+          },
+          {
+            "id": 24,
+            "result": "ok",
+            "roundTrip": 1.71
+          },
+          {
+            "id": 25,
+            "result": "ok",
+            "roundTrip": 8.27
+          },
+          {
+            "id": 26,
+            "result": "ok",
+            "roundTrip": 4.7
+          },
+          {
+            "id": 27,
+            "result": "ok",
+            "roundTrip": 3.1
+          },
+          {
+            "id": 28,
+            "result": "ok",
+            "roundTrip": 5.63
+          },
+          {
+            "id": 29,
+            "result": "ok",
+            "roundTrip": 2.01
+          },
+          {
+            "id": 30,
+            "result": "invalid",
+            "roundTrip": 5.82
+          },
+          {
+            "id": 31,
+            "result": "ok",
+            "roundTrip": 12.03
+          },
+          {
+            "id": 32,
+            "result": "ok",
+            "roundTrip": 2.7
+          },
+          {
+            "id": 33,
+            "result": "ok",
+            "roundTrip": 2.18
+          },
+          {
+            "id": 34,
+            "result": "ok",
+            "roundTrip": 3.75
+          },
+          {
+            "id": 35,
+            "result": "ok",
+            "roundTrip": 2.1
+          },
+          {
+            "id": 36,
+            "result": "ok",
+            "roundTrip": 1.9
+          },
+          {
+            "id": 37,
+            "result": "ok",
+            "roundTrip": 17.07
+          },
+          {
+            "id": 38,
+            "result": "ok",
+            "roundTrip": 4.45
+          },
+          {
+            "id": 39,
+            "result": "ok",
+            "roundTrip": 3.14
+          },
+          {
+            "id": 40,
+            "result": "ok",
+            "roundTrip": 4.28
+          },
+          {
+            "id": 41,
+            "result": "invalid",
+            "roundTrip": 1.81
+          },
+          {
+            "id": 42,
+            "result": "ok",
+            "roundTrip": 3.48
+          },
+          {
+            "id": 43,
+            "result": "ok",
+            "roundTrip": 3.71
+          },
+          {
+            "id": 44,
+            "result": "ok",
+            "roundTrip": 3.83
+          },
+          {
+            "id": 45,
+            "result": "ok",
+            "roundTrip": 5.86
+          },
+          {
+            "id": 46,
+            "result": "ok",
+            "roundTrip": 5.38
+          },
+          {
+            "id": 47,
+            "result": null,
+            "roundTrip": null
+          }
+        ]
+      },
+      "metrics": {
+        "waitAfterOpeningSeconds": 0.0,
+        "waitAfterSeekingSeconds": 2.05,
+        "loadingAfterSeekingPercent": 8.0,
+        "loadingWhilePlayingPercent": 0.0,
+        "providerP50Seconds": 3.75,
+        "providerP90Seconds": 12.03,
+        "providerSamples": 22
+      }
+    },
+    {
+      "name": "hbo-1",
+      "site": "hbo",
+      "rate": 1,
+      "url": "https://play.hbomax.com/video/watch/44805ae8-7771-4238-ad89-2c629a30db4d",
+      "started": "2026-10-10T14:05:54.766457+00:00",
+      "target": 120,
+      "seeks": 1,
+      "opening": {
+        "stats": {
+          "from": 1212.4,
+          "to": 1256.4,
+          "played": 44.3,
+          "wall": 42.9,
+          "views": 69,
+          "counted": 44.0,
+          "states": {
+            "empty": 11.6,
+            "loading": 0.9,
+            "ready": 31.4
+          },
+          "coverage": 94.0,
+          "firstCaptionAt": 1212.4,
+          "firstReadyAt": 1215.4,
+          "firstCaptionWall": 0.0,
+          "firstReadyWall": 3.0,
+          "loading": {
+            "episodes": 1,
+            "seconds": 0.8,
+            "longest": 0.8,
+            "flashes": 1
+          },
+          "lag": {
+            "sentences": 24,
+            "measured": 22,
+            "missed": 2,
+            "p50": 0.0,
+            "p90": 0.1,
+            "max": 1.2,
+            "over1s": 1
+          },
+          "batches": {
+            "count": 10,
+            "results": {
+              "ok": 8,
+              "pending": 2
+            },
+            "measured": 8,
+            "p50": 3.52,
+            "p90": 18.79,
+            "max": 18.79,
+            "firstItemP50": 3.52,
+            "waitMax": 0.0,
+            "opening": [
+              {
+                "seg": null,
+                "size": 1,
+                "result": "ok",
+                "wait": 0.0,
+                "first": 2.57,
+                "roundTrip": 2.57
+              },
+              {
+                "seg": null,
+                "size": 4,
+                "result": "ok",
+                "wait": 0.0,
+                "first": 3.52,
+                "roundTrip": 3.52
+              },
+              {
+                "seg": null,
+                "size": 4,
+                "result": "ok",
+                "wait": 0.0,
+                "first": 8.82,
+                "roundTrip": 8.82
+              }
+            ],
+            "together": 8
+          },
+          "before": 1.1,
+          "since": "open",
+          "playbackRate": 1,
+          "visible": 1.0
+        },
+        "requests": [
+          {
+            "id": 1,
+            "result": "ok",
+            "roundTrip": 2.57
+          },
+          {
+            "id": 2,
+            "result": "ok",
+            "roundTrip": 3.52
+          },
+          {
+            "id": 3,
+            "result": "ok",
+            "roundTrip": 8.82
+          },
+          {
+            "id": 4,
+            "result": "ok",
+            "roundTrip": 5.85
+          },
+          {
+            "id": 5,
+            "result": "ok",
+            "roundTrip": 3.94
+          },
+          {
+            "id": 6,
+            "result": "ok",
+            "roundTrip": 1.96
+          },
+          {
+            "id": 7,
+            "result": "ok",
+            "roundTrip": 1.55
+          },
+          {
+            "id": 8,
+            "result": "ok",
+            "roundTrip": 18.79
+          },
+          {
+            "id": 9,
+            "result": null,
+            "roundTrip": null
+          },
+          {
+            "id": 10,
+            "result": null,
+            "roundTrip": null
+          }
+        ]
+      },
+      "landing": {
+        "stats": {
+          "from": 120,
+          "to": 164.8,
+          "played": 43.3,
+          "wall": 43.1,
+          "views": 48,
+          "counted": 44.8,
+          "states": {
+            "empty": 15.0,
+            "loading": 4.4,
+            "ready": 25.4
+          },
+          "coverage": 84.3,
+          "firstCaptionAt": 120,
+          "firstReadyAt": 133.1,
+          "firstCaptionWall": 1.4,
+          "firstReadyWall": 14.6,
+          "loading": {
+            "episodes": 1,
+            "seconds": 4.4,
+            "longest": 4.4,
+            "flashes": 0
+          },
+          "lag": {
+            "sentences": 13,
+            "measured": 12,
+            "missed": 1,
+            "p50": 0.0,
+            "p90": 0.1,
+            "max": 0.1,
+            "over1s": 0
+          },
+          "batches": {
+            "count": 10,
+            "results": {
+              "aborted": 2,
+              "ok": 8
+            },
+            "measured": 8,
+            "p50": 3.27,
+            "p90": 9.14,
+            "max": 9.14,
+            "firstItemP50": 3.27,
+            "waitMax": 0.0,
+            "opening": [
+              {
+                "seg": null,
+                "size": 4,
+                "result": "aborted",
+                "wait": 0.0,
+                "first": null,
+                "roundTrip": 13.8
+              },
+              {
+                "seg": null,
+                "size": 3,
+                "result": "aborted",
+                "wait": 0.0,
+                "first": null,
+                "roundTrip": 4.01
+              },
+              {
+                "seg": null,
+                "size": 1,
+                "result": "ok",
+                "wait": 0.0,
+                "first": 4.69,
+                "roundTrip": 4.69
+              }
+            ],
+            "together": 8
+          },
+          "before": 1.7,
+          "since": "seek",
+          "playbackRate": 1,
+          "visible": 1.0
+        },
+        "requests": [
+          {
+            "id": 9,
+            "result": "aborted",
+            "roundTrip": 13.8
+          },
+          {
+            "id": 10,
+            "result": "aborted",
+            "roundTrip": 4.01
+          },
+          {
+            "id": 11,
+            "result": "ok",
+            "roundTrip": 4.69
+          },
+          {
+            "id": 12,
+            "result": "ok",
+            "roundTrip": 5.85
+          },
+          {
+            "id": 13,
+            "result": "ok",
+            "roundTrip": 3.52
+          },
+          {
+            "id": 14,
+            "result": "ok",
+            "roundTrip": 3.27
+          },
+          {
+            "id": 15,
+            "result": "ok",
+            "roundTrip": 2.19
+          },
+          {
+            "id": 16,
+            "result": "ok",
+            "roundTrip": 9.14
+          },
+          {
+            "id": 17,
+            "result": "ok",
+            "roundTrip": 3.18
+          },
+          {
+            "id": 18,
+            "result": "ok",
+            "roundTrip": 1.89
+          }
+        ]
+      },
+      "playing": {
+        "stats": {
+          "from": 166.9,
+          "to": 344.9,
+          "played": 180.6,
+          "wall": 179.8,
+          "views": 254,
+          "counted": 178.0,
+          "states": {
+            "empty": 57.2,
+            "ready": 120.9
+          },
+          "coverage": 100.0,
+          "firstCaptionAt": 173.9,
+          "firstReadyAt": 173.9,
+          "firstCaptionWall": 8.8,
+          "firstReadyWall": 8.8,
+          "loading": {
+            "episodes": 0,
+            "seconds": 0,
+            "longest": 0,
+            "flashes": 0
+          },
+          "lag": {
+            "sentences": 83,
+            "measured": 83,
+            "missed": 0,
+            "p50": 0.1,
+            "p90": 0.1,
+            "max": 0.1,
+            "over1s": 0
+          },
+          "batches": {
+            "count": 24,
+            "results": {
+              "ok": 23,
+              "pending": 1
+            },
+            "measured": 23,
+            "p50": 3.16,
+            "p90": 6.15,
+            "max": 7.36,
+            "firstItemP50": 3.16,
+            "waitMax": 0.0,
+            "opening": [
+              {
+                "seg": null,
+                "size": 4,
+                "result": "ok",
+                "wait": 0.0,
+                "first": 2.07,
+                "roundTrip": 2.07
+              },
+              {
+                "seg": null,
+                "size": 4,
+                "result": "ok",
+                "wait": 0.0,
+                "first": 2.35,
+                "roundTrip": 2.35
+              },
+              {
+                "seg": null,
+                "size": 3,
+                "result": "ok",
+                "wait": 0.0,
+                "first": 4.07,
+                "roundTrip": 4.07
+              }
+            ],
+            "together": 23
+          },
+          "playbackRate": 1,
+          "visible": 1.0
+        },
+        "requests": [
+          {
+            "id": 19,
+            "result": "ok",
+            "roundTrip": 2.07
+          },
+          {
+            "id": 20,
+            "result": "ok",
+            "roundTrip": 2.35
+          },
+          {
+            "id": 21,
+            "result": "ok",
+            "roundTrip": 4.07
+          },
+          {
+            "id": 22,
+            "result": "ok",
+            "roundTrip": 3.69
+          },
+          {
+            "id": 23,
+            "result": "ok",
+            "roundTrip": 1.02
+          },
+          {
+            "id": 24,
+            "result": "ok",
+            "roundTrip": 3.32
+          },
+          {
+            "id": 25,
+            "result": "ok",
+            "roundTrip": 1.25
+          },
+          {
+            "id": 26,
+            "result": "ok",
+            "roundTrip": 1.86
+          },
+          {
+            "id": 27,
+            "result": "ok",
+            "roundTrip": 2.19
+          },
+          {
+            "id": 28,
+            "result": "ok",
+            "roundTrip": 7.36
+          },
+          {
+            "id": 29,
+            "result": "ok",
+            "roundTrip": 6.15
+          },
+          {
+            "id": 30,
+            "result": "ok",
+            "roundTrip": 2.83
+          },
+          {
+            "id": 31,
+            "result": "ok",
+            "roundTrip": 3.16
+          },
+          {
+            "id": 32,
+            "result": "ok",
+            "roundTrip": 2.61
+          },
+          {
+            "id": 33,
+            "result": "ok",
+            "roundTrip": 6.72
+          },
+          {
+            "id": 34,
+            "result": "ok",
+            "roundTrip": 4.12
+          },
+          {
+            "id": 35,
+            "result": "ok",
+            "roundTrip": 2.84
+          },
+          {
+            "id": 36,
+            "result": "ok",
+            "roundTrip": 3.94
+          },
+          {
+            "id": 37,
+            "result": "ok",
+            "roundTrip": 3.25
+          },
+          {
+            "id": 38,
+            "result": "ok",
+            "roundTrip": 4.39
+          },
+          {
+            "id": 39,
+            "result": "ok",
+            "roundTrip": 3.89
+          },
+          {
+            "id": 40,
+            "result": "ok",
+            "roundTrip": 1.66
+          },
+          {
+            "id": 41,
+            "result": "ok",
+            "roundTrip": 1.49
+          },
+          {
+            "id": 42,
+            "result": null,
+            "roundTrip": null
+          }
+        ]
+      },
+      "metrics": {
+        "waitAfterOpeningSeconds": 3.0,
+        "waitAfterSeekingSeconds": 13.1,
+        "loadingAfterSeekingPercent": 14.8,
+        "loadingWhilePlayingPercent": 0.0,
+        "providerP50Seconds": 3.16,
+        "providerP90Seconds": 6.15,
+        "providerSamples": 23
+      }
+    },
+    {
+      "name": "hbo-1.25",
+      "site": "hbo",
+      "rate": 1.25,
+      "url": "https://play.hbomax.com/video/watch/44805ae8-7771-4238-ad89-2c629a30db4d",
+      "started": "2026-10-10T14:10:50.571663+00:00",
+      "target": 720,
+      "seeks": 1,
+      "opening": {
+        "stats": {
+          "from": 314.0,
+          "to": 358.7,
+          "played": 44.1,
+          "wall": 34.7,
+          "views": 72,
+          "counted": 44.7,
+          "states": {
+            "empty": 9.2,
+            "loading": 3.4,
+            "ready": 32.2
+          },
+          "coverage": 86.0,
+          "firstCaptionAt": 314.0,
+          "firstReadyAt": 319.3,
+          "firstCaptionWall": 0.0,
+          "firstReadyWall": 4.3,
+          "loading": {
+            "episodes": 3,
+            "seconds": 3.4,
+            "longest": 1.5,
+            "flashes": 0
+          },
+          "lag": {
+            "sentences": 28,
+            "measured": 25,
+            "missed": 3,
+            "p50": 0.1,
+            "p90": 0.2,
+            "max": 1.5,
+            "over1s": 1
+          },
+          "batches": {
+            "count": 14,
+            "results": {
+              "aborted": 2,
+              "ok": 11,
+              "pending": 1
+            },
+            "measured": 11,
+            "p50": 2.89,
+            "p90": 4.38,
+            "max": 10.94,
+            "firstItemP50": 2.89,
+            "waitMax": 0.0,
+            "opening": [
+              {
+                "seg": null,
+                "size": 1,
+                "result": "aborted",
+                "wait": 0.0,
+                "first": null,
+                "roundTrip": 0.66
+              },
+              {
+                "seg": null,
+                "size": 1,
+                "result": "aborted",
+                "wait": 0.0,
+                "first": null,
+                "roundTrip": 2.37
+              },
+              {
+                "seg": null,
+                "size": 3,
+                "result": "ok",
+                "wait": 0.0,
+                "first": 3.22,
+                "roundTrip": 3.22
+              }
+            ],
+            "together": 11
+          },
+          "before": 1.3,
+          "since": "open",
+          "playbackRate": 1.25,
+          "visible": 1.0
+        },
+        "requests": [
+          {
+            "id": 1,
+            "result": "aborted",
+            "roundTrip": 0.66
+          },
+          {
+            "id": 2,
+            "result": "aborted",
+            "roundTrip": 2.37
+          },
+          {
+            "id": 3,
+            "result": "ok",
+            "roundTrip": 3.22
+          },
+          {
+            "id": 4,
+            "result": "ok",
+            "roundTrip": 1.48
+          },
+          {
+            "id": 5,
+            "result": "ok",
+            "roundTrip": 3.41
+          },
+          {
+            "id": 6,
+            "result": "ok",
+            "roundTrip": 3.77
+          },
+          {
+            "id": 7,
+            "result": "ok",
+            "roundTrip": 2.65
+          },
+          {
+            "id": 8,
+            "result": "ok",
+            "roundTrip": 2.79
+          },
+          {
+            "id": 9,
+            "result": "ok",
+            "roundTrip": 1.44
+          },
+          {
+            "id": 10,
+            "result": "ok",
+            "roundTrip": 10.94
+          },
+          {
+            "id": 11,
+            "result": "ok",
+            "roundTrip": 2.89
+          },
+          {
+            "id": 12,
+            "result": "ok",
+            "roundTrip": 4.38
+          },
+          {
+            "id": 13,
+            "result": "ok",
+            "roundTrip": 2.18
+          },
+          {
+            "id": 14,
+            "result": null,
+            "roundTrip": null
+          }
+        ]
+      },
+      "landing": {
+        "stats": {
+          "from": 720,
+          "to": 765.3,
+          "played": 42.9,
+          "wall": 34.2,
+          "views": 71,
+          "counted": 45.3,
+          "states": {
+            "empty": 5.8,
+            "loading": 1.6,
+            "ready": 37.9
+          },
+          "coverage": 92.9,
+          "firstCaptionAt": 720,
+          "firstReadyAt": 723.0,
+          "firstCaptionWall": 1.0,
+          "firstReadyWall": 3.5,
+          "loading": {
+            "episodes": 2,
+            "seconds": 1.6,
+            "longest": 1.1,
+            "flashes": 0
+          },
+          "lag": {
+            "sentences": 27,
+            "measured": 24,
+            "missed": 3,
+            "p50": 0.1,
+            "p90": 0.2,
+            "max": 0.9,
+            "over1s": 0
+          },
+          "batches": {
+            "count": 9,
+            "results": {
+              "aborted": 2,
+              "ok": 6,
+              "pending": 1
+            },
+            "measured": 6,
+            "p50": 2.33,
+            "p90": 21.53,
+            "max": 21.53,
+            "firstItemP50": 2.33,
+            "waitMax": 0.0,
+            "opening": [
+              {
+                "seg": null,
+                "size": 4,
+                "result": "aborted",
+                "wait": 0.0,
+                "first": null,
+                "roundTrip": 0.22
+              },
+              {
+                "seg": null,
+                "size": 1,
+                "result": "aborted",
+                "wait": 0.0,
+                "first": null,
+                "roundTrip": 1.67
+              },
+              {
+                "seg": null,
+                "size": 4,
+                "result": "ok",
+                "wait": 0.0,
+                "first": 2.04,
+                "roundTrip": 2.04
+              }
+            ],
+            "together": 6
+          },
+          "before": 2.5,
+          "since": "seek",
+          "playbackRate": 1.25,
+          "visible": 1.0
+        },
+        "requests": [
+          {
+            "id": 14,
+            "result": "aborted",
+            "roundTrip": 0.22
+          },
+          {
+            "id": 15,
+            "result": "aborted",
+            "roundTrip": 1.67
+          },
+          {
+            "id": 16,
+            "result": "ok",
+            "roundTrip": 2.04
+          },
+          {
+            "id": 17,
+            "result": "ok",
+            "roundTrip": 2.77
+          },
+          {
+            "id": 18,
+            "result": "ok",
+            "roundTrip": 2.33
+          },
+          {
+            "id": 19,
+            "result": "ok",
+            "roundTrip": 1.72
+          },
+          {
+            "id": 20,
+            "result": "ok",
+            "roundTrip": 5.03
+          },
+          {
+            "id": 21,
+            "result": "ok",
+            "roundTrip": 21.53
+          },
+          {
+            "id": 22,
+            "result": null,
+            "roundTrip": null
+          }
+        ]
+      },
+      "playing": {
+        "stats": {
+          "from": 766.0,
+          "to": 945.3,
+          "played": 180.4,
+          "wall": 143.8,
+          "views": 166,
+          "counted": 179.2,
+          "states": {
+            "empty": 95.0,
+            "ready": 84.2
+          },
+          "coverage": 99.9,
+          "firstCaptionAt": 800.9,
+          "firstReadyAt": 800.9,
+          "firstCaptionWall": 28.3,
+          "firstReadyWall": 28.3,
+          "loading": {
+            "episodes": 0,
+            "seconds": 0,
+            "longest": 0,
+            "flashes": 0
+          },
+          "lag": {
+            "sentences": 49,
+            "measured": 49,
+            "missed": 0,
+            "p50": 0.1,
+            "p90": 0.2,
+            "max": 0.2,
+            "over1s": 0
+          },
+          "batches": {
+            "count": 20,
+            "results": {
+              "ok": 19,
+              "pending": 1
+            },
+            "measured": 19,
+            "p50": 2.96,
+            "p90": 4.66,
+            "max": 5.1,
+            "firstItemP50": 2.96,
+            "waitMax": 0.0,
+            "opening": [
+              {
+                "seg": null,
+                "size": 1,
+                "result": "ok",
+                "wait": 0.0,
+                "first": 1.74,
+                "roundTrip": 1.74
+              },
+              {
+                "seg": null,
+                "size": 4,
+                "result": "ok",
+                "wait": 0.0,
+                "first": 1.79,
+                "roundTrip": 1.79
+              },
+              {
+                "seg": null,
+                "size": 3,
+                "result": "ok",
+                "wait": 0.0,
+                "first": 2.96,
+                "roundTrip": 2.96
+              }
+            ],
+            "together": 19
+          },
+          "playbackRate": 1.25,
+          "visible": 1.0
+        },
+        "requests": [
+          {
+            "id": 22,
+            "result": "ok",
+            "roundTrip": 1.74
+          },
+          {
+            "id": 23,
+            "result": "ok",
+            "roundTrip": 1.79
+          },
+          {
+            "id": 24,
+            "result": "ok",
+            "roundTrip": 2.96
+          },
+          {
+            "id": 25,
+            "result": "ok",
+            "roundTrip": 4.22
+          },
+          {
+            "id": 26,
+            "result": "ok",
+            "roundTrip": 4.66
+          },
+          {
+            "id": 27,
+            "result": "ok",
+            "roundTrip": 3.1
+          },
+          {
+            "id": 28,
+            "result": "ok",
+            "roundTrip": 3.01
+          },
+          {
+            "id": 29,
+            "result": "ok",
+            "roundTrip": 5.1
+          },
+          {
+            "id": 30,
+            "result": "ok",
+            "roundTrip": 3.82
+          },
+          {
+            "id": 31,
+            "result": "ok",
+            "roundTrip": 3.33
+          },
+          {
+            "id": 32,
+            "result": "ok",
+            "roundTrip": 2.63
+          },
+          {
+            "id": 33,
+            "result": "ok",
+            "roundTrip": 2.1
+          },
+          {
+            "id": 34,
+            "result": "ok",
+            "roundTrip": 1.86
+          },
+          {
+            "id": 35,
+            "result": "ok",
+            "roundTrip": 1.0
+          },
+          {
+            "id": 36,
+            "result": "ok",
+            "roundTrip": 4.18
+          },
+          {
+            "id": 37,
+            "result": "ok",
+            "roundTrip": 1.57
+          },
+          {
+            "id": 38,
+            "result": "ok",
+            "roundTrip": 1.54
+          },
+          {
+            "id": 39,
+            "result": "ok",
+            "roundTrip": 2.15
+          },
+          {
+            "id": 40,
+            "result": "ok",
+            "roundTrip": 4.56
+          },
+          {
+            "id": 41,
+            "result": null,
+            "roundTrip": null
+          }
+        ]
+      },
+      "metrics": {
+        "waitAfterOpeningSeconds": 4.24,
+        "waitAfterSeekingSeconds": 2.4,
+        "loadingAfterSeekingPercent": 4.1,
+        "loadingWhilePlayingPercent": 0.0,
+        "providerP50Seconds": 2.96,
+        "providerP90Seconds": 4.66,
+        "providerSamples": 19
+      }
+    },
+    {
+      "name": "hbo-1.5",
+      "site": "hbo",
+      "rate": 1.5,
+      "url": "https://play.hbomax.com/video/watch/44805ae8-7771-4238-ad89-2c629a30db4d",
+      "started": "2026-10-10T14:14:48.558350+00:00",
+      "target": 720,
+      "seeks": 1,
+      "opening": {
+        "stats": {
+          "from": 898.9,
+          "to": 942.2,
+          "played": 43.7,
+          "wall": 28.0,
+          "views": 41,
+          "counted": 43.4,
+          "states": {
+            "empty": 15.3,
+            "loading": 7.0,
+            "ready": 21.1
+          },
+          "coverage": 72.7,
+          "firstCaptionAt": 900.4,
+          "firstReadyAt": 914.4,
+          "firstCaptionWall": 1.1,
+          "firstReadyWall": 10.4,
+          "loading": {
+            "episodes": 2,
+            "seconds": 7.0,
+            "longest": 3.6,
+            "flashes": 0
+          },
+          "lag": {
+            "sentences": 14,
+            "measured": 12,
+            "missed": 2,
+            "p50": 0.1,
+            "p90": 0.1,
+            "max": 0.1,
+            "over1s": 0
+          },
+          "batches": {
+            "count": 11,
+            "results": {
+              "aborted": 1,
+              "ok": 9,
+              "pending": 1
+            },
+            "measured": 9,
+            "p50": 1.6,
+            "p90": 10.41,
+            "max": 10.41,
+            "firstItemP50": 1.6,
+            "waitMax": 0.0,
+            "opening": [
+              {
+                "seg": null,
+                "size": 1,
+                "result": "aborted",
+                "wait": 0.0,
+                "first": null,
+                "roundTrip": 2.97
+              },
+              {
+                "seg": null,
+                "size": 2,
+                "result": "ok",
+                "wait": 0.0,
+                "first": 8.85,
+                "roundTrip": 8.85
+              },
+              {
+                "seg": null,
+                "size": 3,
+                "result": "ok",
+                "wait": 0.0,
+                "first": 3.15,
+                "roundTrip": 3.16
+              }
+            ],
+            "together": 9
+          },
+          "before": 1.4,
+          "since": "open",
+          "playbackRate": 1.5,
+          "visible": 1.0
+        },
+        "requests": [
+          {
+            "id": 1,
+            "result": "aborted",
+            "roundTrip": 2.97
+          },
+          {
+            "id": 2,
+            "result": "ok",
+            "roundTrip": 8.85
+          },
+          {
+            "id": 3,
+            "result": "ok",
+            "roundTrip": 3.16
+          },
+          {
+            "id": 4,
+            "result": "ok",
+            "roundTrip": 1.6
+          },
+          {
+            "id": 5,
+            "result": "ok",
+            "roundTrip": 1.51
+          },
+          {
+            "id": 6,
+            "result": "ok",
+            "roundTrip": 1.85
+          },
+          {
+            "id": 7,
+            "result": "ok",
+            "roundTrip": 10.41
+          },
+          {
+            "id": 8,
+            "result": "ok",
+            "roundTrip": 1.53
+          },
+          {
+            "id": 9,
+            "result": null,
+            "roundTrip": null
+          },
+          {
+            "id": 10,
+            "result": "ok",
+            "roundTrip": 1.28
+          },
+          {
+            "id": 11,
+            "result": "ok",
+            "roundTrip": 1.31
+          }
+        ]
+      },
+      "landing": {
+        "stats": {
+          "from": 720,
+          "to": 762.8,
+          "played": 42.4,
+          "wall": 26.5,
+          "views": 71,
+          "counted": 42.8,
+          "states": {
+            "empty": 9.1,
+            "loading": 9.6,
+            "ready": 24.0
+          },
+          "coverage": 63.3,
+          "firstCaptionAt": 720,
+          "firstReadyAt": 726.5,
+          "firstCaptionWall": 1.1,
+          "firstReadyWall": 5.5,
+          "loading": {
+            "episodes": 8,
+            "seconds": 9.6,
+            "longest": 2.2,
+            "flashes": 0
+          },
+          "lag": {
+            "sentences": 27,
+            "measured": 18,
+            "missed": 9,
+            "p50": 0.1,
+            "p90": 0.2,
+            "max": 1.1,
+            "over1s": 1
+          },
+          "batches": {
+            "count": 8,
+            "results": {
+              "aborted": 3,
+              "ok": 4,
+              "pending": 1
+            },
+            "measured": 4,
+            "p50": 2.61,
+            "p90": 3.96,
+            "max": 3.96,
+            "firstItemP50": 2.61,
+            "waitMax": 0.0,
+            "opening": [
+              {
+                "seg": null,
+                "size": 4,
+                "result": "aborted",
+                "wait": 0.0,
+                "first": null,
+                "roundTrip": 13.42
+              },
+              {
+                "seg": null,
+                "size": 1,
+                "result": "aborted",
+                "wait": 0.0,
+                "first": null,
+                "roundTrip": 2.2
+              },
+              {
+                "seg": null,
+                "size": 4,
+                "result": "ok",
+                "wait": 0.0,
+                "first": 3.96,
+                "roundTrip": 3.96
+              }
+            ],
+            "together": 4
+          },
+          "before": 3.0,
+          "since": "seek",
+          "playbackRate": 1.5,
+          "visible": 1.0
+        },
+        "requests": [
+          {
+            "id": 9,
+            "result": "aborted",
+            "roundTrip": 13.42
+          },
+          {
+            "id": 12,
+            "result": "aborted",
+            "roundTrip": 2.2
+          },
+          {
+            "id": 13,
+            "result": "ok",
+            "roundTrip": 3.96
+          },
+          {
+            "id": 14,
+            "result": "ok",
+            "roundTrip": 2.56
+          },
+          {
+            "id": 15,
+            "result": "aborted",
+            "roundTrip": 14.14
+          },
+          {
+            "id": 16,
+            "result": "ok",
+            "roundTrip": 2.81
+          },
+          {
+            "id": 17,
+            "result": "ok",
+            "roundTrip": 2.61
+          },
+          {
+            "id": 18,
+            "result": null,
+            "roundTrip": null
+          }
+        ]
+      },
+      "playing": {
+        "stats": {
+          "from": 765.9,
+          "to": 945.4,
+          "played": 180.1,
+          "wall": 119.9,
+          "views": 154,
+          "counted": 179.5,
+          "states": {
+            "empty": 95.7,
+            "ready": 83.9
+          },
+          "coverage": 99.8,
+          "firstCaptionAt": 800.8,
+          "firstReadyAt": 800.8,
+          "firstCaptionWall": 23.5,
+          "firstReadyWall": 23.5,
+          "loading": {
+            "episodes": 0,
+            "seconds": 0,
+            "longest": 0,
+            "flashes": 0
+          },
+          "lag": {
+            "sentences": 49,
+            "measured": 49,
+            "missed": 0,
+            "p50": 0.1,
+            "p90": 0.2,
+            "max": 0.2,
+            "over1s": 0
+          },
+          "batches": {
+            "count": 12,
+            "results": {
+              "ok": 12
+            },
+            "measured": 12,
+            "p50": 4.88,
+            "p90": 11.27,
+            "max": 14.58,
+            "firstItemP50": 4.88,
+            "waitMax": 0.0,
+            "opening": [
+              {
+                "seg": null,
+                "size": 1,
+                "result": "ok",
+                "wait": 0.0,
+                "first": 2.15,
+                "roundTrip": 2.15
+              },
+              {
+                "seg": null,
+                "size": 4,
+                "result": "ok",
+                "wait": 0.0,
+                "first": 11.27,
+                "roundTrip": 11.27
+              },
+              {
+                "seg": null,
+                "size": 3,
+                "result": "ok",
+                "wait": 0.0,
+                "first": 1.61,
+                "roundTrip": 1.61
+              }
+            ],
+            "together": 12
+          },
+          "playbackRate": 1.5,
+          "visible": 1.0
+        },
+        "requests": [
+          {
+            "id": 18,
+            "result": "ok",
+            "roundTrip": 2.15
+          },
+          {
+            "id": 19,
+            "result": "ok",
+            "roundTrip": 11.27
+          },
+          {
+            "id": 20,
+            "result": "ok",
+            "roundTrip": 1.61
+          },
+          {
+            "id": 21,
+            "result": "ok",
+            "roundTrip": 1.42
+          },
+          {
+            "id": 22,
+            "result": "ok",
+            "roundTrip": 8.72
+          },
+          {
+            "id": 23,
+            "result": "ok",
+            "roundTrip": 1.76
+          },
+          {
+            "id": 24,
+            "result": "ok",
+            "roundTrip": 10.2
+          },
+          {
+            "id": 25,
+            "result": "ok",
+            "roundTrip": 6.31
+          },
+          {
+            "id": 26,
+            "result": "ok",
+            "roundTrip": 4.88
+          },
+          {
+            "id": 27,
+            "result": "ok",
+            "roundTrip": 1.96
+          },
+          {
+            "id": 28,
+            "result": "ok",
+            "roundTrip": 5.8
+          },
+          {
+            "id": 29,
+            "result": "ok",
+            "roundTrip": 14.58
+          }
+        ]
+      },
+      "metrics": {
+        "waitAfterOpeningSeconds": 9.33,
+        "waitAfterSeekingSeconds": 4.33,
+        "loadingAfterSeekingPercent": 28.6,
+        "loadingWhilePlayingPercent": 0.0,
+        "providerP50Seconds": 4.88,
+        "providerP90Seconds": 11.27,
+        "providerSamples": 12
+      }
+    },
+    {
+      "name": "hbo-2",
+      "site": "hbo",
+      "rate": 2,
+      "url": "https://play.hbomax.com/video/watch/44805ae8-7771-4238-ad89-2c629a30db4d",
+      "started": "2026-10-10T14:18:09.605031+00:00",
+      "target": 120,
+      "seeks": 1,
+      "opening": {
+        "stats": {
+          "from": 943.9,
+          "to": 989.5,
+          "played": 44.3,
+          "wall": 21.7,
+          "views": 49,
+          "counted": 45.6,
+          "states": {
+            "empty": 12.6,
+            "loading": 5.9,
+            "ready": 27.1
+          },
+          "coverage": 78.2,
+          "firstCaptionAt": 943.9,
+          "firstReadyAt": 952.0,
+          "firstCaptionWall": 0.0,
+          "firstReadyWall": 4.1,
+          "loading": {
+            "episodes": 2,
+            "seconds": 5.9,
+            "longest": 4.8,
+            "flashes": 0
+          },
+          "lag": {
+            "sentences": 17,
+            "measured": 15,
+            "missed": 2,
+            "p50": 0.2,
+            "p90": 0.2,
+            "max": 0.3,
+            "over1s": 0
+          },
+          "batches": {
+            "count": 12,
+            "results": {
+              "aborted": 2,
+              "ok": 8,
+              "pending": 2
+            },
+            "measured": 8,
+            "p50": 2.05,
+            "p90": 3.5,
+            "max": 3.5,
+            "firstItemP50": 2.04,
+            "waitMax": 0.0,
+            "opening": [
+              {
+                "seg": null,
+                "size": 1,
+                "result": "aborted",
+                "wait": 0.0,
+                "first": null,
+                "roundTrip": 0.71
+              },
+              {
+                "seg": null,
+                "size": 1,
+                "result": "aborted",
+                "wait": 0.0,
+                "first": null,
+                "roundTrip": 3.1
+              },
+              {
+                "seg": null,
+                "size": 1,
+                "result": "ok",
+                "wait": 0.0,
+                "first": 2.91,
+                "roundTrip": 2.91
+              }
+            ],
+            "together": 8
+          },
+          "before": 2.2,
+          "since": "open",
+          "playbackRate": 2,
+          "visible": 1.0
+        },
+        "requests": [
+          {
+            "id": 1,
+            "result": "aborted",
+            "roundTrip": 0.71
+          },
+          {
+            "id": 2,
+            "result": "aborted",
+            "roundTrip": 3.1
+          },
+          {
+            "id": 3,
+            "result": "ok",
+            "roundTrip": 2.91
+          },
+          {
+            "id": 4,
+            "result": "ok",
+            "roundTrip": 1.98
+          },
+          {
+            "id": 5,
+            "result": "ok",
+            "roundTrip": 2.05
+          },
+          {
+            "id": 6,
+            "result": "ok",
+            "roundTrip": 1.57
+          },
+          {
+            "id": 7,
+            "result": "ok",
+            "roundTrip": 2.09
+          },
+          {
+            "id": 8,
+            "result": "ok",
+            "roundTrip": 3.5
+          },
+          {
+            "id": 9,
+            "result": "ok",
+            "roundTrip": 1.88
+          },
+          {
+            "id": 10,
+            "result": null,
+            "roundTrip": null
+          },
+          {
+            "id": 11,
+            "result": "ok",
+            "roundTrip": 3.01
+          },
+          {
+            "id": 12,
+            "result": null,
+            "roundTrip": null
+          }
+        ]
+      },
+      "landing": {
+        "stats": {
+          "from": 120,
+          "to": 162.9,
+          "played": 42.4,
+          "wall": 19.6,
+          "views": 36,
+          "counted": 42.9,
+          "states": {
+            "empty": 13.5,
+            "loading": 4.1,
+            "ready": 25.2
+          },
+          "coverage": 83.8,
+          "firstCaptionAt": 120,
+          "firstReadyAt": 133.2,
+          "firstCaptionWall": 1.2,
+          "firstReadyWall": 7.9,
+          "loading": {
+            "episodes": 1,
+            "seconds": 4.1,
+            "longest": 4.1,
+            "flashes": 0
+          },
+          "lag": {
+            "sentences": 13,
+            "measured": 12,
+            "missed": 1,
+            "p50": 0.1,
+            "p90": 0.2,
+            "max": 0.2,
+            "over1s": 0
+          },
+          "batches": {
+            "count": 13,
+            "results": {
+              "aborted": 3,
+              "ok": 8,
+              "pending": 2
+            },
+            "measured": 8,
+            "p50": 1.94,
+            "p90": 13.19,
+            "max": 13.19,
+            "firstItemP50": 1.93,
+            "waitMax": 0.0,
+            "opening": [
+              {
+                "seg": null,
+                "size": 3,
+                "result": "aborted",
+                "wait": 0.0,
+                "first": null,
+                "roundTrip": 11.97
+              },
+              {
+                "seg": null,
+                "size": 3,
+                "result": "aborted",
+                "wait": 0.0,
+                "first": null,
+                "roundTrip": 3.82
+              },
+              {
+                "seg": null,
+                "size": 1,
+                "result": "aborted",
+                "wait": 0.0,
+                "first": null,
+                "roundTrip": 2.37
+              }
+            ],
+            "together": 8
+          },
+          "before": 3.7,
+          "since": "seek",
+          "playbackRate": 2,
+          "visible": 1.0
+        },
+        "requests": [
+          {
+            "id": 10,
+            "result": "aborted",
+            "roundTrip": 11.97
+          },
+          {
+            "id": 12,
+            "result": "aborted",
+            "roundTrip": 3.82
+          },
+          {
+            "id": 13,
+            "result": "aborted",
+            "roundTrip": 2.37
+          },
+          {
+            "id": 14,
+            "result": "ok",
+            "roundTrip": 2.27
+          },
+          {
+            "id": 15,
+            "result": "ok",
+            "roundTrip": 4.13
+          },
+          {
+            "id": 16,
+            "result": "ok",
+            "roundTrip": 1.94
+          },
+          {
+            "id": 17,
+            "result": "ok",
+            "roundTrip": 4.78
+          },
+          {
+            "id": 18,
+            "result": "ok",
+            "roundTrip": 13.19
+          },
+          {
+            "id": 19,
+            "result": "ok",
+            "roundTrip": 1.82
+          },
+          {
+            "id": 20,
+            "result": "ok",
+            "roundTrip": 1.59
+          },
+          {
+            "id": 21,
+            "result": "ok",
+            "roundTrip": 1.71
+          },
+          {
+            "id": 22,
+            "result": null,
+            "roundTrip": null
+          },
+          {
+            "id": 23,
+            "result": null,
+            "roundTrip": null
+          }
+        ]
+      },
+      "playing": {
+        "stats": {
+          "from": 167.1,
+          "to": 346.7,
+          "played": 181.5,
+          "wall": 90.2,
+          "views": 203,
+          "counted": 179.6,
+          "states": {
+            "empty": 54.6,
+            "ready": 124.9
+          },
+          "coverage": 99.8,
+          "firstCaptionAt": 174.0,
+          "firstReadyAt": 174.0,
+          "firstCaptionWall": 3.9,
+          "firstReadyWall": 3.9,
+          "loading": {
+            "episodes": 0,
+            "seconds": 0,
+            "longest": 0,
+            "flashes": 0
+          },
+          "lag": {
+            "sentences": 84,
+            "measured": 84,
+            "missed": 0,
+            "p50": 0.1,
+            "p90": 0.3,
+            "max": 0.3,
+            "over1s": 0
+          },
+          "batches": {
+            "count": 33,
+            "results": {
+              "invalid": 1,
+              "ok": 31,
+              "pending": 1
+            },
+            "measured": 31,
+            "p50": 2.6,
+            "p90": 8.76,
+            "max": 11.22,
+            "firstItemP50": 2.6,
+            "waitMax": 0.0,
+            "opening": [
+              {
+                "seg": null,
+                "size": 4,
+                "result": "invalid",
+                "wait": 0.0,
+                "first": 10.29,
+                "roundTrip": 10.29
+              },
+              {
+                "seg": null,
+                "size": 3,
+                "result": "ok",
+                "wait": 0.0,
+                "first": 10.61,
+                "roundTrip": 10.61
+              },
+              {
+                "seg": null,
+                "size": 1,
+                "result": "ok",
+                "wait": 0.0,
+                "first": 1.26,
+                "roundTrip": 1.26
+              }
+            ],
+            "together": 32
+          },
+          "playbackRate": 2,
+          "visible": 1.0
+        },
+        "requests": [
+          {
+            "id": 22,
+            "result": "invalid",
+            "roundTrip": 10.29
+          },
+          {
+            "id": 23,
+            "result": "ok",
+            "roundTrip": 10.61
+          },
+          {
+            "id": 24,
+            "result": "ok",
+            "roundTrip": 1.26
+          },
+          {
+            "id": 25,
+            "result": "ok",
+            "roundTrip": 5.88
+          },
+          {
+            "id": 26,
+            "result": "ok",
+            "roundTrip": 8.76
+          },
+          {
+            "id": 27,
+            "result": "ok",
+            "roundTrip": 3.68
+          },
+          {
+            "id": 28,
+            "result": "ok",
+            "roundTrip": 1.6
+          },
+          {
+            "id": 29,
+            "result": "ok",
+            "roundTrip": 2.43
+          },
+          {
+            "id": 30,
+            "result": "ok",
+            "roundTrip": 7.28
+          },
+          {
+            "id": 31,
+            "result": "ok",
+            "roundTrip": 1.3
+          },
+          {
+            "id": 32,
+            "result": "ok",
+            "roundTrip": 1.41
+          },
+          {
+            "id": 33,
+            "result": "ok",
+            "roundTrip": 1.47
+          },
+          {
+            "id": 34,
+            "result": "ok",
+            "roundTrip": 9.13
+          },
+          {
+            "id": 35,
+            "result": "ok",
+            "roundTrip": 6.05
+          },
+          {
+            "id": 36,
+            "result": "ok",
+            "roundTrip": 2.6
+          },
+          {
+            "id": 37,
+            "result": "ok",
+            "roundTrip": 11.22
+          },
+          {
+            "id": 38,
+            "result": "ok",
+            "roundTrip": 7.79
+          },
+          {
+            "id": 39,
+            "result": "ok",
+            "roundTrip": 3.66
+          },
+          {
+            "id": 40,
+            "result": "ok",
+            "roundTrip": 2.6
+          },
+          {
+            "id": 41,
+            "result": "ok",
+            "roundTrip": 4.6
+          },
+          {
+            "id": 42,
+            "result": "ok",
+            "roundTrip": 2.17
+          },
+          {
+            "id": 43,
+            "result": "ok",
+            "roundTrip": 2.2
+          },
+          {
+            "id": 44,
+            "result": "ok",
+            "roundTrip": 1.76
+          },
+          {
+            "id": 45,
+            "result": "ok",
+            "roundTrip": 2.21
+          },
+          {
+            "id": 46,
+            "result": "ok",
+            "roundTrip": 2.21
+          },
+          {
+            "id": 47,
+            "result": "ok",
+            "roundTrip": 1.81
+          },
+          {
+            "id": 48,
+            "result": "ok",
+            "roundTrip": 4.72
+          },
+          {
+            "id": 49,
+            "result": "ok",
+            "roundTrip": 2.97
+          },
+          {
+            "id": 50,
+            "result": "ok",
+            "roundTrip": 2.36
+          },
+          {
+            "id": 51,
+            "result": "ok",
+            "roundTrip": 5.74
+          },
+          {
+            "id": 52,
+            "result": "ok",
+            "roundTrip": 2.33
+          },
+          {
+            "id": 53,
+            "result": "ok",
+            "roundTrip": 2.05
+          },
+          {
+            "id": 54,
+            "result": null,
+            "roundTrip": null
+          }
+        ]
+      },
+      "metrics": {
+        "waitAfterOpeningSeconds": 4.05,
+        "waitAfterSeekingSeconds": 6.6,
+        "loadingAfterSeekingPercent": 14.0,
+        "loadingWhilePlayingPercent": 0.0,
+        "providerP50Seconds": 2.6,
+        "providerP90Seconds": 8.76,
+        "providerSamples": 31
+      }
+    }
+  ],
+  "excludedRuns": [
+    {
+      "name": "x-1-disconnected-run",
+      "reason": "Chrome closed the DevTools socket at 2026-10-10T14:22:58Z during the 180 s playing trace.",
+      "opening": {
+        "from": 0,
+        "to": 45.0,
+        "played": 44.5,
+        "wall": 43.7,
+        "views": 42,
+        "counted": 45.0,
+        "states": {
+          "empty": 1.1,
+          "loading": 1.6,
+          "ready": 42.3
+        },
+        "coverage": 95.5,
+        "firstCaptionAt": 0.7,
+        "firstReadyAt": 2.6,
+        "firstCaptionWall": 1.1,
+        "firstReadyWall": 3.0,
+        "loading": {
+          "episodes": 1,
+          "seconds": 1.6,
+          "longest": 1.6,
+          "flashes": 0
+        },
+        "lag": {
+          "sentences": 12,
+          "measured": 12,
+          "missed": 0,
+          "p50": 0.0,
+          "p90": 0.3,
+          "max": 1.9,
+          "over1s": 1
+        },
+        "batches": {
+          "count": 12,
+          "results": {
+            "ok": 11,
+            "pending": 1
+          },
+          "measured": 11,
+          "p50": 3.02,
+          "p90": 9.27,
+          "max": 11.92,
+          "firstItemP50": 3.01,
+          "waitMax": 0.0,
+          "opening": [
+            {
+              "seg": null,
+              "size": 1,
+              "result": "ok",
+              "wait": 0.0,
+              "first": 1.92,
+              "roundTrip": 1.93
+            },
+            {
+              "seg": null,
+              "size": 2,
+              "result": "ok",
+              "wait": 0.0,
+              "first": 3.28,
+              "roundTrip": 3.28
+            },
+            {
+              "seg": null,
+              "size": 1,
+              "result": "ok",
+              "wait": 0.0,
+              "first": 3.01,
+              "roundTrip": 3.02
+            }
+          ],
+          "together": 11
+        },
+        "before": 1.2,
+        "since": "open",
+        "playbackRate": 1,
+        "visible": 1.0
+      },
+      "landing": {
+        "from": 300,
+        "to": 343.1,
+        "played": 43.5,
+        "wall": 41.6,
+        "views": 59,
+        "counted": 43.1,
+        "states": {
+          "empty": 1.9,
+          "loading": 1.7,
+          "ready": 39.5
+        },
+        "coverage": 93.9,
+        "firstCaptionAt": 300,
+        "firstReadyAt": 302.5,
+        "firstCaptionWall": 0.5,
+        "firstReadyWall": 3.0,
+        "loading": {
+          "episodes": 2,
+          "seconds": 1.7,
+          "longest": 1.3,
+          "flashes": 0
+        },
+        "lag": {
+          "sentences": 21,
+          "measured": 20,
+          "missed": 1,
+          "p50": 0.1,
+          "p90": 0.3,
+          "max": 1.7,
+          "over1s": 1
+        },
+        "batches": {
+          "count": 11,
+          "results": {
+            "aborted": 1,
+            "ok": 8,
+            "pending": 2
+          },
+          "measured": 8,
+          "p50": 2.63,
+          "p90": 28.75,
+          "max": 28.75,
+          "firstItemP50": 2.63,
+          "waitMax": 0.0,
+          "opening": [
+            {
+              "seg": null,
+              "size": 2,
+              "result": "aborted",
+              "wait": 0.0,
+              "first": null,
+              "roundTrip": 17.05
+            },
+            {
+              "seg": null,
+              "size": 1,
+              "result": "ok",
+              "wait": 0.0,
+              "first": 2.1,
+              "roundTrip": 2.1
+            },
+            {
+              "seg": null,
+              "size": 4,
+              "result": "ok",
+              "wait": 0.0,
+              "first": 2.33,
+              "roundTrip": 2.34
+            }
+          ],
+          "together": 8
+        },
+        "before": 1.5,
+        "since": "seek",
+        "playbackRate": 1,
+        "visible": 1.0
+      },
+      "seek": null
+    },
+    {
+      "name": "youtube-1-setup-run",
+      "reason": "Expected one seek: {'action': 'media', 'ok': True, 'video': {'time': 301.28, 'paused': False, 'ended': False, 'ad': False, 'rate': 1, 'ready': 4, 'visible': 'visible'}, 'seeks': 1, 'seconds': 3.0}",
+      "opening": {
+        "from": 0,
+        "to": 45.0,
+        "played": 43.4,
+        "wall": 43.1,
+        "views": 44,
+        "counted": 45.0,
+        "states": {
+          "empty": 12.7,
+          "ready": 32.3
+        },
+        "coverage": 99.8,
+        "firstCaptionAt": 12.7,
+        "firstReadyAt": 12.7,
+        "firstCaptionWall": 21.0,
+        "firstReadyWall": 21.0,
+        "loading": {
+          "episodes": 0,
+          "seconds": 0,
+          "longest": 0,
+          "flashes": 0
+        },
+        "lag": {
+          "sentences": 10,
+          "measured": 10,
+          "missed": 0,
+          "p50": 0.0,
+          "p90": 0.1,
+          "max": 0.1,
+          "over1s": 0
+        },
+        "batches": {
+          "count": 8,
+          "results": {
+            "ok": 7,
+            "pending": 1
+          },
+          "measured": 7,
+          "p50": 4.22,
+          "p90": 9.94,
+          "max": 9.94,
+          "firstItemP50": 4.22,
+          "waitMax": 0.0,
+          "opening": [
+            {
+              "seg": null,
+              "size": 2,
+              "result": "ok",
+              "wait": 0.0,
+              "first": 1.8,
+              "roundTrip": 1.8
+            },
+            {
+              "seg": null,
+              "size": 3,
+              "result": "ok",
+              "wait": 0.0,
+              "first": 7.13,
+              "roundTrip": 7.13
+            },
+            {
+              "seg": null,
+              "size": 3,
+              "result": "ok",
+              "wait": 0.0,
+              "first": 9.94,
+              "roundTrip": 9.94
+            }
+          ],
+          "together": 7
+        },
+        "before": 1.9,
+        "since": "open",
+        "playbackRate": 1,
+        "visible": 1.0
+      },
+      "landing": null,
+      "seek": {
+        "action": "media",
+        "ok": true,
+        "video": {
+          "time": 301.28,
+          "paused": false,
+          "ended": false,
+          "ad": false,
+          "rate": 1,
+          "ready": 4,
+          "visible": "visible"
+        },
+        "seeks": 1,
+        "seconds": 3.0
+      }
+    }
+  ]
+}

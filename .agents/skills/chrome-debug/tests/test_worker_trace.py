@@ -176,6 +176,75 @@ class Summary(unittest.TestCase):
         self.assertEqual((second["done"], "sent" in second), (30, False))
 
 
+class Batches(unittest.TestCase):
+
+    def test_provider_percentiles_use_successes_completed_in_the_window(self):
+        events = []
+        requests = [
+            (1, -5000, -1000, "ok"),
+            (2, -2000, 1000, "ok"),
+            (3, 0, 1000, "ok"),
+            (4, 0, 2000, "ok"),
+            (5, 0, 8000, "aborted"),
+            (6, 0, 9000, "error"),
+            (7, 0, 10000, "timeout"),
+            (8, 0, 11000, "invalid"),
+            (9, 0, None, None),
+        ]
+        for number, sent, done, result in requests:
+            events.extend([
+                (sent - 500, {"e": "batch", "id": number, "tab": "1:0", "size": 1}),
+                (sent, {"e": "sent", "id": number}),
+            ])
+            if done is not None:
+                events.append((done, {"e": "done", "id": number, "result": result}))
+        events.extend(as_events(playing(2, [1.0] * 12)))
+        summary = wt.summarize(sorted(events, key=lambda item: item[0]), "r", 0, 24.0)
+        stats = summary["stats"]["batches"]
+        self.assertEqual((stats["p50"], stats["p90"], stats["max"], stats["measured"]), (2.0, 3.0, 3.0, 3))
+        self.assertEqual(stats["count"], 8)
+        self.assertEqual(stats["results"], {"ok": 3, "aborted": 1, "error": 1, "timeout": 1,
+                                          "invalid": 1, "pending": 1})
+        self.assertEqual(summary["batches"][0]["roundTrip"], 3.0)
+        self.assertEqual(summary["batches"][0]["wait"], 0.5)
+
+    def test_since_mark_includes_completions_before_the_step(self):
+        events = [
+            (-1000, {"e": "batch", "id": 1, "tab": "1:0", "size": 1, "start": 100, "end": 110}),
+            (-500, {"e": "sent", "id": 1}),
+            (500, {"e": "done", "id": 1, "result": "ok"}),
+            *as_events(playing(1, [1.0] * 3)),
+        ]
+        ordinary = wt.summarize(events, "r", 1000, 2.0)
+        self.assertEqual(ordinary["stats"]["batches"]["count"], 0)
+        self.assertEqual(ordinary["stats"]["batches"]["measured"], 0)
+        self.assertIsNone(ordinary["stats"]["batches"]["p50"])
+        self.assertIsNone(ordinary["stats"]["batches"]["p90"])
+        self.assertEqual(ordinary["sentences"][0]["batch"]["id"], 1)
+        since = wt.summarize(events, "r", 1000, 2.0, since=(0, 100), before=1.0)
+        self.assertEqual(since["stats"]["batches"]["measured"], 1)
+        self.assertEqual(since["stats"]["batches"]["p50"], 1.0)
+
+    def test_batch_stats_leave_out_batches_finished_before_the_trace(self):
+        """43d03e2b: the 180 s trace listed 36 requests, 15 of them from the landing trace.
+
+        Requests completed before this trace must not enter its statistics.
+        """
+        view = {"e": "view", "run": "r", "tab": "1:0", "t": 50, "state": "ready", "paused": False,
+                "seeking": False, "cue": 3, "start": 49}
+        events = [
+            (0, {"e": "batch", "id": 1, "tab": "1:0", "size": 4, "start": 0, "end": 16}),
+            (100, {"e": "sent", "id": 1}),
+            (900, {"e": "done", "id": 1, "result": "ok"}),
+            (5000, {"e": "batch", "id": 2, "tab": "1:0", "size": 4, "start": 48, "end": 64}),
+            (5100, {"e": "sent", "id": 2}),
+            (5900, {"e": "done", "id": 2, "result": "ok"}),
+            (6000, view),
+            (7000, {**view, "t": 51}),
+        ]
+        self.assertEqual(wt.summarize(events, "r", 4000, 1.0)["stats"]["batches"]["count"], 1)
+
+
 class Clock(unittest.TestCase):
     """00834c8: a trace from a hidden or throttled tab must say so."""
 
