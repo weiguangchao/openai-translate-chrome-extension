@@ -5,7 +5,7 @@ import {
   translationBatchLimit,
 } from '../shared/limits';
 import type { PlaybackCue } from '../shared/playback-plan';
-import { needsSubtitleSegmentation } from '../shared/subtitle-segmentation';
+import { needsSubtitleSegmentation } from '../shared/segmenter';
 import type { TranslationPart } from '../shared/caption-translation';
 import type { TimedCue } from './cues';
 

@@ -88,7 +88,7 @@
           videoDetails: { videoId: state.id },
           captions: {
             playerCaptionsTracklistRenderer: {
-              captionTracks: [track('en'), track('en', 'asr'), track('fr'), track('zh-CN')],
+              captionTracks: [track('en'), track('en', 'asr'), track('zh-TW'), track('zh-CN')],
             },
           },
         });
@@ -96,7 +96,7 @@
         const subtitles = [
           ['en', 'en', 'English'],
           ['en-asr', 'en', 'English (auto)'],
-          ['fr', 'fr', 'Français'],
+          ['zh-TW', 'zh-TW', '繁體中文'],
           ['zh-CN', 'zh-CN', '中文'],
         ];
         const media = () => `https://video.twimg.com/e2e/${state.id}`;

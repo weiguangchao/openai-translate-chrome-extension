@@ -124,7 +124,7 @@ describe('OpenAI-compatible provider contract', () => {
       const body = JSON.parse(fetch.mock.calls[0][1].body);
       const instructions: string = body.messages[0].content;
       expect(instructions).toMatch(/^Translate the given English into Simplified Chinese\./);
-      expect(instructions).toContain('{"results":[{"id":0,"parts":[...]}]}');
+      expect(instructions).toContain('{"id":0,"text":"..."} becomes {"id":0,"translation":"..."}');
       expect(JSON.parse(body.messages[1].content)).toEqual(texts.map((text, id) => ({ id, text })));
       expect(body).not.toHaveProperty('prompt');
       expect(body.stream).toBe(false);
@@ -626,5 +626,16 @@ describe('saved configuration contract', () => {
     for (const secret of ['apiKey', 'baseUrl', 'model', 'apiFormat'])
       expect(exposed).not.toHaveProperty(secret);
     expect(JSON.stringify(exposed)).not.toContain('private-test-key');
+  });
+
+  it.each([
+    [{ sourceLanguage: 'ja', targetLanguage: 'ko' }, ['en', 'zh-CN']],
+    [{ sourceLanguage: 'zh-CN', targetLanguage: 'ja' }, ['zh-CN', 'en']],
+    [{ sourceLanguage: 'fr', targetLanguage: 'en' }, ['zh-CN', 'en']],
+    [{ sourceLanguage: 'zh-TW', targetLanguage: 'en' }, ['zh-TW', 'en']],
+    [{ sourceLanguage: 'en', targetLanguage: 'en' }, ['en', 'en']],
+  ])('replaces a removed language without pairing it with the other one: %o', (saved, pair) => {
+    const settings = normalizeSettings({ ...config(), ...saved });
+    expect([settings.sourceLanguage, settings.targetLanguage]).toEqual(pair);
   });
 });

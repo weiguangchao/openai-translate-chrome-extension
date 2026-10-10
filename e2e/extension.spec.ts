@@ -9,8 +9,8 @@ import {
   denseCue,
   draftPrefix,
   elsewhereUrl,
-  frenchSource,
-  frenchTranslation,
+  traditionalSource,
+  traditionalTranslation,
   gardenSource,
   nextSource,
   nextTranslation,
@@ -89,7 +89,7 @@ for (const platform of ['youtube', 'hbo', 'x'] as const) {
         await p.seek(40);
         await p.play();
         await expect.poll(() => p.posts.length).toBe(1);
-        expect(p.posts[0].inputs).toMatchObject([{ id: 0, text: longCaption, split: true }]);
+        expect(p.posts[0].inputs).toEqual([{ id: 0, parts: longCaptionParts }]);
         await p.pause();
         const host = await p.overlay.elementHandle();
         const downloads = p.downloads.length;
@@ -195,17 +195,17 @@ for (const platform of ['youtube', 'hbo', 'x'] as const) {
           (r) => new URL(r.url).searchParams.has('tlang') || r.url.includes('zh-CN'),
         ),
       ).toBe(false);
-      await p.settings({ sourceLanguage: 'fr' });
-      await p.page.evaluate(() => window.fixture.select('fr'));
-      await p.pair(frenchSource, frenchTranslation);
+      await p.settings({ sourceLanguage: 'zh-TW' });
+      await p.page.evaluate(() => window.fixture.select('zh-TW'));
+      await p.pair(traditionalSource, traditionalTranslation);
       if (platform !== 'youtube') {
         await p.page.evaluate(() => window.fixture.select(null));
         await expect(p.original).toBeHidden();
         await expect(p.translated).toBeHidden();
-        await p.page.evaluate(() => window.fixture.select('fr'));
-        await p.pair(frenchSource, frenchTranslation);
+        await p.page.evaluate(() => window.fixture.select('zh-TW'));
+        await p.pair(traditionalSource, traditionalTranslation);
       }
-      expect(p.downloads.some((r) => r.url.includes('fr'))).toBe(true);
+      expect(p.downloads.some((r) => r.url.includes('zh-TW'))).toBe(true);
     });
   });
 

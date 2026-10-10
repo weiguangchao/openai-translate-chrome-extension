@@ -94,7 +94,7 @@ async function playTo(video: HTMLVideoElement, time: number) {
   await vi.advanceTimersByTimeAsync(0);
 }
 
-it('prefetches a long subtitle whole, has the Provider split it, and shows each part on time after a seek', async () => {
+it('prefetches a long subtitle as local lines and shows each line on time after a seek', async () => {
   const { video, player, sendMessage, lines } = setup();
   Object.assign(player, {
     getOption: () => ({ vssId: 'a.en' }),
@@ -116,11 +116,13 @@ it('prefetches a long subtitle whole, has the Provider split it, and shows each 
   });
   let finish!: (value: Response) => void;
   const requests: string[][] = [];
+  const providerInputs: unknown[] = [];
   vi.stubGlobal(
     'fetch',
     vi.fn(async (url: string, init?: RequestInit) => {
       if (url.includes('/api/timedtext')) return Response.json(githubCaptionTrack);
       requests.push(requestedTexts(init!));
+      providerInputs.push(JSON.parse(JSON.parse(init!.body as string).messages[1].content));
       return new Promise<Response>((resolve) => {
         finish = resolve;
       });
@@ -158,22 +160,18 @@ it('prefetches a long subtitle whole, has the Provider split it, and shows each 
   expect(requests).toEqual([[githubCaption]]);
   const split = [
     githubCommaParts[0],
-    'and many other people are realizing',
-    'that GitHub might not be the safest place for us to be leaving our code',
-    "now that they're randomly reverting merges and having downtime",
-    'that is measured in days instead of minutes.',
+    'and many other people are realizing that GitHub might not be the safest place',
+    "for us to be leaving our code now that they're randomly reverting merges",
+    'and having downtime that is measured in days instead of minutes.',
   ];
-  finish(
-    structuredReply([
-      { id: 0, parts: split.map((source) => ({ source, translation: `译文：${source}` })) },
-    ]),
-  );
+  expect(providerInputs).toEqual([[{ id: 0, parts: split }]]);
+  finish(structuredReply([{ id: 0, parts: split.map((line) => `译文：${line}`) }]));
   await vi.advanceTimersByTimeAsync(0);
   expect([...lines()].map((line) => line.textContent)).toEqual([split[0], `译文：${split[0]}`]);
   video.currentTime = 6.75;
   video.dispatchEvent(new Event('seeked'));
   await vi.advanceTimersByTimeAsync(400);
-  expect([...lines()].map((line) => line.textContent)).toEqual([split[3], `译文：${split[3]}`]);
+  expect([...lines()].map((line) => line.textContent)).toEqual([split[2], `译文：${split[2]}`]);
   const snapshots: string[][] = [];
   for (const time of [0, 3, 8.25, 2]) {
     video.currentTime = time;
@@ -183,7 +181,7 @@ it('prefetches a long subtitle whole, has the Provider split it, and shows each 
   }
   expect(snapshots).toEqual([
     [split[0], `译文：${split[0]}`],
-    [split[2], `译文：${split[2]}`],
+    [split[1], `译文：${split[1]}`],
     [split[3], `译文：${split[3]}`],
     [split[1], `译文：${split[1]}`],
   ]);
@@ -274,7 +272,7 @@ it('loads the selected YouTube track before playback, aligns rolling captions, a
       videoDetails: { videoId },
       captions: {
         playerCaptionsTracklistRenderer: {
-          captionTracks: ['en', 'es'].map((language) => ({
+          captionTracks: ['en', 'zh-Hant'].map((language) => ({
             languageCode: language,
             kind: 'asr',
             vssId: `.${language}`,
@@ -286,7 +284,7 @@ it('loads the selected YouTube track before playback, aligns rolling captions, a
   });
   let oldTrack!: (response: Response) => void;
   const fetch = vi.fn((url: string) => {
-    if (url.includes('lang=es'))
+    if (url.includes('lang=zh-Hant'))
       return new Promise<Response>((resolve) => {
         oldTrack = resolve;
       });
@@ -319,9 +317,9 @@ it('loads the selected YouTube track before playback, aligns rolling captions, a
   await playTo(video, 4);
   expect(lines()[0].textContent).toBe('Second phrase.');
   expect(lines()[1].textContent).toBe('译文：Second phrase.');
-  languageCode = 'es';
+  languageCode = 'zh-Hant';
   controller.update(
-    publicSettings({ ...DEFAULT_SETTINGS, apiKey: 'key', model: 'model', sourceLanguage: 'es' }),
+    publicSettings({ ...DEFAULT_SETTINGS, apiKey: 'key', model: 'model', sourceLanguage: 'zh-TW' }),
   );
   await vi.advanceTimersByTimeAsync(1100);
   expect(oldTrack).toBeTypeOf('function');
@@ -886,7 +884,7 @@ it('keeps the YouTube source across target/provider/style changes, seeks, blob r
           captionTracks: [
             { languageCode: 'en', vssId: '.en' },
             { languageCode: 'en', vssId: 'a.en', kind: 'asr' },
-            { languageCode: 'es', vssId: '.es' },
+            { languageCode: 'zh-Hant', vssId: '.zh-Hant' },
           ].map((track) => ({
             ...track,
             baseUrl: `https://www.youtube.com/api/timedtext?v=${videoId}&lang=${track.languageCode}&signature=${token}`,
@@ -907,7 +905,7 @@ it('keeps the YouTube source across target/provider/style changes, seeks, blob r
   await vi.advanceTimersByTimeAsync(0);
   expect(fetch).toHaveBeenCalledTimes(1);
   for (const next of [
-    { ...saved, targetLanguage: 'ja' },
+    { ...saved, targetLanguage: 'zh-TW' },
     { ...saved, model: 'other', baseUrl: 'https://other.example/v1', apiKey: 'other' },
     { ...saved, original: { ...saved.original, size: 36 } },
   ]) {
@@ -931,7 +929,7 @@ it('keeps the YouTube source across target/provider/style changes, seeks, blob r
   active = 'a.en';
   await vi.advanceTimersByTimeAsync(1200);
   expect(fetch).toHaveBeenCalledTimes(2);
-  controller.update(publicSettings({ ...saved, sourceLanguage: 'es' }));
+  controller.update(publicSettings({ ...saved, sourceLanguage: 'zh-TW' }));
   await vi.advanceTimersByTimeAsync(1200);
   expect(fetch).toHaveBeenCalledTimes(3);
   videoId = 'video-2';

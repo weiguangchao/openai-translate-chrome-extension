@@ -3,12 +3,8 @@ import { providerFetch, type ProviderSendPolicy } from './provider/transport';
 import { translationBatchLimit } from './limits';
 import { englishLanguageName, validateBaseUrl, validateSettings, type Settings } from './settings';
 import { addTokenUsage, readProviderUsage } from './token-usage';
-import {
-  modelAnswer,
-  parseModelJson,
-  scanTranslationResults,
-  subtitleDisplayLimit,
-} from './subtitle-segmentation';
+import { modelAnswer, parseModelJson, scanTranslationResults } from './model-json';
+import { segmenterFor } from './segmenter';
 import {
   readCaptionTranslation,
   type CaptionTranslation,
@@ -265,26 +261,19 @@ export async function translateCaptionBatch(
   inputs.forEach((input) => checkText(input.text));
   if (!inputs.length || inputs.length > translationBatchLimit)
     throw new Error('单次翻译的字幕过多。');
+  const segmenter = segmenterFor(settings.sourceLanguage);
+  const lines = inputs.map((input) => (input.needsSplit ? segmenter.lines(input.text) : []));
   const response = await complete(
     settings,
-    `The input is a JSON array of ordered captions from one passage. Use neighboring captions only as context; never move content between captions. Return only JSON {"results":[{"id":0,"parts":[...]}]} with exactly one result per input id, in input order.
-
-Without "split": return one part, {"translation":"..."}, translating the whole caption.
-
-With "split":true, the caption is too long for one line. Break it into consecutive parts and translate each as {"source":"...","translation":"..."}.
-- Copy the caption text into the sources word for word and in order; joined together, the sources must reproduce the text. Do not add, drop, or reword anything, including fillers and repetitions.
-- Break at natural clause boundaries and keep related words together. Prefer break points where each part's translation reads naturally on its own, without borrowing words from a neighboring part.
-- Aim for at most ${subtitleDisplayLimit} display columns in each part's source and in its translation (CJK characters count as two). Allow slight overflow rather than break a phrase, and avoid tiny fragments.
-- Translate each part in the context of the whole caption, preserving its content, spoken order, repetitions, and self-corrections.
-
-Example output shape (placeholders, not real text):
-{"results":[{"id":0,"parts":[{"translation":"<translation of caption 0>"}]},{"id":1,"parts":[{"source":"<first part of caption 1>","translation":"<its translation>"},{"source":"<rest of caption 1>","translation":"<its translation>"}]}]}`,
+    `The input is a JSON array of ordered captions from one passage. Use neighboring captions only as context; never move content between captions. Return only JSON {"results":[...]} with exactly one result per input id, in input order.
+- {"id":0,"text":"..."} becomes {"id":0,"translation":"..."}.
+- {"id":1,"parts":["...","..."]} is one sentence shown as consecutive subtitle lines. It becomes {"id":1,"parts":["...","..."]} with one translation per line, in the same order. Translate each line in the context of the whole sentence, but keep each line's content in its own translation.`,
     JSON.stringify(
-      inputs.map((input, id) => ({
-        id,
-        text: input.text,
-        ...(input.needsSplit ? { split: true } : {}),
-      })),
+      inputs.map((input, id) =>
+        lines[id].length > 1
+          ? { id, parts: lines[id].map(({ from, to }) => input.text.slice(from, to)) }
+          : { id, text: input.text },
+      ),
     ),
     65536,
     signal,
@@ -311,7 +300,7 @@ Example output shape (placeholders, not real text):
       ids.filter((other) => other === id).length !== 1
     )
       continue;
-    const translation = readCaptionTranslation(inputs[id], normalizeResult(value));
+    const translation = readCaptionTranslation(inputs[id].text, lines[id], normalizeResult(value));
     if (translation === null) continue;
     accepted.set(id, translation);
     onTranslation?.(id, translation);
@@ -346,14 +335,9 @@ function alignResultIds(values: unknown[], count: number): unknown[] {
 function normalizeResult(value: unknown): unknown {
   if (!value || typeof value !== 'object') return value;
   const record = value as { parts?: unknown; translation?: unknown; text?: unknown };
-  if (!Array.isArray(record.parts)) {
-    const translation = typeof record.translation === 'string' ? record.translation : record.text;
-    return typeof translation === 'string' ? { ...record, parts: [{ translation }] } : value;
-  }
-  return {
-    ...record,
-    parts: record.parts.map((part) => (typeof part === 'string' ? { translation: part } : part)),
-  };
+  if (Array.isArray(record.parts)) return value;
+  const translation = typeof record.translation === 'string' ? record.translation : record.text;
+  return typeof translation === 'string' ? { ...record, parts: [{ translation }] } : value;
 }
 
 function translationPayloads(value: unknown): unknown[] {
