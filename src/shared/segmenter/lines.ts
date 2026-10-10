@@ -7,7 +7,7 @@ export interface TextRange {
 
 export interface LanguageSegmenter {
   sentenceEnds(text: string): number[];
-  lines(text: string): TextRange[];
+  lines(text: string, limit?: number, breaks?: readonly number[]): TextRange[];
 }
 
 export interface WordBreak {
@@ -65,25 +65,30 @@ function clauses(text: string, range: TextRange, breaks: readonly number[]): Tex
   return cut(text, range, kept);
 }
 
-function fewestLines(text: string, range: TextRange, candidates: readonly WordBreak[]): number[] {
+function fewestLines(
+  text: string,
+  range: TextRange,
+  candidates: readonly WordBreak[],
+  limit: number,
+): number[] {
   const points = [
     { at: range.from, cost: 0 },
     ...candidates.filter((point) => point.at > range.from && point.at < range.to),
     { at: range.to, cost: 0 },
   ];
-  const target = width(text, range) / Math.ceil(width(text, range) / subtitleDisplayLimit);
+  const target = width(text, range) / Math.ceil(width(text, range) / limit);
   const best = [0];
   const previous = [0];
   for (let end = 1; end < points.length; end++) {
     best[end] = Infinity;
     for (let start = end - 1; start >= 0; start--) {
       const columns = width(text, trimmed(text, points[start].at, points[end].at));
-      if (columns > subtitleDisplayLimit && start < end - 1) break;
+      if (columns > limit && start < end - 1) break;
       const cost =
         best[start] +
         lineCost +
-        Math.max(0, columns - subtitleDisplayLimit) * overflowCost +
-        balanceCost * ((columns - target) / subtitleDisplayLimit) ** 2 +
+        Math.max(0, columns - limit) * overflowCost +
+        balanceCost * ((columns - target) / limit) ** 2 +
         (end < points.length - 1 ? points[end].cost : 0);
       if (cost < best[end]) {
         best[end] = cost;
@@ -97,16 +102,21 @@ function fewestLines(text: string, range: TextRange, candidates: readonly WordBr
   return breaks;
 }
 
-export function fitLines(text: string, rules: BreakRules): TextRange[] {
+export function fitLines(
+  text: string,
+  rules: BreakRules,
+  limit = subtitleDisplayLimit,
+  breaks: readonly number[] = [],
+): TextRange[] {
   const range = trimmed(text, 0, text.length);
   if (range.to === range.from) return [];
-  if (width(text, range) <= subtitleDisplayLimit) return [range];
+  if (width(text, range) <= limit) return [range];
   const words = rules.wordBreaks(text);
-  const pieces = clauses(text, range, rules.clauseBreaks(text)).flatMap((clause) =>
-    width(text, clause) > subtitleDisplayLimit
-      ? cut(text, clause, fewestLines(text, clause, words))
+  const pieces = clauses(text, range, [...rules.clauseBreaks(text), ...breaks]).flatMap((clause) =>
+    width(text, clause) > limit
+      ? cut(text, clause, fewestLines(text, clause, words, limit))
       : [clause],
   );
   const joins = pieces.slice(1).map((piece) => ({ at: piece.from, cost: 0 }));
-  return cut(text, range, fewestLines(text, range, joins));
+  return cut(text, range, fewestLines(text, range, joins, limit));
 }

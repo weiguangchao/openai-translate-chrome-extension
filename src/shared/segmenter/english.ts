@@ -61,5 +61,5 @@ function wordBreaks(text: string): WordBreak[] {
 
 export const english: LanguageSegmenter = {
   sentenceEnds,
-  lines: (text) => fitLines(text, { clauseBreaks, wordBreaks }),
+  lines: (text, limit, breaks) => fitLines(text, { clauseBreaks, wordBreaks }, limit, breaks),
 };

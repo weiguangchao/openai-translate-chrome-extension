@@ -1,5 +1,5 @@
 import type { CueTiming, TimedCue } from './cues';
-import { needsSubtitleSegmentation, segmenterFor } from '../shared/segmenter';
+import { needsSubtitleSegmentation, segmenterFor, sentenceDisplayLimit } from '../shared/segmenter';
 
 interface SentenceInput extends TimedCue {
   parts?: TimedCue[];
@@ -12,17 +12,9 @@ interface TextSpan extends TimedCue {
 }
 const cjk = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Thai}]/u;
 
-function requestWindows(text: string): number[] {
-  if (text.length <= 5000) return [text.length];
-  const stops: number[] = [];
-  let from = 0;
-  for (const word of new Intl.Segmenter(undefined, { granularity: 'word' }).segment(text)) {
-    if (word.index + word.segment.length - from > 5000 && word.index > from) {
-      stops.push(word.index);
-      from = word.index;
-    }
-  }
-  return [...stops, text.length];
+function pieceEnds(text: string, language: string, cueStarts: readonly number[]): number[] {
+  const pieces = segmenterFor(language).lines(text, sentenceDisplayLimit, cueStarts);
+  return [...pieces.slice(1).map((piece) => piece.from), text.length];
 }
 
 export function subtitleSentences(
@@ -32,6 +24,7 @@ export function subtitleSentences(
 ): TimedCue[] {
   const spans: TextSpan[] = [];
   const pauses: number[] = [];
+  const cueStarts: number[] = [];
   let text = '';
   for (let index = 0; index < events.length; index++) {
     const event = events[index];
@@ -43,6 +36,7 @@ export function subtitleSentences(
       !(cjk.test(text.at(-1)!) && cjk.test(parts[0]?.text[0] ?? ''))
     )
       text += ' ';
+    cueStarts.push(text.length);
     const wordTimed = event.wordTimed === true;
     for (const part of parts) {
       const previous = spans.at(-1);
@@ -69,7 +63,10 @@ export function subtitleSentences(
   let from = 0;
   let spanIndex = 0;
   for (const boundary of boundaries) {
-    const stops = requestWindows(text.slice(from, boundary)).map((offset) => from + offset);
+    const starts = cueStarts.filter((at) => at > from && at < boundary).map((at) => at - from);
+    const stops = pieceEnds(text.slice(from, boundary), language, starts).map(
+      (offset) => from + offset,
+    );
     for (const to of stops) {
       const raw = text.slice(from, to);
       const content = raw.replace(/\s+/g, ' ').trim();

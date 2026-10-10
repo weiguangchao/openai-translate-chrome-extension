@@ -50,7 +50,10 @@ function chinese(script: ChineseScript): LanguageSegmenter {
     }
     return breaks;
   };
-  return { sentenceEnds, lines: (text) => fitLines(text, { clauseBreaks, wordBreaks }) };
+  return {
+    sentenceEnds,
+    lines: (text, limit, breaks) => fitLines(text, { clauseBreaks, wordBreaks }, limit, breaks),
+  };
 }
 
 export const simplifiedChinese = chinese({

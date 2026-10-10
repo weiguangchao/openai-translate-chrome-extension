@@ -28,7 +28,7 @@ A run counts only if its traces report the tested `playbackRate` and none is mar
 
 ### Sentence
 
-A sentence is one cue in the source subtitle timeline. YouTube timelines and HBO and X WebVTT timelines first rejoin cues and split them at the source language's sentence-ending punctuation; overlapping HBO and X cues retain their original intervals. Sentences over 80 display columns are split locally, except DOM-only or overlapping subtitles. The Provider never splits them.
+A sentence is one cue in the source subtitle timeline. YouTube timelines and HBO and X WebVTT timelines first rejoin cues and split them at the source language's sentence-ending punctuation; overlapping HBO and X cues retain their original intervals. A rejoined sentence still over 240 display columns is cut into sentences of at most 240 columns, between cues or at clause punctuation first, then between words. Sentences over 80 display columns are split locally, except DOM-only or overlapping subtitles. The Provider never splits them.
 
 ### Caption
 

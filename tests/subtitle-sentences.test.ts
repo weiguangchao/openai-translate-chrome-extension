@@ -42,6 +42,29 @@ it('rejoins fragmented authored sentences and retains source block timings for l
   expect(captionAt(display, 6)).toBe(second);
 });
 
+it('cuts an unpunctuated authored run over three display lines between cues', () => {
+  const lines = [
+    'my children will be using their Sama coins to try and buy dinner',
+    "and I'll have to explain to them that when I was a kid",
+    'we used to use US dollars in order to get our Sama coins',
+    'and we used to pay two hundred dollars for twelve hundred',
+    'I know I am memeing pretty hard here but seriously just a few weeks ago',
+    'a plan on your codex sub would get you up to twelve thousand a month',
+  ];
+  const sentences = authoredSubtitleSentences(
+    lines.map((text, index) => ({ startTime: index * 4, endTime: index * 4 + 3.8, text })),
+    'en',
+  );
+  expect(sentences.map((sentence) => sentence.text)).toEqual([
+    lines.slice(0, 3).join(' '),
+    lines.slice(3).join(' '),
+  ]);
+  expect(sentences.map(({ startTime, endTime }) => [startTime, endTime])).toEqual([
+    [0, 11.8],
+    [12, 23.8],
+  ]);
+});
+
 it('preserves simultaneous speech and repeated dialogue instead of retiming overlapping cues', () => {
   const cues = [
     { startTime: 1, endTime: 4, text: 'Wait.\nPlease.' },

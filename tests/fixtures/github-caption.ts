@@ -1,5 +1,5 @@
 export const githubCaption =
-  "Myself, Mitchell the creator of Ghostie, and many other people are realizing that GitHub might not be the safest place for us to be leaving our code now that they're randomly reverting merges and having downtime that is measured in days instead of minutes.";
+  "Myself, Mitchell the creator of Ghostie, and many other people are realizing that GitHub might not be the safest place for us to be leaving our code now that they're randomly reverting merges and having downtime that is measured in days.";
 
 export const githubCaptionTrack = {
   events: [

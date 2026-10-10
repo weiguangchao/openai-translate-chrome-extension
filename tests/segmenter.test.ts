@@ -56,7 +56,7 @@ it('splits English at clause punctuation first, then between words inside a clau
     'Myself, Mitchell the creator of Ghostie,',
     'and many other people are realizing that GitHub might not be the safest place',
     "for us to be leaving our code now that they're randomly reverting merges",
-    'and having downtime that is measured in days instead of minutes.',
+    'and having downtime that is measured in days.',
   ]);
   expect(
     lines(

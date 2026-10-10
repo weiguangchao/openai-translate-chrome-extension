@@ -1,4 +1,5 @@
 export const subtitleDisplayLimit = 80;
+export const sentenceDisplayLimit = 3 * subtitleDisplayLimit;
 
 export function subtitleDisplayLength(text: string): number {
   return [...text].reduce(

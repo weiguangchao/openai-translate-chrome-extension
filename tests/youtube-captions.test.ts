@@ -1,5 +1,6 @@
 import { expect, it } from 'vitest';
 import { parseYoutubeCaptions } from '../src/platforms/youtube/captions';
+import { sentenceDisplayLimit, subtitleDisplayLength } from '../src/shared/segmenter';
 import {
   captionAt,
   captionWindow,
@@ -62,7 +63,7 @@ it('maps normalized whitespace back to the timed source blocks', () => {
           dDurationMs: 4000,
           segs: [
             {
-              utf8: "now that they're randomly reverting merges and having downtime that is measured in days instead of minutes.",
+              utf8: "now that they're randomly reverting merges and having downtime that is measured in days.",
             },
           ],
         },
@@ -80,7 +81,7 @@ it('maps normalized whitespace back to the timed source blocks', () => {
 it('estimates part times within an untimed block without a gap between parts', () => {
   const captions = timedCaptions(
     parseYoutubeCaptions(
-      { events: [{ tStartMs: 0, dDurationMs: 25600, segs: [{ utf8: githubCaption }] }] },
+      { events: [{ tStartMs: 0, dDurationMs: 23700, segs: [{ utf8: githubCaption }] }] },
       'authored',
       'en',
     ),
@@ -293,19 +294,21 @@ it('does not cut a long phrase at an arbitrary character or word count', () => {
   ]);
 });
 
-it('keeps a list together when commas do not introduce clauses', () => {
+it('cuts a sentence over three display lines at clause punctuation', () => {
   const text = `${'one more detail, '.repeat(40)}and that is all.`;
   const cues = parseYoutubeCaptions(
     { events: [{ tStartMs: 0, dDurationMs: 20000, segs: [{ utf8: text }] }] },
     'asr',
     'en',
   );
-  expect(cues.map(({ timing: _timing, ...cue }) => cue)).toEqual([
-    { startTime: 0, endTime: 20, text },
-  ]);
+  expect(cues.map((cue) => cue.text).join(' ')).toBe(text);
+  expect(cues).toHaveLength(3);
+  expect(cues.every((cue) => subtitleDisplayLength(cue.text) <= sentenceDisplayLimit)).toBe(true);
+  expect(cues.slice(0, -1).every((cue) => cue.text.endsWith(','))).toBe(true);
+  expect([cues[0].startTime, cues[2].endTime]).toEqual([0, 20]);
 });
 
-it('bounds model input windows without dropping words in an unpunctuated transcript', () => {
+it('cuts an unpunctuated transcript at caption boundaries without dropping words', () => {
   const text = 'keep speaking '.repeat(500).trim();
   const cues = parseYoutubeCaptions(
     {
@@ -319,10 +322,13 @@ it('bounds model input windows without dropping words in an unpunctuated transcr
     'en',
   );
   expect(cues.map((cue) => cue.text).join(' ')).toBe(text);
-  expect(cues.length).toBe(2);
+  expect(cues).toHaveLength(50);
   expect(
     cues.every(
-      (cue) => cue.text.length <= 5000 && cue.timing?.length && cue.endTime > cue.startTime,
+      (cue) =>
+        subtitleDisplayLength(cue.text) <= sentenceDisplayLimit &&
+        cue.timing?.length &&
+        cue.endTime > cue.startTime,
     ),
   ).toBe(true);
 });

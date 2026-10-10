@@ -162,7 +162,7 @@ it('prefetches a long subtitle as local lines and shows each line on time after 
     githubCommaParts[0],
     'and many other people are realizing that GitHub might not be the safest place',
     "for us to be leaving our code now that they're randomly reverting merges",
-    'and having downtime that is measured in days instead of minutes.',
+    'and having downtime that is measured in days.',
   ];
   expect(providerInputs).toEqual([[{ id: 0, parts: split }]]);
   finish(structuredReply([{ id: 0, parts: split.map((line) => `译文：${line}`) }]));
