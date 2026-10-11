@@ -41,4 +41,4 @@ A caption is what Subline translates and shows. A sentence over `captionDisplayL
 
 ### Segment
 
-A segment is four consecutive captions, numbered from zero and recorded in traces as `seg`. It only labels the timeline and doesn't decide Provider requests: each request carries up to four upcoming captions within 10 s of video, whichever segments they belong to.
+A segment is `segmentCaptions` consecutive captions, numbered from zero and recorded in traces as `seg`. It only labels the timeline and doesn't decide Provider requests: each request carries up to `translationBatchLimit` upcoming captions within `packSpanSeconds` of video, whichever segments they belong to.

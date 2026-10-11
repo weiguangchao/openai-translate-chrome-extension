@@ -101,8 +101,6 @@ export async function fetchModels(settings: Settings): Promise<string[]> {
   if (!ids.length) throw new Error('接口没有返回可用模型，可手动填写 Model ID。');
   return [...new Set(ids)].sort((a, b) => a.localeCompare(b));
 }
-export { translationBatchLimit };
-
 function translatorInstructions(settings: Settings, task: string): string {
   const source = englishLanguageName(settings.sourceLanguage);
   const target = englishLanguageName(settings.targetLanguage);

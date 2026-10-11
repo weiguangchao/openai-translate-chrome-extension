@@ -1,4 +1,5 @@
 export const translationBatchLimit = 4;
+export const segmentCaptions = 4;
 export const planSentenceCap = 16;
 export const planBufferSeconds = 30;
 export const packSpanSeconds = 10;
