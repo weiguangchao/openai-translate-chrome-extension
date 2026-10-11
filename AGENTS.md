@@ -5,6 +5,23 @@
 - Any prose surface → the unslop skill. Your reply is a prose surface. Write it per Writing the reply.
 - Before commit → the deslop skill
 
+## Rules
+
+Each rule names what fails when it is broken. When the developer corrects a mistake, fix it and add its rule here; if the rule is already here and only judgment enforces it, enforce it in the same change.
+
+| Rule | Enforced by |
+| --- | --- |
+| A Provider reply is read only as `{"results":[{"id","translation"}]}`, and each translation goes to the id it names. | `src/shared/api.ts` reads no other shape; `tests/provider-responses.test.ts` |
+| `CaptionTranslator` owns what each caption shows; the overlay only renders it. | `SubtitleOverlay` exposes no state; `TranslationLine` switches are exhaustive; `tests/controller.test.ts` |
+| Every setting has one scope, which decides what changing it invalidates and whether it is part of the translation cache key. | `SETTING_SCOPES` in `src/shared/settings.ts`; `tests/settings-scope.test.ts` |
+| Provider HTTP goes through `src/shared/provider/transport.ts`. | ESLint `local/provider-transport` |
+| Caption queues call `translateCaptionBatch`, never `translate`. | ESLint `no-restricted-imports` in `src/extension/queue.ts` |
+| Imports flow platforms → core → shared, and platforms never import each other. | ESLint `local/dependency-boundaries`; `tests/dependency-boundaries.test.ts` |
+| TypeScript has no comments. | ESLint `local/no-comments` |
+| Local runs and CI run the same checks. | `npm run verify` in the `verify` workflow; `npm run test:discovery` |
+| The glossary names constants instead of copying their values. | Judgment |
+| Don't add a fallback, alternate format, retry, cap or cache the request didn't ask for; propose it instead. | Judgment |
+
 ## Git
 
 - When Codex creates a commit, append `Co-authored-by: Codex <noreply@openai.com>` to the commit message.
