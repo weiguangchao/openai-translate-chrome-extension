@@ -1,9 +1,6 @@
-"""Problems agents hit with chrome-debug that the current scripts still have.
+"""Regression tests for problems reported in T3 Code sessions.
 
-Each test states the behaviour chrome-debug should have and is marked
-expectedFailure. When a fix lands, its test passes, unittest reports an
-unexpected success and the run fails until the marker is removed, so the fix
-stays covered. Thread ids are T3 Code sessions where the problem showed up.
+Thread ids identify the sessions that originally exposed each problem.
 """
 import contextlib
 import io
@@ -20,7 +17,6 @@ import holder
 
 class Steps(BrowserCase):
 
-    @unittest.expectedFailure
     def test_evaluate_fails_once_the_budget_is_spent(self):
         """43f82664: with a 2 s budget, a Promise that resolved at 5 s passed at 5.2 s.
 
@@ -28,11 +24,12 @@ class Steps(BrowserCase):
         evaluate waits up to 8 s whatever time is left.
         """
         tab = self.open("slow-evaluate")
+        started = time.monotonic()
         done = self.do(tab, timeout=2, action="evaluate",
                        expression="new Promise((resolve) => setTimeout(() => resolve(true), 5000))")
         self.assertEqual(done.code, 1, done)
+        self.assertLess(time.monotonic() - started, 3)
 
-    @unittest.expectedFailure
     def test_overlay_wait_needs_an_overlay_the_viewer_can_see(self):
         """43f82664: overlay wait passed while the overlay host had display:none.
 
@@ -42,7 +39,6 @@ class Steps(BrowserCase):
         self.result(self.do(tab, action="media", time=40, play=True))
         self.assertEqual(self.do(tab, timeout=6, action="overlay", wait=True).code, 1)
 
-    @unittest.expectedFailure
     def test_a_rate_the_page_keeps_resetting_is_reported(self):
         """21caa5fc: page events showed 1x and 1.5x every other second; media and trace said 1.5.
 
@@ -54,7 +50,6 @@ class Steps(BrowserCase):
         stats = self.result(self.do(tab, action="trace", seconds=12))["stats"]
         self.assertTrue(stats.get("clock") == "throttled" or stats["playbackRate"] != 1.5, stats)
 
-    @unittest.expectedFailure
     def test_each_trace_reports_its_own_clock(self):
         """Tab.rates, clock_samples and clock_visible add up over the tab's life.
 
@@ -72,7 +67,6 @@ class Steps(BrowserCase):
 
 class Status(BrowserCase):
 
-    @unittest.expectedFailure
     def test_status_answers_while_a_step_runs(self):
         """43f82664, b11662a7 and 43c2b370: status waited for the running step, or 15 s.
 
@@ -83,13 +77,14 @@ class Status(BrowserCase):
         self.addCleanup(waiting.communicate)
         time.sleep(1)
         started = time.monotonic()
-        self.call("status", session=None)
+        status = self.call("status", session=None)
         self.assertLess(time.monotonic() - started, 3)
+        self.assertEqual(status.json['state'], 'running')
+        self.assertEqual(status.json['active']['tab'], tab)
 
 
 class KilledClient(BrowserCase):
 
-    @unittest.expectedFailure
     def test_a_killed_client_frees_its_tab(self):
         """05ab845b and 43c2b370: the client died at 01:06:32; the holder noticed at 01:07:28.
 
@@ -106,7 +101,6 @@ class KilledClient(BrowserCase):
 
 class Handshake(unittest.TestCase):
 
-    @unittest.expectedFailure
     def test_no_click_by_hand_warning_after_chrome_accepted(self):
         """43d03e2b, 29bba869, 21caa5fc and others.
 

@@ -113,11 +113,6 @@ class Stall(unittest.TestCase):
         self.assertIsNone(self.feed(15))
         self.assertIsNone(self.feed(15, time=12.5))
 
-    def test_samples_feed_the_trace_clock(self):
-        self.feed(3, rate=2, visible="hidden")
-        self.assertEqual((self.tab.rates, self.tab.clock_samples, self.tab.clock_visible), ({2: 4}, 4, 0))
-
-
 class Ownership(unittest.TestCase):
     """c1d5f06: one task's holder never serves, restarts or stops for another task."""
 

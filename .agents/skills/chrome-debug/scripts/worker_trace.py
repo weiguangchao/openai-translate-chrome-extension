@@ -133,6 +133,33 @@ def clock(stats, rates, visible, samples):
         stats["clock"] = "throttled"
 
 
+def media_clock(stats, events, started, ended, expected=None):
+    window = [event for event in events if started <= event['at'] <= ended]
+    stats['wall'] = r1((ended - started) / 1000)
+    if not window:
+        stats['clockMissing'] = True
+        return
+    durations, visible, changes = {}, 0.0, []
+    previous, at = window[0], started
+    for event in window + [{**window[-1], 'at': ended}]:
+        seconds = max(0.0, (event['at'] - at) / 1000)
+        rate = previous['rate']
+        durations[rate] = durations.get(rate, 0.0) + seconds
+        if previous['visible'] == 'visible':
+            visible += seconds
+        if event['rate'] != rate:
+            changes.append({'at': r2((event['at'] - started) / 1000),
+                            'from': rate, 'to': event['rate']})
+        previous, at = event, event['at']
+    clock(stats, durations, visible, (ended - started) / 1000)
+    stats['rates'] = {str(rate): r2(seconds) for rate, seconds in durations.items()}
+    stats['rateChanges'] = changes
+    stats['targetRate'] = expected
+    stats['rateMismatch'] = expected is not None and any(event['rate'] != expected for event in window)
+    if changes or stats['rateMismatch']:
+        stats['clock'] = 'throttled'
+
+
 def trace_line(stats):
     lag = stats.get("lag") or {}
     text = ", ".join([
