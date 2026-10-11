@@ -8,7 +8,7 @@ beforeEach(async () => {
   ({ translateCaptionBatch } = await import('../src/shared/api'));
 });
 afterEach(() => vi.unstubAllGlobals());
-const result = (id: unknown, translation: string) => ({ id, parts: [{ translation }] });
+const result = (id: unknown, translation: string) => ({ id, translation });
 const payload = (results: unknown[]) => JSON.stringify({ results });
 function respond(content: string) {
   vi.stubGlobal(
@@ -16,6 +16,28 @@ function respond(content: string) {
     vi.fn(async () => Response.json({ choices: [{ message: { content } }] })),
   );
 }
+
+const four = ['One.', 'Two.', 'Three.', 'Four.'];
+it.each([
+  { label: 'translations by position', texts: four, reply: { translations: ['甲乙', '丙', '丁'] } },
+  { label: 'a bare array by position', texts: four, reply: ['甲乙', '丙', '丁'] },
+  {
+    label: 'the request echoed back',
+    texts: ['One.'],
+    reply: { results: [{ id: 0, text: 'One.' }] },
+  },
+  {
+    label: 'parts',
+    texts: ['One.'],
+    reply: { results: [{ id: 0, parts: [{ translation: '甲' }] }] },
+  },
+  { label: 'a result without an id', texts: ['One.'], reply: { translation: '甲' } },
+])('publishes and caches nothing from $label', async ({ texts, reply }) => {
+  respond(JSON.stringify(reply));
+  const published = vi.fn();
+  await expect(translateCaptionBatch(settings, texts, undefined, published)).resolves.toBeNull();
+  expect(published).not.toHaveBeenCalled();
+});
 
 it('selects the final JSON once for both its return value and publications', async () => {
   respond(`${payload([result(0, '草稿')])}\nFinal\n${payload([result(0, '最终')])}`);
@@ -29,8 +51,8 @@ it('selects the final JSON once for both its return value and publications', asy
 it.each([
   { label: 'unclosed array', suffix: '' },
   { label: 'unclosed object', suffix: ']' },
-  { label: 'unfinished key', suffix: ',{"id":1,"parts":[{"transl' },
-  { label: 'unfinished string', suffix: ',{"id":1,"parts":[{"translation":"unfinished' },
+  { label: 'unfinished key', suffix: ',{"id":1,"transl' },
+  { label: 'unfinished string', suffix: ',{"id":1,"translation":"unfinished' },
 ])('selects the final JSON after a draft with an $label', async ({ suffix }) => {
   const draft = '{"results":[' + JSON.stringify(result(0, '草稿')) + suffix;
   respond(`${draft}\nFinal\n${payload([result(0, '最终')])}`);
@@ -83,7 +105,7 @@ it('does not treat an invalid single ID as a missing ID', async () => {
 });
 
 it('recovers complete results from a truncated response only after parsing fails', async () => {
-  respond('{"results":[' + JSON.stringify(result(0, '完整')) + ',{"id":1,"parts":[');
+  respond('{"results":[' + JSON.stringify(result(0, '完整')) + ',{"id":1,"translation":');
   const published = vi.fn();
   await expect(
     translateCaptionBatch(settings, ['One.', 'Two.'], undefined, published),
@@ -91,8 +113,8 @@ it('recovers complete results from a truncated response only after parsing fails
   expect(published.mock.calls).toEqual([[0, '完整']]);
 });
 
-it('does not publish a parts array from an incomplete result as a standalone reply', async () => {
-  respond('{"results":[{"id":0,"parts":[{"translation":"未完成"}]');
+it('does not publish a result object the reply never closed', async () => {
+  respond('{"results":[{"id":0,"translation":"未完成"');
   const published = vi.fn();
   await expect(
     translateCaptionBatch(settings, ['Original.'], undefined, published),
@@ -105,14 +127,12 @@ it.each(
     {
       label: 'malformed',
       final:
-        '{"results":[{"id":0,"parts":[{"translation":"一"} stray]},' +
-        JSON.stringify(result(1, '二')) +
-        ']}',
+        '{"results":[{"id":0,"translation":"一" stray},' + JSON.stringify(result(1, '二')) + ']}',
       published: [[1, '二']],
     },
     {
       label: 'truncated',
-      final: '{"results":[' + JSON.stringify(result(0, '一')) + ',{"id":1,"parts":[{"transl',
+      final: '{"results":[' + JSON.stringify(result(0, '一')) + ',{"id":1,"transl',
       published: [[0, '一']],
     },
   ].flatMap((test) =>

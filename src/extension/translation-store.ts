@@ -1,4 +1,5 @@
 import { readStoredTranslation } from '../shared/caption-translation';
+import { translationIdentityLength } from '../shared/settings';
 import type { TranslationQueue, TranslationStore } from './queue';
 
 const PREFIX = 'subline.translation.v2:';
@@ -6,7 +7,12 @@ const PREFIX = 'subline.translation.v2:';
 function readEntry(key: string, value: unknown): [string, string] | null {
   try {
     const parsed: unknown = JSON.parse(key);
-    if (!Array.isArray(parsed) || parsed.length !== 5 || typeof parsed[4] !== 'string') return null;
+    if (
+      !Array.isArray(parsed) ||
+      parsed.length !== translationIdentityLength + 1 ||
+      typeof parsed.at(-1) !== 'string'
+    )
+      return null;
     const translation = readStoredTranslation(value);
     return translation === null ? null : [key, translation];
   } catch {

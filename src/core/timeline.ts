@@ -2,7 +2,7 @@ import {
   behindGraceSeconds,
   planLookaheadCues,
   planLookaheadSeconds,
-  translationBatchLimit,
+  segmentCaptions,
 } from '../shared/limits';
 import type { PlaybackCue } from '../shared/playback-plan';
 import type { TimedCue } from './cues';
@@ -16,7 +16,7 @@ export function timedCaptions(cues: readonly TimedCue[]): readonly TimedCaption[
   if (cached) return cached;
   const captions = cues
     .filter((cue) => cue.text)
-    .map((cue, index) => ({ ...cue, segment: Math.floor(index / translationBatchLimit) }));
+    .map((cue, index) => ({ ...cue, segment: Math.floor(index / segmentCaptions) }));
   captionCache.set(cues, captions);
   return captions;
 }

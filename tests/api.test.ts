@@ -18,7 +18,7 @@ const config = (): Settings => ({
 });
 const resultsContent = (translations: string[]) =>
   JSON.stringify({
-    results: translations.map((translation, id) => ({ id, parts: [{ translation }] })),
+    results: translations.map((translation, id) => ({ id, translation })),
   });
 afterEach(() => vi.unstubAllGlobals());
 
@@ -107,7 +107,7 @@ describe('OpenAI-compatible provider contract', () => {
     'translates batches through chat completions with saved apiFormat=%s and preserves cue order',
     async (apiFormat) => {
       const content =
-        '```json\n{"results":[{"id":2,"parts":[{"translation":"第三句"}]},{"id":0,"parts":[{"translation":" 第一句 "}]},{"id":1,"parts":[{"translation":"第二句"}]}]}\n```';
+        '```json\n{"results":[{"id":2,"translation":"第三句"},{"id":0,"translation":" 第一句 "},{"id":1,"translation":"第二句"}]}\n```';
       const fetch = vi.fn().mockResolvedValue(
         Response.json({
           choices: [{ message: { content } }],
@@ -135,10 +135,10 @@ describe('OpenAI-compatible provider contract', () => {
 
   it.each([
     ['plain text', '第一句\n第二句'],
-    ['too few results', '{"results":[{"id":0,"parts":[{"translation":"第一句"}]}]}'],
+    ['too few results', '{"results":[{"id":0,"translation":"第一句"}]}'],
     [
       'an empty translation',
-      '{"results":[{"id":0,"parts":[{"translation":"第一句"}]},{"id":1,"parts":[{"translation":"  "}]}]}',
+      '{"results":[{"id":0,"translation":"第一句"},{"id":1,"translation":"  "}]}',
     ],
     ['the wrong shape', '{"segments":["第一句","第二句"]}'],
   ])('reports an unusable batch reply with %s', async (_, content) => {
@@ -288,7 +288,7 @@ describe('OpenAI-compatible provider contract', () => {
 describe('batch replies', () => {
   it('submits each translation from a complete fenced JSON body', async () => {
     const content =
-      '```json\n{"results":[{"id":0,"parts":[{"translation":"第一句"}]},{"id":1,"parts":[{"translation":"他说\\"你好\\"\\n中\\/\\u6587"}]}]}\n```';
+      '```json\n{"results":[{"id":0,"translation":"第一句"},{"id":1,"translation":"他说\\"你好\\"\\n中\\/\\u6587"}]}\n```';
     const fetch = vi.fn().mockResolvedValue(Response.json({ choices: [{ message: { content } }] }));
     vi.stubGlobal('fetch', fetch);
     const seen: [number, string][] = [];
@@ -333,7 +333,7 @@ describe('batch replies', () => {
     ).resolves.toEqual(['第一句', '第二句']);
   });
 
-  it('accepts translations wrapped beside the results schema and text content parts', async () => {
+  it('finds the results JSON beside prose, in text content parts and in reasoning_content', async () => {
     const fetch = vi
       .fn()
       .mockResolvedValueOnce(
@@ -341,9 +341,7 @@ describe('batch replies', () => {
           choices: [
             {
               message: {
-                content: `译文如下：\n${JSON.stringify({
-                  translations: ['甲', '乙'],
-                })}\n完成。`,
+                content: `译文如下：\n${resultsContent(['甲', '乙'])}\n完成。`,
               },
             },
           ],
@@ -361,7 +359,7 @@ describe('batch replies', () => {
                     text: JSON.stringify({
                       results: [
                         { id: 1, translation: '后一句' },
-                        { id: '0', text: '前一句' },
+                        { id: '0', translation: '前一句' },
                       ],
                     }),
                   },

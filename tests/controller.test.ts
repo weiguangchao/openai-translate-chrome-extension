@@ -342,3 +342,36 @@ it('reports what the viewer sees only while the page asks for a trace', async ()
   ]);
   expect(document.documentElement.getAttribute('data-subline-trace-worker')).toBe('extension-id');
 });
+
+it('treats a translation that reads like the loading placeholder as a translation', async () => {
+  sendMessage.mockImplementation((message) =>
+    Promise.resolve({ ok: true, data: message.type === 'translate' ? '翻译中' : null }),
+  );
+  document.documentElement.setAttribute('data-subline-trace', 'run');
+  source = {
+    kind: 'timeline',
+    mode: 'model',
+    id: 'track',
+    cues: [{ startTime: 0, endTime: 10, text: 'Translating.' }],
+    layers: () => [],
+  };
+  controller = new CaptionController(
+    () => platform,
+    publicSettings({ ...DEFAULT_SETTINGS, apiKey: 'key', model: 'model' }),
+  );
+  await vi.advanceTimersByTimeAsync(450);
+  const traced = () =>
+    sendMessage.mock.calls
+      .map(([message]) => message as { type: string; state?: string })
+      .filter((message) => message.type === 'trace')
+      .at(-1)?.state;
+  expect(lines()).toEqual(['Translating.', '翻译中']);
+  expect(traced()).toBe('ready');
+
+  const video = document.querySelector('video')!;
+  Object.defineProperty(video, 'seeking', { configurable: true, value: true });
+  video.dispatchEvent(new Event('seeking'));
+  await vi.advanceTimersByTimeAsync(0);
+  expect(lines()).toEqual(['Translating.', '翻译中']);
+  expect(traced()).toBe('ready');
+});

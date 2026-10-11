@@ -14,17 +14,7 @@ export function modelAnswer(source: string): string {
 }
 
 function hasTranslationPayload(value: unknown): boolean {
-  if (Array.isArray(value))
-    return value.some(
-      (item) =>
-        typeof item === 'string' ||
-        (!!item &&
-          typeof item === 'object' &&
-          ('parts' in item || 'translation' in item || 'text' in item)),
-    );
-  if (!value || typeof value !== 'object') return false;
-  const record = value as { results?: unknown; translations?: unknown };
-  return Array.isArray(record.results) || Array.isArray(record.translations);
+  return Array.isArray((value as { results?: unknown } | null)?.results);
 }
 
 interface ModelPayload {

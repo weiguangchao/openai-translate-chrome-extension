@@ -104,6 +104,38 @@ export function englishLanguageName(value: string): string {
   return LANGUAGES.find((l) => l.value === value)?.english ?? value;
 }
 
+type SettingScope = 'availability' | 'credentials' | 'source' | 'translation' | 'style';
+
+const SETTING_SCOPES: Record<keyof Settings, SettingScope> = {
+  enabled: 'availability',
+  baseUrl: 'translation',
+  apiKey: 'credentials',
+  model: 'translation',
+  sourceLanguage: 'source',
+  targetLanguage: 'translation',
+  original: 'style',
+  translation: 'style',
+  backgroundOpacity: 'style',
+  subtitleGap: 'style',
+  youtube: 'availability',
+  hbo: 'availability',
+  x: 'availability',
+};
+
+function settingsIn(...scopes: SettingScope[]): (keyof Settings)[] {
+  return (Object.keys(SETTING_SCOPES) as (keyof Settings)[]).filter((key) =>
+    scopes.includes(SETTING_SCOPES[key]),
+  );
+}
+
+const identityKeys = settingsIn('source', 'translation');
+
+export const translationIdentityLength = identityKeys.length;
+
+export function translationIdentity(settings: Settings): unknown[] {
+  return identityKeys.map((key) => settings[key]);
+}
+
 export interface SettingsChange {
   style: boolean;
   source: boolean;
@@ -115,20 +147,15 @@ export function classifySettingsChange(
   previous: Settings | PublicSettings,
   next: Settings | PublicSettings,
 ): SettingsChange {
-  const changed = <Key extends keyof Settings & keyof PublicSettings>(key: Key) =>
-    JSON.stringify(previous[key]) !== JSON.stringify(next[key]);
-  const providerChanged =
-    'apiKey' in previous && 'apiKey' in next
-      ? (['baseUrl', 'apiKey', 'model'] as const).some((key) => previous[key] !== next[key])
-      : 'translationRevision' in previous &&
-        'translationRevision' in next &&
-        previous.translationRevision !== next.translationRevision;
+  const changed = (key: string) =>
+    key in previous &&
+    key in next &&
+    JSON.stringify(Reflect.get(previous, key)) !== JSON.stringify(Reflect.get(next, key));
+  const changedIn = (...scopes: SettingScope[]) => settingsIn(...scopes).some(changed);
   return {
-    style: (['original', 'translation', 'backgroundOpacity', 'subtitleGap'] as const).some(changed),
-    source: changed('sourceLanguage'),
-    translation: changed('targetLanguage') || providerChanged,
-    availability:
-      (['enabled', 'youtube', 'hbo', 'x'] as const).some(changed) ||
-      ('configured' in previous && 'configured' in next && previous.configured !== next.configured),
+    style: changedIn('style'),
+    source: changedIn('source'),
+    translation: changedIn('translation', 'credentials') || changed('translationRevision'),
+    availability: changedIn('availability') || changed('configured'),
   };
 }

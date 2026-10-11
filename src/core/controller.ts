@@ -86,7 +86,6 @@ export class CaptionController {
       hold: () => {
         this.translator.hold(this.video?.currentTime ?? 0);
         this.translator.cancel();
-        this.overlay.clearLoading();
       },
       changed: () => this.tick(),
     });
@@ -140,11 +139,6 @@ export class CaptionController {
     this.overlay.mount(player, this.settings);
   }
 
-  private clearCaption(): void {
-    this.translator.clear();
-    this.overlay.clear();
-  }
-
   private hasReadyCaption(source: CaptionSource, time: number): boolean {
     const captions = source.kind === 'timeline' ? timedCaptions(source.cues) : null;
     const caption = currentCaption(source, captions ? captionAt(captions, time) : '');
@@ -154,7 +148,8 @@ export class CaptionController {
   private tick(): void {
     this.shown = null;
     this.advance();
-    if (!this.destroyed && this.video) this.trace.note(this.video, this.shown, this.overlay.state);
+    if (!this.destroyed && this.video)
+      this.trace.note(this.video, this.shown, this.translator.state);
   }
 
   private advance(): void {
@@ -190,14 +185,14 @@ export class CaptionController {
       this.mount(video, player);
     if (source.mode !== this.mode) {
       this.translator.release();
-      this.clearCaption();
+      this.translator.clear();
       this.mode = source.mode;
     }
     const time = video.currentTime;
     if (video.seeking) {
       this.gate.observe(time);
       this.gate.hold();
-      if (!this.hasReadyCaption(source, time)) this.clearCaption();
+      if (!this.hasReadyCaption(source, time)) this.translator.clear();
       return;
     }
     this.gate.observe(time);
@@ -206,8 +201,7 @@ export class CaptionController {
     if (sourceId !== this.source || track !== this.nativeTrack) {
       this.source = sourceId;
       this.nativeTrack = track;
-      this.translator.invalidate();
-      this.clearCaption();
+      this.translator.clear();
       this.translator.release();
     }
     const captions = source.kind === 'timeline' ? timedCaptions(source.cues) : null;
@@ -224,7 +218,7 @@ export class CaptionController {
       ) ?? -1;
     const cue = captions?.[cueIndex];
     if (!caption.text || !usesModel) {
-      this.clearCaption();
+      this.translator.clear();
       return;
     }
     this.shown = {

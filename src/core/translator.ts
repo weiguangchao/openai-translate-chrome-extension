@@ -1,8 +1,9 @@
 import { readStoredTranslation } from '../shared/caption-translation';
 import type { PlaybackCue } from '../shared/playback-plan';
 import { providerTimeoutMessage } from '../shared/provider-error';
+import type { ViewState } from '../shared/trace';
 import type { ExtensionConnection } from './connection';
-import type { SubtitleOverlay } from './overlay';
+import type { CaptionView, SubtitleOverlay, TranslationLine } from './overlay';
 
 const LOADING_DELAY_MS = 300;
 const PLAN_REFRESH_SECONDS = 1;
@@ -13,24 +14,40 @@ export interface CaptionFrame {
   readonly debounce: number;
 }
 
-type CaptionView =
-  | { kind: 'waiting' }
-  | { kind: 'failed'; original: string }
-  | { kind: 'ready'; original: string; translation: string };
+interface Request {
+  readonly cacheOnly: boolean;
+}
+
+interface Caption {
+  readonly text: string;
+  since: number;
+  line: TranslationLine;
+  request: Request | null;
+  checked: boolean;
+}
+
+const VIEW_STATES: Record<TranslationLine['kind'], ViewState> = {
+  none: 'empty',
+  loading: 'loading',
+  ready: 'ready',
+  failed: 'error',
+  timedOut: 'timeout',
+};
+
+function captionView(caption: Caption | null): CaptionView {
+  if (!caption) return { original: '', line: { kind: 'none' } };
+  const { line } = caption;
+  const withSource = line.kind === 'ready' || line.kind === 'failed';
+  return { original: withSource ? caption.text : '', line };
+}
 
 export class CaptionTranslator {
-  private text = '';
-  private changedAt = 0;
-  private requested = '';
-  private version = 0;
-  private result: string | null = null;
-  private checkedCache = false;
+  private caption: Caption | null = null;
   private windowKey = '';
   private holdKey = '';
   private active = false;
   private prefetchedAt = 0;
   private playbackHeld = false;
-  private timedOut = false;
 
   constructor(
     private connection: ExtensionConnection,
@@ -38,33 +55,32 @@ export class CaptionTranslator {
     private changed: () => void,
   ) {}
 
-  get requesting(): boolean {
-    return this.requested !== '';
+  get state(): ViewState {
+    return VIEW_STATES[this.caption?.line.kind ?? 'none'];
   }
 
   hasTranslation(text: string): boolean {
-    return this.result !== null && this.text === text;
-  }
-
-  invalidate(): void {
-    this.version++;
+    return this.caption?.text === text && this.caption.line.kind === 'ready';
   }
 
   cancel(): void {
-    if (!this.requested) return;
-    this.version++;
-    this.requested = '';
-    this.checkedCache = false;
+    const { caption } = this;
+    if (!caption) return;
+    if (caption.line.kind === 'loading') caption.line = { kind: 'none' };
+    if (caption.request) {
+      caption.request = null;
+      caption.checked = false;
+    }
+    this.render();
   }
 
   clear(): void {
-    if (this.text) this.version++;
-    this.forget();
+    this.caption = null;
+    this.render();
   }
 
   reset(): void {
-    this.version++;
-    this.forget();
+    this.caption = null;
     this.playbackHeld = false;
     this.windowKey = '';
     this.holdKey = '';
@@ -72,39 +88,21 @@ export class CaptionTranslator {
   }
 
   show(frame: CaptionFrame): void {
-    const { text } = frame;
-    if (text !== this.text) {
-      this.version++;
-      this.forget();
-      this.text = text;
-      this.changedAt = Date.now();
-      this.overlay.hideTranslation();
-    }
-    if (this.timedOut) {
-      this.overlay.showOriginal('');
-      this.overlay.showTimeout();
-      return;
-    }
-    const view = this.view(frame);
-    this.overlay.showOriginal(view.kind === 'waiting' ? '' : view.original);
-    if (view.kind === 'ready') {
-      this.overlay.showTranslation(view.translation);
-      return;
-    }
-    const pending = this.requested === this.text && this.requested !== '';
-    if (frame.cacheOnly && (this.checkedCache || pending)) return;
-    const waited = Date.now() - this.changedAt;
-    if (pending || waited < frame.debounce) {
-      if (!frame.cacheOnly && !this.overlay.failed && waited >= LOADING_DELAY_MS)
-        this.overlay.showLoading();
-      return;
-    }
-    this.request(frame.cacheOnly);
+    if (frame.text !== this.caption?.text)
+      this.caption = {
+        text: frame.text,
+        since: Date.now(),
+        line: { kind: 'none' },
+        request: null,
+        checked: false,
+      };
+    this.update(this.caption, frame);
+    this.render();
   }
 
   notePlayback(paused: boolean): void {
     if (paused) {
-      if (this.playbackHeld || (!this.windowKey && !this.requested)) return;
+      if (this.playbackHeld || !this.active) return;
       this.playbackHeld = true;
     } else {
       if (!this.playbackHeld) return;
@@ -149,63 +147,63 @@ export class CaptionTranslator {
       .catch(() => {});
   }
 
-  private forget(): void {
-    this.text = '';
-    this.requested = '';
-    this.result = null;
-    this.checkedCache = false;
-    this.timedOut = false;
+  private render(): void {
+    this.overlay.render(captionView(this.caption));
   }
 
-  private view(frame: CaptionFrame): CaptionView {
-    if (this.result) return { kind: 'ready', original: frame.text, translation: this.result };
-    return this.overlay.failed ? { kind: 'failed', original: frame.text } : { kind: 'waiting' };
+  private update(caption: Caption, frame: CaptionFrame): void {
+    const { line } = caption;
+    if (line.kind === 'ready' || line.kind === 'timedOut') return;
+    const pending = caption.request !== null;
+    if (frame.cacheOnly && (caption.checked || pending)) return;
+    const waited = Date.now() - caption.since;
+    if (pending || waited < frame.debounce) {
+      if (!frame.cacheOnly && line.kind !== 'failed' && waited >= LOADING_DELAY_MS)
+        caption.line = { kind: 'loading' };
+      return;
+    }
+    this.request(caption, frame.cacheOnly, waited);
   }
 
-  private request(cacheOnly: boolean): void {
-    const { text, version } = this;
-    this.requested = text;
-    this.active = true;
-    if (cacheOnly) this.checkedCache = true;
-    else if (this.overlay.failed || Date.now() - this.changedAt >= LOADING_DELAY_MS)
-      this.overlay.showLoading();
+  private request(caption: Caption, cacheOnly: boolean, waited: number): void {
+    const request: Request = { cacheOnly };
+    const current = () => this.caption === caption && caption.request === request;
+    caption.request = request;
+    if (cacheOnly) caption.checked = true;
+    else {
+      this.active = true;
+      if (caption.line.kind === 'failed' || waited >= LOADING_DELAY_MS)
+        caption.line = { kind: 'loading' };
+    }
     void this.connection
       .sendMessage<unknown>({
         type: 'translate',
-        text,
+        text: caption.text,
         ...(cacheOnly ? { cacheOnly: true } : {}),
       })
       .then((response) => {
+        if (!current()) return;
         const data = response?.data;
         if (cacheOnly && response?.ok && data === null) {
-          if (this.version === version) this.requested = '';
-          this.changed();
-          return;
-        }
-        if (this.version !== version || !this.overlay.mounted) {
-          this.changed();
+          caption.request = null;
           return;
         }
         const translation = readStoredTranslation(data);
         if (!response?.ok || translation === null)
           throw new Error(response?.error ?? '翻译未完成，请检查扩展配置。');
-        this.result = translation;
-        this.changed();
+        caption.request = null;
+        caption.line = { kind: 'ready', translation };
       })
       .catch((error) => {
-        if (this.version === version && this.overlay.mounted) {
-          const message = error instanceof Error ? error.message : '翻译失败，请检查配置。';
-          this.requested = '';
-          if (message === providerTimeoutMessage) {
-            this.timedOut = true;
-            this.overlay.showOriginal('');
-            this.overlay.showTimeout();
-          } else {
-            this.overlay.showError(message);
-            this.changedAt = Date.now() + 15000;
-          }
+        if (!current()) return;
+        const message = error instanceof Error ? error.message : '翻译失败，请检查配置。';
+        caption.request = null;
+        if (message === providerTimeoutMessage) caption.line = { kind: 'timedOut' };
+        else {
+          caption.line = { kind: 'failed', message };
+          caption.since = Date.now() + 15000;
         }
-        this.changed();
-      });
+      })
+      .finally(() => this.changed());
   }
 }

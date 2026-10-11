@@ -62,7 +62,7 @@ class SublineContract(unittest.TestCase):
         self.assertIn("attachShadow({ mode: 'open' })", overlay)
         self.assertIn("className = 'line original'", overlay)
         self.assertIn("className = 'line translation'", overlay)
-        self.assertIn("classList.contains('error')", overlay)
+        self.assertIn("classList.toggle('error'", overlay)
         for selector in ("[data-subline-overlay]", ".original", ".translation", "classList.contains('error')"):
             self.assertIn(selector, holder.OVERLAY)
 
