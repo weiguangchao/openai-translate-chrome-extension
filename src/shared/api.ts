@@ -302,9 +302,6 @@ function resultId(value: unknown): number | null {
 
 function alignResultIds(values: unknown[], count: number): unknown[] {
   const ids = values.map(resultId);
-  const only = values[0];
-  if (values.length === 1 && count === 1 && only && typeof only === 'object' && !('id' in only))
-    return [{ ...only, id: 0 }];
   if (ids.includes(0)) return values;
   if (
     ids.length !== count ||
@@ -318,25 +315,8 @@ function alignResultIds(values: unknown[], count: number): unknown[] {
 }
 
 function translationPayloads(value: unknown): unknown[] {
-  if (Array.isArray(value)) {
-    if (
-      value.every(
-        (item) =>
-          !!item &&
-          typeof item === 'object' &&
-          ('parts' in item || 'translation' in item || 'text' in item || 'id' in item),
-      )
-    )
-      return value;
-    return value.map((translation, id) => ({ id, translation }));
-  }
-  if (!value || typeof value !== 'object') return [];
-  const record = value as { results?: unknown; translations?: unknown };
-  if (Array.isArray(record.results)) return record.results;
-  if (Array.isArray(record.translations))
-    return record.translations.map((translation, id) => ({ id, translation }));
-  if ('parts' in record || 'translation' in record || 'text' in record) return [record];
-  return [];
+  const results = (value as { results?: unknown } | null)?.results;
+  return Array.isArray(results) ? results : [];
 }
 
 async function readModelText(
@@ -416,5 +396,5 @@ function choiceText(payload: unknown, caption: boolean): string | null {
   const reasoning = modelAnswer(
     messageText(message?.reasoning_content ?? message?.reasoning),
   ).trim();
-  return /"(?:results|translations)"\s*:/.test(reasoning) ? reasoning : null;
+  return /"results"\s*:/.test(reasoning) ? reasoning : null;
 }

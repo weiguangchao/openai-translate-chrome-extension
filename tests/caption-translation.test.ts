@@ -3,20 +3,15 @@ import { readCaptionTranslation, readStoredTranslation } from '../src/shared/cap
 import { captionWindow, timedCaptions } from '../src/core/timeline';
 import { scanTranslationResults } from '../src/shared/model-json';
 
-it('reads a translation and joins one a model split into parts', () => {
+it('reads only the translation field of a result', () => {
   expect(readCaptionTranslation({ id: 0, translation: ' 短句。 ' })).toBe('短句。');
-  expect(readCaptionTranslation({ id: 0, text: '短句。' })).toBe('短句。');
-  expect(readCaptionTranslation({ parts: [{ translation: ' 短句。 ' }] })).toBe('短句。');
-  expect(readCaptionTranslation({ parts: ['你好', '世界'] })).toBe('你好世界');
-  expect(readCaptionTranslation({ parts: ['Hello,', 'world.'] })).toBe('Hello, world.');
-  expect(readCaptionTranslation({ parts: ['他说：', 'OK.'] })).toBe('他说：OK.');
 });
 
 it.each([
   ['no translation', { id: 0 }],
   ['an empty translation', { id: 0, translation: ' ' }],
-  ['no parts', { parts: [] }],
-  ['an empty part', { parts: ['好', ' '] }],
+  ['only the source text echoed back', { id: 0, text: 'Short line.' }],
+  ['parts instead of a translation', { id: 0, parts: [{ translation: '短句。' }] }],
   ['a translation longer than any caption', { translation: '字'.repeat(5001) }],
 ])('treats a reply with %s as unusable', (_, value) => {
   expect(readCaptionTranslation(value)).toBeNull();

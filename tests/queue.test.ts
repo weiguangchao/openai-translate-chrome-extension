@@ -513,8 +513,8 @@ it('caches only the final reply after a truncated draft without retrying', async
         {
           message: {
             content:
-              '{"results":[{"id":0,"parts":[{"translation":"草稿"}]}\nFinal\n' +
-              '{"results":[{"id":0,"parts":[{"translation":"最终"}]}]}',
+              '{"results":[{"id":0,"translation":"草稿"}\nFinal\n' +
+              '{"results":[{"id":0,"translation":"最终"}]}',
           },
         },
       ],
@@ -555,7 +555,7 @@ it('retries only the cue that was not committed when the batch reply is short', 
         {
           message: {
             content: JSON.stringify({
-              results: [{ id: 0, parts: [{ translation: '第一句' }] }],
+              results: [{ id: 0, translation: '第一句' }],
             }),
           },
         },
