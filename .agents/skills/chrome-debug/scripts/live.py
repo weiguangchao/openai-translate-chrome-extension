@@ -46,10 +46,10 @@ ACTIONS_HELP = """Actions
                    Evaluate page JavaScript, await Promises, return JSON.
                    Truthy values pass; falsy values retry every second.
                    An object with a fail key ends the step as failed.
-                   Each attempt waits up to 8 seconds for the expression.
+                   Each attempt waits up to 8 seconds, capped by the remaining budget.
   click            selector. Click the first matching document element.
   overlay          Optional wait. Reports Subline's overlay: original and translation
-                   lines with hidden, text and error. With wait, waits until both
+                   lines with hidden, visible, text and error. With wait, waits until both
                    lines show text and the translation is neither the loading
                    placeholder nor an error.
   requests         Optional match, a list of substrings. Lists this tab's request
@@ -72,8 +72,13 @@ ACTIONS_HELP = """Actions
                    and lag max; played and wall cover the step alone. clock is
                    "throttled" when the tab was mostly hidden or played/wall
                    diverges from playbackRate; "sparse" marks counted under 80% of
-                   played plus before. save writes the stats with every sentence,
-                   batch and view. batches excludes requests completed before the
+                   played plus before. Clock rates and visibility cover this step
+                   only, sampled before rate enforcement. rates lists wall seconds
+                   at each rate; rateChanges and rateMismatch expose external resets.
+                   complete says whether the requested duration was collected.
+                   save writes stats, sentences, batches, views, this tab's raw
+                   worker events and media observations. Interrupted traces save
+                   partial evidence with interrupted=true. batches excludes requests completed before the
                    trace's start or since mark. Its p50, p90 and max use successful
                    requests completed in this window, measured is their count, and
                    results counts all outcomes, including pending requests. Durations
@@ -206,6 +211,7 @@ def request(method, params=None, timeout=15):
                 yield reply
                 if reply.get("done"):
                     return
+        raise OSError('holder closed the request before completing it')
 
 
 def echo_log(offset):
@@ -469,6 +475,20 @@ def extension_id(folder):
 
 
 def reload(args):
+    state = load_state()
+    if state:
+        require_owner(state)
+    else:
+        print('Holder is not running. Start it before replacing the loaded build.', file=sys.stderr)
+        return 1
+    try:
+        status = next(request('Session.status'))
+    except (OSError, NotRunning):
+        print('Holder is disconnected; the loaded files were not replaced.', file=sys.stderr)
+        return 1
+    if status.get('active'):
+        print('Holder is busy; the loaded files were not replaced.', file=sys.stderr)
+        return 1
     folder = Path(args.path).resolve() if args.path else HERE.parents[3] / "dist"
     if args.source:
         sync(Path(args.source).resolve(), folder)
@@ -491,13 +511,13 @@ def status(_args):
         print("Not running.")
         return 1
     if not alive(state):
-        print(f"Not running. Stale state file {STATE} (pid {state.get('pid')}).")
+        print(json.dumps({'ok': False, 'state': 'disconnected', 'pid': state.get('pid')}))
         return 1
     try:
         reply = next(request("Session.status"))
-    except socket.timeout:
-        print(f"Running (pid {state['pid']}), busy with checks.")
-        return 0
+    except (OSError, NotRunning) as error:
+        print(json.dumps({'ok': False, 'state': 'unresponsive', 'error': str(error)}))
+        return 1
     print(json.dumps(reply, ensure_ascii=False))
     return 0 if reply.get("ok") else 1
 

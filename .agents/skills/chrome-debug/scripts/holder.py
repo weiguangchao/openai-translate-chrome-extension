@@ -16,7 +16,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from live import STATE, alive, load_state, session_id
-from worker_trace import (MARK_SLACK_SECONDS, MAX_RATE, clock as clock_stats, continuous, settled,
+from worker_trace import (MARK_SLACK_SECONDS, MAX_RATE, media_clock, continuous, settled,
                           summarize as summarize_worker, trace_line)
 
 PORT_FILE = Path(
@@ -116,6 +116,9 @@ OVERLAY = r"""
   const root = host && host.shadowRoot;
   const read = (node) => node ? {
     hidden: node.hidden,
+    visible: node.checkVisibility({checkOpacity: true, checkVisibilityCSS: true}) &&
+      [...node.getClientRects()].some(r => r.width > 0 && r.height > 0 &&
+        r.bottom > 0 && r.right > 0 && r.top < innerHeight && r.left < innerWidth),
     text: (node.textContent || '').trim().slice(0, 180),
     error: node.classList.contains('error')
   } : null;
@@ -127,6 +130,22 @@ OVERLAY = r"""
     time: video ? Math.round(video.currentTime * 10) / 10 : null
   };
 })()
+"""
+
+MEDIA_CLOCK = """if (!video.__sublineDebugClock) {
+  const clock = video.__sublineDebugClock = {events: [], dropped: false};
+  clock.record = (kind) => {
+    if (clock.events.length >= 4096) { clock.dropped = true; return; }
+    clock.events.push({at: Date.now(), rate: video.playbackRate,
+      visible: document.visibilityState, time: video.currentTime, kind});
+  };
+  video.addEventListener('ratechange', () => clock.record('ratechange'));
+  document.addEventListener('visibilitychange', () => clock.record('visibilitychange'));
+}
+video.__sublineDebugClock.record('sample');
+const clockEvents = video.__sublineDebugClock.events.splice(0);
+const clockDropped = video.__sublineDebugClock.dropped;
+video.__sublineDebugClock.dropped = false;
 """
 
 
@@ -166,6 +185,10 @@ class TabGone(Exception):
     pass
 
 
+class ClientGone(OSError):
+    pass
+
+
 class Chrome:
 
     def __init__(self, sock, rest):
@@ -176,6 +199,7 @@ class Chrome:
         self.waiting = set()
         self.responses = {}
         self.listener = None
+        self.service = None
 
     def call(self, method, params=None, session=None, timeout=20, abort=None):
         message_id = self.next_id
@@ -230,7 +254,9 @@ class Chrome:
             raise ChromeClosed(f"Chrome socket: {error}") from error
 
     def pump(self, timeout):
-        ready, _, _ = select.select([self.sock], [], [], max(timeout, 0))
+        if self.service:
+            self.service()
+        ready, _, _ = select.select([self.sock], [], [], min(max(timeout, 0), 0.2))
         if not ready:
             return
         try:
@@ -341,7 +367,7 @@ def handshake(port, path):
     except OSError as error:
         raise SystemExit(f"Cannot reach Chrome on port {port} ({error}). Is Chrome running?")
     sock.sendall(request.encode())
-    log('Waiting for Chrome. Click Allow on "Allow remote debugging?" if it shows.')
+    log('Waiting for Chrome authorization.')
     buf = b""
     deadline = time.monotonic() + ALLOW_SECONDS
     next_click = time.monotonic() + 2
@@ -353,9 +379,11 @@ def handshake(port, path):
                 f"Chrome did not accept the connection within {ALLOW_SECONDS} s. "
                 'Click Allow on "Allow remote debugging?", then start again.'
             )
-        if now >= next_click:
+        ready, _, _ = select.select([sock], [], [], 0)
+        if not ready and now >= next_click:
             problem = click_allow()
-            if problem and not warned:
+            ready, _, _ = select.select([sock], [], [], 0)
+            if problem and not warned and not ready:
                 warned = True
                 log(f"Could not click Allow automatically ({problem}). Click it by hand.")
             next_click = time.monotonic() + 5
@@ -511,9 +539,9 @@ class Tab:
         self.url = None
         self.used = time.monotonic()
         self.expect_motion = False
-        self.rates = {}
-        self.clock_samples = 0
-        self.clock_visible = 0
+        self.media_events = []
+        self.clock_dropped = False
+        self.clock_started = None
         self.stall_since = None
         self.stall_time = None
         self.buffering = False
@@ -650,12 +678,6 @@ class Tab:
         if not isinstance(value, dict) or "ready" not in value:
             self.stall_since = None
             return None
-        rate = value.get("rate")
-        if isinstance(rate, (int, float)):
-            self.rates[rate] = self.rates.get(rate, 0) + 1
-            self.clock_samples += 1
-            if value.get("visible") == "visible":
-                self.clock_visible += 1
         if value.get("ended") or value.get("ad"):
             self.stall_since = None
             return None
@@ -677,7 +699,19 @@ class Tab:
         return None
 
     def attach_clock(self, stats):
-        clock_stats(stats, self.rates, self.clock_visible, self.clock_samples)
+        if self.clock_started is not None:
+            media_clock(stats, self.media_events, self.clock_started, time.time() * 1000, self.rate)
+        if self.clock_dropped:
+            stats['clockTruncated'] = True
+
+    def trace_events(self):
+        tabs = {event.get('tab') for _, event in self.worker_events
+                if event.get('e') == 'view' and event.get('run') == self.run_id}
+        ids = {event.get('id') for _, event in self.worker_events
+               if event.get('e') == 'batch' and event.get('tab') in tabs}
+        return [(stamp, event) for stamp, event in self.worker_events
+                if (event.get('e') == 'view' and event.get('run') == self.run_id)
+                or (event.get('e') != 'view' and event.get('id') in ids)]
 
     def call(self, method, params=None, timeout=20):
         self.check_gone()
@@ -703,7 +737,7 @@ class Tab:
 
     def sample(self, expression):
         try:
-            value = self.evaluate(expression)
+            value = self.evaluate(expression, timeout=max(0.001, min(8, self.deadline - time.monotonic())))
         except CdpError as error:
             self.last_error = str(error)
             return None
@@ -714,12 +748,19 @@ class Tab:
         beat = time.monotonic() + HEARTBEAT_SECONDS
         while True:
             self.check_gone()
+            if time.monotonic() >= self.deadline:
+                return False, None
             if self.run_id:
                 self.pump_worker()
             observed = None
             if self.watch:
                 observed = self.remember(self.sample(self.watch))
+                if isinstance(observed, dict):
+                    self.media_events.extend(observed.pop('clockEvents', []))
+                    self.clock_dropped |= observed.pop('clockDropped', False)
             value = probe()
+            if time.monotonic() >= self.deadline:
+                return False, value
             if isinstance(value, dict) and "ready" in value:
                 observed = self.remember(value)
             if self.expect_motion and self.note_stall(observed) is FAIL:
@@ -793,7 +834,8 @@ class Tab:
         if self.keep_playing:
             keep.append("if (video.paused && !video.ended) { const playing = video.play(); "
                         "if (playing && playing.catch) playing.catch(() => {}); }")
-        return probe.replace("if (!video) return null;", "if (!video) return null;\n          " + " ".join(keep))
+        probe = probe.replace("if (!video) return null;", "if (!video) return null;\n" + MEDIA_CLOCK + " ".join(keep))
+        return probe.replace("return {time:", "return {clockEvents, clockDropped, time:")
 
     def restore(self):
         self.rate = None
@@ -932,7 +974,7 @@ class Tab:
             return {"ok": value is not None, "overlay": value}
 
         def shown(line):
-            return bool(line and not line["hidden"] and line["text"])
+            return bool(line and line["visible"] and not line["hidden"] and line["text"])
 
         def passed(value):
             if not value or not shown(value.get("original")) or not shown(value.get("translation")):
@@ -990,6 +1032,9 @@ class Tab:
     def do_trace(self, step):
         self.expect_motion = True
         started = time.time() * 1000
+        self.clock_started = started
+        self.clock_dropped = False
+        self.media_events = []
         count_from = step.get("since")
         if count_from == "seek" and self.seek_mark is None:
             return {"ok": False, "reason": "fail", "value": {"fail": "since seek needs an earlier media step with time"}}
@@ -1008,6 +1053,7 @@ class Tab:
                                     since=progress["mark"], before=before)
             if count_from:
                 full["stats"]["since"] = count_from
+            full['stats']['requested'] = step['seconds']
             return full
 
         def passed(value):
@@ -1029,6 +1075,11 @@ class Tab:
             last, now = progress["last"], time.monotonic()
             if moving and last is not None and continuous(value["time"] - last, now - progress["last_at"]):
                 progress["played"] += value["time"] - last
+            elif moving and last is not None and count_from == 'seek' and (
+                    value['time'] < last - MARK_SLACK_SECONDS or
+                    value['time'] - last > (now - progress['last_at']) * MAX_RATE + MARK_SLACK_SECONDS):
+                self.fail_reason = f"video jumped from {last} s to {value['time']} s during the landing trace"
+                return FAIL
             progress["last"] = value["time"] if moving else None
             progress["last_at"] = now
             if moving and progress["playing_since"] is None:
@@ -1045,16 +1096,20 @@ class Tab:
 
         try:
             verdict, _ = self.until(lambda: self.sample(probe), passed)
-        except TabGone:
+        except (TabGone, ChromeClosed, ClientGone):
             stats = summary()["stats"]
             self.attach_clock(stats)
             self.milestone = stats
+            if step.get('save'):
+                save_json(step['save'], {**summary(), 'stats': stats, 'events': self.trace_events(),
+                                        'media': self.media_events, 'interrupted': True})
             raise
         full = summary()
         self.attach_clock(full["stats"])
         if self.fail_reason or (verdict is True and not self.saw_view):
             verdict = FAIL
         result = {"ok": verdict is True}
+        full['stats']['complete'] = verdict is True and progress['played'] >= step['seconds']
         if verdict is FAIL:
             if self.fail_reason:
                 why = self.fail_reason
@@ -1074,7 +1129,8 @@ class Tab:
         result["slowest"] = sorted(measured, key=lambda s: -s["lag"])[:5]
         if step.get("save"):
             views = [[stamp, e] for stamp, e in self.worker_events if e.get("e") == "view" and e.get("run") == self.run_id]
-            result["saved"] = save_json(step["save"], {**full, "views": views})
+            result["saved"] = save_json(step["save"], {**full, "views": views,
+                                                     "events": self.trace_events(), "media": self.media_events})
         return result
 
     def screenshot(self, path):
@@ -1105,7 +1161,33 @@ class Holder:
         self.opened = 0
         self.watchers = []
         self.temporary = []
+        self.active_client = None
+        self.active = None
         chrome.listener = self.dispatch
+        chrome.service = self.service_clients
+
+    def service_clients(self):
+        if self.active_client is None:
+            return
+        ready, _, _ = select.select([self.active_client, self.server], [], [], 0)
+        if self.active_client in ready:
+            if not self.active_client.recv(1, socket.MSG_PEEK):
+                self.active_client = None
+                raise ClientGone('client disconnected; cancelled its active command')
+        if self.server in ready:
+            client, _ = self.server.accept()
+            with client:
+                try:
+                    self.handle(client, busy=True)
+                except OSError:
+                    pass
+
+    def status(self):
+        tabs = [{'tab': tab.id, 'url': tab.url, 'idle': round(time.monotonic() - tab.used),
+                 'video': tab.video_time} for tab in self.tabs.values()]
+        return {'done': True, 'ok': True, 'pid': os.getpid(), 'chrome_port': self.chrome_port,
+                'started': self.started, 'idle_minutes': IDLE_SECONDS // 60, 'tabs': tabs,
+                'state': 'running' if self.active else 'ready', 'active': self.active}
 
     def dispatch(self, event):
         for tab in list(self.tabs.values()):
@@ -1191,8 +1273,8 @@ class Holder:
                         log(f"Client went away: {error}")
                 idle_until = time.monotonic() + IDLE_SECONDS
 
-    def handle(self, client):
-        client.settimeout(10)
+    def handle(self, client, busy=False):
+        client.settimeout(0.2 if busy else 10)
         try:
             with client.makefile("rb") as stream:
                 request = json.loads(stream.readline(1 << 22))
@@ -1209,20 +1291,22 @@ class Holder:
             reply(client, {"done": True, "ok": False, "error": "Holder belongs to another session"})
             return
         if method == "Session.status":
-            tabs = [{"tab": tab.id, "url": tab.url, "idle": round(time.monotonic() - tab.used)}
-                    for tab in self.tabs.values()]
-            reply(client, {"done": True, "ok": True, "pid": os.getpid(), "chrome_port": self.chrome_port,
-                           "started": self.started, "idle_minutes": IDLE_SECONDS // 60, "tabs": tabs})
-        elif method == "Session.run":
-            self.run(client, params.get("checks"))
-        elif method == "Session.open":
-            self.open(client, params)
-        elif method == "Session.do":
-            self.do(client, params)
-        elif method == "Session.close":
-            self.close(client, params)
-        elif method == "Session.reload":
-            self.reload(client, params.get("extension"))
+            reply(client, self.status())
+        elif busy:
+            reply(client, {'done': True, 'ok': False, 'error': 'Holder is busy', 'active': self.active})
+        elif method in ('Session.run', 'Session.open', 'Session.do', 'Session.close', 'Session.reload'):
+            self.active_client = client
+            self.active = {'method': method, 'tab': params.get('tab'), 'started': time.time()}
+            try:
+                if method == 'Session.run':
+                    self.run(client, params.get('checks'))
+                elif method == 'Session.reload':
+                    self.reload(client, params.get('extension'))
+                else:
+                    getattr(self, method.split('.')[1])(client, params)
+            finally:
+                self.active_client = None
+                self.active = None
         else:
             reply(client, {"done": True, "ok": False, "error": f"unknown method {method!r}"})
 
@@ -1339,7 +1423,11 @@ class Holder:
             reply(client, {"done": True, "ok": False, "error": "; ".join(problems)})
             return
         tab.deadline = time.monotonic() + timeout
-        tab.progress = lambda event: reply(client, {"progress": event})
+        def progress(event):
+            if self.active:
+                self.active['step'] = event
+            reply(client, {"progress": event})
+        tab.progress = progress
         try:
             result = tab.run(step, {"check": tab.id, "step": 1, "of": 1, "action": step["action"]})
         finally:
@@ -1473,6 +1561,7 @@ def main():
         log(f"{error}. Exiting.")
         holder.tabs.clear()
     finally:
+        holder.active_client = None
         for tab in list(holder.tabs.values()):
             try:
                 holder.close_tab(tab)

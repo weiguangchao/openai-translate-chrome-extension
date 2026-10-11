@@ -10,6 +10,8 @@ import json
 import os
 import shutil
 import socket
+import subprocess
+import sys
 import tempfile
 import time
 import unittest
@@ -19,6 +21,7 @@ from unittest.mock import patch
 from support import SESSION, Browser, BrowserCase, Site, copy_extension, step
 
 import holder
+import measure
 import live as live_module
 
 
@@ -160,7 +163,9 @@ class Trace(BrowserCase):
         self.assertIn(", rate 2, visible 1.0,", done.err)
         self.assertNotIn("throttled", done.err)
         saved = json.loads((folder / "trace.json").read_text())
-        self.assertEqual(set(saved), {"stats", "sentences", "episodes", "batches", "views"})
+        self.assertEqual(set(saved), {"stats", "sentences", "episodes", "batches", "views", "events", "media"})
+        self.assertTrue(saved['events'])
+        self.assertTrue(saved['media'])
 
     def test_landing_trace_reports_the_wait_after_seeking(self):
         """AGENTS.md: wait after seeking is (firstReadyAt - firstCaptionAt) / playbackRate."""
@@ -210,6 +215,14 @@ class Trace(BrowserCase):
         missing = self.result(self.do(self.open("since-none", trace=True), action="trace", seconds=5, since="seek"),
                               ok=False)
         self.assertEqual(missing["value"]["fail"], "since seek needs an earlier media step with time")
+
+    def test_landing_fails_if_the_site_jumps_during_the_trace(self):
+        tab = self.open('since-later-jump', trace=True)
+        self.result(self.do(tab, action='media', time=40, play=True))
+        self.result(self.do(tab, action='evaluate', expression=
+                    "setTimeout(() => { document.querySelector('video').currentTime = 5; }, 2500)"))
+        result = self.result(self.do(tab, action='trace', seconds=15, since='seek'), ok=False)
+        self.assertIn('during the landing trace', result['value']['fail'])
 
 
 class Run(BrowserCase):
@@ -322,7 +335,7 @@ class Restart(BrowserCase):
         self.live.kill_holder()
         status = self.call("status", session=None)
         self.assertEqual(status.code, 1)
-        self.assertIn("Not running. Stale state file", status.out)
+        self.assertEqual(status.json['state'], 'disconnected')
         restarted = self.call("start")
         self.assertEqual(restarted.code, 0, restarted)
         self.assertIn("Closed a tab a stopped holder left open.", restarted.err)
@@ -410,6 +423,35 @@ class Protocol(unittest.TestCase):
         popup = {expression for method, session, expression in calls
                  if method == "Runtime.evaluate" and session not in page_or_worker}
         self.assertEqual(popup, {"chrome.runtime.getManifest().name", "chrome.runtime.reload()"})
+
+
+class Measurements(BrowserCase):
+
+    def test_matrix_restores_build_and_resume_skips_complete_runs(self):
+        folder = self.folder()
+        source = copy_extension('0.2.0')
+        self.addCleanup(shutil.rmtree, source, True)
+        plan = folder / 'plan.json'
+        plan.write_text(json.dumps({'durations': {'opening': 12, 'landing': 20, 'playing': 20},
+                                    'cases': [{'name': 'clip', 'url': self.site.url('measure'),
+                                               'rate': 1, 'seek': [44]}]}))
+        output = folder / 'results'
+        command = [sys.executable, measure.__file__, str(plan), '--build', f'new={source}',
+                   '--loaded', str(self.extension), '--output', str(output), '--session', SESSION]
+        before = live_module.fingerprint(self.extension)
+        result = subprocess.run(command, env=self.live.env, capture_output=True, text=True, timeout=120)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        summary = json.loads((output / 'summary.json').read_text())
+        self.assertTrue(summary['runs'][0]['assessment']['dataValid'])
+        self.assertTrue(summary['restoration']['reloadVerified'])
+        self.assertEqual(live_module.fingerprint(self.extension), before)
+        run_path = output / summary['runs'][0]['path']
+        original = run_path.read_bytes()
+        resumed = subprocess.run(command + ['--resume'], env=self.live.env, capture_output=True, text=True, timeout=30)
+        self.assertEqual(resumed.returncode, 0, resumed.stdout + resumed.stderr)
+        self.assertIn('kept completed run', resumed.stdout)
+        self.assertEqual(run_path.read_bytes(), original)
+        self.assertEqual(len(json.loads((output / 'summary.json').read_text())['runs']), 1)
 
 
 if __name__ == "__main__":
