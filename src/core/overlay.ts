@@ -1,8 +1,45 @@
 import type { PublicSettings } from '../shared/settings';
-import type { ViewState } from '../shared/trace';
 
 const LOADING_TRANSLATION = '翻译中';
 const TIMEOUT_TRANSLATION = '接口调用超时';
+
+export type TranslationLine =
+  | { readonly kind: 'none' }
+  | { readonly kind: 'loading' }
+  | { readonly kind: 'ready'; readonly translation: string }
+  | { readonly kind: 'failed'; readonly message: string }
+  | { readonly kind: 'timedOut' };
+
+export interface CaptionView {
+  readonly original: string;
+  readonly line: TranslationLine;
+}
+
+type Status = 'error' | 'timeout' | null;
+
+function lineContent(line: TranslationLine): { text: string; status: Status } {
+  switch (line.kind) {
+    case 'none':
+      return { text: '', status: null };
+    case 'loading':
+      return { text: LOADING_TRANSLATION, status: null };
+    case 'ready':
+      return { text: line.translation, status: null };
+    case 'failed':
+      return { text: `Subline：${line.message}`, status: 'error' };
+    case 'timedOut':
+      return { text: TIMEOUT_TRANSLATION, status: 'timeout' };
+  }
+}
+
+function write(node: HTMLDivElement | null, text: string, status: Status): void {
+  if (!node) return;
+  node.classList.toggle('error', status === 'error');
+  node.classList.toggle('timeout', status === 'timeout');
+  if (node.textContent !== text) node.textContent = text;
+  node.hidden = !text;
+}
+
 const OVERLAY_STYLE =
   ':host{all:initial}.stack{position:absolute;left:4%;width:92%;text-align:center;font-family:Arial,"PingFang SC",sans-serif;line-height:1.4;pointer-events:none}.line{width:fit-content;max-width:100%;margin-inline:auto;padding:1px 8px;border-radius:3px;white-space:normal;overflow-wrap:anywhere;text-shadow:0 1px 3px #000;box-sizing:border-box}.error{font-size:13px!important;color:#ffe3b0!important}.timeout{color:#ffcc00!important}';
 
@@ -20,18 +57,6 @@ export class SubtitleOverlay {
 
   get connected(): boolean {
     return Boolean(this.host?.isConnected);
-  }
-
-  get failed(): boolean {
-    return Boolean(this.translation?.classList.contains('error'));
-  }
-
-  get state(): ViewState {
-    const text = this.translation && !this.translation.hidden ? this.translation.textContent : '';
-    if (!text) return 'empty';
-    if (this.failed) return 'error';
-    if (text === LOADING_TRANSLATION) return 'loading';
-    return text === TIMEOUT_TRANSLATION ? 'timeout' : 'ready';
   }
 
   mount(player: HTMLElement, settings: PublicSettings): void {
@@ -101,64 +126,9 @@ export class SubtitleOverlay {
     this.layers = [...next];
   }
 
-  showOriginal(text: string): void {
-    if (!this.original) return;
-    if (this.original.textContent !== text) this.original.textContent = text;
-    this.original.hidden = !text;
-  }
-
-  showTranslation(text: string): void {
-    if (!this.translation) return;
-    this.translation.classList.remove('error', 'timeout');
-    if (this.translation.textContent !== text) this.translation.textContent = text;
-    this.translation.hidden = !text;
-  }
-
-  showLoading(): void {
-    this.showStatus(LOADING_TRANSLATION, false);
-  }
-
-  showTimeout(): void {
-    this.showStatus(TIMEOUT_TRANSLATION, true);
-  }
-
-  private showStatus(text: string, timeout: boolean): void {
-    const node = this.translation;
-    if (!node) return;
-    if (
-      node.textContent === text &&
-      !node.hidden &&
-      !this.failed &&
-      node.classList.contains('timeout') === timeout
-    )
-      return;
-    node.classList.remove('error');
-    node.classList.toggle('timeout', timeout);
-    node.textContent = text;
-    node.hidden = false;
-  }
-
-  clearLoading(): void {
-    if (this.translation?.textContent === LOADING_TRANSLATION) this.hideTranslation();
-  }
-
-  showError(message: string): void {
-    if (!this.translation) return;
-    this.translation.textContent = `Subline：${message}`;
-    this.translation.classList.remove('timeout');
-    this.translation.classList.add('error');
-    this.translation.hidden = false;
-  }
-
-  hideTranslation(): void {
-    if (!this.translation) return;
-    this.translation.classList.remove('error', 'timeout');
-    this.translation.textContent = '';
-    this.translation.hidden = true;
-  }
-
-  clear(): void {
-    this.hideTranslation();
-    this.showOriginal('');
+  render(view: CaptionView): void {
+    write(this.original, view.original, null);
+    const { text, status } = lineContent(view.line);
+    write(this.translation, text, status);
   }
 }

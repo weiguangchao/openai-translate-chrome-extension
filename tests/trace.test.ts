@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { SubtitleOverlay } from '../src/core/overlay';
+import { SubtitleOverlay, type TranslationLine } from '../src/core/overlay';
 import { TraceReporter } from '../src/core/trace';
 import { DEFAULT_SETTINGS, publicSettings } from '../src/shared/settings';
 import { readTraceRequest, TRACE_ATTRIBUTE, TRACE_WORKER_ATTRIBUTE } from '../src/shared/trace';
@@ -96,41 +96,41 @@ it('keeps only the known fields of a trace event and rejects malformed ones', ()
   expect(() => readTraceRequest({ ...event, time: Number.NaN })).toThrow();
 });
 
-it('names what the translation line shows', () => {
+it('renders each translation line with its own text and class', () => {
   const player = document.createElement('div');
   document.body.append(player);
   const overlay = new SubtitleOverlay();
-  expect(overlay.state).toBe('empty');
   overlay.mount(player, publicSettings(DEFAULT_SETTINGS));
-  expect(overlay.state).toBe('empty');
-  overlay.showLoading();
-  expect(overlay.state).toBe('loading');
-  overlay.showTranslation('你好');
-  expect(overlay.state).toBe('ready');
-  overlay.showTimeout();
-  expect(overlay.state).toBe('timeout');
+  const render = (line: TranslationLine) => overlay.render({ original: '', line });
   const root = player.querySelector('[data-subline-overlay]')!.shadowRoot!;
   const translation = root.querySelector<HTMLElement>('.translation')!;
-  expect(translation.classList.contains('timeout')).toBe(true);
-  expect(translation.classList.contains('error')).toBe(false);
+  const shown = () => ({
+    text: translation.hidden ? null : translation.textContent,
+    error: translation.classList.contains('error'),
+    timeout: translation.classList.contains('timeout'),
+  });
+  expect(shown()).toEqual({ text: null, error: false, timeout: false });
+  render({ kind: 'loading' });
+  expect(shown()).toEqual({ text: '翻译中', error: false, timeout: false });
+  render({ kind: 'ready', translation: '你好' });
+  expect(shown()).toEqual({ text: '你好', error: false, timeout: false });
+  render({ kind: 'timedOut' });
+  expect(shown()).toEqual({ text: '接口调用超时', error: false, timeout: true });
   expect(root.querySelector('style')!.textContent).toContain('.timeout{color:#ffcc00!important}');
   expect(translation.style.fontSize).toBe('20px');
   overlay.updateStyle(
     publicSettings({ ...DEFAULT_SETTINGS, translation: { color: '#112233', size: 18 } }),
   );
-  expect(translation.classList.contains('timeout')).toBe(true);
+  expect(shown().timeout).toBe(true);
   expect(translation.style.color).toBe('rgb(17, 34, 51)');
   expect(translation.style.fontSize).toBe('18px');
-  overlay.showError('翻译失败。');
-  expect(overlay.state).toBe('error');
-  expect(translation.classList.contains('timeout')).toBe(false);
-  overlay.showTimeout();
-  expect(overlay.state).toBe('timeout');
-  expect(translation.classList.contains('error')).toBe(false);
-  overlay.showTranslation('你好');
-  expect(overlay.state).toBe('ready');
-  expect(translation.classList.contains('timeout')).toBe(false);
+  render({ kind: 'failed', message: '翻译失败。' });
+  expect(shown()).toEqual({ text: 'Subline：翻译失败。', error: true, timeout: false });
+  render({ kind: 'timedOut' });
+  expect(shown()).toEqual({ text: '接口调用超时', error: false, timeout: true });
+  render({ kind: 'ready', translation: '你好' });
+  expect(shown()).toEqual({ text: '你好', error: false, timeout: false });
   expect(translation.style.color).toBe('rgb(17, 34, 51)');
-  overlay.hideTranslation();
-  expect(overlay.state).toBe('empty');
+  render({ kind: 'none' });
+  expect(shown()).toEqual({ text: null, error: false, timeout: false });
 });
