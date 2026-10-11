@@ -8,7 +8,7 @@ import {
 } from '../shared/playback-plan';
 import { ProviderTimeoutError } from '../shared/provider-error';
 import { wakeProviderRequests } from '../shared/provider/transport';
-import type { Settings } from '../shared/settings';
+import { translationIdentity, type Settings } from '../shared/settings';
 import type { TraceEvent } from '../shared/trace';
 
 export const translationCacheLimit = 5000;
@@ -72,13 +72,7 @@ export class TranslationQueue {
   ) {}
 
   private key(settings: Settings, text: string): string {
-    return JSON.stringify([
-      settings.baseUrl,
-      settings.model,
-      settings.sourceLanguage,
-      settings.targetLanguage,
-      text,
-    ]);
+    return JSON.stringify([...translationIdentity(settings), text]);
   }
 
   restore(entries: Iterable<readonly [string, string]>, store: TranslationStore): void {
