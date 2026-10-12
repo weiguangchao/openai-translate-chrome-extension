@@ -5,6 +5,7 @@ export const domTestProjects = [
     name: 'dom',
     environment: 'jsdom',
     include: [
+      'tests/bridge.test.ts',
       'tests/captions.test.ts',
       'tests/content.test.ts',
       'tests/controller.test.ts',
@@ -13,6 +14,7 @@ export const domTestProjects = [
       'tests/settings-alerts.test.tsx',
       'tests/settings-models.test.tsx',
       'tests/trace.test.ts',
+      'tests/webvtt.test.ts',
     ],
   },
   {

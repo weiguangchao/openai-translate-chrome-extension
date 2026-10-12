@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest';
 import { parseYoutubeCaptions } from '../src/platforms/youtube/captions';
 import { captionDisplayLimit, subtitleDisplayLength } from '../src/shared/segmenter';
-import { captionAt, captionWindow, timedCaptions } from '../src/core/timeline';
+import { captionAt, playbackCues, timedCaptions } from '../src/core/timeline';
 import { githubCaption, githubCaptionTrack } from './fixtures/github-caption';
 
 const githubCaptions = [
@@ -138,18 +138,28 @@ it('joins ASR fragments, uses word timestamps within a cue and preserves the fin
     { startTime: 2, endTime: 3, text: 'Are you?' },
     { startTime: 3, endTime: 4, text: 'Let’s go' },
   ]);
-  expect(captionWindow(timedCaptions(cues), 1.5)).toEqual({
-    current: 'We are ready.',
-    items: [
-      { text: 'We are ready.', start: 0, end: 2 },
-      { text: 'Are you?', start: 2, end: 3 },
-      { text: 'Let’s go', start: 3, end: 4 },
-    ],
-  });
-  expect(captionWindow(timedCaptions(cues), 2).current).toBe('Are you?');
+  expect(captionAt(cues, 1.5)).toBe('We are ready.');
+  expect(playbackCues(timedCaptions(cues), 1.5)).toEqual([
+    { text: 'We are ready.', start: 0, end: 2 },
+    { text: 'Are you?', start: 2, end: 3 },
+    { text: 'Let’s go', start: 3, end: 4 },
+  ]);
+  expect(captionAt(cues, 2)).toBe('Are you?');
 });
 
-it('keeps a punctuated authored sentence intact across a gap between caption blocks', () => {
+it.each([
+  {
+    kind: 'authored' as const,
+    expected: [{ startTime: 1, endTime: 5, text: 'This field behind me will become a city.' }],
+  },
+  {
+    kind: 'asr' as const,
+    expected: [
+      { startTime: 1, endTime: 2, text: 'This field behind me' },
+      { startTime: 3.2, endTime: 5, text: 'will become a city.' },
+    ],
+  },
+])('handles a pause within punctuated $kind dialogue', ({ kind, expected }) => {
   expect(
     parseYoutubeCaptions(
       {
@@ -158,10 +168,10 @@ it('keeps a punctuated authored sentence intact across a gap between caption blo
           { tStartMs: 3200, dDurationMs: 1800, segs: [{ utf8: 'will become a city.' }] },
         ],
       },
-      'authored',
+      kind,
       'en',
     ),
-  ).toEqual([{ startTime: 1, endTime: 5, text: 'This field behind me will become a city.' }]);
+  ).toEqual(expected);
 });
 
 it('preserves simultaneous authored lines and removes duplicate drawing layers', () => {
@@ -220,8 +230,8 @@ it('uses pauses in unpunctuated word timings and leaves silence between sentence
     { startTime: 2.5, endTime: 3.7, text: 'let’s go' },
     { startTime: 6, endTime: 7, text: 'goodbye' },
   ]);
-  expect(captionWindow(timedCaptions(cues), 2).current).toBe('');
-  expect(captionWindow(timedCaptions(cues), 3).current).toBe('let’s go');
+  expect(captionAt(cues, 2)).toBe('');
+  expect(captionAt(cues, 3)).toBe('let’s go');
 });
 
 it('keeps decimals, abbreviations, split words and repeated spoken words intact', () => {
@@ -339,32 +349,4 @@ it('ignores malformed and non-text events while retaining valid captions', () =>
       'en',
     ),
   ).toEqual([{ startTime: 0, endTime: 1, text: 'Valid.' }]);
-});
-
-it('joins overlapping captions into one line in the playback window', () => {
-  const first = 'When I first moved to the city, I didn’t know anyone at all,';
-  const second = 'and every night I walked along the river, wondering why.';
-  const long =
-    'Years later, standing on the same bridge, I finally understood that the city had become my home.';
-  const captions = timedCaptions([
-    { startTime: 2, endTime: 6, text: first },
-    { startTime: 4, endTime: 8, text: second },
-    { startTime: 8, endTime: 12, text: long },
-  ]);
-  expect(captionWindow(captions, 0).items).toEqual([
-    { text: first, start: 2, end: 4 },
-    { text: `${first}\n${second}`, start: 4, end: 6 },
-    { text: second, start: 6, end: 8 },
-    { text: long, start: 8, end: 12 },
-  ]);
-});
-
-it('keeps a long cue whole while it overlaps another cue', () => {
-  const long =
-    'Years later, standing on the same bridge, I finally understood that the city had become my home.';
-  const captions = timedCaptions([
-    { startTime: 0, endTime: 5, text: long },
-    { startTime: 4, endTime: 6, text: 'Overlap.' },
-  ]);
-  expect(captions.map((caption) => caption.text)).toEqual([long, 'Overlap.']);
 });

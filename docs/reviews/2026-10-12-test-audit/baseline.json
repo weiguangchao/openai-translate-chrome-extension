@@ -1,0 +1,197 @@
+{
+  "sha": "6b1da64",
+  "unit_files": [
+    {
+      "file": "tests/captions.test.ts",
+      "environment": "dom",
+      "lines": 486,
+      "baseline": "pass"
+    },
+    {
+      "file": "tests/content.test.ts",
+      "environment": "dom",
+      "lines": 101,
+      "baseline": "pass"
+    },
+    {
+      "file": "tests/controller.test.ts",
+      "environment": "dom",
+      "lines": 377,
+      "baseline": "pass"
+    },
+    {
+      "file": "tests/popup.test.tsx",
+      "environment": "dom",
+      "lines": 225,
+      "baseline": "pass"
+    },
+    {
+      "file": "tests/prefetch.test.ts",
+      "environment": "dom",
+      "lines": 681,
+      "baseline": "pass"
+    },
+    {
+      "file": "tests/settings-alerts.test.tsx",
+      "environment": "dom",
+      "lines": 154,
+      "baseline": "pass"
+    },
+    {
+      "file": "tests/settings-models.test.tsx",
+      "environment": "dom",
+      "lines": 147,
+      "baseline": "pass"
+    },
+    {
+      "file": "tests/trace.test.ts",
+      "environment": "dom",
+      "lines": 136,
+      "baseline": "pass"
+    },
+    {
+      "file": "tests/hbo.test.ts",
+      "environment": "hbo",
+      "lines": 701,
+      "baseline": "pass"
+    },
+    {
+      "file": "tests/youtube.test.ts",
+      "environment": "youtube",
+      "lines": 945,
+      "baseline": "pass"
+    },
+    {
+      "file": "tests/x.test.ts",
+      "environment": "x",
+      "lines": 393,
+      "baseline": "pass"
+    },
+    {
+      "file": "tests/api.test.ts",
+      "environment": "node",
+      "lines": 623,
+      "baseline": "pass"
+    },
+    {
+      "file": "tests/background.test.ts",
+      "environment": "node",
+      "lines": 371,
+      "baseline": "pass"
+    },
+    {
+      "file": "tests/caption-translation.test.ts",
+      "environment": "node",
+      "lines": 56,
+      "baseline": "pass"
+    },
+    {
+      "file": "tests/caption-types.test.ts",
+      "environment": "node",
+      "lines": 63,
+      "baseline": "pass"
+    },
+    {
+      "file": "tests/dependency-boundaries.test.ts",
+      "environment": "node",
+      "lines": 83,
+      "baseline": "pass"
+    },
+    {
+      "file": "tests/model-cache.test.ts",
+      "environment": "node",
+      "lines": 94,
+      "baseline": "pass"
+    },
+    {
+      "file": "tests/playback-plan.test.ts",
+      "environment": "node",
+      "lines": 136,
+      "baseline": "pass"
+    },
+    {
+      "file": "tests/playback-schedule.test.ts",
+      "environment": "node",
+      "lines": 190,
+      "baseline": "pass"
+    },
+    {
+      "file": "tests/provider-responses.test.ts",
+      "environment": "node",
+      "lines": 174,
+      "baseline": "pass"
+    },
+    {
+      "file": "tests/provider-transport.test.ts",
+      "environment": "node",
+      "lines": 187,
+      "baseline": "pass"
+    },
+    {
+      "file": "tests/queue.test.ts",
+      "environment": "node",
+      "lines": 734,
+      "baseline": "pass"
+    },
+    {
+      "file": "tests/registry.test.ts",
+      "environment": "node",
+      "lines": 50,
+      "baseline": "pass"
+    },
+    {
+      "file": "tests/segmenter.test.ts",
+      "environment": "node",
+      "lines": 174,
+      "baseline": "pass"
+    },
+    {
+      "file": "tests/settings-scope.test.ts",
+      "environment": "node",
+      "lines": 38,
+      "baseline": "pass"
+    },
+    {
+      "file": "tests/source-cache.test.ts",
+      "environment": "node",
+      "lines": 102,
+      "baseline": "pass"
+    },
+    {
+      "file": "tests/subtitle-sentences.test.ts",
+      "environment": "node",
+      "lines": 130,
+      "baseline": "pass"
+    },
+    {
+      "file": "tests/token-usage.test.ts",
+      "environment": "node",
+      "lines": 171,
+      "baseline": "pass"
+    },
+    {
+      "file": "tests/youtube-captions.test.ts",
+      "environment": "node",
+      "lines": 370,
+      "baseline": "pass"
+    }
+  ],
+  "unit_tests": 378,
+  "e2e_tests": 53,
+  "counts": {
+    "unit": 8092,
+    "unit_support": 72,
+    "e2e": 1161,
+    "e2e_support": 236,
+    "production": 6101
+  },
+  "checks": {
+    "verify": "pass",
+    "lint": "pass",
+    "typecheck": "pass",
+    "discovery": "29 files, exactly once",
+    "unit": "29 files, 378 passed",
+    "build": "pass",
+    "e2e": "53 passed, 5.6 minutes"
+  }
+}

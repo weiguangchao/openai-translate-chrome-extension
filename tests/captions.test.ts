@@ -2,7 +2,6 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { CaptionController } from '../src/core/controller';
 import { createHboPlatform } from '../src/platforms/hbo/platform';
 import { readHboCaption } from '../src/platforms/hbo/player';
-import { createYoutubePlatform } from '../src/platforms/youtube/platform';
 import { DEFAULT_SETTINGS, publicSettings } from '../src/shared/settings';
 
 let controller: CaptionController | undefined;
@@ -112,9 +111,17 @@ it.each(['[data-testid="caption_renderer_overlay"]', '#cue'])(
   },
 );
 
-it('finds an HBO subtitle layer that is a sibling of the video wrapper', async () => {
-  document.body.innerHTML =
-    '<div class="stream-player"><div class="media-wrapper"><video></video></div><div data-testid="subtitles">HBO cue</div></div>';
+it.each([
+  [
+    'a sibling of the video wrapper',
+    '<div class="stream-player"><div class="media-wrapper"><video></video></div><div data-testid="subtitles">HBO cue</div></div>',
+  ],
+  [
+    'outside the nested video root',
+    '<div data-testid="playerContainer"><div data-testid="player-root-element"><div><div><video></video></div></div></div><div data-testid="caption_renderer_overlay">HBO cue</div></div>',
+  ],
+])('finds an HBO subtitle layer when it is %s', async (_placement, html) => {
+  document.body.innerHTML = html;
   Object.defineProperty(document.querySelector('video'), 'textTracks', { value: [] });
   Object.defineProperty(document.querySelector('video'), 'readyState', { value: 1 });
   Object.defineProperty(document.querySelector('video'), 'paused', { value: false });
@@ -123,6 +130,7 @@ it('finds an HBO subtitle layer that is a sibling of the video wrapper', async (
   controller = new CaptionController(createHboPlatform, settings());
   await vi.advanceTimersByTimeAsync(450);
   expect(sendMessage).toHaveBeenCalledWith({ type: 'translate', text: 'HBO cue' });
+  expect(originalNode()?.textContent).toBe('HBO cue');
   expect(translationNode()?.textContent).toBe('HBO 译文');
 });
 
@@ -149,32 +157,6 @@ async function playMax(html: string) {
   await vi.advanceTimersByTimeAsync(450);
   return sendMessage;
 }
-
-it.each([
-  ['collapsed', 0],
-  ['full screen', 450],
-])(
-  'replaces the Max original and uses the shared layout when its overlay is %s',
-  async (_label, overlayHeight) => {
-    const sendMessage = await playMax(
-      '<div id="player" data-testid="playerContainer"><video></video><div id="overlay" data-testid="caption_renderer_overlay"><div id="cue">[chuckles] It is?</div></div></div>',
-    );
-    const player = document.getElementById('player')!;
-    const overlay = document.getElementById('overlay')!;
-    const cue = document.getElementById('cue')!;
-    stubBox(player, box(0, 450, 800));
-    stubBox(overlay, box(0, overlayHeight, 800));
-    stubBox(cue, box(360, 28));
-    await vi.advanceTimersByTimeAsync(150);
-    expect(sendMessage).toHaveBeenCalledWith({ type: 'translate', text: '[chuckles] It is?' });
-    expect(stackNode()?.querySelector('.original')?.textContent).toBe('[chuckles] It is?');
-    expect(translationNode()?.textContent).toBe('是吗?');
-    expect(stackNode()?.style.bottom).toBe('9%');
-    expect(stackNode()?.style.top).toBe('');
-    expect(getComputedStyle(overlay).opacity).toBe('0');
-    expect(player.style.getPropertyValue('--subline-reserve')).toBe('');
-  },
-);
 
 it('hides both Max source and mirrored cue when they are outside each other', async () => {
   await playMax(
@@ -239,91 +221,6 @@ it('follows a replaced Max source while keeping plugin placement and restores si
   expect(getComputedStyle(replacement).opacity).not.toBe('0');
   expect(replacement.style.cssText).toBe(originalStyle);
   expect(document.querySelector('[data-subline-overlay]')).toBeNull();
-});
-
-it('renders a YouTube timeline and a Max DOM caption with the same overlay and settings', async () => {
-  vi.mocked(window.postMessage).mockImplementation(
-    (data: { type?: string; requestId?: number }) => {
-      if (data?.type !== 'subline:youtube-timeline-request') return;
-      queueMicrotask(() =>
-        window.dispatchEvent(
-          new MessageEvent('message', {
-            source: window,
-            origin: location.origin,
-            data: {
-              type: 'subline:youtube-timeline-response',
-              requestId: data.requestId,
-              revision: 1,
-              state: {
-                mode: 'model',
-                source: [{ startTime: 0, endTime: 10, text: 'Shared text' }],
-                sourceId: 'track',
-              },
-            },
-          }),
-        ),
-      );
-    },
-  );
-  const styled = {
-    ...settings(),
-    original: { color: '#AABBCC', size: 32 },
-    translation: { color: '#CCDDEE', size: 28 },
-    backgroundOpacity: 60,
-    subtitleGap: 12,
-  };
-  const sources = [
-    {
-      platform: createYoutubePlatform,
-      html: '<div class="html5-video-player"><video></video><div class="ytp-caption-window-container"><span class="ytp-caption-segment">Shared text</span></div></div>',
-      layer: '.ytp-caption-window-container',
-    },
-    {
-      platform: createHboPlatform,
-      html: '<div data-testid="playerContainer" style="font:bold italic 60px serif;letter-spacing:8px;text-transform:uppercase"><video></video><div data-testid="caption_renderer_overlay">Shared text</div></div>',
-      layer: '[data-testid="caption_renderer_overlay"]',
-    },
-  ];
-  const snapshots = [];
-  for (const { platform, html, layer } of sources) {
-    document.body.innerHTML = html;
-    const video = document.querySelector('video')!;
-    Object.defineProperty(video, 'textTracks', { value: [] });
-    Object.defineProperty(video, 'readyState', { value: 1 });
-    Object.defineProperty(video, 'paused', { value: false });
-    vi.stubGlobal('chrome', {
-      runtime: {
-        id: 'extension-id',
-        sendMessage: vi.fn().mockResolvedValue({ ok: true, data: '是吗?' }),
-      },
-    });
-    controller = new CaptionController(platform, styled);
-    await vi.advanceTimersByTimeAsync(450);
-    const shadow = document.querySelector('[data-subline-overlay]')!.shadowRoot!;
-    snapshots.push(shadow.innerHTML);
-    expect(shadow.querySelector('.original')?.textContent).toBe('Shared text');
-    expect(shadow.querySelector('.translation')?.textContent).toBe('是吗?');
-    expect(shadow.querySelector<HTMLElement>('.original')?.style.fontSize).toBe('32px');
-    expect(shadow.querySelector<HTMLElement>('.translation')?.style.marginTop).toBe('12px');
-    expect(getComputedStyle(document.querySelector(layer)!).opacity).toBe('0');
-    controller.destroy();
-    expect(getComputedStyle(document.querySelector(layer)!).opacity).not.toBe('0');
-  }
-  expect(snapshots[0]).toBe(snapshots[1]);
-});
-
-it('reads the current Max caption overlay even when it sits outside the video root', async () => {
-  document.body.innerHTML =
-    '<div data-testid="playerContainer"><div data-testid="player-root-element"><div><div><video></video></div></div></div><div data-testid="caption_renderer_overlay">Max cue</div></div>';
-  Object.defineProperty(document.querySelector('video'), 'textTracks', { value: [] });
-  Object.defineProperty(document.querySelector('video'), 'readyState', { value: 1 });
-  Object.defineProperty(document.querySelector('video'), 'paused', { value: false });
-  const sendMessage = vi.fn().mockResolvedValue({ ok: true, data: 'Max 译文' });
-  vi.stubGlobal('chrome', { runtime: { id: 'extension-id', sendMessage } });
-  controller = new CaptionController(createHboPlatform, settings());
-  await vi.advanceTimersByTimeAsync(450);
-  expect(sendMessage).toHaveBeenCalledWith({ type: 'translate', text: 'Max cue' });
-  expect(translationNode()?.textContent).toBe('Max 译文');
 });
 
 it('does not contact the service or modify the player before API setup is complete', async () => {

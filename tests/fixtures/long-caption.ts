@@ -9,6 +9,3 @@ export const longTranslations = [
   '找个愿意免费送你旧笔记本或台式机的人，',
   '至少要有 8GB 内存，而且至少……什么来着，至少四核，',
 ];
-export function structuredReply(results: unknown[]): Response {
-  return Response.json({ choices: [{ message: { content: JSON.stringify({ results }) } }] });
-}

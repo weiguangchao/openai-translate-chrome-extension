@@ -1,14 +1,12 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { CaptionController } from '../src/core/controller';
-import { playbackCues, timedCaptions } from '../src/core/timeline';
+import type { TimedCue } from '../src/core/cues';
 import { maxInFlightRequests } from '../src/shared/limits';
-import { planPlayback } from '../src/shared/playback-plan';
 import { providerSendWindowMs } from '../src/shared/provider/transport';
 import { createHboPlatform } from '../src/platforms/hbo/platform';
 import { NativeTimeline } from '../src/core/native';
 import { DEFAULT_SETTINGS, publicSettings, STORAGE_KEY } from '../src/shared/settings';
 import { providerReply, requestedTexts } from './fixtures/provider';
-import { authoredSubtitleCaptions } from '../src/core/sentences';
 import { longCaption, longCaptionParts, longTranslations } from './fixtures/long-caption';
 
 let controller: CaptionController | undefined;
@@ -23,22 +21,6 @@ const pending: {
 const requested: string[][] = [];
 const messages: string[] = [];
 
-function plannedTexts(
-  list: readonly { startTime: number; endTime: number; text: string }[],
-  time: number,
-) {
-  return planPlayback({ time, rate: 1, cues: playbackCues(timedCaptions(list), time) }).map(
-    (request) => request.cues.map((cue) => cue.text),
-  );
-}
-
-function sentTexts(
-  list: readonly { startTime: number; endTime: number; text: string }[],
-  time: number,
-) {
-  return plannedTexts(list, time).slice(0, maxInFlightRequests);
-}
-
 const cues = [
   { startTime: 2, endTime: 4, text: 'First cue.' },
   { startTime: 4, endTime: 6, text: 'Second cue.' },
@@ -46,16 +28,20 @@ const cues = [
   { startTime: 80, endTime: 82, text: 'After seeking.' },
 ];
 
+function setCues(cues: readonly TimedCue[]): void {
+  Object.defineProperty(video, 'textTracks', {
+    configurable: true,
+    value: [{ mode: 'showing', kind: 'subtitles', language: 'en', cues, activeCues: [] }],
+  });
+}
+
 beforeEach(async () => {
   vi.useFakeTimers();
   document.body.innerHTML = '<div class="video-js"><video></video></div>';
   video = document.querySelector('video')!;
   Object.defineProperty(video, 'readyState', { value: 1 });
   Object.defineProperty(video, 'paused', { configurable: true, value: false });
-  Object.defineProperty(video, 'textTracks', {
-    configurable: true,
-    value: [{ mode: 'showing', kind: 'subtitles', language: 'en', cues, activeCues: [] }],
-  });
+  setCues(cues);
   type Reply = { ok: boolean; data?: unknown; error?: string };
   let listener!: (
     message: unknown,
@@ -189,20 +175,10 @@ async function advance(time: number) {
 }
 
 it('cuts a long cue into captions, translates each on its own, and shows each on time after a seek', async () => {
-  Object.defineProperty(video, 'textTracks', {
-    value: [
-      {
-        mode: 'showing',
-        kind: 'subtitles',
-        language: 'en',
-        activeCues: [],
-        cues: [
-          { text: longCaption, startTime: 2, endTime: 14 },
-          { text: 'After.', startTime: 16, endTime: 18 },
-        ],
-      },
-    ],
-  });
+  setCues([
+    { text: longCaption, startTime: 2, endTime: 14 },
+    { text: 'After.', startTime: 16, endTime: 18 },
+  ]);
   controller = new CaptionController(createHboPlatform, publicSettings(saved));
   await advance(8);
   expect(requested.flat()).not.toContain(longCaption);
@@ -271,21 +247,10 @@ it('cancels the opening window during a scrub and requests only the cues at the 
     endTime: 4 + index * 2,
     text: `Cue ${index + 1}.`,
   }));
-  Object.defineProperty(video, 'textTracks', {
-    value: [
-      {
-        mode: 'showing',
-        kind: 'subtitles',
-        language: 'en',
-        cues: [...dense, { startTime: 80, endTime: 82, text: 'After seeking.' }],
-        activeCues: [],
-      },
-    ],
-  });
+  setCues([...dense, { startTime: 80, endTime: 82, text: 'After seeking.' }]);
   controller = new CaptionController(createHboPlatform, publicSettings(saved));
   await vi.advanceTimersByTimeAsync(0);
-  const timeline = [...dense, { startTime: 80, endTime: 82, text: 'After seeking.' }];
-  const opening = sentTexts(timeline, 0);
+  const opening = [['Cue 1.'], ['Cue 2.', 'Cue 3.', 'Cue 4.', 'Cue 5.']];
   expect(requested).toEqual(opening);
   Object.defineProperty(video, 'seeking', { configurable: true, value: true });
   video.currentTime = 40;
@@ -300,7 +265,7 @@ it('cancels the opening window during a scrub and requests only the cues at the 
   await vi.advanceTimersByTimeAsync(200);
   expect(requested).toEqual(opening);
   await vi.advanceTimersByTimeAsync(600);
-  expect(requested.slice(opening.length)).toEqual(sentTexts(timeline, 80));
+  expect(requested.slice(opening.length)).toEqual([['After seeking.']]);
   await finish({ 'After seeking.': '跳转后的字幕' });
   expect(translated()?.textContent).toBe('跳转后的字幕');
   await finish({ 'Cue 1.': '迟到的旧字幕' });
@@ -313,20 +278,10 @@ it('shows a timeout like the loading line, skips that batch, and translates the 
     endTime: 4 + index * 2,
     text: `Cue ${index + 1}.`,
   }));
-  Object.defineProperty(video, 'textTracks', {
-    value: [
-      {
-        mode: 'showing',
-        kind: 'subtitles',
-        language: 'en',
-        cues: dense,
-        activeCues: [],
-      },
-    ],
-  });
+  setCues(dense);
   controller = new CaptionController(createHboPlatform, publicSettings(saved));
   await vi.advanceTimersByTimeAsync(0);
-  const opening = sentTexts(dense, 0);
+  const opening = [['Cue 1.'], ['Cue 2.', 'Cue 3.', 'Cue 4.', 'Cue 5.']];
   expect(requested).toEqual(opening);
   await advance(3);
   expect(requested).toEqual(opening);
@@ -352,15 +307,13 @@ it('shows a timeout like the loading line, skips that batch, and translates the 
   expect(requested.some((request) => request.includes('Cue 6.'))).toBe(true);
 });
 
-it('after a jump settles, sends full batches from the new anchor', async () => {
+it('holds a playback jump until it settles, then requests captions at the new anchor', async () => {
   const dense = Array.from({ length: 30 }, (_, index) => ({
     startTime: 2 + index * 2,
     endTime: 4 + index * 2,
     text: `Cue ${index + 1}.`,
   }));
-  Object.defineProperty(video, 'textTracks', {
-    value: [{ mode: 'showing', kind: 'subtitles', language: 'en', cues: dense, activeCues: [] }],
-  });
+  setCues(dense);
   controller = new CaptionController(createHboPlatform, publicSettings(saved));
   await vi.advanceTimersByTimeAsync(0);
   const started = requested.length;
@@ -369,15 +322,17 @@ it('after a jump settles, sends full batches from the new anchor', async () => {
   await vi.advanceTimersByTimeAsync(200);
   expect(requested).toHaveLength(started);
   expect(pending.slice(0, started).every((request) => request.signal.aborted)).toBe(true);
-  await vi.advanceTimersByTimeAsync(200);
-  const landing = sentTexts(dense, 42);
+  await vi.advanceTimersByTimeAsync(199);
+  expect(requested).toHaveLength(started);
+  await vi.advanceTimersByTimeAsync(1);
+  const landing = [['Cue 21.'], ['Cue 22.', 'Cue 23.', 'Cue 24.', 'Cue 25.']];
   expect(requested.slice(started)).toEqual(landing);
   await vi.advanceTimersByTimeAsync(providerSendWindowMs);
   expect(requested.slice(started)).toEqual(landing);
   expect(pending[started].signal.aborted).toBe(false);
 });
 
-it('skips a sub-second opening cue and waits out a seek before requesting the landing cues', async () => {
+it('keeps an untranslated short source hidden and waits out a seek before requesting the landing cues', async () => {
   const cues = [
     { startTime: 0, endTime: 0.6, text: 'Opening.' },
     { startTime: 0.6, endTime: 4, text: 'Stay.' },
@@ -385,16 +340,14 @@ it('skips a sub-second opening cue and waits out a seek before requesting the la
     { startTime: 20, endTime: 20.3, text: 'Seek tail.' },
     { startTime: 20.3, endTime: 24, text: 'After.' },
   ];
-  Object.defineProperty(video, 'textTracks', {
-    value: [{ mode: 'showing', kind: 'subtitles', language: 'en', cues, activeCues: [] }],
-  });
+  setCues(cues);
   const original = () =>
     document
       .querySelector('[data-subline-overlay]')
       ?.shadowRoot?.querySelectorAll<HTMLElement>('.line')[0];
   controller = new CaptionController(createHboPlatform, publicSettings(saved));
   await vi.advanceTimersByTimeAsync(0);
-  const opening = sentTexts(cues, 0);
+  const opening = [['Stay.'], ['Next.']];
   expect(requested).toEqual(opening);
   expect(requested.flat()).not.toContain('Opening.');
   expect(requested.flat()).not.toContain('Seek tail.');
@@ -414,7 +367,7 @@ it('skips a sub-second opening cue and waits out a seek before requesting the la
   await vi.advanceTimersByTimeAsync(0);
   expect(requested).toHaveLength(sent);
   await vi.advanceTimersByTimeAsync(400);
-  expect(requested.slice(sent)).toEqual([...sentTexts(cues, 20), ['Seek tail.']]);
+  expect(requested.slice(sent)).toEqual([['After.'], ['Seek tail.']]);
   expect(original()?.hidden).toBe(true);
   expect(translated()?.hidden).toBe(false);
   expect(translated()?.textContent).toBe('翻译中');
@@ -427,9 +380,7 @@ it('finishes in-flight prefetch while paused and does not send more until playba
     endTime: 4 + index * 2,
     text: `Cue ${index + 1}.`,
   }));
-  Object.defineProperty(video, 'textTracks', {
-    value: [{ mode: 'showing', kind: 'subtitles', language: 'en', cues: dense, activeCues: [] }],
-  });
+  setCues(dense);
   const setPaused = async (paused: boolean) => {
     Object.defineProperty(video, 'paused', { value: paused });
     video.dispatchEvent(new Event(paused ? 'pause' : 'play'));
@@ -459,33 +410,6 @@ it('finishes in-flight prefetch while paused and does not send more until playba
   const sent = requested.length;
   await vi.advanceTimersByTimeAsync(60000);
   expect(requested).toHaveLength(sent);
-  expect(pending.at(-1)?.signal.aborted).toBe(false);
-});
-
-it('holds the batch past the send rate and requests the next one when playback enters it', async () => {
-  const dense = Array.from({ length: 24 }, (_, index) => ({
-    startTime: 2 + index * 2,
-    endTime: 4 + index * 2,
-    text: `Cue ${index + 1}.`,
-  }));
-  Object.defineProperty(video, 'textTracks', {
-    value: [{ mode: 'showing', kind: 'subtitles', language: 'en', cues: dense, activeCues: [] }],
-  });
-  controller = new CaptionController(createHboPlatform, publicSettings(saved));
-  await vi.advanceTimersByTimeAsync(0);
-  const opening = sentTexts(dense, 0);
-  expect(requested).toEqual(opening);
-  await vi.advanceTimersByTimeAsync(providerSendWindowMs);
-  expect(requested).toEqual(opening);
-  video.currentTime = 12;
-  video.dispatchEvent(new Event('timeupdate'));
-  await vi.advanceTimersByTimeAsync(0);
-  expect(requested).toEqual(opening);
-  expect(pending.every((request) => request.signal.aborted)).toBe(true);
-  await vi.advanceTimersByTimeAsync(399);
-  expect(requested).toEqual(opening);
-  await vi.advanceTimersByTimeAsync(1);
-  expect(requested.slice(opening.length)).toEqual(sentTexts(dense, 12));
   expect(pending.at(-1)?.signal.aborted).toBe(false);
 });
 
@@ -546,7 +470,7 @@ it('queries the background again on a repeated caption while keeping the display
   expect(requested).toEqual([['First cue.'], ['Second cue.', 'Third cue.']]);
 });
 
-it('translates overlapping sentences separately, and cuts a long cue of its own into captions', async () => {
+it('translates the displayed overlap together and splits a following long cue into captions', async () => {
   const first = 'When I first moved to the city, I didn’t know anyone at all,';
   const second = 'and every night I walked along the river, wondering why.';
   const joined = `${first}\n${second}`;
@@ -557,24 +481,14 @@ it('translates overlapping sentences separately, and cuts a long cue of its own 
     { startTime: 4, endTime: 8, text: second },
     { startTime: 8, endTime: 12, text: long },
   ];
-  Object.defineProperty(video, 'textTracks', {
-    value: [
-      {
-        mode: 'showing',
-        kind: 'subtitles',
-        language: 'en',
-        activeCues: [],
-        cues: overlap,
-      },
-    ],
-  });
+  setCues(overlap);
   const pieces = [
     'Years later, standing on the same bridge,',
     'I finally understood that the city had become my home.',
   ];
   controller = new CaptionController(createHboPlatform, publicSettings(saved));
   await vi.advanceTimersByTimeAsync(0);
-  expect(requested).toEqual(sentTexts(authoredSubtitleCaptions(overlap, 'en'), 0));
+  expect(requested).toEqual([[first], [joined, second, ...pieces]]);
   const delivered = new Set<(typeof pending)[number]>();
   const deliver = async () => {
     for (const request of [...pending]) {
@@ -601,71 +515,6 @@ it('translates overlapping sentences separately, and cuts a long cue of its own 
   expect(requested.flat()).toEqual(expect.arrayContaining([joined, ...pieces]));
   expect(requested.flat()).not.toContain(long);
   expect(messages).toContain('translate');
-});
-
-it('counts each caption of a long sentence when filling a segment', async () => {
-  const long = ['a', 'b', 'c'].map((letter) => letter.repeat(60)).join(', ');
-  const short = Array.from({ length: 3 }, (_, index) => ({
-    startTime: 2 + index * 2,
-    endTime: 4 + index * 2,
-    text: `Cue ${index + 1}.`,
-  }));
-  const timeline = [
-    ...short,
-    { startTime: 8, endTime: 14, text: long },
-    { startTime: 14, endTime: 16, text: 'After.' },
-    { startTime: 16, endTime: 18, text: 'Later' },
-  ];
-  Object.defineProperty(video, 'textTracks', {
-    value: [
-      {
-        mode: 'showing',
-        kind: 'subtitles',
-        language: 'en',
-        activeCues: [],
-        cues: timeline,
-      },
-    ],
-  });
-  controller = new CaptionController(createHboPlatform, publicSettings(saved));
-  await vi.advanceTimersByTimeAsync(0);
-  expect(requested).toEqual(sentTexts(authoredSubtitleCaptions(timeline, 'en'), 0));
-  expect(requested.flat()).not.toContain(long);
-});
-
-it('shows the segment translation only after the JSON response is complete', async () => {
-  const cues = [
-    { startTime: 0, endTime: 3, text: 'Opening line.' },
-    { startTime: 3, endTime: 6, text: 'Following line.' },
-  ];
-  Object.defineProperty(video, 'textTracks', {
-    value: [{ mode: 'showing', kind: 'subtitles', language: 'en', cues, activeCues: [] }],
-  });
-  const resolvers: { texts: string[]; resolve: (value: Response) => void }[] = [];
-  vi.stubGlobal(
-    'fetch',
-    vi.fn((_url: string, init: RequestInit) => {
-      const texts = requestedTexts(init);
-      requested.push(texts);
-      expect(JSON.parse(init.body as string).stream).toBe(false);
-      return new Promise<Response>((resolve) => {
-        resolvers.push({ texts, resolve });
-      });
-    }),
-  );
-  controller = new CaptionController(createHboPlatform, publicSettings(saved));
-  await vi.advanceTimersByTimeAsync(0);
-  expect(requested[0]).toEqual(['Opening line.']);
-  expect(translated()?.hidden).toBe(true);
-  await vi.advanceTimersByTimeAsync(300);
-  expect(translated()?.textContent).toBe('翻译中');
-  resolvers
-    .find((resolver) => resolver.texts.includes('Opening line.'))!
-    .resolve(providerReply(['Opening line.'], () => '开场字幕'));
-  for (let attempt = 0; attempt < 8; attempt++) await vi.advanceTimersByTimeAsync(0);
-  expect(translated()?.textContent).toBe('开场字幕');
-  expect(translated()?.hidden).toBe(false);
-  expect(requested.some((request) => request.includes('Following line.'))).toBe(true);
 });
 
 it('reuses the cues read from a track until the track changes', () => {

@@ -541,3 +541,40 @@ export async function withPlayer(
     }
   }
 }
+
+export async function expectNativeHidden(p: Player, hidden: boolean) {
+  if (p.platform === 'x') {
+    const video = expect(p.page.locator('video'));
+    await (hidden ? video : video.not).toHaveClass(/subline-native/);
+    return;
+  }
+  await expect(p.page.locator('#native')).toHaveCSS('opacity', hidden ? '0' : '1');
+  if (!hidden) await expect(p.page.locator('#native')).toBeVisible();
+}
+
+export const errorsShown = async (p: Player) =>
+  [...new Set((await p.frames()).map((f) => f.translation))].filter((t) =>
+    t.startsWith('Subline：'),
+  );
+
+const openingInputs = [[{ id: 0, text: source }]];
+
+export async function expectOpeningPosts(p: Player) {
+  await expect.poll(() => p.posts.map((post) => post.inputs)).toEqual(openingInputs);
+}
+
+export async function expectStored(p: Player, text: string) {
+  await expect
+    .poll(() =>
+      p.settingsPage.evaluate(async (caption) => {
+        const stored = await chrome.storage.session.get(null);
+        return Object.keys(stored).some((key) => key.includes(caption));
+      }, text),
+    )
+    .toBe(true);
+}
+
+export async function preloadNext(p: Player) {
+  await p.seek(24);
+  await expectStored(p, nextSource);
+}

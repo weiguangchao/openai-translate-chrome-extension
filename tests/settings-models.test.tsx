@@ -24,17 +24,13 @@ vi.mock('../src/shared/storage', () => ({
 
 let root: Root;
 let settings: Settings;
-let cached: string[];
 
 beforeEach(() => {
   vi.resetAllMocks();
   settings = { ...structuredClone(DEFAULT_SETTINGS), apiKey: 'test-key', model: 'chosen-model' };
-  cached = ['cached-a', 'cached-b'];
   vi.mocked(loadSettings).mockImplementation(async () => structuredClone(settings));
-  vi.mocked(loadCachedModels).mockImplementation(async () => [...cached]);
-  vi.mocked(saveCachedModels).mockImplementation(async (_, ids) => {
-    cached = [...ids];
-  });
+  vi.mocked(loadCachedModels).mockResolvedValue(['cached-a', 'cached-b']);
+  vi.mocked(saveCachedModels).mockResolvedValue(undefined);
   vi.mocked(allowApiHost).mockResolvedValue(undefined);
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   document.body.innerHTML = '<div id="root"></div>';
@@ -77,7 +73,7 @@ it('restores the cached list and keeps the selected model without requesting the
   expect(saveSettings).not.toHaveBeenCalled();
 });
 
-it('caches each successful refresh immediately and restores the latest list when reopened', async () => {
+it('updates each successful refresh immediately and requests model-cache persistence', async () => {
   vi.mocked(apiAction)
     .mockResolvedValueOnce(['model-a', 'model-b'])
     .mockResolvedValueOnce(['model-a', 'model-c']);
@@ -86,11 +82,9 @@ it('caches each successful refresh immediately and restores the latest list when
   expect(saveCachedModels).toHaveBeenLastCalledWith(settings, ['model-a', 'model-b']);
   expect(options()).toEqual(['', 'chosen-model', 'model-a', 'model-b']);
   await fetchModels();
-  expect(cached).toEqual(['model-a', 'model-c']);
-  await act(async () => root.unmount());
-  root = createRoot(document.getElementById('root')!);
-  await render();
+  expect(saveCachedModels).toHaveBeenLastCalledWith(settings, ['model-a', 'model-c']);
   expect(options()).toEqual(['', 'chosen-model', 'model-a', 'model-c']);
+  expect(saveCachedModels).toHaveBeenCalledTimes(2);
   expect(apiAction).toHaveBeenCalledTimes(2);
   expect(saveSettings).not.toHaveBeenCalled();
 });

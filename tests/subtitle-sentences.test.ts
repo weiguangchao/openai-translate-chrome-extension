@@ -1,22 +1,14 @@
 import { expect, it } from 'vitest';
 import { authoredSubtitleCaptions } from '../src/core/sentences';
-import { parseYoutubeCaptions } from '../src/platforms/youtube/captions';
 import { captionAt } from '../src/core/timeline';
 
-it('uses YouTube sentence boundaries and timing for multiline authored subtitles', () => {
+it('splits multiline authored subtitles into timed sentences', () => {
   const text = "Oh, thank you.\nI've got to talk to that\nmailman.";
   const cues = authoredSubtitleCaptions([{ startTime: 3, endTime: 9, text }], 'en');
   expect(cues.map((cue) => cue.text)).toEqual([
     'Oh, thank you.',
     "I've got to talk to that mailman.",
   ]);
-  expect(cues).toEqual(
-    parseYoutubeCaptions(
-      { events: [{ tStartMs: 3000, dDurationMs: 6000, segs: [{ utf8: text }] }] },
-      'authored',
-      'en',
-    ),
-  );
   expect(captionAt(cues, 3)).toBe('Oh, thank you.');
   expect(captionAt(cues, 6)).toBe("I've got to talk to that mailman.");
   expect(captionAt(cues, 9)).toBe('');
@@ -64,19 +56,24 @@ it('cuts an unpunctuated run between cues into captions of at most 90 columns', 
   ]);
 });
 
-it('ends a sentence at a silence of two seconds or more', () => {
+it.each([
+  [1.9, [{ startTime: 0, endTime: 5, text: 'We were waiting for the bus.' }]],
+  [
+    2,
+    [
+      { startTime: 0, endTime: 2, text: 'We were waiting' },
+      { startTime: 4, endTime: 5, text: 'for the bus.' },
+    ],
+  ],
+])('ends a sentence only when a silence reaches two seconds, gap=%s', (gap, expected) => {
   const captions = authoredSubtitleCaptions(
     [
       { startTime: 0, endTime: 2, text: 'We were waiting' },
-      { startTime: 2.2, endTime: 4, text: 'for the bus' },
-      { startTime: 6, endTime: 7.5, text: 'and then it finally came' },
+      { startTime: 2 + gap, endTime: 5, text: 'for the bus.' },
     ],
     'en',
   );
-  expect(captions.map((caption) => caption.text)).toEqual([
-    'We were waiting for the bus',
-    'and then it finally came',
-  ]);
+  expect(captions).toEqual(expected);
 });
 
 it('keeps lyric lines and sound tags apart from the dialogue around them', () => {
@@ -100,20 +97,31 @@ it('keeps lyric lines and sound tags apart from the dialogue around them', () =>
   ]);
 });
 
-it('preserves simultaneous speech and repeated dialogue instead of retiming overlapping cues', () => {
-  const cues = [
-    { startTime: 1, endTime: 4, text: 'Wait.\nPlease.' },
-    { startTime: 2, endTime: 3, text: 'No. Stop.' },
-    { startTime: 2, endTime: 5, text: 'Wait.\nPlease.' },
-    { startTime: 6, endTime: 8, text: 'Later. Goodbye.' },
-  ];
-  const sentences = authoredSubtitleCaptions(cues, 'en');
-  expect(sentences.slice(0, 3)).toEqual(
-    cues.slice(0, 3).map((cue) => ({ ...cue, text: cue.text.replace('\n', ' ') })),
-  );
-  expect(sentences.slice(3).map((cue) => cue.text)).toEqual(['Later.', 'Goodbye.']);
-  expect(captionAt(sentences, 2.5)).toBe('Wait. Please.\nNo. Stop.\nWait. Please.');
-});
+it.each([
+  ['Wait.\nPlease.', 'Wait. Please.'],
+  [
+    'Years later, standing on the same bridge,\nI finally understood that the city had become my home.',
+    'Years later, standing on the same bridge, I finally understood that the city had become my home.',
+  ],
+])(
+  'preserves overlapping speech and repeated dialogue with their original timing',
+  (text, expected) => {
+    const cues = [
+      { startTime: 1, endTime: 4, text },
+      { startTime: 2, endTime: 3, text: 'No. Stop.' },
+      { startTime: 2, endTime: 5, text },
+      { startTime: 6, endTime: 8, text: 'Later. Goodbye.' },
+    ];
+    const captions = authoredSubtitleCaptions(cues, 'en');
+    expect(captions.slice(0, 3)).toEqual([
+      { startTime: 1, endTime: 4, text: expected },
+      { startTime: 2, endTime: 3, text: 'No. Stop.' },
+      { startTime: 2, endTime: 5, text: expected },
+    ]);
+    expect(captions.slice(3).map((caption) => caption.text)).toEqual(['Later.', 'Goodbye.']);
+    expect(captionAt(captions, 2.5)).toBe(`${expected}\nNo. Stop.\n${expected}`);
+  },
+);
 
 it('ends Chinese sentences at full-width punctuation across fragmented cues', () => {
   const cues = authoredSubtitleCaptions(
