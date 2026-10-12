@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import manifest from '../public/manifest.json';
 import { fetchModels, translate, translateCaptionBatch } from '../src/shared/api';
 import { translationBatchLimit } from '../src/shared/limits';
 import { structuredReply } from './fixtures/provider';
@@ -19,9 +20,11 @@ const config = (): Settings => ({
 });
 afterEach(() => vi.unstubAllGlobals());
 
+const localHttpProviders = ['http://localhost:11434/api/v1', 'http://127.0.0.1:59271/v1'];
+
 describe('OpenAI-compatible provider contract', () => {
-  it.each(['http://9.9.9.9:59271/v1', 'http://provider.example:8080/api/v1'])(
-    'fetches models from the configured HTTP service at %s before a model is selected',
+  it.each(localHttpProviders)(
+    'fetches models from the local HTTP service at %s before a model is selected',
     async (baseUrl) => {
       const fetch = vi.fn().mockResolvedValue(Response.json({ data: [{ id: 'subtitle-model' }] }));
       vi.stubGlobal('fetch', fetch);
@@ -271,10 +274,19 @@ describe('OpenAI-compatible provider contract', () => {
       'https://provider.example/v1?token=oops',
       'https://user:password@provider.example/v1',
       'https://provider.example/v1/chat/completions',
+      'http://provider.example:8080/api/v1',
+      'http://192.168.1.10:11434/v1',
+      'http://localhost.provider.example/v1',
     ]) {
       await expect(fetchModels({ ...config(), baseUrl })).rejects.toThrow();
     }
     expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('asks for plain HTTP host access only on this computer', () => {
+    expect(
+      manifest.optional_host_permissions.filter((origin) => origin.startsWith('http:')),
+    ).toEqual(localHttpProviders.map((baseUrl) => `http://${new URL(baseUrl).hostname}/*`));
   });
 });
 

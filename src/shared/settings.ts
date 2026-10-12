@@ -75,6 +75,7 @@ export function publicSettings(settings: Settings, translationRevision = ''): Pu
     configured: Boolean(settings.apiKey.trim() && settings.model.trim()),
   };
 }
+const localHttpHosts = ['localhost', '127.0.0.1'];
 export function validateBaseUrl(raw: string): URL {
   let url: URL;
   try {
@@ -82,8 +83,13 @@ export function validateBaseUrl(raw: string): URL {
   } catch {
     throw new Error('请输入完整的 Base URL，例如 https://api.openai.com/v1');
   }
-  if (url.protocol !== 'https:' && url.protocol !== 'http:')
-    throw new Error('Base URL 需要使用 HTTP 或 HTTPS。');
+  if (
+    url.protocol !== 'https:' &&
+    !(url.protocol === 'http:' && localHttpHosts.includes(url.hostname))
+  )
+    throw new Error(
+      'Base URL 需要使用 HTTPS。只有本机服务（localhost 或 127.0.0.1）可以使用 HTTP。',
+    );
   if (url.username || url.password || url.search || url.hash)
     throw new Error('Base URL 不能包含用户名、密码、查询参数或锚点。');
   if (/\/(chat\/completions|completions|models?)\/?$/.test(url.pathname))
