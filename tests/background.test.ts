@@ -1,8 +1,10 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { DEFAULT_SETTINGS, STORAGE_KEY } from '../src/shared/settings';
+import { DEFAULT_SETTINGS, type Settings } from '../src/shared/settings';
+import { extensionStorage } from './fixtures/extension-storage';
 import { packedCues, providerReply, requestedTexts, structuredReply } from './fixtures/provider';
 
-afterEach(() => {
+afterEach(async () => {
+  await new Promise((resolve) => setTimeout(resolve, 0));
   vi.unstubAllGlobals();
   vi.resetModules();
 });
@@ -29,12 +31,13 @@ it('answers cache-only lookups without starting model work and reuses background
   expect(fetch).toHaveBeenCalledTimes(1);
 });
 
-async function loadBackground(saved: object, session = new Map<string, unknown>()) {
+async function loadBackground(saved: Settings, session = new Map<string, unknown>()) {
   let listener!: (
     message: unknown,
     sender: chrome.runtime.MessageSender,
     reply: (value: Reply) => void,
   ) => boolean | undefined;
+  const { local, onChanged } = extensionStorage();
   vi.stubGlobal('chrome', {
     runtime: {
       id: 'extension-id',
@@ -50,10 +53,7 @@ async function loadBackground(saved: object, session = new Map<string, unknown>(
       sendMessage: vi.fn().mockResolvedValue(undefined),
     },
     storage: {
-      local: {
-        setAccessLevel: vi.fn().mockResolvedValue(undefined),
-        get: vi.fn().mockResolvedValue({ [STORAGE_KEY]: saved }),
-      },
+      local,
       session: {
         get: vi.fn(async () => Object.fromEntries(session)),
         set: vi.fn(async (items: Record<string, unknown>) => {
@@ -63,9 +63,10 @@ async function loadBackground(saved: object, session = new Map<string, unknown>(
           for (const key of keys) session.delete(key);
         }),
       },
-      onChanged: { addListener: vi.fn() },
+      onChanged,
     },
   });
+  await (await import('../src/shared/storage')).saveSettings(saved);
   await import('../src/extension/background');
   const sender = {
     id: 'extension-id',
@@ -252,8 +253,8 @@ it.each([
   const send = await loadBackground(initial);
   const pending = send({ type: 'translate', text: 'Original.' });
   await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
-  const changed = vi.mocked(chrome.storage.onChanged.addListener).mock.calls[0][0];
-  changed({ [STORAGE_KEY]: { oldValue: initial, newValue: { ...initial, ...patch } } }, 'local');
+  const { saveSettings } = await import('../src/shared/storage');
+  await saveSettings({ ...initial, ...patch });
   await vi.waitFor(() => expect(chrome.tabs.sendMessage).toHaveBeenCalledTimes(1));
   expect(signal.aborted).toBe(abort);
   finish(providerReply(['Original.'], () => '原来的译文'));
@@ -288,10 +289,8 @@ it('retains shared work when only one consuming platform is disabled', async () 
     { url: 'https://play.hbomax.com/video/watch/episode', tab: { id: 2 } as chrome.tabs.Tab },
   );
   await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
-  vi.mocked(chrome.storage.onChanged.addListener).mock.calls[0][0](
-    { [STORAGE_KEY]: { newValue: { ...initial, youtube: false } } },
-    'local',
-  );
+  const { saveSettings } = await import('../src/shared/storage');
+  await saveSettings({ ...initial, youtube: false });
   await vi.waitFor(() => expect(chrome.tabs.sendMessage).toHaveBeenCalledTimes(1));
   expect(signal.aborted).toBe(false);
   finish(providerReply(['Shared.'], () => '共享译文'));
@@ -304,14 +303,14 @@ it('sends only an opaque translation revision, retaining it for style changes', 
   const initial = { ...DEFAULT_SETTINGS, apiKey: 'secret-key', model: 'private-model' };
   const send = await loadBackground(initial);
   const before = await send({ type: 'settings' });
-  const changed = vi.mocked(chrome.storage.onChanged.addListener).mock.calls[0][0];
-  changed({ [STORAGE_KEY]: { newValue: { ...initial, subtitleGap: 16 } } }, 'local');
+  const { saveSettings } = await import('../src/shared/storage');
+  await saveSettings({ ...initial, subtitleGap: 16 });
   await vi.waitFor(() => expect(chrome.tabs.sendMessage).toHaveBeenCalledTimes(1));
   const style = await send({ type: 'settings' });
   expect(style.data).toMatchObject({
     translationRevision: (before.data as { translationRevision: string }).translationRevision,
   });
-  changed({ [STORAGE_KEY]: { newValue: { ...initial, model: 'other-private-model' } } }, 'local');
+  await saveSettings({ ...initial, model: 'other-private-model' });
   await vi.waitFor(() => expect(chrome.tabs.sendMessage).toHaveBeenCalledTimes(2));
   const provider = await send({ type: 'settings' });
   expect(provider.data).not.toMatchObject({

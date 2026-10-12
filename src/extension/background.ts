@@ -14,6 +14,7 @@ import {
   STORAGE_KEY,
   type Settings,
 } from '../shared/settings';
+import { loadSettings } from '../shared/storage';
 import { printTrace, readTraceRequest } from '../shared/trace';
 import { TranslationQueue, translationCacheLimit } from './queue';
 import { restoreTranslations } from './translation-store';
@@ -25,7 +26,7 @@ let updateSequence = 0;
 const consumers = new Map<string, { platform: PlatformId; document?: string }>();
 const ready = (async () => {
   await chrome.storage.local.setAccessLevel({ accessLevel: 'TRUSTED_CONTEXTS' });
-  settings = normalizeSettings((await chrome.storage.local.get(STORAGE_KEY))[STORAGE_KEY]);
+  settings = await loadSettings();
   await restoreTranslations(queue);
 })();
 
@@ -100,9 +101,11 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, respond) => {
 
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local' || !changes[STORAGE_KEY]) return;
+  const sequence = ++updateSequence;
   void (async () => {
     await ready;
-    const next = normalizeSettings(changes[STORAGE_KEY].newValue);
+    const next = await loadSettings();
+    if (sequence !== updateSequence) return;
     const change = classifySettingsChange(settings, next);
     settings = next;
     if (change.translation || change.source) translationRevision = crypto.randomUUID();
@@ -116,7 +119,6 @@ chrome.storage.onChanged.addListener((changes, area) => {
       for (const consumer of disabled) consumers.delete(consumer);
       queue.release(disabled);
     }
-    const sequence = ++updateSequence;
     const update: SettingsUpdated = {
       type: 'settings-updated',
       settings: publicSettings(settings, translationRevision),

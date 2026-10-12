@@ -5,7 +5,8 @@ import { maxInFlightRequests } from '../src/shared/limits';
 import { providerSendWindowMs } from '../src/shared/provider/transport';
 import { createHboPlatform } from '../src/platforms/hbo/platform';
 import { NativeTimeline } from '../src/core/native';
-import { DEFAULT_SETTINGS, publicSettings, STORAGE_KEY } from '../src/shared/settings';
+import { DEFAULT_SETTINGS, publicSettings } from '../src/shared/settings';
+import { extensionStorage } from './fixtures/extension-storage';
 import { providerReply, requestedTexts } from './fixtures/provider';
 import { longCaption, longCaptionParts, longTranslations } from './fixtures/long-caption';
 
@@ -36,7 +37,6 @@ function setCues(cues: readonly TimedCue[]): void {
 }
 
 beforeEach(async () => {
-  vi.useFakeTimers();
   document.body.innerHTML = '<div class="video-js"><video></video></div>';
   video = document.querySelector('video')!;
   Object.defineProperty(video, 'readyState', { value: 1 });
@@ -54,6 +54,7 @@ beforeEach(async () => {
     frameId: 0,
     tab: { id: 1 },
   } as chrome.runtime.MessageSender;
+  const { local, onChanged } = extensionStorage();
   vi.stubGlobal('chrome', {
     runtime: {
       id: 'extension-id',
@@ -69,16 +70,13 @@ beforeEach(async () => {
       },
     },
     storage: {
-      local: {
-        setAccessLevel: vi.fn().mockResolvedValue(undefined),
-        get: vi.fn().mockResolvedValue({ [STORAGE_KEY]: saved }),
-      },
+      local,
       session: {
         get: vi.fn().mockResolvedValue({}),
         set: vi.fn().mockResolvedValue(undefined),
         remove: vi.fn().mockResolvedValue(undefined),
       },
-      onChanged: { addListener: vi.fn() },
+      onChanged,
     },
   });
   vi.stubGlobal(
@@ -94,7 +92,10 @@ beforeEach(async () => {
       });
     }),
   );
+  await (await import('../src/shared/storage')).saveSettings(saved);
   await import('../src/extension/background');
+  await new Promise((resolve) => listener({ type: 'settings' }, sender, resolve));
+  vi.useFakeTimers();
 });
 
 it.each([true, false])(
