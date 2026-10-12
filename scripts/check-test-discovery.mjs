@@ -47,13 +47,12 @@ try {
   );
   const banned =
     /from \+ [45]\b|batches of (?:four|five)|(?:fifteen|sixteen) sentences|three (?:full|anchor|opening) batches|(?:four|five) whole sentences|prefetches four batches|larger than four cues|block of (?:four|five)/;
-  const exempt = new Set(['tests/playback-schedule.test.ts', 'tests/playback-budget.test.ts']);
   const hits = [];
   for (const dir of ['tests', 'e2e']) {
     const entries = await readdir(dir, { recursive: true });
     for (const file of entries) {
       const rel = path.join(dir, file).split(path.sep).join('/');
-      if (exempt.has(rel) || !/\.(?:[cm]?[jt]s|[jt]sx)$/.test(rel)) continue;
+      if (!/\.(?:[cm]?[jt]s|[jt]sx)$/.test(rel)) continue;
       const lines = (await readFile(rel, 'utf8')).split('\n');
       lines.forEach((line, index) => {
         if (banned.test(line)) hits.push(`${rel}:${index + 1}: ${line.trim()}`);

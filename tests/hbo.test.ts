@@ -3,7 +3,6 @@ import { CaptionController } from '../src/core/controller';
 import { createHboPlatform } from '../src/platforms/hbo/platform';
 import { hboMediaUrl, parseHboManifest } from '../src/platforms/hbo/captions';
 import { parseWebVtt } from '../src/core/webvtt';
-import { BridgeTimeline } from '../src/core/bridge/client';
 import { TranslationQueue } from '../src/extension/queue';
 import { providerSendWindowMs } from '../src/shared/provider/transport';
 import { DEFAULT_SETTINGS, publicSettings } from '../src/shared/settings';
@@ -19,7 +18,6 @@ let stream: { url: string; streamMode: string };
 let queue: TranslationQueue;
 const requested: { at: number; texts: string[]; signal: AbortSignal }[] = [];
 let targetLanguage = '';
-let failTarget = false;
 let testTime = Date.now();
 
 function manifest(languages = ['en-US', ...(targetLanguage ? [targetLanguage] : [])]): string {
@@ -91,7 +89,6 @@ beforeEach(async () => {
   vi.useFakeTimers({ now: testTime });
   requested.length = 0;
   targetLanguage = '';
-  failTarget = false;
   history.replaceState(null, '', '/video/watch/episode-1');
   document.body.innerHTML =
     '<div data-testid="playerContainer"><video></video><div data-testid="caption_renderer_overlay"></div></div>';
@@ -138,7 +135,6 @@ beforeEach(async () => {
     vi.fn(async (url: string, init: RequestInit) => {
       if (new URL(url).pathname.endsWith('.mpd')) return new Response(manifest());
       if (url.endsWith('.vtt')) {
-        if (failTarget && !url.includes('/en-US/')) throw new Error('Unavailable');
         return new Response(
           vtt(
             Number(url.match(/\/(\d)\.vtt/)![1]),
@@ -336,7 +332,7 @@ it('accepts HBO edge subtitle URLs while rejecting lookalike hosts and unsafe UR
     expect(hboMediaUrl(url)).toBeUndefined();
 });
 
-it('cancels old model requests after seeking and ignores their late results', async () => {
+it('cancels old model requests after seeking and translates the landing caption', async () => {
   controller = new CaptionController(createHboPlatform, publicSettings(settings));
   await vi.advanceTimersByTimeAsync(0);
   video.currentTime = 65;
@@ -377,17 +373,6 @@ it.each([true, false])(
     }
   },
 );
-
-it('does not download a target track even when it would fail', async () => {
-  targetLanguage = 'zh-CN';
-  failTarget = true;
-  controller = new CaptionController(createHboPlatform, publicSettings(settings));
-  await playTo(4);
-  expect(lines()?.[1].textContent).toBe('译文 Cue 1');
-  expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).includes('/zh-CN/'))).toBe(false);
-  expect(requested.some((request) => request.texts.includes('Cue 1'))).toBe(true);
-  expect(requested.some((request) => request.texts.includes('Cue 21'))).toBe(false);
-});
 
 it('stops prefetch and clears the displayed subtitles when the HBO selection is off', async () => {
   controller = new CaptionController(createHboPlatform, publicSettings(settings));
@@ -507,32 +492,6 @@ it('reads the committed React branch instead of an old episode retained on the D
   expect(requested.map((request) => request.texts)).toEqual(openingRequests);
 });
 
-it('rejects unsolicited or malformed bridge responses', () => {
-  const changed = vi.fn();
-  const timeline = new BridgeTimeline('hbo', changed);
-  timeline.read(`${location.origin}${location.pathname}`, 'en');
-  for (const data of [
-    { requestId: 999, state: { mode: 'model', source: [], translation: null } },
-    {
-      requestId: 1,
-      state: {
-        mode: 'model',
-        source: [{ startTime: 2, endTime: 1, text: 'Invalid' }],
-        translation: null,
-      },
-    },
-  ])
-    window.dispatchEvent(
-      new MessageEvent('message', {
-        source: window,
-        origin: location.origin,
-        data: { type: 'subline:hbo-timeline-response', generation: 1, revision: 1, ...data },
-      }),
-    );
-  expect(changed).not.toHaveBeenCalled();
-  timeline.destroy();
-});
-
 it('parses multiperiod HBO WebVTT templates without adding the period offset twice', () => {
   const tracks = parseHboManifest(manifest(['en-US', 'es-419']), mediaUrl);
   expect(tracks).toHaveLength(2);
@@ -547,19 +506,6 @@ it('parses multiperiod HBO WebVTT templates without adding the period offset twi
     endTime: 35,
     text: 'Cue 11',
   });
-});
-
-it('chooses one same-language/role track and keeps its identity when later Periods reorder alternatives', () => {
-  expect(parseHboManifest(alternateTrackManifest(), mediaUrl)).toEqual([
-    {
-      language: 'en-US',
-      role: 'caption',
-      files: [1, 2, 3].map((part) => ({
-        url: new URL(`t3/${part}.vtt`, mediaUrl).href,
-        offset: 0,
-      })),
-    },
-  ]);
 });
 
 it('continues the timeline with one available alternative when track IDs change between Periods', () => {
@@ -604,15 +550,6 @@ it('resolves BaseURL, repeated templates, presentation offsets, and ignores vide
     parseHboManifest(xml.replace('subtitles/', 'https://untrusted.example/'), mediaUrl),
   ).toEqual([]);
   expect(parseHboManifest(xml.replace('type="static"', 'type="dynamic"'), mediaUrl)).toEqual([]);
-});
-
-it('parses VTT identifiers, markup, entities and CRLF while skipping metadata and invalid times', () => {
-  const text =
-    'WEBVTT\n\nNOTE ignore\n00:00.000 --> 00:01.000\nComment\n\nSTYLE\n::cue { color: red }\n\ncue-id\n00:01.000 --> 00:03.000 align:start\n<v Narrator><i>Hello &amp; goodbye.</i></v>\nSecond line &lt;3\n\n00:04.000 --> 00:02.000\nInvalid\n\n00:60.000 --> 01:02.000\nInvalid\n';
-  expect(parseWebVtt(`\uFEFF${text.replaceAll('\n', '\r\n')}`, 10)).toEqual([
-    { startTime: 11, endTime: 13, text: 'Hello & goodbye.\nSecond line <3' },
-  ]);
-  expect(() => parseWebVtt('<html>Not subtitles</html>')).toThrow('Invalid WebVTT');
 });
 
 it('keeps the HBO source across target/provider/style changes, seeks, blob renewal and signed URL renewal', async () => {

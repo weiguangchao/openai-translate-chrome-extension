@@ -43,6 +43,7 @@ afterEach(() => {
   controller = undefined;
   document.documentElement.removeAttribute('data-subline-trace');
   document.documentElement.removeAttribute('data-subline-trace-worker');
+  Reflect.deleteProperty(document, 'fullscreenElement');
   vi.useRealTimers();
   vi.unstubAllGlobals();
   document.body.innerHTML = '';
@@ -374,4 +375,89 @@ it('treats a translation that reads like the loading placeholder as a translatio
   await vi.advanceTimersByTimeAsync(0);
   expect(lines()).toEqual(['Translating.', '翻译中']);
   expect(traced()).toBe('ready');
+});
+
+it('keeps ready captions when the playback rate changes and plans at the new rate', async () => {
+  source = {
+    kind: 'timeline',
+    mode: 'model',
+    id: 'track',
+    cues: [
+      { startTime: 0, endTime: 10, text: 'Current caption.' },
+      { startTime: 10, endTime: 20, text: 'Upcoming caption.' },
+    ],
+    layers: () => [],
+  };
+  controller = new CaptionController(
+    () => platform,
+    publicSettings({ ...DEFAULT_SETTINGS, apiKey: 'key', model: 'model' }),
+  );
+  await vi.advanceTimersByTimeAsync(0);
+  expect(lines()).toEqual(['Current caption.', '译文 Current caption.']);
+  sendMessage.mockClear();
+  const video = document.querySelector('video')!;
+  video.playbackRate = 1.5;
+  video.dispatchEvent(new Event('ratechange'));
+  await vi.advanceTimersByTimeAsync(0);
+  expect(lines()).toEqual(['Current caption.', '译文 Current caption.']);
+  expect(sendMessage.mock.calls.map(([message]) => message)).toEqual([
+    {
+      type: 'prefetch',
+      time: 0,
+      rate: 1.5,
+      cues: [
+        { start: 0, end: 10, text: 'Current caption.' },
+        { start: 10, end: 20, text: 'Upcoming caption.' },
+      ],
+    },
+  ]);
+});
+
+it('keeps captions inside a fullscreen ancestor and restores native layers for video-only fullscreen', async () => {
+  const player = document.getElementById('player')!;
+  const layer = document.getElementById('layer')!;
+  const video = document.querySelector('video')!;
+  const fullscreen = document.createElement('div');
+  player.replaceWith(fullscreen);
+  fullscreen.append(player);
+  source = {
+    kind: 'timeline',
+    mode: 'model',
+    cues: [{ startTime: 0, endTime: 10, text: 'Visible caption.' }],
+    layers: () => [layer],
+  };
+  controller = new CaptionController(
+    () => platform,
+    publicSettings({ ...DEFAULT_SETTINGS, apiKey: 'key', model: 'model' }),
+  );
+  await vi.advanceTimersByTimeAsync(0);
+  expect(lines()).toEqual(['Visible caption.', '译文 Visible caption.']);
+  Object.defineProperty(document, 'fullscreenElement', { configurable: true, value: fullscreen });
+  video.dispatchEvent(new Event('timeupdate'));
+  await vi.advanceTimersByTimeAsync(0);
+  expect(
+    fullscreen
+      .querySelector(':scope > [data-subline-overlay]')
+      ?.shadowRoot?.querySelector('.original')?.textContent,
+  ).toBe('Visible caption.');
+  expect(getComputedStyle(layer).opacity).toBe('0');
+  Object.defineProperty(document, 'fullscreenElement', { configurable: true, value: video });
+  video.dispatchEvent(new Event('timeupdate'));
+  expect(document.querySelector('[data-subline-overlay]')).toBeNull();
+  expect(getComputedStyle(layer).opacity).not.toBe('0');
+});
+
+it('keeps the overlay in the player when the whole document is fullscreen', async () => {
+  controller = new CaptionController(
+    () => platform,
+    publicSettings({ ...DEFAULT_SETTINGS, apiKey: 'key', model: 'model' }),
+  );
+  const host = document.querySelector('#player > [data-subline-overlay]');
+  expect(host).not.toBeNull();
+  for (const root of [document.documentElement, document.body]) {
+    Object.defineProperty(document, 'fullscreenElement', { configurable: true, value: root });
+    await vi.advanceTimersByTimeAsync(150);
+    expect([...document.querySelectorAll('[data-subline-overlay]')]).toEqual([host]);
+    expect(root.classList.contains('subline-player')).toBe(false);
+  }
 });

@@ -20,6 +20,7 @@ Each rule names what fails when it is broken. When the developer corrects a mist
 | Imports flow platforms → core → shared, and platforms never import each other. | ESLint `local/dependency-boundaries`; `tests/dependency-boundaries.test.ts` |
 | TypeScript has no comments. | ESLint `local/no-comments` |
 | Local runs and CI run the same checks. | `npm run verify` in the `verify` workflow; `npm run test:discovery` |
+| Each test contract has one primary owner. Expected values come from the contract, and rejection cases reach the guard they claim to test. | The test-audit skill; `docs/reviews/2026-10-12-test-audit.md` |
 | The glossary names constants instead of copying their values. | Judgment |
 | Don't add a fallback, alternate format, retry, cap or cache the request didn't ask for; propose it instead. | Judgment |
 

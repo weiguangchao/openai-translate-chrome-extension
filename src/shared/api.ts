@@ -4,7 +4,7 @@ import { translationBatchLimit } from './limits';
 import { englishLanguageName, validateBaseUrl, validateSettings, type Settings } from './settings';
 import { addTokenUsage, readProviderUsage } from './token-usage';
 import { modelAnswer, parseModelJson, scanTranslationResults } from './model-json';
-import { readCaptionTranslation } from './caption-translation';
+import { readStoredTranslation } from './caption-translation';
 
 class HttpError extends Error {
   constructor(
@@ -283,7 +283,9 @@ export async function translateCaptionBatch(
       ids.filter((other) => other === id).length !== 1
     )
       continue;
-    const translation = readCaptionTranslation(value);
+    const translation = readStoredTranslation(
+      (value as { translation?: unknown } | null)?.translation,
+    );
     if (translation === null) continue;
     accepted.set(id, translation);
     onTranslation?.(id, translation);

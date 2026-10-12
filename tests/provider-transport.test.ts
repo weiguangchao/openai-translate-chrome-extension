@@ -95,19 +95,48 @@ it('cancels a waiting send without fetching or consuming another consumer’s wo
 });
 
 it('starts each provider deadline only when its HTTP request is sent', async () => {
-  const timeout = vi.spyOn(AbortSignal, 'timeout');
-  const fetch = vi.fn(async (_url: string, init: RequestInit) =>
-    providerReply(requestedTexts(init), () => '完成'),
+  vi.spyOn(AbortSignal, 'timeout').mockImplementation((milliseconds) => {
+    const controller = new AbortController();
+    setTimeout(
+      () => controller.abort(new DOMException('Provider deadline', 'TimeoutError')),
+      milliseconds,
+    );
+    return controller.signal;
+  });
+  const sends: { text: string; at: number; signal: AbortSignal }[] = [];
+  const fetch = vi.fn(
+    (_url: string, init: RequestInit) =>
+      new Promise<Response>((_resolve, reject) => {
+        const signal = init.signal!;
+        sends.push({ text: requestedTexts(init)[0], at: Date.now(), signal });
+        signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+      }),
   );
   vi.stubGlobal('fetch', fetch);
-  const work = ['A', 'B', 'C', 'D'].map((text) => api.translateCaptionBatch(settings, [text]));
-  const immediate = Array.from({ length: translationSendsPerSecond }, () => [providerTimeoutMs]);
-  expect(timeout.mock.calls).toEqual(immediate);
+  const started = Date.now();
+  const work = ['A', 'B', 'C', 'D'].map((text) =>
+    api.translateCaptionBatch(settings, [text]).catch((error: Error) => error.message),
+  );
+  expect(sends.map(({ text }) => text)).toEqual(['A', 'B', 'C']);
   await vi.advanceTimersByTimeAsync(providerSendWindowMs - 1);
-  expect(timeout).toHaveBeenCalledTimes(translationSendsPerSecond);
+  expect(sends).toHaveLength(translationSendsPerSecond);
   await vi.advanceTimersByTimeAsync(1);
-  await expect(Promise.all(work)).resolves.toEqual([['完成'], ['完成'], ['完成'], ['完成']]);
-  expect(timeout.mock.calls).toEqual([...immediate, [providerTimeoutMs]]);
+  expect(sends.map(({ text, at }) => [text, at - started])).toEqual([
+    ['A', 0],
+    ['B', 0],
+    ['C', 0],
+    ['D', providerSendWindowMs],
+  ]);
+  await vi.advanceTimersByTimeAsync(providerTimeoutMs - providerSendWindowMs);
+  expect(sends.map(({ signal }) => signal.aborted)).toEqual([true, true, true, false]);
+  await expect(Promise.all(work.slice(0, 3))).resolves.toEqual(
+    Array(3).fill('接口请求超时，请检查网络或更换响应更快的模型。'),
+  );
+  await vi.advanceTimersByTimeAsync(providerSendWindowMs - 1);
+  expect(sends[3].signal.aborted).toBe(false);
+  await vi.advanceTimersByTimeAsync(1);
+  expect(sends[3].signal.aborted).toBe(true);
+  await expect(work[3]).resolves.toBe('接口请求超时，请检查网络或更换响应更快的模型。');
 });
 
 it('prioritizes the visible caption when the next send window opens', async () => {

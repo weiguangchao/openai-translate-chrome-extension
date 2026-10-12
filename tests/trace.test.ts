@@ -116,7 +116,6 @@ it('renders each translation line with its own text and class', () => {
   expect(shown()).toEqual({ text: '你好', error: false, timeout: false });
   render({ kind: 'timedOut' });
   expect(shown()).toEqual({ text: '接口调用超时', error: false, timeout: true });
-  expect(root.querySelector('style')!.textContent).toContain('.timeout{color:#ffcc00!important}');
   expect(translation.style.fontSize).toBe('20px');
   overlay.updateStyle(
     publicSettings({ ...DEFAULT_SETTINGS, translation: { color: '#112233', size: 18 } }),

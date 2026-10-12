@@ -36,3 +36,7 @@ export function providerReply(texts: string[], translate: (text: string) => stri
     ],
   });
 }
+
+export function structuredReply(results: unknown[]): Response {
+  return Response.json({ choices: [{ message: { content: JSON.stringify({ results }) } }] });
+}

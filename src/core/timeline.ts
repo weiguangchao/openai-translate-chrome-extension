@@ -70,10 +70,3 @@ export function playbackCues(captions: readonly TimedCaption[], time: number): P
   }
   return units;
 }
-
-export function captionWindow(
-  captions: readonly TimedCaption[],
-  time: number,
-): { current: string; items: readonly PlaybackCue[] } {
-  return { current: captionAt(captions, time), items: playbackCues(captions, time) };
-}

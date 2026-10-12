@@ -15,11 +15,13 @@ it('counts CJK characters and full-width punctuation as two columns and combinin
   expect(subtitleDisplayLength('cafe\u0301')).toBe(4);
 });
 
-it('splits only text wider than the caption limit', () => {
-  const words = (count: number) => Array.from({ length: count }, () => 'word').join(' ');
-  expect(subtitleDisplayLength(words(18))).toBeLessThanOrEqual(captionDisplayLimit);
-  expect(captions('en', words(18))).toHaveLength(1);
-  expect(captions('en', words(19))).toHaveLength(2);
+it.each([
+  ['en', `${'a '.repeat((captionDisplayLimit - 2) / 2)}aa`, 1],
+  ['en', `${'a '.repeat((captionDisplayLimit - 2) / 2)}aaa`, 2],
+  ['zh-CN', '甲'.repeat(captionDisplayLimit / 2), 1],
+  ['zh-CN', '甲'.repeat(captionDisplayLimit / 2 + 1), 2],
+])('splits %s only when its display width exceeds the caption limit', (language, text, count) => {
+  expect(captions(language, text)).toHaveLength(count);
 });
 
 it('ends English sentences at terminal punctuation but not at abbreviations, decimals or initials', () => {
@@ -167,8 +169,10 @@ it('keeps a word wider than the limit whole on its own line', () => {
   expect(captions('en', `Open ${url} now please.`)).toEqual(['Open', url, 'now please.']);
 });
 
-it('falls back to English rules for a language without its own segmenter', () => {
-  expect(segmenterFor('fr')).toBe(segmenterFor('en'));
-  expect(segmenterFor('constructor')).toBe(segmenterFor('en'));
-  expect(segmenterFor('zh-CN')).not.toBe(segmenterFor('zh-TW'));
-});
+it.each(['fr', 'constructor'])(
+  'uses English sentence and caption rules when %s has no segmenter',
+  (language) => {
+    expect(segmenterFor(language).sentenceEnds('Hello. Goodbye!')).toEqual([6, 15]);
+    expect(captions(language, longCaption)).toEqual(longCaptionParts);
+  },
+);

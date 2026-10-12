@@ -1,0 +1,366 @@
+[
+  {
+    "name": "silence-stop",
+    "edits": [
+      {
+        "path": "src/core/sentences.ts",
+        "old": "if (gap >= sentencePauseSeconds) stops.push(text.length);",
+        "new": "if (gap >= sentencePauseSeconds + 1) stops.push(text.length);",
+        "count": 1
+      }
+    ],
+    "command": ["npx", "vitest", "run", "tests/subtitle-sentences.test.ts", "-t", "silence"],
+    "exit": 1,
+    "seconds": 0.81,
+    "result": "intended assertion failed; source restored byte for byte"
+  },
+  {
+    "name": "overlap-exemption",
+    "edits": [
+      {
+        "path": "src/core/sentences.ts",
+        "old": "if (overlapping) {",
+        "new": "if (overlapping && false) {",
+        "count": 1
+      }
+    ],
+    "command": ["npx", "vitest", "run", "tests/subtitle-sentences.test.ts", "-t", "overlap"],
+    "exit": 1,
+    "seconds": 0.66,
+    "result": "intended assertion failed; source restored byte for byte"
+  },
+  {
+    "name": "asr-punctuated-pause",
+    "edits": [
+      {
+        "path": "src/core/sentences.ts",
+        "old": "if (automatic || !naturalStops.size)",
+        "new": "if (!naturalStops.size)",
+        "count": 1
+      }
+    ],
+    "command": ["npx", "vitest", "run", "tests/youtube-captions.test.ts", "-t", "pause|gap"],
+    "exit": 1,
+    "seconds": 0.69,
+    "result": "intended assertion failed; source restored byte for byte"
+  },
+  {
+    "name": "overlap-text",
+    "edits": [
+      {
+        "path": "src/core/timeline.ts",
+        "old": ".join('\\n')",
+        "new": ".join(' ')",
+        "count": 1
+      }
+    ],
+    "command": ["npx", "vitest", "run", "tests/timeline.test.ts", "-t", "overlapping"],
+    "exit": 1,
+    "seconds": 0.59,
+    "result": "intended assertion failed; source restored byte for byte"
+  },
+  {
+    "name": "caption-width-one-over",
+    "edits": [
+      {
+        "path": "src/shared/segmenter/lines.ts",
+        "old": "if (width(text, range) <= captionDisplayLimit) return [range];",
+        "new": "if (width(text, range) <= captionDisplayLimit + 1) return [range];",
+        "count": 1
+      }
+    ],
+    "command": ["npx", "vitest", "run", "tests/segmenter.test.ts"],
+    "exit": 1,
+    "seconds": 0.66,
+    "result": "intended assertion failed; source restored byte for byte"
+  },
+  {
+    "name": "language-fallback",
+    "edits": [
+      {
+        "path": "src/shared/segmenter/index.ts",
+        "old": "return segmenters.get(language) ?? english;",
+        "new": "return segmenters.get(language) ?? simplifiedChinese;",
+        "count": 1
+      }
+    ],
+    "command": ["npx", "vitest", "run", "tests/segmenter.test.ts"],
+    "exit": 1,
+    "seconds": 0.85,
+    "result": "intended assertion failed; source restored byte for byte"
+  },
+  {
+    "name": "dynamic-playback-rate",
+    "edits": [
+      {
+        "path": "src/core/controller.ts",
+        "old": "this.translator.plan(time, video.playbackRate || 1, playbackCues(captions, time));",
+        "new": "this.translator.plan(time, 1, playbackCues(captions, time));",
+        "count": 1
+      }
+    ],
+    "command": ["npx", "vitest", "run", "tests/controller.test.ts", "-t", "rate"],
+    "exit": 1,
+    "seconds": 1.04,
+    "result": "intended assertion failed; source restored byte for byte"
+  },
+  {
+    "name": "seek-settle-edge",
+    "edits": [
+      {
+        "path": "src/core/playback.ts",
+        "old": "export const seekSettleMs = 400;",
+        "new": "export const seekSettleMs = 399;",
+        "count": 1
+      }
+    ],
+    "command": ["npx", "vitest", "run", "tests/prefetch.test.ts", "-t", "playback jump"],
+    "exit": 1,
+    "seconds": 1.3,
+    "result": "intended assertion failed; source restored byte for byte"
+  },
+  {
+    "name": "queue-duration",
+    "edits": [
+      {
+        "path": "src/extension/queue.ts",
+        "old": "const elapsed = () => Date.now() - (sentAt ?? created);",
+        "new": "const elapsed = () => Date.now() - created;",
+        "count": 1
+      }
+    ],
+    "command": ["npx", "vitest", "run", "tests/queue.test.ts", "-t", "trace"],
+    "exit": 1,
+    "seconds": 0.87,
+    "result": "intended assertion failed; source restored byte for byte"
+  },
+  {
+    "name": "queue-stale-slot",
+    "edits": [
+      {
+        "path": "src/extension/queue.ts",
+        "old": "    const packs: Pack[] = planned.map((request) => ({",
+        "new": "    if (!planned.length) return this.results(snapshot.map(({ key }) => key));\n    const packs: Pack[] = planned.map((request) => ({",
+        "count": 1
+      }
+    ],
+    "command": ["npx", "vitest", "run", "tests/queue.test.ts", "-t", "slot opens"],
+    "exit": 1,
+    "seconds": 0.71,
+    "result": "intended assertion failed; source restored byte for byte"
+  },
+  {
+    "name": "bridge-origin",
+    "edits": [
+      {
+        "path": "src/core/bridge/client.ts",
+        "old": "event.origin !== location.origin ||",
+        "new": "false ||",
+        "count": 1
+      }
+    ],
+    "command": ["npx", "vitest", "run", "tests/bridge.test.ts"],
+    "exit": 1,
+    "seconds": 0.87,
+    "result": "intended assertion failed; source restored byte for byte"
+  },
+  {
+    "name": "bridge-source",
+    "edits": [
+      {
+        "path": "src/core/bridge/client.ts",
+        "old": "event.source !== window ||",
+        "new": "false ||",
+        "count": 1
+      }
+    ],
+    "command": ["npx", "vitest", "run", "tests/bridge.test.ts"],
+    "exit": 1,
+    "seconds": 1.08,
+    "result": "intended assertion failed; source restored byte for byte"
+  },
+  {
+    "name": "bridge-id",
+    "edits": [
+      {
+        "path": "src/core/bridge/client.ts",
+        "old": "data.requestId !== this.pendingId ||",
+        "new": "false ||",
+        "count": 1
+      }
+    ],
+    "command": ["npx", "vitest", "run", "tests/bridge.test.ts"],
+    "exit": 1,
+    "seconds": 1.11,
+    "result": "intended assertion failed; source restored byte for byte"
+  },
+  {
+    "name": "settings-scope-required",
+    "edits": [
+      {
+        "path": "src/shared/settings.ts",
+        "old": "const SETTING_SCOPES: Record<keyof Settings, SettingScope> = {",
+        "new": "const SETTING_SCOPES: Record<string, SettingScope> = {",
+        "count": 1
+      }
+    ],
+    "command": ["npx", "vitest", "run", "tests/settings-scope.test.ts"],
+    "exit": 1,
+    "seconds": 2.03,
+    "result": "intended assertion failed; source restored byte for byte"
+  },
+  {
+    "name": "models-cache-write",
+    "edits": [
+      {
+        "path": "src/ui/App.tsx",
+        "old": "        await saveCachedModels(requestSettings, ids);",
+        "new": "        await Promise.resolve();",
+        "count": 1
+      }
+    ],
+    "command": [
+      "npx",
+      "vitest",
+      "run",
+      "tests/settings-models.test.tsx",
+      "-t",
+      "successful refresh"
+    ],
+    "exit": 1,
+    "seconds": 1.2,
+    "result": "intended assertion failed; source restored byte for byte"
+  },
+  {
+    "name": "token-locale",
+    "edits": [
+      {
+        "path": "src/shared/token-usage.ts",
+        "old": ".toLocaleString('en-US')",
+        "new": ".toLocaleString('de-DE')",
+        "count": 1
+      }
+    ],
+    "command": ["npx", "vitest", "run", "tests/token-usage.test.ts"],
+    "exit": 1,
+    "seconds": 0.58,
+    "result": "intended assertion failed; source restored byte for byte"
+  },
+  {
+    "name": "segment-batch-independent",
+    "edits": [
+      {
+        "path": "src/core/timeline.ts",
+        "old": "  segmentCaptions,",
+        "new": "  translationBatchLimit,"
+      },
+      {
+        "path": "src/core/timeline.ts",
+        "old": "Math.floor(index / segmentCaptions)",
+        "new": "Math.floor(index / translationBatchLimit)"
+      }
+    ],
+    "command": ["npx", "vitest", "run", "tests/timeline.test.ts", "-t", "numbers segments"],
+    "exit": 1,
+    "seconds": 0.6,
+    "result": "intended assertion failed; source restored byte for byte"
+  },
+  {
+    "name": "deadline-before-send",
+    "edits": [
+      {
+        "path": "src/shared/provider/transport.ts",
+        "old": "  const post = init.method?.toUpperCase() === 'POST';",
+        "new": "  const post = init.method?.toUpperCase() === 'POST';\n  const deadline = signal\n    ? AbortSignal.any([signal, AbortSignal.timeout(providerTimeoutMs)])\n    : AbortSignal.timeout(providerTimeoutMs);"
+      },
+      {
+        "path": "src/shared/provider/transport.ts",
+        "old": "        const deadline = signal\n          ? AbortSignal.any([signal, AbortSignal.timeout(providerTimeoutMs)])\n          : AbortSignal.timeout(providerTimeoutMs);",
+        "new": ""
+      }
+    ],
+    "command": ["npx", "vitest", "run", "tests/provider-transport.test.ts", "-t", "deadline"],
+    "exit": 1,
+    "seconds": 0.63,
+    "result": "intended assertion failed; source restored byte for byte"
+  },
+  {
+    "name": "stored-translation-size",
+    "edits": [
+      {
+        "path": "src/shared/caption-translation.ts",
+        "old": "translation && translation.length <= 5000 ? translation : null",
+        "new": "translation ? translation : null"
+      }
+    ],
+    "command": ["npx", "vitest", "run", "tests/background.test.ts", "-t", "session storage"],
+    "exit": 1,
+    "seconds": 0.83,
+    "result": "intended assertion failed; source restored byte for byte"
+  },
+  {
+    "name": "stored-translation-trim",
+    "edits": [
+      {
+        "path": "src/shared/caption-translation.ts",
+        "old": "const translation = value.trim();",
+        "new": "const translation = value;"
+      }
+    ],
+    "command": ["npx", "vitest", "run", "tests/background.test.ts", "-t", "session storage"],
+    "exit": 1,
+    "seconds": 0.67,
+    "result": "intended assertion failed; source restored byte for byte"
+  },
+  {
+    "name": "cached-loading-flash",
+    "edits": [
+      {
+        "path": "src/core/translator.ts",
+        "old": "        line: { kind: 'none' },",
+        "new": "        line: { kind: 'loading' },"
+      }
+    ],
+    "prepare": ["npm", "run", "build"],
+    "command": [
+      "npx",
+      "playwright",
+      "test",
+      "e2e/playback.spec.ts",
+      "-g",
+      "youtube: a cached translation"
+    ],
+    "exit": 1,
+    "seconds": 10.78,
+    "result": "intended assertion failed; source restored byte for byte"
+  },
+  {
+    "name": "timeout-warning-color",
+    "edits": [
+      {
+        "path": "src/core/overlay.ts",
+        "old": ".timeout{color:#ffcc00!important}",
+        "new": ".timeout{color:#ff00cc!important}"
+      }
+    ],
+    "prepare": ["npm", "run", "build"],
+    "command": ["npx", "playwright", "test", "e2e/provider.spec.ts", "-g", "stalled opening batch"],
+    "exit": 1,
+    "seconds": 78.12,
+    "result": "intended assertion failed; source restored byte for byte"
+  },
+  {
+    "name": "missing-result-id",
+    "edits": [
+      {
+        "path": "src/shared/api.ts",
+        "old": "  const id = (value as { id?: unknown } | null)?.id;",
+        "new": "  const id = (value as { id?: unknown } | null)?.id ?? 0;"
+      }
+    ],
+    "command": ["npx", "vitest", "run", "tests/provider-responses.test.ts", "-t", "without an id"],
+    "exit": 1,
+    "seconds": 0.72,
+    "result": "intended assertion failed; source restored byte for byte"
+  }
+]

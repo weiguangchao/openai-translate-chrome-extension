@@ -1,7 +1,6 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { DEFAULT_SETTINGS, STORAGE_KEY } from '../src/shared/settings';
-import { packedCues, providerReply, requestedTexts } from './fixtures/provider';
-import { structuredReply } from './fixtures/long-caption';
+import { packedCues, providerReply, requestedTexts, structuredReply } from './fixtures/provider';
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -360,6 +359,18 @@ it('keeps translations in session storage, without the API key, for a restarted 
   });
   await vi.waitFor(() => expect([...session.values()]).toContain('你好'));
   expect(JSON.stringify([...session])).not.toContain('trusted-secret');
+  const prefix = 'subline.translation.v2:';
+  const storedKey = [...session.keys()].find((key) => key.startsWith(prefix))!;
+  const identity = JSON.parse(storedKey.slice(prefix.length)) as unknown[];
+  const invalid = [
+    { text: 'Blank.', value: ' ' },
+    { text: 'Oversized.', value: '字'.repeat(5001) },
+    { text: 'Legacy parts.', value: { parts: ['整句译文'] } },
+    { text: 'Null.', value: null },
+  ];
+  session.set(storedKey, ' 你好 ');
+  for (const { text, value } of invalid)
+    session.set(prefix + JSON.stringify([...identity.slice(0, -1), text]), value);
 
   vi.resetModules();
   send = await loadBackground(saved, session);
@@ -367,5 +378,10 @@ it('keeps translations in session storage, without the API key, for a restarted 
     ok: true,
     data: '你好',
   });
+  for (const { text } of invalid)
+    await expect(send({ type: 'translate', text, cacheOnly: true })).resolves.toEqual({
+      ok: true,
+      data: null,
+    });
   expect(fetch).toHaveBeenCalledTimes(1);
 });
