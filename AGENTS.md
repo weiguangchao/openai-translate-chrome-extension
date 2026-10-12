@@ -1,9 +1,10 @@
 # Subline
 
-## Principle
+## Non-negotiables
 
 - Any prose surface → the unslop skill. Your reply is a prose surface. Write it per Writing the reply.
 - Before commit → the deslop skill
+- For testing -> the test-audit skill
 
 ## Rules
 
