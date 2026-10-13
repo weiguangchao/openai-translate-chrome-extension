@@ -8,7 +8,8 @@ export type TranslationLine =
   | { readonly kind: 'loading' }
   | { readonly kind: 'ready'; readonly translation: string }
   | { readonly kind: 'failed'; readonly message: string }
-  | { readonly kind: 'timedOut' };
+  | { readonly kind: 'timedOut' }
+  | { readonly kind: 'repeated' };
 
 export interface CaptionView {
   readonly original: string;
@@ -29,6 +30,8 @@ function lineContent(line: TranslationLine): { text: string; status: Status } {
       return { text: `Subline：${line.message}`, status: 'error' };
     case 'timedOut':
       return { text: TIMEOUT_TRANSLATION, status: 'timeout' };
+    case 'repeated':
+      return { text: '', status: null };
   }
 }
 

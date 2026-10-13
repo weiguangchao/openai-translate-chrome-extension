@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { CaptionController } from '../src/core/controller';
 import type { CaptionSource, Platform } from '../src/core/platform';
+import { repeatedSourceMessage } from '../src/shared/provider-error';
 import { publicSettings } from '../src/shared/settings';
 import { consentedSettings } from './fixtures/settings';
 
@@ -376,6 +377,31 @@ it('treats a translation that reads like the loading placeholder as a translatio
   await vi.advanceTimersByTimeAsync(0);
   expect(lines()).toEqual(['Translating.', '翻译中']);
   expect(traced()).toBe('ready');
+});
+
+it('shows only the source when the translation copies it and does not ask again', async () => {
+  sendMessage.mockImplementation((message: { type: string }) =>
+    Promise.resolve(
+      message.type === 'translate'
+        ? { ok: false, error: repeatedSourceMessage }
+        : { ok: true, data: null },
+    ),
+  );
+  source = {
+    kind: 'live',
+    mode: 'model',
+    read: () => ({ text: 'Live cue', layers: [], nativeTrack: false }),
+  };
+  controller = new CaptionController(
+    () => platform,
+    publicSettings({ ...consentedSettings, apiKey: 'key', model: 'model' }),
+  );
+  await vi.advanceTimersByTimeAsync(450);
+  expect(lines()).toEqual(['Live cue', null]);
+  await vi.advanceTimersByTimeAsync(20000);
+  expect(sendMessage.mock.calls.filter(([message]) => message.type === 'translate')).toHaveLength(
+    1,
+  );
 });
 
 it('keeps ready captions when the playback rate changes and plans at the new rate', async () => {
