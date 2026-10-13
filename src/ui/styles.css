@@ -322,34 +322,13 @@ button:hover:not(:disabled) {
   flex-direction: column;
   gap: 22px;
 }
-.enable-panel {
-  display: flex;
-  align-items: center;
-  gap: 13px;
-  background: #eeebfc;
-  border: 1px solid #e5e0fa;
-  border-radius: 10px;
-  padding: 18px 20px;
-  min-height: 85px;
-}
-.enable-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: #e4defb;
-  border-radius: 9px;
-  width: 43px;
-  height: 43px;
-  color: var(--accent);
-  flex-shrink: 0;
-}
 .enable-panel h2 {
   font-size: 13px;
   font-weight: 600;
+  line-height: 1.5;
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 6px;
 }
 .small-tag {
   display: inline-flex;
@@ -367,10 +346,6 @@ button:hover:not(:disabled) {
 .enable-panel > .toggle {
   margin-left: auto;
   flex-shrink: 0;
-}
-.disabled-panel {
-  background: #f0f1f5;
-  border-color: #e6e7ec;
 }
 .toggle {
   background: #d6d7e2;
@@ -443,7 +418,7 @@ button:hover:not(:disabled) {
   margin-bottom: 9px;
   line-height: 1.4;
 }
-.field label > span:not(.label-side):not(.field-tip) {
+.field label > span:not(.field-tip) {
   font-size: 11px;
   font-weight: 400;
   color: #71758a;
@@ -555,15 +530,6 @@ button:hover:not(:disabled) {
 .field-tip {
   color: #a8a8b8;
   display: flex;
-}
-.label-side {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-weight: 400;
-  color: #71758a;
-  font-size: 10px;
 }
 .key-input input {
   padding-right: 43px !important;
@@ -1217,11 +1183,11 @@ button:hover:not(:disabled) {
   background: #f6f5fb;
   color: var(--accent);
 }
-.popup-power {
+.popup-power,
+.enable-panel {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin: 16px 0;
   padding: 10px 12px;
   border: 1px solid var(--line);
   border-radius: 12px;
@@ -1230,22 +1196,29 @@ button:hover:not(:disabled) {
     background 0.18s,
     border-color 0.18s;
 }
-.popup-power.is-enabled {
+.popup-power {
+  margin: 16px 0;
+}
+.popup-power.is-enabled,
+.enable-panel.is-enabled {
   border-color: #e4def8;
   background: #f7f5ff;
 }
-.popup-power-icon {
+.popup-power-icon,
+.enable-icon {
   display: flex;
   align-items: center;
   justify-content: center;
   width: 32px;
   height: 32px;
+  flex-shrink: 0;
   border: 1px solid #e5e6ed;
   border-radius: 9px;
   background: #fff;
   color: #74798d;
 }
-.is-enabled .popup-power-icon {
+.is-enabled .popup-power-icon,
+.is-enabled .enable-icon {
   border-color: #e5dff8;
   color: var(--accent);
 }
@@ -1257,15 +1230,18 @@ button:hover:not(:disabled) {
 .popup-power fieldset {
   margin-left: auto;
 }
-.popup-power .toggle {
+.popup-power .toggle,
+.enable-panel .toggle {
   width: 42px;
   height: 24px;
 }
-.popup-power .toggle > span {
+.popup-power .toggle > span,
+.enable-panel .toggle > span {
   width: 18px;
   height: 18px;
 }
-.popup-power .toggle.is-on > span {
+.popup-power .toggle.is-on > span,
+.enable-panel .toggle.is-on > span {
   transform: translateX(18px);
 }
 .popup-languages {
@@ -1479,14 +1455,6 @@ button:hover:not(:disabled) {
   }
   .settings-section {
     padding: 19px;
-  }
-  .enable-panel {
-    padding: 15px;
-    gap: 10px;
-  }
-  .enable-icon {
-    width: 35px;
-    height: 35px;
   }
   .enable-panel h2 {
     font-size: 12px;
@@ -1720,9 +1688,6 @@ button:hover:not(:disabled) {
   }
   .color-value {
     font-size: 11px;
-  }
-  .enable-panel {
-    padding: 16px;
   }
   .preview-dialog {
     padding: 14px;

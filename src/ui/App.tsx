@@ -283,9 +283,9 @@ export function App() {
             <div className="settings-column">
               {page === 'general' && (
                 <>
-                  <div className={`enable-panel ${settings.enabled ? '' : 'disabled-panel'}`}>
+                  <div className={`enable-panel ${settings.enabled ? 'is-enabled' : ''}`}>
                     <span className="enable-icon">
-                      <Subtitles size={23} />
+                      <Subtitles size={20} />
                     </span>
                     <div>
                       <h2>
@@ -371,13 +371,7 @@ export function App() {
                         <p className="field-hint">填写接口根地址，无需添加 /chat/completions</p>
                       </div>
                       <div className="field">
-                        <label htmlFor="api-key">
-                          API Key{' '}
-                          <span className="label-side">
-                            <LockKeyhole size={11} />
-                            {isExtension ? '仅本地保存' : '仅当前页面有效'}
-                          </span>
-                        </label>
+                        <label htmlFor="api-key">API Key</label>
                         <div className="input-icon key-input">
                           <LockKeyhole size={16} />
                           <input
