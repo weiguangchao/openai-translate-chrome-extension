@@ -58,6 +58,35 @@ it('retries only an invalid result, keeping its neighbors cached', async () => {
   expect(fetch).toHaveBeenCalledTimes(2);
 });
 
+it('retries a translation that copies its source and does not cache the copy', async () => {
+  const { fetch, requests } = pendingProvider();
+  const queue = new TranslationQueue();
+  const pending = queue.prefetch('tab', settings, packedCues(['Before.', 'Same.', 'After.']));
+  requests[0].resolve(
+    structuredReply([
+      { id: 0, translation: '之前。' },
+      { id: 1, translation: 'Same.' },
+      { id: 2, translation: '之后。' },
+    ]),
+  );
+  await flush();
+  expect(requests.map((request) => request.texts)).toEqual([
+    ['Before.', 'Same.', 'After.'],
+    ['Same.'],
+  ]);
+  requests[1].resolve(providerReply(['Same.'], (text) => text));
+  await expect(pending).resolves.toEqual(['之前。', null, '之后。']);
+  expect(fetch).toHaveBeenCalledTimes(2);
+  await expect(queue.lookup(settings, 'Before.')).resolves.toBe('之前。');
+  await expect(queue.lookup(settings, 'Same.')).resolves.toBeNull();
+  await vi.advanceTimersByTimeAsync(1000);
+  const again = queue.request('tab', settings, 'Same.');
+  await flush();
+  requests.at(-1)!.resolve(providerReply(['Same.'], () => '不同。'));
+  await expect(again).resolves.toBe('不同。');
+  expect(fetch).toHaveBeenCalledTimes(3);
+});
+
 it('stops after one corrective retry for a persistently invalid result and never caches it', async () => {
   const fetch = vi
     .fn()

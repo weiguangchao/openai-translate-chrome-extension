@@ -1,6 +1,6 @@
 import { readStoredTranslation } from '../shared/caption-translation';
 import type { PlaybackCue } from '../shared/playback-plan';
-import { providerTimeoutMessage } from '../shared/provider-error';
+import { providerTimeoutMessage, repeatedSourceMessage } from '../shared/provider-error';
 import type { ViewState } from '../shared/trace';
 import type { ExtensionConnection } from './connection';
 import type { CaptionView, SubtitleOverlay, TranslationLine } from './overlay';
@@ -32,11 +32,13 @@ const VIEW_STATES: Record<TranslationLine['kind'], ViewState> = {
   ready: 'ready',
   failed: 'error',
   timedOut: 'timeout',
+  repeated: 'empty',
 };
 
 function captionView(caption: Caption | null): CaptionView {
   if (!caption) return { original: '', line: { kind: 'none' } };
   const { line } = caption;
+  if (line.kind === 'repeated') return { original: caption.text, line: { kind: 'none' } };
   const withSource = line.kind === 'ready' || line.kind === 'failed';
   return { original: withSource ? caption.text : '', line };
 }
@@ -153,7 +155,7 @@ export class CaptionTranslator {
 
   private update(caption: Caption, frame: CaptionFrame): void {
     const { line } = caption;
-    if (line.kind === 'ready' || line.kind === 'timedOut') return;
+    if (line.kind === 'ready' || line.kind === 'timedOut' || line.kind === 'repeated') return;
     const pending = caption.request !== null;
     if (frame.cacheOnly && (caption.checked || pending)) return;
     const waited = Date.now() - caption.since;
@@ -198,7 +200,8 @@ export class CaptionTranslator {
         if (!current()) return;
         const message = error instanceof Error ? error.message : '翻译失败，请检查配置。';
         caption.request = null;
-        if (message === providerTimeoutMessage) caption.line = { kind: 'timedOut' };
+        if (message === repeatedSourceMessage) caption.line = { kind: 'repeated' };
+        else if (message === providerTimeoutMessage) caption.line = { kind: 'timedOut' };
         else {
           caption.line = { kind: 'failed', message };
           caption.since = Date.now() + 15000;

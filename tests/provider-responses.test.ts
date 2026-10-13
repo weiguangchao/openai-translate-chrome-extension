@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { repeatedSourceMessage } from '../src/shared/provider-error';
 import { DEFAULT_SETTINGS } from '../src/shared/settings';
 
 let translateCaptionBatch: typeof import('../src/shared/api').translateCaptionBatch;
@@ -55,6 +56,15 @@ it.each([
   respond(typeof reply === 'string' ? reply : JSON.stringify(reply));
   const published = vi.fn();
   await expect(translateCaptionBatch(settings, texts, undefined, published)).resolves.toBeNull();
+  expect(published).not.toHaveBeenCalled();
+});
+
+it.each(['One.', ' One. '])('rejects a translation that copies its source %j', async (text) => {
+  respond(payload([result(0, 'One.')]));
+  const published = vi.fn();
+  await expect(translateCaptionBatch(settings, [text], undefined, published)).rejects.toThrow(
+    repeatedSourceMessage,
+  );
   expect(published).not.toHaveBeenCalled();
 });
 

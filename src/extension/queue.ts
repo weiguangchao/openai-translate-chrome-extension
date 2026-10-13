@@ -6,7 +6,7 @@ import {
   typicalLatency,
   type PlaybackCue,
 } from '../shared/playback-plan';
-import { ProviderTimeoutError } from '../shared/provider-error';
+import { ProviderTimeoutError, RepeatedSourceError } from '../shared/provider-error';
 import { wakeProviderRequests } from '../shared/provider/transport';
 import { translationIdentity, type Settings } from '../shared/settings';
 import type { TraceEvent } from '../shared/trace';
@@ -386,6 +386,24 @@ export class TranslationQueue {
       if (result === 'ok' && sentAt !== undefined) this.noteSample(elapsed());
       this.trace({ e: 'done', id, ms: elapsed(), result });
     };
+    const retryOrReject = (failure: Error) => {
+      for (const job of batch) {
+        if (this.jobs.get(job.key) !== job) continue;
+        if (job.solo) {
+          this.jobs.delete(job.key);
+          job.reject(failure);
+          continue;
+        }
+        Object.assign(job, {
+          controller: undefined,
+          batch: undefined,
+          sent: false,
+          solo: true,
+          pack: undefined,
+        });
+      }
+      this.drain();
+    };
     this.trace({
       e: 'batch',
       id,
@@ -454,22 +472,7 @@ export class TranslationQueue {
         if (controller.signal.aborted) return finish('aborted');
         finish(results ? 'ok' : 'invalid');
         if (!results) {
-          for (const job of batch) {
-            if (this.jobs.get(job.key) !== job) continue;
-            if (job.solo) {
-              this.jobs.delete(job.key);
-              job.reject(new Error('模型返回的译文无效，请稍后重试。'));
-              continue;
-            }
-            Object.assign(job, {
-              controller: undefined,
-              batch: undefined,
-              sent: false,
-              solo: true,
-              pack: undefined,
-            });
-          }
-          this.drain();
+          retryOrReject(new Error('模型返回的译文无效，请稍后重试。'));
           return;
         }
         batch.forEach((job, index) => {
@@ -483,6 +486,11 @@ export class TranslationQueue {
       },
       (error) => {
         if (controller.signal.aborted) return finish('aborted');
+        if (error instanceof RepeatedSourceError) {
+          finish('invalid');
+          retryOrReject(error);
+          return;
+        }
         const failure = error instanceof Error ? error : new Error('翻译失败。');
         const timedOut = failure instanceof ProviderTimeoutError;
         finish(timedOut ? 'timeout' : 'error');

@@ -1,4 +1,4 @@
-import { ProviderTimeoutError } from './provider-error';
+import { ProviderTimeoutError, RepeatedSourceError } from './provider-error';
 import { providerFetch, type ProviderSendPolicy } from './provider/transport';
 import { translationBatchLimit } from './limits';
 import { englishLanguageName, validateBaseUrl, validateSettings, type Settings } from './settings';
@@ -273,6 +273,7 @@ export async function translateCaptionBatch(
   const aligned = alignResultIds(values, texts.length);
   const ids = aligned.map(resultId);
   const accepted = new Map<number, string>();
+  const echoed = new Set<number>();
   for (const value of aligned) {
     signal?.throwIfAborted();
     const id = resultId(value);
@@ -287,9 +288,15 @@ export async function translateCaptionBatch(
       (value as { translation?: unknown } | null)?.translation,
     );
     if (translation === null) continue;
+    if (translation === texts[id].trim()) {
+      echoed.add(id);
+      continue;
+    }
     accepted.set(id, translation);
     onTranslation?.(id, translation);
   }
+  if (echoed.size > 0 && accepted.size + echoed.size === texts.length)
+    throw new RepeatedSourceError();
   return accepted.size === texts.length ? texts.map((_, index) => accepted.get(index)!) : null;
 }
 
