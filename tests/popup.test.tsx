@@ -82,7 +82,6 @@ it('saves each language immediately and retains the latest provider and style se
   expect(select('source').value).toBe('zh-TW');
   expect(select('target').value).toBe('en');
   expect(document.querySelector('.popup-model-id')?.textContent).toBe('provider/new-model');
-  expect(document.querySelector('[role="status"]')?.textContent).toBe('已保存');
 });
 
 it.each([
@@ -153,7 +152,6 @@ it('locks quick controls until a save finishes', async () => {
   await click('[role="switch"]');
   expect(select('source').matches(':disabled')).toBe(true);
   expect(document.querySelector('[role="switch"]')?.matches(':disabled')).toBe(true);
-  expect(document.querySelector('[role="status"]')?.textContent).toBe('正在保存…');
   await act(async () => finish());
   expect(select('source').matches(':disabled')).toBe(false);
   expect(document.querySelector('[role="switch"]')?.getAttribute('aria-checked')).toBe('false');
