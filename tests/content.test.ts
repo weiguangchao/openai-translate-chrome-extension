@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, expect, it, vi, type Mock } from 'vitest';
-import { DEFAULT_SETTINGS, publicSettings } from '../src/shared/settings';
+import { publicSettings } from '../src/shared/settings';
+import { consentedSettings } from './fixtures/settings';
 
-const settings = publicSettings({ ...DEFAULT_SETTINGS, apiKey: 'key', model: 'model' });
+const settings = publicSettings({ ...consentedSettings, apiKey: 'key', model: 'model' });
 let runtime: {
   id: string | undefined;
   sendMessage: Mock<(message: { type: string }) => Promise<unknown>>;

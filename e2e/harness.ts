@@ -177,6 +177,7 @@ export class Player {
       baseUrl: providerUrl.replace('/chat/completions', ''),
       apiKey,
       model: 'e2e-fixed-model',
+      providerConsent: new URL(providerUrl).origin,
       sourceLanguage: 'en',
       targetLanguage: 'zh-CN',
     });
@@ -197,7 +198,9 @@ export class Player {
       await chrome.storage.local.set({ [key]: { ...current, ...patch } });
     }, patch);
     const publicPatch = Object.fromEntries(
-      Object.entries(patch).filter(([key]) => !['apiKey', 'baseUrl', 'model'].includes(key)),
+      Object.entries(patch).filter(
+        ([key]) => !['apiKey', 'baseUrl', 'model', 'providerConsent'].includes(key),
+      ),
     );
     await expect
       .poll(() =>

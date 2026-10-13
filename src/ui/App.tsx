@@ -23,7 +23,9 @@ import {
 } from 'lucide-react';
 import {
   DEFAULT_SETTINGS,
+  hasProviderConsent,
   languageName,
+  providerOrigin,
   validateSettings,
   type Settings,
 } from '../shared/settings';
@@ -105,6 +107,9 @@ export function App() {
   const current = PAGES.find((item) => item.id === page)!;
   const fingerprint = JSON.stringify([settings.baseUrl, settings.apiKey, settings.model]);
   const connected = connection === fingerprint;
+  const origin = providerOrigin(settings.baseUrl);
+  const provider = origin ? new URL(origin).host : '你填写的 Provider';
+  const consented = hasProviderConsent(settings);
 
   useEffect(() => {
     void loadSettings()
@@ -161,12 +166,16 @@ export function App() {
       await saveSettings(normalized);
       setSettings(normalized);
       setSaved(JSON.stringify(normalized));
-      showAlert({
-        kind: 'success',
-        text: isExtension
-          ? '设置已保存，已打开的视频页面会自动应用。'
-          : '预览设置已保存。API Key 仅保留在当前页面，安装扩展后可本地保存。',
-      });
+      showAlert(
+        normalized.apiKey && normalized.model && !hasProviderConsent(normalized)
+          ? { kind: 'info', text: '设置已保存。同意数据使用说明后，才会翻译字幕。' }
+          : {
+              kind: 'success',
+              text: isExtension
+                ? '设置已保存，已打开的视频页面会自动应用。'
+                : '预览设置已保存。API Key 仅保留在当前页面，安装扩展后可本地保存。',
+            },
+      );
     } catch (error) {
       showAlert({
         kind: 'error',
@@ -431,9 +440,35 @@ export function App() {
                         </div>
                       </div>
                     </fieldset>
+                    <div className="data-notice">
+                      <h3>
+                        <ShieldCheck size={15} /> 数据使用说明
+                      </h3>
+                      <ul>
+                        <li>
+                          在 YouTube、HBO Max、X 上播放带字幕的视频时，Subline 会把字幕原文发送到{' '}
+                          {provider} 翻译。
+                        </li>
+                        <li>
+                          不发送视频网址、标题或你的视频网站账号信息。Subline 没有自己的服务器。
+                        </li>
+                        <li>字幕由 Provider 按其隐私政策处理，请求可能产生费用。</li>
+                      </ul>
+                      <label className="consent-check">
+                        <input
+                          type="checkbox"
+                          checked={consented}
+                          disabled={!origin}
+                          onChange={(event) =>
+                            update('providerConsent', event.target.checked ? origin : '')
+                          }
+                        />
+                        我同意将字幕原文发送到 {provider} 翻译
+                      </label>
+                    </div>
                     <div className="api-footer">
                       <span>
-                        <ShieldCheck size={14} /> API Key 不会发送给视频网站
+                        <LockKeyhole size={14} /> API Key 只发送给 Provider，不会发送给视频网站
                       </span>
                       <button
                         className="button secondary test-button"

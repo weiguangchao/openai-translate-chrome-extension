@@ -5,12 +5,13 @@ import { hboMediaUrl, parseHboManifest } from '../src/platforms/hbo/captions';
 import { parseWebVtt } from '../src/core/webvtt';
 import { TranslationQueue } from '../src/extension/queue';
 import { providerSendWindowMs } from '../src/shared/provider/transport';
-import { DEFAULT_SETTINGS, publicSettings } from '../src/shared/settings';
+import { publicSettings } from '../src/shared/settings';
+import { consentedSettings } from './fixtures/settings';
 import { providerReply, requestedTexts } from './fixtures/provider';
 
 const mediaUrl = 'https://cdn.prd.media.h264.io/episode/manifest.mpd';
 const edgeMediaUrl = 'https://v4-e-cebcc-lax-csla2-01-wm.e.hbo/episode/manifest.mpd';
-const settings = { ...DEFAULT_SETTINGS, apiKey: 'test', model: 'model' };
+const settings = { ...consentedSettings, apiKey: 'test', model: 'model' };
 let controller: CaptionController | undefined;
 let video: HTMLVideoElement;
 let selected: { language: string; role: string } | null;
@@ -560,7 +561,13 @@ it('keeps the HBO source across target/provider/style changes, seeks, blob renew
   expect(downloads()).toHaveLength(4);
   for (const next of [
     { ...settings, targetLanguage: 'zh-TW' },
-    { ...settings, model: 'other', baseUrl: 'https://other.example/v1', apiKey: 'other' },
+    {
+      ...settings,
+      model: 'other',
+      baseUrl: 'https://other.example/v1',
+      apiKey: 'other',
+      providerConsent: 'https://other.example',
+    },
     { ...settings, original: { ...settings.original, size: 36 } },
   ]) {
     controller.update(publicSettings(next));

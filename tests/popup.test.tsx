@@ -85,6 +85,15 @@ it('saves each language immediately and retains the latest provider and style se
   expect(document.querySelector('[role="status"]')?.textContent).toBe('已保存');
 });
 
+it.each([
+  { providerConsent: '', hint: '请在设置中同意将字幕发送给 Provider。' },
+  { providerConsent: 'https://api.openai.com', hint: undefined },
+])('asks for consent when the configured Provider has none: $providerConsent', async (row) => {
+  stored.providerConsent = row.providerConsent;
+  await render();
+  expect(document.querySelector('.popup-setup-hint')?.textContent).toBe(row.hint);
+});
+
 it('offers only English, Simplified Chinese and Traditional Chinese', async () => {
   await render();
   for (const kind of ['source', 'target'] as const)

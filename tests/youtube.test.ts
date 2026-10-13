@@ -2,6 +2,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { CaptionController } from '../src/core/controller';
 import { createYoutubePlatform } from '../src/platforms/youtube/platform';
 import { DEFAULT_SETTINGS, publicSettings } from '../src/shared/settings';
+import { consentedSettings } from './fixtures/settings';
 
 let controller: CaptionController | undefined;
 let clockStart = 0;
@@ -128,7 +129,7 @@ it('translates and displays complete ASR sentences across rolling events', async
   await import('../src/platforms/youtube/page');
   controller = new CaptionController(
     createYoutubePlatform,
-    publicSettings({ ...DEFAULT_SETTINGS, apiKey: 'key', model: 'model' }),
+    publicSettings({ ...consentedSettings, apiKey: 'key', model: 'model' }),
   );
   await vi.advanceTimersByTimeAsync(0);
   expect(prefetchTexts(sendMessage)).toEqual([
@@ -205,7 +206,7 @@ it('loads the selected YouTube track before playback, aligns rolling captions, a
   await import('../src/platforms/youtube/page');
   controller = new CaptionController(
     createYoutubePlatform,
-    publicSettings({ ...DEFAULT_SETTINGS, apiKey: 'key', model: 'model' }),
+    publicSettings({ ...consentedSettings, apiKey: 'key', model: 'model' }),
   );
   await vi.advanceTimersByTimeAsync(0);
   expect(fetch.mock.calls[0][0]).toContain('fmt=json3');
@@ -218,14 +219,19 @@ it('loads the selected YouTube track before playback, aligns rolling captions, a
   expect(lines()[1].textContent).toBe('译文：Second phrase.');
   languageCode = 'zh-Hant';
   controller.update(
-    publicSettings({ ...DEFAULT_SETTINGS, apiKey: 'key', model: 'model', sourceLanguage: 'zh-TW' }),
+    publicSettings({
+      ...consentedSettings,
+      apiKey: 'key',
+      model: 'model',
+      sourceLanguage: 'zh-TW',
+    }),
   );
   await vi.advanceTimersByTimeAsync(1100);
   expect(oldTrack).toBeTypeOf('function');
   expect(lines()[1].hidden).toBe(true);
   videoId = 'video-2';
   languageCode = 'en';
-  controller.update(publicSettings({ ...DEFAULT_SETTINGS, apiKey: 'key', model: 'model' }));
+  controller.update(publicSettings({ ...consentedSettings, apiKey: 'key', model: 'model' }));
   history.replaceState(null, '', '/watch?v=video-2');
   video.currentTime = 2;
   video.dispatchEvent(new Event('loadedmetadata'));
@@ -301,7 +307,7 @@ it('uses the current video session to load source subtitles and removes duplicat
   video.currentTime = 1;
   controller = new CaptionController(
     createYoutubePlatform,
-    publicSettings({ ...DEFAULT_SETTINGS, apiKey: 'key', model: 'model' }),
+    publicSettings({ ...consentedSettings, apiKey: 'key', model: 'model' }),
   );
   await vi.advanceTimersByTimeAsync(1100);
   expect(lines()[1].hidden).toBe(true);
@@ -380,7 +386,7 @@ it('translates authored English sentences even when authored, automatic and brow
   );
   vi.stubGlobal('fetch', fetch);
   await import('../src/platforms/youtube/page');
-  const settings = publicSettings({ ...DEFAULT_SETTINGS, apiKey: 'key', model: 'model' });
+  const settings = publicSettings({ ...consentedSettings, apiKey: 'key', model: 'model' });
   controller = new CaptionController(createYoutubePlatform, { ...settings, configured: false });
   await vi.advanceTimersByTimeAsync(1100);
   expect(document.querySelector('[data-subline-overlay]')).toBeNull();
@@ -462,7 +468,7 @@ it('downloads the source language and calls the Provider when website auto-trans
   video.currentTime = 2;
   controller = new CaptionController(
     createYoutubePlatform,
-    publicSettings({ ...DEFAULT_SETTINGS, apiKey: 'key', model: 'model' }),
+    publicSettings({ ...consentedSettings, apiKey: 'key', model: 'model' }),
   );
   await vi.advanceTimersByTimeAsync(1500);
   expect(lines()[0].textContent).toBe('Source phrase');
@@ -516,7 +522,7 @@ it.each([
       ),
     );
     await import('../src/platforms/youtube/page');
-    const settings = publicSettings({ ...DEFAULT_SETTINGS, apiKey: 'key', model: 'model' });
+    const settings = publicSettings({ ...consentedSettings, apiKey: 'key', model: 'model' });
     controller = new CaptionController(createYoutubePlatform, settings);
     video.currentTime = 1;
     await vi.advanceTimersByTimeAsync(1500);
@@ -585,7 +591,7 @@ it('waits for the configured source language instead of translating the website 
   await import('../src/platforms/youtube/page');
   controller = new CaptionController(
     createYoutubePlatform,
-    publicSettings({ ...DEFAULT_SETTINGS, apiKey: 'key', model: 'model' }),
+    publicSettings({ ...consentedSettings, apiKey: 'key', model: 'model' }),
   );
   await vi.advanceTimersByTimeAsync(1500);
   expect([...lines()].map((line) => line.hidden)).toEqual([true, true]);
@@ -630,13 +636,19 @@ it('keeps the YouTube source across target/provider/style changes, seeks, blob r
   );
   vi.stubGlobal('fetch', fetch);
   await import('../src/platforms/youtube/page');
-  const saved = { ...DEFAULT_SETTINGS, apiKey: 'key', model: 'model' };
+  const saved = { ...consentedSettings, apiKey: 'key', model: 'model' };
   controller = new CaptionController(createYoutubePlatform, publicSettings(saved));
   await vi.advanceTimersByTimeAsync(0);
   expect(fetch).toHaveBeenCalledTimes(1);
   for (const next of [
     { ...saved, targetLanguage: 'zh-TW' },
-    { ...saved, model: 'other', baseUrl: 'https://other.example/v1', apiKey: 'other' },
+    {
+      ...saved,
+      model: 'other',
+      baseUrl: 'https://other.example/v1',
+      apiKey: 'other',
+      providerConsent: 'https://other.example',
+    },
     { ...saved, original: { ...saved.original, size: 36 } },
   ]) {
     controller.update(publicSettings(next));

@@ -12,13 +12,13 @@ Subline 是一个 Chrome 扩展，在 YouTube、HBO Max 和 X 的视频上显示
 
 在你开启了 Subline 的视频网站上，扩展从字幕文件或播放器显示的字幕中读取原文。扩展只从视频网站给出的地址下载字幕文件。
 
-你开启 Subline 并填好 API 设置后，扩展把即将播放的字幕原文发到你填写的 API 地址，请模型翻译。同一个请求还带有你的 API Key、Model ID、原文和译文的语言名称，以及一段固定的翻译要求。请求不包含视频地址、视频标题、你的视频网站账号或浏览记录。
+你开启 Subline、填好 API 设置，并在设置页的「数据使用说明」里勾选同意后，扩展把即将播放的字幕原文发到你填写的 API 地址，请模型翻译。没有同意时扩展不发送字幕；换成另一个域名的 Base URL 后要重新同意。同一个请求还带有你的 API Key、Model ID、原文和译文的语言名称，以及一段固定的翻译要求。请求不包含视频地址、视频标题、你的视频网站账号或浏览记录。
 
 扩展把字幕原文和译文缓存在 Chrome 的会话存储 chrome.storage.session 中，回看时不用重新请求。会话存储只在内存中，不写入磁盘。
 
 ### API 设置
 
-你填写的 Base URL、API Key 和 Model ID 保存在本机 Chrome 的扩展存储 chrome.storage.local 中，不会同步到其他设备。扩展先用 AES-GCM 加密 API Key，再写入存储，Base URL 和 Model ID 不加密。加密密钥由扩展在本机生成，以不可导出的形式保存在扩展自己的 IndexedDB 中，任何脚本都读不出密钥本身。视频网站的页面读不到 API Key，扩展在视频页面里运行的脚本也读不到。扩展只在三种请求里把 API Key 发给你填写的 API 地址，分别是翻译字幕、获取模型列表和测试连接。测试连接发送一句固定的英文例句，不发送字幕。
+你填写的 Base URL、API Key 和 Model ID 保存在本机 Chrome 的扩展存储 chrome.storage.local 中，不会同步到其他设备。扩展先用 AES-GCM 加密 API Key，再写入存储，Base URL 和 Model ID 不加密。加密密钥由扩展在本机生成，以不可导出的形式保存在扩展自己的 IndexedDB 中，任何脚本都读不出密钥本身。你同意发送字幕的 API 地址也保存在 chrome.storage.local 中，只记录协议、域名和端口。视频网站的页面读不到 API Key，扩展在视频页面里运行的脚本也读不到。扩展只在三种请求里把 API Key 发给你填写的 API 地址，分别是翻译字幕、获取模型列表和测试连接。测试连接发送一句固定的英文例句，不发送字幕。
 
 ### 模型列表
 
@@ -50,6 +50,7 @@ Subline 不使用统计分析、广告、错误上报或远程代码。Subline �
 
 - 浏览器关闭，或扩展重新加载、更新、停用时，Chrome 会清空字幕原文和译文缓存。
 - API 设置、加密密钥、模型列表、显示设置和用量统计保留在本机，直到你删除。
+- 要撤回同意，在设置页取消勾选后保存。扩展会停止发送字幕，并取消还没完成的翻译请求。
 - 要删除 API Key，在设置页清空 API Key 后保存。加密密钥和旧 API Key 对应的模型列表缓存会保留到你移除扩展。
 - 要删除全部本地数据，在 `chrome://extensions` 中移除 Subline，Chrome 会一并删除扩展保存的全部数据。
 - 已经发给 API 服务的数据由该服务保管，Subline 无法删除，请按服务商提供的方式处理。
@@ -86,13 +87,13 @@ Subline is a Chrome extension that shows bilingual subtitles on YouTube, HBO Max
 
 On video sites where Subline is turned on, the extension reads the original subtitles from subtitle files or from the subtitles the player shows. It downloads subtitle files only from the addresses the video site provides.
 
-After you turn Subline on and fill in the API settings, the extension sends the text of upcoming subtitles to the API address you entered and asks the model to translate it. Each request also carries your API key, the model ID, the names of the source and target languages, and fixed translation instructions. Requests do not include the video address, the video title, your video site account or your browsing history.
+After you turn Subline on, fill in the API settings and tick the consent box under 数据使用说明 (data use) on the settings page, the extension sends the text of upcoming subtitles to the API address you entered and asks the model to translate it. Without that consent the extension sends no subtitles, and a base URL on a different host needs consent again. Each request also carries your API key, the model ID, the names of the source and target languages, and fixed translation instructions. Requests do not include the video address, the video title, your video site account or your browsing history.
 
 The extension caches subtitle text and translations in Chrome session storage, chrome.storage.session, so replayed subtitles need no new request. Session storage lives in memory and is never written to disk.
 
 ### API settings
 
-Chrome stores the base URL, API key and model ID you enter in chrome.storage.local, inside your Chrome profile on this device, and does not sync them to other devices. The extension encrypts the API key with AES-GCM before writing it to storage. It does not encrypt the base URL or model ID. The extension generates the encryption key on this device and keeps it in its own IndexedDB as a non-exportable key, so no script can read the key itself. Video site pages cannot read the API key, and neither can the scripts the extension runs inside those pages. The extension sends the API key only to the API address you entered, in three kinds of requests: translating subtitles, fetching the model list and testing the connection. The connection test sends a fixed English sentence, not subtitles.
+Chrome stores the base URL, API key and model ID you enter in chrome.storage.local, inside your Chrome profile on this device, and does not sync them to other devices. The extension encrypts the API key with AES-GCM before writing it to storage. It does not encrypt the base URL or model ID. The extension generates the encryption key on this device and keeps it in its own IndexedDB as a non-exportable key, so no script can read the key itself. chrome.storage.local also records the API address you agreed to send subtitles to, as its scheme, host and port only. Video site pages cannot read the API key, and neither can the scripts the extension runs inside those pages. The extension sends the API key only to the API address you entered, in three kinds of requests: translating subtitles, fetching the model list and testing the connection. The connection test sends a fixed English sentence, not subtitles.
 
 ### Model list
 
@@ -124,6 +125,7 @@ The extension accepts only HTTPS base URLs, so your API key and subtitle text tr
 
 - Chrome clears the subtitle and translation cache when the browser closes or when the extension is reloaded, updated or disabled.
 - API settings, the encryption key, model lists, display settings and usage counts stay on this device until you delete them.
+- To withdraw consent, untick the box on the settings page and save. The extension stops sending subtitles and cancels translation requests that have not finished.
 - To delete your API key, clear the API Key field on the settings page and save. The encryption key and the model lists cached for the old API key stay until you remove the extension.
 - To delete all local data, remove Subline at `chrome://extensions`. Chrome deletes everything the extension stored.
 - Subline cannot delete data already sent to your API service. Use that provider's own deletion options.

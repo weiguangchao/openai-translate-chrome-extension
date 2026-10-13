@@ -1,6 +1,7 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { DEFAULT_SETTINGS, type Settings } from '../src/shared/settings';
+import { type Settings } from '../src/shared/settings';
 import { extensionStorage } from './fixtures/extension-storage';
+import { consentedSettings } from './fixtures/settings';
 import { packedCues, providerReply, requestedTexts, structuredReply } from './fixtures/provider';
 
 afterEach(async () => {
@@ -14,7 +15,7 @@ type Reply = { ok: boolean; data?: unknown; error?: string };
 it('answers cache-only lookups without starting model work and reuses background translations', async () => {
   const fetch = vi.fn().mockResolvedValue(providerReply(['Hello'], () => '你好'));
   vi.stubGlobal('fetch', fetch);
-  const send = await loadBackground({ ...DEFAULT_SETTINGS, apiKey: 'key', model: 'model' });
+  const send = await loadBackground({ ...consentedSettings, apiKey: 'key', model: 'model' });
   await expect(send({ type: 'translate', text: 'Hello', cacheOnly: true })).resolves.toEqual({
     ok: true,
     data: null,
@@ -82,7 +83,7 @@ it('keeps credentials in the background and rejects content-script requests to u
   const fetch = vi.fn().mockResolvedValue(providerReply(['Hello'], () => '你好'));
   vi.stubGlobal('fetch', fetch);
   const send = await loadBackground({
-    ...structuredClone(DEFAULT_SETTINGS),
+    ...structuredClone(consentedSettings),
     apiKey: 'trusted-secret',
     model: 'saved-model',
   });
@@ -107,6 +108,29 @@ it('keeps credentials in the background and rejects content-script requests to u
   expect(fetch.mock.calls[0][1].headers.Authorization).toBe('Bearer trusted-secret');
 });
 
+it.each([
+  { name: 'before the viewer agrees', providerConsent: '' },
+  { name: 'when the viewer agreed to another Provider', providerConsent: 'https://other.example' },
+])('sends no caption to the Provider $name', async ({ providerConsent }) => {
+  const fetch = vi.fn().mockResolvedValue(providerReply(['Hello'], () => '你好'));
+  vi.stubGlobal('fetch', fetch);
+  const send = await loadBackground({
+    ...consentedSettings,
+    apiKey: 'key',
+    model: 'model',
+    providerConsent,
+  });
+  await expect(send({ type: 'settings' })).resolves.toMatchObject({
+    data: { configured: false },
+  });
+  const refused = { ok: false, error: '请先在设置中同意将字幕发送给 Provider。' };
+  await expect(send({ type: 'translate', text: 'Hello' })).resolves.toEqual(refused);
+  await expect(
+    send({ type: 'prefetch', time: 0, rate: 1, cues: packedCues(['Hello']) }),
+  ).resolves.toEqual(refused);
+  expect(fetch).not.toHaveBeenCalled();
+});
+
 it('answers a prefetch with translations in the order asked, settling cues a later window drops', async () => {
   const pending: { texts: string[]; resolve: (value: Response) => void }[] = [];
   const fetch = vi.fn(
@@ -115,7 +139,7 @@ it('answers a prefetch with translations in the order asked, settling cues a lat
   );
   vi.stubGlobal('fetch', fetch);
   const send = await loadBackground({
-    ...structuredClone(DEFAULT_SETTINGS),
+    ...structuredClone(consentedSettings),
     apiKey: 'key',
     model: 'model',
   });
@@ -158,7 +182,7 @@ it('starts a new page in the same tab without the pause the previous page left',
   );
   vi.stubGlobal('fetch', fetch);
   const send = await loadBackground({
-    ...structuredClone(DEFAULT_SETTINGS),
+    ...structuredClone(consentedSettings),
     apiKey: 'key',
     model: 'model',
   });
@@ -181,7 +205,7 @@ it('packs a prefetch by its time span and rejects a snapshot without usable time
   });
   vi.stubGlobal('fetch', fetch);
   const send = await loadBackground({
-    ...structuredClone(DEFAULT_SETTINGS),
+    ...structuredClone(consentedSettings),
     apiKey: 'key',
     model: 'model',
   });
@@ -215,7 +239,7 @@ it('shares one translation between duplicate captions across messages', async ()
     .fn()
     .mockImplementation(async () => structuredReply([{ id: 0, translation: '完整译文' }]));
   vi.stubGlobal('fetch', fetch);
-  const send = await loadBackground({ ...DEFAULT_SETTINGS, apiKey: 'key', model: 'model' });
+  const send = await loadBackground({ ...consentedSettings, apiKey: 'key', model: 'model' });
   await expect(
     send({ type: 'prefetch', time: 0, rate: 1, cues: packedCues(['Same.', 'Same.', 'Same.']) }),
   ).resolves.toEqual({ ok: true, data: ['完整译文', '完整译文', '完整译文'] });
@@ -236,6 +260,7 @@ it.each([
   { name: 'model', patch: { model: 'new-model' }, abort: true },
   { name: 'credentials', patch: { apiKey: 'new-secret' }, abort: true },
   { name: 'provider', patch: { baseUrl: 'https://other.example/v1' }, abort: true },
+  { name: 'withdrawn consent', patch: { providerConsent: '' }, abort: true },
   { name: 'extension disabled', patch: { enabled: false }, abort: true },
   { name: 'active platform disabled', patch: { youtube: false }, abort: true },
   { name: 'other platform disabled', patch: { hbo: false }, abort: false },
@@ -249,7 +274,7 @@ it.each([
     });
   });
   vi.stubGlobal('fetch', fetch);
-  const initial = { ...DEFAULT_SETTINGS, apiKey: 'old-secret', model: 'model' };
+  const initial = { ...consentedSettings, apiKey: 'old-secret', model: 'model' };
   const send = await loadBackground(initial);
   const pending = send({ type: 'translate', text: 'Original.' });
   await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
@@ -281,7 +306,7 @@ it('retains shared work when only one consuming platform is disabled', async () 
     });
   });
   vi.stubGlobal('fetch', fetch);
-  const initial = { ...DEFAULT_SETTINGS, apiKey: 'key', model: 'model' };
+  const initial = { ...consentedSettings, apiKey: 'key', model: 'model' };
   const send = await loadBackground(initial);
   const youtube = send({ type: 'translate', text: 'Shared.' });
   const hbo = send(
@@ -300,7 +325,7 @@ it('retains shared work when only one consuming platform is disabled', async () 
 });
 
 it('sends only an opaque translation revision, retaining it for style changes', async () => {
-  const initial = { ...DEFAULT_SETTINGS, apiKey: 'secret-key', model: 'private-model' };
+  const initial = { ...consentedSettings, apiKey: 'secret-key', model: 'private-model' };
   const send = await loadBackground(initial);
   const before = await send({ type: 'settings' });
   const { saveSettings } = await import('../src/shared/storage');
@@ -321,7 +346,7 @@ it('sends only an opaque translation revision, retaining it for style changes', 
 
 it('prints a page trace event with its tab and only the known fields', async () => {
   const debug = vi.spyOn(console, 'debug').mockImplementation(() => {});
-  const send = await loadBackground({ ...DEFAULT_SETTINGS, apiKey: 'trusted-secret', model: 'm' });
+  const send = await loadBackground({ ...consentedSettings, apiKey: 'trusted-secret', model: 'm' });
   const event = {
     type: 'trace',
     run: 'run-1',
@@ -350,7 +375,7 @@ it('keeps translations in session storage, without the API key, for a restarted 
   const fetch = vi.fn().mockResolvedValue(providerReply(['Hello'], () => '你好'));
   vi.stubGlobal('fetch', fetch);
   const session = new Map<string, unknown>();
-  const saved = { ...DEFAULT_SETTINGS, apiKey: 'trusted-secret', model: 'model' };
+  const saved = { ...consentedSettings, apiKey: 'trusted-secret', model: 'model' };
   let send = await loadBackground(saved, session);
   await expect(send({ type: 'translate', text: 'Hello' })).resolves.toEqual({
     ok: true,

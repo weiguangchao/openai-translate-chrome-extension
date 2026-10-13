@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { CaptionController } from '../src/core/controller';
 import type { CaptionSource, Platform } from '../src/core/platform';
-import { DEFAULT_SETTINGS, publicSettings } from '../src/shared/settings';
+import { publicSettings } from '../src/shared/settings';
+import { consentedSettings } from './fixtures/settings';
 
 let controller: CaptionController | undefined;
 let source: CaptionSource;
@@ -64,7 +65,7 @@ it('releases a DOM-only consumer when the controller is destroyed', async () => 
   };
   controller = new CaptionController(
     () => platform,
-    publicSettings({ ...DEFAULT_SETTINGS, apiKey: 'key', model: 'model' }),
+    publicSettings({ ...consentedSettings, apiKey: 'key', model: 'model' }),
   );
   await vi.advanceTimersByTimeAsync(450);
   expect(lines()).toEqual(['DOM caption', '译文 DOM caption']);
@@ -78,7 +79,7 @@ it('drives any platform through the waiting, live and timeline caption sources',
   const layer = document.getElementById('layer')!;
   controller = new CaptionController(
     () => platform,
-    publicSettings({ ...DEFAULT_SETTINGS, apiKey: 'key', model: 'model' }),
+    publicSettings({ ...consentedSettings, apiKey: 'key', model: 'model' }),
   );
   await vi.advanceTimersByTimeAsync(450);
   expect(lines()).toEqual([null, null]);
@@ -134,7 +135,7 @@ it('shows no source while the caption source is still being checked', async () =
   ];
   controller = new CaptionController(
     () => platform,
-    publicSettings({ ...DEFAULT_SETTINGS, apiKey: 'key', model: 'model' }),
+    publicSettings({ ...consentedSettings, apiKey: 'key', model: 'model' }),
   );
   for (const next of checking) {
     source = next;
@@ -149,7 +150,7 @@ it('shows no source while the caption source is still being checked', async () =
 });
 
 it('updates styles in place while a translation is pending and shows its original result', async () => {
-  const settings = { ...DEFAULT_SETTINGS, apiKey: 'key', model: 'model' };
+  const settings = { ...consentedSettings, apiKey: 'key', model: 'model' };
   let finish!: (value: { ok: boolean; data: string }) => void;
   sendMessage.mockImplementationOnce(() => Promise.resolve({ ok: true, data: null }));
   sendMessage.mockImplementationOnce(
@@ -187,7 +188,7 @@ it('updates styles in place while a translation is pending and shows its origina
 it.each(['translation', 'source'])(
   'discards a late cached response after the %s identity changes',
   async (change) => {
-    const settings = { ...DEFAULT_SETTINGS, apiKey: 'key', model: 'model' };
+    const settings = { ...consentedSettings, apiKey: 'key', model: 'model' };
     const replies: ((value: { ok: boolean; data: string }) => void)[] = [];
     sendMessage.mockImplementation((message) =>
       message.type === 'translate'
@@ -247,7 +248,7 @@ it('retries a paused cache lookup invalidated by a later seek event', async () =
   };
   controller = new CaptionController(
     () => platform,
-    publicSettings({ ...DEFAULT_SETTINGS, apiKey: 'key', model: 'model' }),
+    publicSettings({ ...consentedSettings, apiKey: 'key', model: 'model' }),
   );
   await vi.advanceTimersByTimeAsync(0);
   expect(replies).toHaveLength(1);
@@ -287,7 +288,7 @@ it('keeps a displayed translation when playback resumes through a rebuffer seek'
   };
   controller = new CaptionController(
     () => platform,
-    publicSettings({ ...DEFAULT_SETTINGS, apiKey: 'key', model: 'model' }),
+    publicSettings({ ...consentedSettings, apiKey: 'key', model: 'model' }),
   );
   await vi.advanceTimersByTimeAsync(0);
   expect(lines()).toEqual(['Already translated.', '译文 Already translated.']);
@@ -316,7 +317,7 @@ it('reports what the viewer sees only while the page asks for a trace', async ()
   };
   controller = new CaptionController(
     () => platform,
-    publicSettings({ ...DEFAULT_SETTINGS, apiKey: 'key', model: 'model' }),
+    publicSettings({ ...consentedSettings, apiKey: 'key', model: 'model' }),
   );
   await vi.advanceTimersByTimeAsync(450);
   expect(lines()).toEqual(['Timed cue.', '译文 Timed cue.']);
@@ -358,7 +359,7 @@ it('treats a translation that reads like the loading placeholder as a translatio
   };
   controller = new CaptionController(
     () => platform,
-    publicSettings({ ...DEFAULT_SETTINGS, apiKey: 'key', model: 'model' }),
+    publicSettings({ ...consentedSettings, apiKey: 'key', model: 'model' }),
   );
   await vi.advanceTimersByTimeAsync(450);
   const traced = () =>
@@ -390,7 +391,7 @@ it('keeps ready captions when the playback rate changes and plans at the new rat
   };
   controller = new CaptionController(
     () => platform,
-    publicSettings({ ...DEFAULT_SETTINGS, apiKey: 'key', model: 'model' }),
+    publicSettings({ ...consentedSettings, apiKey: 'key', model: 'model' }),
   );
   await vi.advanceTimersByTimeAsync(0);
   expect(lines()).toEqual(['Current caption.', '译文 Current caption.']);
@@ -428,7 +429,7 @@ it('keeps captions inside a fullscreen ancestor and restores native layers for v
   };
   controller = new CaptionController(
     () => platform,
-    publicSettings({ ...DEFAULT_SETTINGS, apiKey: 'key', model: 'model' }),
+    publicSettings({ ...consentedSettings, apiKey: 'key', model: 'model' }),
   );
   await vi.advanceTimersByTimeAsync(0);
   expect(lines()).toEqual(['Visible caption.', '译文 Visible caption.']);
@@ -450,7 +451,7 @@ it('keeps captions inside a fullscreen ancestor and restores native layers for v
 it('keeps the overlay in the player when the whole document is fullscreen', async () => {
   controller = new CaptionController(
     () => platform,
-    publicSettings({ ...DEFAULT_SETTINGS, apiKey: 'key', model: 'model' }),
+    publicSettings({ ...consentedSettings, apiKey: 'key', model: 'model' }),
   );
   const host = document.querySelector('#player > [data-subline-overlay]');
   expect(host).not.toBeNull();

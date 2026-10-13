@@ -96,6 +96,34 @@ it.each(['preview', 'load-error', 'save'] as const)(
   },
 );
 
+it('records consent for the Provider host only when the viewer ticks it and asks again for a new host', async () => {
+  await render();
+  const consent = () => document.querySelector<HTMLInputElement>('.consent-check input')!;
+  expect(consent().checked).toBe(false);
+  expect(document.querySelector('.consent-check')?.textContent).toContain('api.openai.com');
+  await click('[aria-label="启用双语字幕"]');
+  await click('.save-button');
+  expect(saveSettings).toHaveBeenLastCalledWith(expect.objectContaining({ providerConsent: '' }));
+  expect(document.querySelector('.settings-alert')?.textContent).toContain(
+    '同意数据使用说明后，才会翻译字幕',
+  );
+  await act(async () => consent().click());
+  await click('.save-button');
+  expect(saveSettings).toHaveBeenLastCalledWith(
+    expect.objectContaining({ providerConsent: 'https://api.openai.com' }),
+  );
+  await act(async () => {
+    const input = document.querySelector<HTMLInputElement>('#base-url')!;
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(
+      input,
+      'https://other.example/v1',
+    );
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  expect(consent().checked).toBe(false);
+  expect(document.querySelector('.consent-check')?.textContent).toContain('other.example');
+});
+
 it('shows only a brief connection success alert and gives its replacement a full lifetime', async () => {
   vi.mocked(apiAction)
     .mockResolvedValueOnce('世界充满了美妙的事物。')

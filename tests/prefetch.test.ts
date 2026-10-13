@@ -5,14 +5,15 @@ import { maxInFlightRequests } from '../src/shared/limits';
 import { providerSendWindowMs } from '../src/shared/provider/transport';
 import { createHboPlatform } from '../src/platforms/hbo/platform';
 import { NativeTimeline } from '../src/core/native';
-import { DEFAULT_SETTINGS, publicSettings } from '../src/shared/settings';
+import { publicSettings } from '../src/shared/settings';
 import { extensionStorage } from './fixtures/extension-storage';
+import { consentedSettings } from './fixtures/settings';
 import { providerReply, requestedTexts } from './fixtures/provider';
 import { longCaption, longCaptionParts, longTranslations } from './fixtures/long-caption';
 
 let controller: CaptionController | undefined;
 let video: HTMLVideoElement;
-const saved = { ...DEFAULT_SETTINGS, apiKey: 'test-key', model: 'test-model' };
+const saved = { ...consentedSettings, apiKey: 'test-key', model: 'test-model' };
 const pending: {
   texts: string[];
   signal: AbortSignal;

@@ -18,6 +18,7 @@ Each rule names what fails when it is broken. When the developer corrects a mist
 | Provider HTTP goes through `src/shared/provider/transport.ts`. | ESLint `local/provider-transport` |
 | Provider requests leave the computer only over HTTPS; plain HTTP goes only to `localhost` or `127.0.0.1`, or the Chrome Web Store rejects the extension. | `validateBaseUrl` in `src/shared/settings.ts`; `optional_host_permissions` in `public/manifest.json`; `tests/api.test.ts` |
 | The API key reaches `chrome.storage` only encrypted under the device key. | `saveSettings` in `src/shared/storage.ts`; `tests/settings-storage.test.ts` |
+| No caption reaches the Provider until the user has agreed, on the settings page, to send captions to that Provider's origin. | `hasProviderConsent` in `src/extension/background.ts`; `tests/background.test.ts` |
 | Caption queues call `translateCaptionBatch`, never `translate`. | ESLint `no-restricted-imports` in `src/extension/queue.ts` |
 | Imports flow platforms → core → shared, and platforms never import each other. | ESLint `local/dependency-boundaries`; `tests/dependency-boundaries.test.ts` |
 | TypeScript has no comments. | ESLint `local/no-comments` |

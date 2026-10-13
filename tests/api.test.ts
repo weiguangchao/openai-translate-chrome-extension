@@ -430,6 +430,7 @@ describe('saved configuration contract', () => {
   it('bounds persisted styles and strips service secrets from content-script settings', () => {
     const settings = normalizeSettings({
       ...config(),
+      providerConsent: 'https://provider.example',
       original: { color: 'url(https://tracker.example)', size: 999 },
       translation: { color: '#ffe3a3', size: 0 },
       backgroundOpacity: 1000,
@@ -445,9 +446,9 @@ describe('saved configuration contract', () => {
     expect(settings.sourceLanguage).toBe('en');
     const exposed = publicSettings(settings);
     expect(exposed.configured).toBe(true);
-    for (const secret of ['apiKey', 'baseUrl', 'model', 'apiFormat'])
+    for (const secret of ['apiKey', 'baseUrl', 'model', 'providerConsent', 'apiFormat'])
       expect(exposed).not.toHaveProperty(secret);
-    expect(JSON.stringify(exposed)).not.toContain('private-test-key');
+    expect(JSON.stringify(exposed)).not.toMatch(/private-test-key|provider\.example/);
   });
 
   it.each([

@@ -9,6 +9,7 @@ import {
 import { platformForUrl, platformMatches, type PlatformId } from '../shared/platforms';
 import {
   classifySettingsChange,
+  hasProviderConsent,
   normalizeSettings,
   publicSettings,
   STORAGE_KEY,
@@ -32,6 +33,7 @@ const ready = (async () => {
 
 function requireEnabled(platform: PlatformId): void {
   if (!settings.enabled || !settings[platform]) throw new Error('双语字幕已关闭。');
+  if (!hasProviderConsent(settings)) throw new Error('请先在设置中同意将字幕发送给 Provider。');
 }
 
 async function contentRequest(
@@ -109,7 +111,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
     const change = classifySettingsChange(settings, next);
     settings = next;
     if (change.translation || change.source) translationRevision = crypto.randomUUID();
-    if (change.translation || change.source || !settings.enabled) {
+    if (change.translation || change.source || !settings.enabled || !hasProviderConsent(settings)) {
       queue.reset();
       consumers.clear();
     } else if (change.availability) {
