@@ -7,6 +7,7 @@ export interface Settings {
   baseUrl: string;
   apiKey: string;
   model: string;
+  providerConsent: string;
   sourceLanguage: string;
   targetLanguage: string;
   original: SubtitleStyle;
@@ -17,7 +18,7 @@ export interface Settings {
   hbo: boolean;
   x: boolean;
 }
-export type PublicSettings = Omit<Settings, 'apiKey' | 'baseUrl' | 'model'> & {
+export type PublicSettings = Omit<Settings, 'apiKey' | 'baseUrl' | 'model' | 'providerConsent'> & {
   configured: boolean;
   translationRevision: string;
 };
@@ -31,6 +32,7 @@ export const DEFAULT_SETTINGS: Settings = {
   baseUrl: 'https://api.openai.com/v1',
   apiKey: '',
   model: '',
+  providerConsent: '',
   sourceLanguage: 'en',
   targetLanguage: 'zh-CN',
   original: { color: '#FFFFFF', size: 24 },
@@ -47,7 +49,7 @@ export function normalizeSettings(value: unknown): Settings {
   const result = structuredClone(DEFAULT_SETTINGS);
   for (const key of ['enabled', 'youtube', 'hbo', 'x'] as const)
     if (typeof input[key] === 'boolean') result[key] = input[key];
-  for (const key of ['baseUrl', 'apiKey', 'model'] as const)
+  for (const key of ['baseUrl', 'apiKey', 'model', 'providerConsent'] as const)
     if (typeof input[key] === 'string') result[key] = input[key];
   for (const key of ['sourceLanguage', 'targetLanguage'] as const)
     if (LANGUAGES.some((l) => l.value === input[key])) result[key] = input[key]!;
@@ -68,11 +70,18 @@ export function normalizeSettings(value: unknown): Settings {
   return result;
 }
 export function publicSettings(settings: Settings, translationRevision = ''): PublicSettings {
-  const { apiKey: _key, baseUrl: _url, model: _model, ...rest } = settings;
+  const {
+    apiKey: _key,
+    baseUrl: _url,
+    model: _model,
+    providerConsent: _consent,
+    ...rest
+  } = settings;
   return {
     ...rest,
     translationRevision,
-    configured: Boolean(settings.apiKey.trim() && settings.model.trim()),
+    configured:
+      Boolean(settings.apiKey.trim() && settings.model.trim()) && hasProviderConsent(settings),
   };
 }
 const localHttpHosts = ['localhost', '127.0.0.1'];
@@ -96,6 +105,17 @@ export function validateBaseUrl(raw: string): URL {
     throw new Error('请填写接口根地址，例如 /v1，不要包含 /chat/completions 或 /models。');
   return url;
 }
+export function providerOrigin(baseUrl: string): string {
+  try {
+    return validateBaseUrl(baseUrl).origin;
+  } catch {
+    return '';
+  }
+}
+export function hasProviderConsent(settings: Settings): boolean {
+  const origin = providerOrigin(settings.baseUrl);
+  return Boolean(origin) && settings.providerConsent === origin;
+}
 export function validateSettings(settings: Settings, requireConnection = false): void {
   validateBaseUrl(settings.baseUrl);
   if (settings.sourceLanguage === settings.targetLanguage)
@@ -117,6 +137,7 @@ const SETTING_SCOPES: Record<keyof Settings, SettingScope> = {
   baseUrl: 'translation',
   apiKey: 'credentials',
   model: 'translation',
+  providerConsent: 'availability',
   sourceLanguage: 'source',
   targetLanguage: 'translation',
   original: 'style',

@@ -4,11 +4,12 @@ import { TranslationQueue } from '../src/extension/queue';
 import { parseXSubtitlePlaylist, xMediaUrl } from '../src/platforms/x/captions';
 import { createXPlatform } from '../src/platforms/x/platform';
 import { providerSendWindowMs } from '../src/shared/provider/transport';
-import { DEFAULT_SETTINGS, publicSettings } from '../src/shared/settings';
+import { publicSettings } from '../src/shared/settings';
+import { consentedSettings } from './fixtures/settings';
 import { providerReply, requestedTexts } from './fixtures/provider';
 
 const media = 'https://video.twimg.com/amplify_video/100';
-const settings = { ...DEFAULT_SETTINGS, apiKey: 'test', model: 'model' };
+const settings = { ...consentedSettings, apiKey: 'test', model: 'model' };
 
 interface Track {
   name: string;

@@ -601,6 +601,53 @@ button:hover:not(:disabled) {
   color: var(--accent);
   font-size: 12px;
 }
+.data-notice {
+  margin-top: 19px;
+  padding: 14px 15px;
+  border: 1px solid #e4e0fb;
+  border-radius: 9px;
+  background: #faf9ff;
+}
+.data-notice h3 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 7px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.data-notice h3 svg {
+  color: var(--accent);
+}
+.data-notice ul {
+  margin: 0;
+  padding-left: 18px;
+  color: #5d6175;
+  font-size: 11px;
+  line-height: 1.75;
+}
+.consent-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 11px;
+  padding-top: 11px;
+  border-top: 1px solid #ebe8fb;
+  cursor: pointer;
+  line-height: 1.5;
+}
+.consent-check input[type='checkbox'] {
+  width: 15px;
+  height: 15px;
+  margin: 2px 0 0;
+  flex-shrink: 0;
+  accent-color: var(--accent);
+  cursor: inherit;
+}
+.consent-check:has(input:disabled) {
+  color: var(--muted);
+  cursor: not-allowed;
+}
 .api-footer {
   border-top: 1px solid #eff0f5;
   margin: 19px -23px -23px;

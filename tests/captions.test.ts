@@ -3,10 +3,11 @@ import { CaptionController } from '../src/core/controller';
 import { createHboPlatform } from '../src/platforms/hbo/platform';
 import { readHboCaption } from '../src/platforms/hbo/player';
 import { DEFAULT_SETTINGS, publicSettings } from '../src/shared/settings';
+import { consentedSettings } from './fixtures/settings';
 
 let controller: CaptionController | undefined;
 const settings = () =>
-  publicSettings({ ...structuredClone(DEFAULT_SETTINGS), apiKey: 'secret', model: 'test' });
+  publicSettings({ ...structuredClone(consentedSettings), apiKey: 'secret', model: 'test' });
 const captionLayer = () =>
   document.querySelector<HTMLElement>('[data-testid="caption_renderer_overlay"]')!;
 beforeEach(() => {

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ArrowLeftRight, Check, LockKeyhole, Settings2, Subtitles } from 'lucide-react';
-import { DEFAULT_SETTINGS, LANGUAGES, type Settings } from '../shared/settings';
+import { DEFAULT_SETTINGS, hasProviderConsent, LANGUAGES, type Settings } from '../shared/settings';
 import { isExtension, loadSettings, saveSettings } from '../shared/storage';
 import {
   formatExactTokens,
@@ -230,6 +230,9 @@ export function Popup() {
           <p className="popup-setup-hint">
             请在设置中配置{settings.model.trim() ? ' API Key' : '翻译服务'}。
           </p>
+        )}
+        {ready && configured && !hasProviderConsent(settings) && (
+          <p className="popup-setup-hint">请在设置中同意将字幕发送给 Provider。</p>
         )}
       </section>
 
