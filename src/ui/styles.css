@@ -873,37 +873,39 @@ button:hover:not(:disabled) {
   font-size: 12px;
   line-height: 1.9;
 }
-.about-links {
-  display: grid;
-  gap: 10px;
-}
-.about-links a {
-  display: flex;
+.repo-link {
+  width: 32px;
+  height: 32px;
+  margin-top: -4px;
+  margin-left: auto;
+  border: 1px solid #e4e6ee;
+  border-radius: 8px;
+  color: #5c6172;
+  display: inline-flex;
   align-items: center;
-  gap: 12px;
-  padding: 13px 15px;
-  border: 1px solid var(--line);
-  border-radius: 9px;
-  color: var(--text);
-  transition:
-    border-color 0.15s,
-    background 0.15s;
+  justify-content: center;
+  flex-shrink: 0;
 }
-.about-links a:hover {
+.repo-link:hover {
   border-color: #d9d3f7;
   background: #faf9ff;
+  color: #6554d9;
 }
-.about-links a > svg {
-  flex-shrink: 0;
-  color: #75718d;
+.about-feedback {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 14px;
 }
-.about-links a > svg:last-child {
-  margin-left: auto;
-  color: #a0a2b1;
+.about-feedback-link {
+  color: #9aa0b2;
+  font-size: 12px;
+  font-weight: 400;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
 }
-.about-links strong {
-  font-size: 13px;
-  font-weight: 600;
+.about-feedback-link:hover {
+  color: #71758a;
 }
 .alert-layer {
   position: fixed;

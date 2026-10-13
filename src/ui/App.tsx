@@ -6,14 +6,12 @@ import {
   CircleHelp,
   Eye,
   EyeOff,
-  ExternalLink,
   Globe2,
   Info,
   Languages,
   Layers3,
   LoaderCircle,
   LockKeyhole,
-  MessageSquare,
   MonitorPlay,
   PlugZap,
   RefreshCw,
@@ -77,12 +75,14 @@ function Section({
   icon,
   title,
   description,
+  action,
   children,
   className = '',
 }: {
   icon: ReactNode;
   title: string;
   description?: string;
+  action?: ReactNode;
   children: ReactNode;
   className?: string;
 }) {
@@ -94,6 +94,7 @@ function Section({
           <h2>{title}</h2>
           {description && <p>{description}</p>}
         </div>
+        {action}
       </div>
       {children}
     </section>
@@ -655,6 +656,17 @@ export function App() {
                     description={
                       isExtension ? `版本 ${chrome.runtime.getManifest().version}` : undefined
                     }
+                    action={
+                      <a
+                        className="repo-link"
+                        href={REPOSITORY_URL}
+                        target="_blank"
+                        rel="noreferrer"
+                        aria-label="GitHub 仓库"
+                      >
+                        <GithubMark />
+                      </a>
+                    }
                   >
                     <p className="about-intro">
                       在 YouTube、HBO Max 和 X 上看视频时，Subline 读取视频的原文字幕，用你自己的
@@ -671,18 +683,14 @@ export function App() {
                         Provider，设置保存在本机，API Key 加密保存。
                       </li>
                     </ul>
-                  </Section>
-                  <Section icon={<GithubMark />} title="项目与反馈">
-                    <div className="about-links">
-                      <a href={REPOSITORY_URL} target="_blank" rel="noreferrer">
-                        <GithubMark />
-                        <strong>GitHub 仓库</strong>
-                        <ExternalLink size={14} />
-                      </a>
-                      <a href={`${REPOSITORY_URL}/issues/new`} target="_blank" rel="noreferrer">
-                        <MessageSquare size={18} />
-                        <strong>问题反馈</strong>
-                        <ExternalLink size={14} />
+                    <div className="about-feedback">
+                      <a
+                        className="about-feedback-link"
+                        href={`${REPOSITORY_URL}/issues/new`}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        反馈
                       </a>
                     </div>
                   </Section>
