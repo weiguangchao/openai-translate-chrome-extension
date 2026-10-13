@@ -184,9 +184,6 @@ export function SubtitlePreview({ settings }: { settings: Settings }) {
         </div>
       </div>
       <div className="scene-bottom">
-        <span>
-          <Subtitles size={15} /> 双语字幕示例
-        </span>
         <button onClick={() => setSample((value) => 1 - value)}>
           切换示例 <span aria-hidden>↻</span>
         </button>
@@ -200,9 +197,6 @@ export function SubtitlePreview({ settings }: { settings: Settings }) {
           <h2>
             <Subtitles size={18} /> 字幕预览
           </h2>
-          <span className="live-label">
-            <i /> 实时更新
-          </span>
         </div>
         {scene(false)}
         <div className="preview-details">

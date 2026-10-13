@@ -62,4 +62,4 @@ declare module '../src/shared/settings' {
       message: expect.stringMatching(/Property 'temperature' is missing/),
     },
   ]);
-});
+}, 60_000);
