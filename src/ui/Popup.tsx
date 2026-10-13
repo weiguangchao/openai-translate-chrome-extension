@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ArrowLeftRight, Check, LockKeyhole, Settings2, Subtitles } from 'lucide-react';
+import { ArrowLeftRight, Settings2, Subtitles } from 'lucide-react';
 import { DEFAULT_SETTINGS, hasProviderConsent, LANGUAGES, type Settings } from '../shared/settings';
 import { isExtension, loadSettings, saveSettings } from '../shared/storage';
 import {
@@ -86,8 +86,7 @@ export function Popup() {
   const [usage, setUsage] = useState<TokenUsage>({ input: 0, output: 0, cache: 0 });
   const [ready, setReady] = useState(false);
   const [error, setError] = useState('');
-  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
-  const busy = saveStatus === 'saving';
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -119,7 +118,7 @@ export function Popup() {
     changes: Partial<Pick<Settings, 'enabled' | 'sourceLanguage' | 'targetLanguage'>>,
   ) {
     if (!ready || busy) return;
-    setSaveStatus('saving');
+    setBusy(true);
     setError('');
     try {
       const latest = await loadSettings();
@@ -129,16 +128,15 @@ export function Popup() {
         next.sourceLanguage === next.targetLanguage
       ) {
         setSettings(latest);
-        setSaveStatus('idle');
         setError('原文和译文语言需要不同。');
         return;
       }
       await saveSettings(next);
       setSettings(next);
-      setSaveStatus('saved');
     } catch {
-      setSaveStatus('idle');
       setError('保存失败，请重试。');
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -157,9 +155,13 @@ export function Popup() {
     <main className="popup" aria-label="Subline 控制面板" aria-busy={!ready || busy}>
       <header className="popup-header">
         <Logo small />
-        <button className="popup-settings" onClick={() => void options()}>
+        <button
+          className="popup-settings"
+          aria-label="设置"
+          title="设置"
+          onClick={() => void options()}
+        >
           <Settings2 size={16} aria-hidden />
-          设置
         </button>
       </header>
 
@@ -167,10 +169,7 @@ export function Popup() {
         <span className="popup-power-icon">
           <Subtitles size={20} aria-hidden />
         </span>
-        <div className="popup-power-label">
-          <h1>双语字幕</h1>
-          <p>{!ready ? '读取中…' : settings.enabled ? '已开启' : '已关闭'}</p>
-        </div>
+        <h1>双语字幕</h1>
         <fieldset disabled={!ready || busy}>
           <Toggle
             label="启用双语字幕"
@@ -183,7 +182,7 @@ export function Popup() {
       <fieldset className="popup-languages" disabled={!ready || busy} aria-label="翻译语言">
         <PopupLanguage
           id="popup-source-language"
-          label="原文语言"
+          label="原文"
           value={settings.sourceLanguage}
           otherLanguage={settings.targetLanguage}
           onChange={(sourceLanguage) => void update({ sourceLanguage })}
@@ -204,7 +203,7 @@ export function Popup() {
         </button>
         <PopupLanguage
           id="popup-target-language"
-          label="译文语言"
+          label="译文"
           value={settings.targetLanguage}
           otherLanguage={settings.sourceLanguage}
           onChange={(targetLanguage) => void update({ targetLanguage })}
@@ -213,19 +212,16 @@ export function Popup() {
       </fieldset>
 
       <section className="popup-model" aria-labelledby="popup-model-label">
-        <div className="popup-model-heading">
-          <h2 id="popup-model-label">Model ID</h2>
-          <span>
-            <LockKeyhole size={11} aria-hidden /> 只读
-          </span>
+        <div className="popup-model-row">
+          <h2 id="popup-model-label">Model</h2>
+          {ready && settings.model.trim() ? (
+            <code className="popup-model-id" title={settings.model}>
+              {settings.model}
+            </code>
+          ) : (
+            <p className="popup-model-empty">{ready ? '未配置' : '读取中…'}</p>
+          )}
         </div>
-        {ready && settings.model.trim() ? (
-          <code className="popup-model-id" title={settings.model}>
-            {settings.model}
-          </code>
-        ) : (
-          <p className="popup-model-empty">{ready ? '未配置' : '读取中…'}</p>
-        )}
         {ready && !configured && (
           <p className="popup-setup-hint">
             请在设置中配置{settings.model.trim() ? ' API Key' : '翻译服务'}。
@@ -238,18 +234,6 @@ export function Popup() {
 
       <PopupTokens usage={usage} ready={ready} />
 
-      <div className="popup-feedback" role="status">
-        {busy ? (
-          '正在保存…'
-        ) : saveStatus === 'saved' ? (
-          <>
-            <Check size={12} aria-hidden />
-            已保存
-          </>
-        ) : (
-          ''
-        )}
-      </div>
       {error && (
         <p role="alert" className="popup-error">
           {error}

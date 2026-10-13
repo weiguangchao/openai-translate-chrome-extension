@@ -6,12 +6,14 @@ import {
   CircleHelp,
   Eye,
   EyeOff,
+  ExternalLink,
   Globe2,
   Info,
   Languages,
   Layers3,
   LoaderCircle,
   LockKeyhole,
+  MessageSquare,
   MonitorPlay,
   PlugZap,
   RefreshCw,
@@ -39,6 +41,7 @@ import {
   saveSettings,
 } from '../shared/storage';
 import {
+  GithubMark,
   HboMark,
   LanguageSelect,
   Logo,
@@ -50,7 +53,8 @@ import {
 } from './components';
 import { useAlert } from './Alert';
 
-type Page = 'general' | 'appearance';
+type Page = 'general' | 'appearance' | 'about';
+const REPOSITORY_URL = 'https://github.com/weiguangchao/openai-translate-chrome-extension';
 const PAGES = [
   {
     id: 'general' as const,
@@ -61,6 +65,11 @@ const PAGES = [
     id: 'appearance' as const,
     name: '字幕样式',
     icon: SlidersHorizontal,
+  },
+  {
+    id: 'about' as const,
+    name: '关于',
+    icon: Info,
   },
 ];
 
@@ -252,21 +261,23 @@ export function App() {
             <span>{current.name}</span>
           </div>
         </header>
-        <div className={`page-content ${page === 'general' ? 'general-page' : ''}`}>
+        <div className={`page-content ${page === 'appearance' ? '' : 'narrow-page'}`}>
           <div className="page-heading">
             <h1>{current.name}</h1>
-            <button
-              className="button primary save-button"
-              onClick={() => void save()}
-              disabled={!dirty || Boolean(busy) || !ready}
-            >
-              {busy === 'save' ? (
-                <LoaderCircle size={16} className="spinning" />
-              ) : (
-                <Check size={17} />
-              )}{' '}
-              {dirty ? '保存更改' : '已保存'}
-            </button>
+            {page !== 'about' && (
+              <button
+                className="button primary save-button"
+                onClick={() => void save()}
+                disabled={!dirty || Boolean(busy) || !ready}
+              >
+                {busy === 'save' ? (
+                  <LoaderCircle size={16} className="spinning" />
+                ) : (
+                  <Check size={17} />
+                )}{' '}
+                {dirty ? '保存更改' : '已保存'}
+              </button>
+            )}
           </div>
           <div className={`content-grid ${page === 'appearance' ? 'with-preview' : ''}`}>
             <div className="settings-column">
@@ -291,7 +302,7 @@ export function App() {
                   <Section icon={<Languages size={19} />} title="字幕语言">
                     <div className="language-pair">
                       <div className="field">
-                        <label htmlFor="source-language">原文语言</label>
+                        <label htmlFor="source-language">原文</label>
                         <LanguageSelect
                           id="source-language"
                           value={settings.sourceLanguage}
@@ -313,7 +324,7 @@ export function App() {
                         <ArrowLeftRight size={17} />
                       </button>
                       <div className="field">
-                        <label htmlFor="target-language">译文语言</label>
+                        <label htmlFor="target-language">译文</label>
                         <LanguageSelect
                           id="target-language"
                           value={settings.targetLanguage}
@@ -431,11 +442,12 @@ export function App() {
                             </Select>
                           )}
                           <button
-                            className="button secondary fetch-button"
+                            className="fetch-button"
+                            aria-label="获取模型"
+                            title="获取模型"
                             onClick={() => void runApi('models')}
                           >
-                            <RefreshCw size={14} className={busy === 'models' ? 'spinning' : ''} />{' '}
-                            {busy === 'models' ? '获取中' : '获取模型'}
+                            <RefreshCw size={16} className={busy === 'models' ? 'spinning' : ''} />
                           </button>
                         </div>
                       </div>
@@ -467,19 +479,11 @@ export function App() {
                       </label>
                     </div>
                     <div className="api-footer">
-                      <span>
-                        <LockKeyhole size={14} /> API Key 只发送给 Provider，不会发送给视频网站
-                      </span>
                       <button
-                        className="button secondary test-button"
+                        className="test-button"
                         disabled={Boolean(busy)}
                         onClick={() => void runApi('test')}
                       >
-                        {busy === 'test' ? (
-                          <LoaderCircle size={14} className="spinning" />
-                        ) : (
-                          <PlugZap size={14} />
-                        )}{' '}
                         {busy === 'test' ? '连接中…' : '测试连接'}
                       </button>
                     </div>
@@ -654,11 +658,60 @@ export function App() {
                   </Section>
                 </>
               )}
-              <footer className="settings-footer">
-                <span className={dirty ? 'unsaved' : ''}>
-                  {dirty ? '有未保存的更改' : '所有更改已保存'}
-                </span>
-              </footer>
+              {page === 'about' && (
+                <>
+                  <Section
+                    icon={<Subtitles size={19} />}
+                    title="Subline 双语字幕"
+                    description={
+                      isExtension ? `版本 ${chrome.runtime.getManifest().version}` : undefined
+                    }
+                  >
+                    <p className="about-intro">
+                      在 YouTube、HBO Max 和 X 上看视频时，Subline 读取视频的原文字幕，用你自己的
+                      OpenAI 兼容接口翻译，再把原文和译文一起显示在播放器里。
+                    </p>
+                    <ul className="about-features">
+                      <li>原文和译文可选英语、简体中文和繁体中文。</li>
+                      <li>字幕按句子翻译，并提前翻译即将播放的部分，减少等待。</li>
+                      <li>
+                        可以调整原文和译文的颜色、字号、两行间距和译文背景，也可以按网站单独开关。
+                      </li>
+                      <li>
+                        Subline 没有自己的服务器。字幕原文只发送给你选择的
+                        Provider，设置保存在本机，API Key 加密保存。
+                      </li>
+                    </ul>
+                  </Section>
+                  <Section icon={<GithubMark />} title="项目与反馈">
+                    <div className="about-links">
+                      <a href={REPOSITORY_URL} target="_blank" rel="noreferrer">
+                        <GithubMark />
+                        <span>
+                          <strong>GitHub 仓库</strong>
+                          <small>查看源代码和使用说明</small>
+                        </span>
+                        <ExternalLink size={14} />
+                      </a>
+                      <a href={`${REPOSITORY_URL}/issues/new`} target="_blank" rel="noreferrer">
+                        <MessageSquare size={18} />
+                        <span>
+                          <strong>问题反馈</strong>
+                          <small>在 GitHub Issues 报告问题或提出建议</small>
+                        </span>
+                        <ExternalLink size={14} />
+                      </a>
+                    </div>
+                  </Section>
+                </>
+              )}
+              {page !== 'about' && (
+                <footer className="settings-footer">
+                  <span className={dirty ? 'unsaved' : ''}>
+                    {dirty ? '有未保存的更改' : '所有更改已保存'}
+                  </span>
+                </footer>
+              )}
             </div>
             {page === 'appearance' && (
               <aside className="preview-column" aria-label="字幕预览">
