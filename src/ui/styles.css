@@ -780,19 +780,6 @@ button:hover:not(:disabled) {
 .preview-heading h2 svg {
   color: #7b7791;
 }
-.live-label {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 10px;
-  color: #999cab;
-}
-.live-label i {
-  width: 4px;
-  height: 4px;
-  background: #8bb39f;
-  border-radius: 100%;
-}
 .preview-scene {
   position: relative;
   aspect-ratio: 1.43;
@@ -863,14 +850,9 @@ button:hover:not(:disabled) {
   right: 15px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   font-size: 10px;
   color: #c0ccc6;
-}
-.scene-bottom > span {
-  display: flex;
-  align-items: center;
-  gap: 5px;
 }
 .scene-bottom button {
   display: flex;
@@ -953,31 +935,9 @@ button:hover:not(:disabled) {
   margin-left: auto;
   color: #a0a2b1;
 }
-.about-links span {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  min-width: 0;
-}
 .about-links strong {
   font-size: 13px;
   font-weight: 600;
-}
-.about-links small {
-  color: #71758a;
-  font-size: 11px;
-}
-.settings-footer {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  color: #71758a;
-  font-size: 10px;
-  padding: 0 2px 6px;
-  gap: 10px;
-}
-.settings-footer .unsaved {
-  color: #a18ccc;
 }
 .alert-layer {
   position: fixed;
@@ -1633,9 +1593,6 @@ button:hover:not(:disabled) {
   .page-heading h1 {
     font-size: 25px;
   }
-  .settings-footer {
-    order: 1;
-  }
   .color-presets button {
     width: 22px;
     height: 22px;
@@ -1750,10 +1707,6 @@ button:hover:not(:disabled) {
   }
   .content-grid {
     gap: 22px;
-  }
-  .settings-footer {
-    font-size: 10px;
-    gap: 4px;
   }
   .color-controls {
     gap: 8px;

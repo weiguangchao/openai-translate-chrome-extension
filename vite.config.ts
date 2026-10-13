@@ -7,6 +7,8 @@ export default defineConfig({
   base: './',
   build: { rollupOptions: { input: { options: 'index.html', popup: 'popup.html' } } },
   test: {
+    maxWorkers: 1,
+    testTimeout: 15_000,
     projects: [
       {
         extends: true,

@@ -337,12 +337,7 @@ export function App() {
                       {languageName(settings.sourceLanguage)}。
                     </p>
                   </Section>
-                  <Section
-                    icon={<PlugZap size={19} />}
-                    title="Provider"
-                    description="OpenAI 兼容接口"
-                    className="api-section"
-                  >
+                  <Section icon={<PlugZap size={19} />} title="Provider" className="api-section">
                     <div className={`connection-badge ${connected ? 'connected' : ''}`}>
                       <i />
                       {connected
@@ -687,30 +682,17 @@ export function App() {
                     <div className="about-links">
                       <a href={REPOSITORY_URL} target="_blank" rel="noreferrer">
                         <GithubMark />
-                        <span>
-                          <strong>GitHub 仓库</strong>
-                          <small>查看源代码和使用说明</small>
-                        </span>
+                        <strong>GitHub 仓库</strong>
                         <ExternalLink size={14} />
                       </a>
                       <a href={`${REPOSITORY_URL}/issues/new`} target="_blank" rel="noreferrer">
                         <MessageSquare size={18} />
-                        <span>
-                          <strong>问题反馈</strong>
-                          <small>在 GitHub Issues 报告问题或提出建议</small>
-                        </span>
+                        <strong>问题反馈</strong>
                         <ExternalLink size={14} />
                       </a>
                     </div>
                   </Section>
                 </>
-              )}
-              {page !== 'about' && (
-                <footer className="settings-footer">
-                  <span className={dirty ? 'unsaved' : ''}>
-                    {dirty ? '有未保存的更改' : '所有更改已保存'}
-                  </span>
-                </footer>
               )}
             </div>
             {page === 'appearance' && (
