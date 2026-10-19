@@ -1,4 +1,4 @@
-import { planLookaheadCues } from './limits';
+import { planLookaheadCues } from './tuning';
 import type { PlaybackCue } from './playback-plan';
 import type { TranslateFailure } from './provider-error';
 import type { PublicSettings } from './settings';

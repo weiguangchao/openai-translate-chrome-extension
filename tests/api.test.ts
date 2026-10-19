@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import manifest from '../public/manifest.json';
 import { fetchModels, translate, translateCaptionBatch } from '../src/shared/api';
-import { translationBatchLimit } from '../src/shared/limits';
+import { translationBatchLimit } from '../src/shared/tuning';
 import { structuredReply } from './fixtures/provider';
 import { TOKEN_USAGE_KEY } from '../src/shared/token-usage';
 import {

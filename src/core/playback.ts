@@ -1,5 +1,4 @@
-export const seekSettleMs = 400;
-export const seekJumpSeconds = 1;
+import { seekJumpSeconds, seekSettleMs } from '../shared/tuning';
 const SEEK_JUMP_TOLERANCE = 1e-3;
 
 export interface PlaybackHooks {

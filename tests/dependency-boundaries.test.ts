@@ -121,3 +121,19 @@ it.each([
     ]),
   );
 });
+
+it('keeps new tuning numbers in src/shared/tuning.ts', async () => {
+  const [outside] = await eslint.lintText('export const retryDelayMs = 15_000;', {
+    filePath: 'src/core/probe.ts',
+  });
+  expect(outside.messages).toEqual([
+    expect.objectContaining({
+      ruleId: 'local/tuning-home',
+      message: expect.stringContaining('src/shared/tuning.ts'),
+    }),
+  ]);
+  const [home] = await eslint.lintText('export const retryDelayMs = 15_000;', {
+    filePath: 'src/shared/tuning.ts',
+  });
+  expect(home.messages).toEqual([]);
+});

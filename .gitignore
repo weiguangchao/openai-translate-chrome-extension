@@ -6,3 +6,4 @@ coverage/
 .artifacts/
 .claude/*
 !.claude/skills/
+__pycache__/

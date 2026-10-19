@@ -1,9 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { CaptionController } from '../src/core/controller';
 import type { TimedCue } from '../src/core/cues';
-import { maxInFlightRequests } from '../src/shared/limits';
-import { translationSendsPerSecond } from '../src/shared/provider/transport';
-import { seekSettleMs } from '../src/core/playback';
+import { maxInFlightRequests, seekSettleMs, translationSendsPerSecond } from '../src/shared/tuning';
 import { createHboPlatform } from '../src/platforms/hbo/platform';
 import { NativeTimeline } from '../src/core/native';
 import { publicSettings } from '../src/shared/settings';

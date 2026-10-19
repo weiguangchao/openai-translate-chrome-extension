@@ -15,7 +15,7 @@ import {
   planBufferSeconds,
   planSentenceCap,
   translationBatchLimit,
-} from '../src/shared/limits';
+} from '../src/shared/tuning';
 
 function cues(count: number, gap = 4, from = 0) {
   return Array.from({ length: count }, (_, index) => ({

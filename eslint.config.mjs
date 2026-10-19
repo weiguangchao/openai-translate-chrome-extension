@@ -151,6 +151,36 @@ const writeOnlyOverlay = {
   },
 };
 
+const tuningHome = {
+  meta: {
+    type: 'problem',
+    schema: [{ type: 'array', items: { type: 'string' } }],
+    messages: {
+      home: '{{name}} is a named number outside src/shared/tuning.ts. Put numbers that shape playback, Provider traffic or what a caption shows in src/shared/tuning.ts.',
+    },
+  },
+  create(context) {
+    const existing = new Set(context.options[0] ?? []);
+    const numeric = (node) =>
+      node?.type === 'Literal'
+        ? typeof node.value === 'number'
+        : node?.type === 'UnaryExpression'
+          ? numeric(node.argument)
+          : node?.type === 'BinaryExpression'
+            ? numeric(node.left) || numeric(node.right)
+            : false;
+    return {
+      'Program > VariableDeclaration > VariableDeclarator, Program > ExportNamedDeclaration > VariableDeclaration > VariableDeclarator'(
+        node,
+      ) {
+        if (node.parent.kind !== 'const' || node.id.type !== 'Identifier') return;
+        if (numeric(node.init) && !existing.has(node.id.name))
+          context.report({ node, messageId: 'home', data: { name: node.id.name } });
+      },
+    };
+  },
+};
+
 const dependencyBoundaries = {
   meta: {
     type: 'problem',
@@ -220,6 +250,7 @@ export default [
           'dependency-boundaries': dependencyBoundaries,
           'typed-outcomes': typedOutcomes,
           'write-only-overlay': writeOnlyOverlay,
+          'tuning-home': tuningHome,
         },
       },
     },
@@ -237,6 +268,27 @@ export default [
   {
     files: ['src/core/**/*.ts', 'src/extension/**/*.ts', 'src/shared/**/*.ts'],
     rules: { 'local/typed-outcomes': 'error' },
+  },
+  {
+    files: ['src/**/*.ts', 'src/**/*.tsx'],
+    ignores: ['src/shared/tuning.ts'],
+    rules: {
+      'local/tuning-home': [
+        'error',
+        [
+          'cueLimit',
+          'cueTextLimit',
+          'SEEK_JUMP_TOLERANCE',
+          'HEARTBEAT_MS',
+          'translationCacheLimit',
+          'minClauseColumns',
+          'lineCost',
+          'overflowCost',
+          'balanceCost',
+          'TRACE_TEXT_LIMIT',
+        ],
+      ],
+    },
   },
   {
     files: ['src/core/overlay.ts'],

@@ -4,10 +4,10 @@ import { createHboPlatform } from '../src/platforms/hbo/platform';
 import { hboMediaUrl, parseHboManifest } from '../src/platforms/hbo/captions';
 import { parseWebVtt } from '../src/core/webvtt';
 import { TranslationQueue } from '../src/extension/queue';
-import { providerSendWindowMs } from '../src/shared/provider/transport';
 import { publicSettings } from '../src/shared/settings';
 import { consentedSettings } from './fixtures/settings';
 import { providerReply, requestedTexts } from './fixtures/provider';
+import { providerSendWindowMs } from '../src/shared/tuning';
 
 const mediaUrl = 'https://cdn.prd.media.h264.io/episode/manifest.mpd';
 const edgeMediaUrl = 'https://v4-e-cebcc-lax-csla2-01-wm.e.hbo/episode/manifest.mpd';

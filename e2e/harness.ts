@@ -11,7 +11,7 @@ import {
   type Route,
   type TestInfo,
 } from '@playwright/test';
-import { planSentenceCap, translationBatchLimit } from '../src/shared/limits';
+import { planSentenceCap, translationBatchLimit } from '../src/shared/tuning';
 import type { Settings } from '../src/shared/settings';
 import { TRACE_PREFIX, type TraceEvent } from '../src/shared/trace';
 import { longCaption, longCaptionParts, longTranslations } from '../tests/fixtures/long-caption';

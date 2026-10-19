@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { maxInFlightRequests } from '../src/shared/limits';
+import { maxInFlightRequests } from '../src/shared/tuning';
 import { longCaption, longCaptionParts, longTranslations } from '../tests/fixtures/long-caption';
 import {
   denseCue,

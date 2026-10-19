@@ -1,4 +1,5 @@
-import { captionDisplayLimit, subtitleDisplayLength } from './width';
+import { subtitleDisplayLength } from './width';
+import { captionDisplayLimit } from '../tuning';
 
 export interface TextRange {
   readonly from: number;

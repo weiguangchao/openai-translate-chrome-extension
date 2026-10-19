@@ -1,5 +1,5 @@
 import { translateCaptionBatch } from '../shared/api';
-import { latencySampleLimit, maxInFlightRequests, translationBatchLimit } from '../shared/limits';
+import { latencySampleLimit, maxInFlightRequests, translationBatchLimit } from '../shared/tuning';
 import {
   planPlayback,
   slackSeconds,

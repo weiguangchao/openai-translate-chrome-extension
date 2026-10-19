@@ -1,8 +1,12 @@
 import { packedCues, prefetchItems } from './fixtures/provider';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { maxInFlightRequests, translationBatchLimit } from '../src/shared/limits';
+import {
+  maxInFlightRequests,
+  providerSendWindowMs,
+  translationBatchLimit,
+  translationSendsPerSecond,
+} from '../src/shared/tuning';
 import { planPlayback } from '../src/shared/playback-plan';
-import { providerSendWindowMs, translationSendsPerSecond } from '../src/shared/provider/transport';
 let TranslationQueue: typeof import('../src/extension/queue').TranslationQueue;
 import { DEFAULT_SETTINGS } from '../src/shared/settings';
 import { providerReply, requestedTexts, structuredReply } from './fixtures/provider';

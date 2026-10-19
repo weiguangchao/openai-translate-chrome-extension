@@ -1,6 +1,4 @@
-export const translationSendsPerSecond = 3;
-export const providerSendWindowMs = 1000;
-export const providerTimeoutMs = 60_000;
+import { providerSendWindowMs, providerTimeoutMs, translationSendsPerSecond } from '../tuning';
 
 export interface ProviderSendPolicy {
   canSend(): boolean;

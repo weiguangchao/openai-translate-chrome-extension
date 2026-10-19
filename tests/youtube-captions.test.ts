@@ -1,8 +1,9 @@
 import { expect, it } from 'vitest';
 import { parseYoutubeCaptions } from '../src/platforms/youtube/captions';
-import { captionDisplayLimit, subtitleDisplayLength } from '../src/shared/segmenter';
+import { subtitleDisplayLength } from '../src/shared/segmenter';
 import { captionAt, playbackCues, timedCaptions } from '../src/core/timeline';
 import { githubCaption, githubCaptionTrack } from './fixtures/github-caption';
+import { captionDisplayLimit } from '../src/shared/tuning';
 
 const githubCaptions = [
   'Myself, Mitchell the creator of Ghostie, and many other people are realizing',

@@ -1,6 +1,6 @@
 import { ProviderTimeoutError, RepeatedSourceError } from './provider-error';
 import { providerFetch, type ProviderSendPolicy } from './provider/transport';
-import { translationBatchLimit } from './limits';
+import { reasoningEffort, translationBatchLimit } from './tuning';
 import { englishLanguageName, validateBaseUrl, validateSettings, type Settings } from './settings';
 import { addTokenUsage, readProviderUsage } from './token-usage';
 import { modelAnswer, parseModelJson, scanTranslationResults } from './model-json';
@@ -176,7 +176,7 @@ function completionBody(
     stream: false,
     ...(probe.jsonObject ? { response_format: { type: 'json_object' as const } } : {}),
     ...(probe.maxTokens ? { max_tokens: maxTokens } : {}),
-    ...(probe.reasoning ? { reasoning_effort: 'low' as const } : {}),
+    ...(probe.reasoning ? { reasoning_effort: reasoningEffort } : {}),
   };
 }
 

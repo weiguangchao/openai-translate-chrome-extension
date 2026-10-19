@@ -1,5 +1,3 @@
-export const captionDisplayLimit = 90;
-
 export function subtitleDisplayLength(text: string): number {
   return [...text].reduce(
     (length, character) =>

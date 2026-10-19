@@ -1,5 +1,4 @@
 import { expect, test } from '@playwright/test';
-import { providerTimeoutMs } from '../src/shared/provider/transport';
 import {
   apiKey,
   denseCue,
@@ -14,6 +13,7 @@ import {
   errorsShown,
   preloadNext,
 } from './harness';
+import { providerTimeoutMs } from '../src/shared/tuning';
 
 for (const platform of ['youtube', 'hbo', 'x'] as const) {
   test(`${platform}: compatibility retry uses actual worker HTTP and finishes`, async ({}, info) => {

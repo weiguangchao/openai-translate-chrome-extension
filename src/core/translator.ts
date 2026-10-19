@@ -2,11 +2,9 @@ import { readStoredTranslation } from '../shared/caption-translation';
 import type { PlaybackCue } from '../shared/playback-plan';
 import { failureOf, type TranslateFailure } from '../shared/provider-error';
 import type { ViewState } from '../shared/trace';
+import { loadingDelayMs, planRefreshSeconds } from '../shared/tuning';
 import type { ExtensionConnection } from './connection';
 import type { CaptionView, SubtitleOverlay, TranslationLine } from './overlay';
-
-const LOADING_DELAY_MS = 300;
-const PLAN_REFRESH_SECONDS = 1;
 
 export interface CaptionFrame {
   readonly text: string;
@@ -128,7 +126,7 @@ export class CaptionTranslator {
   plan(time: number, rate: number, cues: readonly PlaybackCue[]): void {
     const key = JSON.stringify(
       cues.length
-        ? [Math.floor(time / PLAN_REFRESH_SECONDS) * PLAN_REFRESH_SECONDS, rate, cues]
+        ? [Math.floor(time / planRefreshSeconds) * planRefreshSeconds, rate, cues]
         : [rate, cues],
     );
     if (key === this.windowKey) return;
@@ -168,7 +166,7 @@ export class CaptionTranslator {
     if (frame.cacheOnly && (caption.checked || pending)) return;
     const waited = Date.now() - caption.since;
     if (pending || waited < frame.debounce) {
-      if (!frame.cacheOnly && waited >= LOADING_DELAY_MS) caption.line = { kind: 'loading' };
+      if (!frame.cacheOnly && waited >= loadingDelayMs) caption.line = { kind: 'loading' };
       return;
     }
     this.request(caption, frame.cacheOnly, waited);
@@ -181,7 +179,7 @@ export class CaptionTranslator {
     if (cacheOnly) caption.checked = true;
     else {
       this.active = true;
-      if (waited >= LOADING_DELAY_MS) caption.line = { kind: 'loading' };
+      if (waited >= loadingDelayMs) caption.line = { kind: 'loading' };
     }
     void this.connection
       .sendMessage<unknown>({
