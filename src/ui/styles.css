@@ -1295,6 +1295,28 @@ button:hover:not(:disabled) {
   background: var(--accent-soft);
   color: var(--accent);
 }
+.popup-translation-only {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 10px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #656a7e;
+  cursor: pointer;
+}
+.popup-translation-only input[type='checkbox'] {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  accent-color: var(--accent);
+  cursor: inherit;
+}
+.popup-translation-only:has(input:disabled) {
+  cursor: default;
+  opacity: 0.6;
+}
 .popup-model {
   margin-top: 16px;
   padding: 10px 12px;

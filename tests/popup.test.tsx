@@ -140,6 +140,16 @@ it('toggles the extension without requiring a configured provider and keeps lang
   expect(stored.enabled).toBe(true);
 });
 
+it('saves translation-only from an unchecked default without touching other settings', async () => {
+  await render();
+  const checkbox = () =>
+    document.querySelector<HTMLInputElement>('.popup-translation-only input[type="checkbox"]')!;
+  expect(checkbox().checked).toBe(false);
+  await click('.popup-translation-only input[type="checkbox"]');
+  expect(stored).toMatchObject({ translationOnly: true, enabled: true, targetLanguage: 'zh-CN' });
+  expect(checkbox().checked).toBe(true);
+});
+
 it('locks quick controls until a save finishes', async () => {
   await render();
   let finish!: () => void;
