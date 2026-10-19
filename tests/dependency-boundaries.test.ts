@@ -105,3 +105,19 @@ it('allows a caption state chosen by its failure kind', async () => {
   );
   expect(result.messages).toEqual([]);
 });
+
+it.each([
+  'export class SubtitleOverlay { line = ""; }',
+  'export class SubtitleOverlay { get state() { return "ready"; } }',
+  'export class SubtitleOverlay { current(): string { return ""; } }',
+])('rejects state exposed by the overlay: %s', async (source) => {
+  const [result] = await eslint.lintText(source, { filePath: 'src/core/overlay.ts' });
+  expect(result.messages).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        ruleId: 'local/write-only-overlay',
+        message: expect.stringContaining('SubtitleOverlay only renders'),
+      }),
+    ]),
+  );
+});

@@ -47,19 +47,15 @@ const OVERLAY_STYLE =
   ':host{all:initial}.stack{position:absolute;left:4%;width:92%;text-align:center;font-family:Arial,"PingFang SC",sans-serif;line-height:1.4;pointer-events:none}.line{width:fit-content;max-width:100%;margin-inline:auto;padding:1px 8px;border-radius:3px;white-space:normal;overflow-wrap:anywhere;text-shadow:0 1px 3px #000;box-sizing:border-box}.error{font-size:13px!important;color:#ffe3b0!important}.timeout{color:#ffcc00!important}';
 
 export class SubtitleOverlay {
-  player: HTMLElement | null = null;
+  private player: HTMLElement | null = null;
   private host: HTMLDivElement | null = null;
   private original: HTMLDivElement | null = null;
   private translation: HTMLDivElement | null = null;
   private positioned = false;
   private layers: HTMLElement[] = [];
 
-  get mounted(): boolean {
-    return Boolean(this.host);
-  }
-
-  get connected(): boolean {
-    return Boolean(this.host?.isConnected);
+  showsIn(player: HTMLElement): boolean {
+    return this.player === player && Boolean(this.host?.isConnected);
   }
 
   mount(player: HTMLElement, settings: PublicSettings): void {

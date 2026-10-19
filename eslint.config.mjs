@@ -121,6 +121,36 @@ const typedOutcomes = {
   },
 };
 
+const writeOnlyOverlay = {
+  meta: {
+    type: 'problem',
+    schema: [],
+    messages: {
+      state:
+        'SubtitleOverlay only renders. {{member}} exposes state; keep it in CaptionTranslator or CaptionController and pass it to render() or mount().',
+    },
+  },
+  create(context) {
+    return {
+      'ClassDeclaration[id.name="SubtitleOverlay"] > ClassBody > *'(node) {
+        if (node.type === 'StaticBlock') return;
+        const name = node.key?.name ?? node.key?.value ?? '?';
+        if (node.key?.type === 'PrivateIdentifier' || node.accessibility === 'private') return;
+        if (node.type === 'PropertyDefinition' || node.type === 'AccessorProperty')
+          return context.report({ node, messageId: 'state', data: { member: name } });
+        if (node.type === 'MethodDefinition' && (node.kind === 'get' || node.kind === 'set'))
+          return context.report({ node, messageId: 'state', data: { member: name } });
+        if (node.type === 'MethodDefinition' && node.kind === 'method') {
+          if (name === 'showsIn') return;
+          const returns = node.value.returnType?.typeAnnotation?.type;
+          if (returns && returns !== 'TSVoidKeyword')
+            context.report({ node, messageId: 'state', data: { member: name } });
+        }
+      },
+    };
+  },
+};
+
 const dependencyBoundaries = {
   meta: {
     type: 'problem',
@@ -189,6 +219,7 @@ export default [
           'provider-transport': providerTransport,
           'dependency-boundaries': dependencyBoundaries,
           'typed-outcomes': typedOutcomes,
+          'write-only-overlay': writeOnlyOverlay,
         },
       },
     },
@@ -206,6 +237,10 @@ export default [
   {
     files: ['src/core/**/*.ts', 'src/extension/**/*.ts', 'src/shared/**/*.ts'],
     rules: { 'local/typed-outcomes': 'error' },
+  },
+  {
+    files: ['src/core/overlay.ts'],
+    rules: { 'local/write-only-overlay': 'error' },
   },
   {
     files: ['src/extension/queue.ts'],
