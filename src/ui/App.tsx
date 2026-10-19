@@ -50,6 +50,7 @@ import {
   YoutubeMark,
 } from './components';
 import { useAlert } from './Alert';
+import { copy } from './copy';
 
 type Page = 'general' | 'appearance' | 'about';
 const REPOSITORY_URL = 'https://github.com/weiguangchao/openai-translate-chrome-extension';
@@ -189,7 +190,7 @@ export function App() {
     } catch (error) {
       showAlert({
         kind: 'error',
-        text: error instanceof Error ? error.message : '保存失败，请重试。',
+        text: error instanceof Error ? error.message : copy.saveFailed,
       });
     } finally {
       setBusy(null);
@@ -290,12 +291,12 @@ export function App() {
                     </span>
                     <div>
                       <h2>
-                        启用双语字幕{' '}
+                        {copy.enableSubtitles}{' '}
                         <span className="small-tag">{settings.enabled ? '已开启' : '已关闭'}</span>
                       </h2>
                     </div>
                     <Toggle
-                      label="启用双语字幕"
+                      label={copy.enableSubtitles}
                       checked={settings.enabled}
                       onChange={(value) => update('enabled', value)}
                     />
@@ -303,7 +304,7 @@ export function App() {
                   <Section icon={<Languages size={19} />} title="字幕语言">
                     <div className="language-pair">
                       <div className="field">
-                        <label htmlFor="source-language">原文</label>
+                        <label htmlFor="source-language">{copy.source}</label>
                         <LanguageSelect
                           id="source-language"
                           value={settings.sourceLanguage}
@@ -312,7 +313,7 @@ export function App() {
                       </div>
                       <button
                         className="swap-button"
-                        aria-label="互换原文和译文语言"
+                        aria-label={copy.swapLanguages}
                         title="交换语言"
                         onClick={() =>
                           setSettings((previous) => ({
@@ -325,7 +326,7 @@ export function App() {
                         <ArrowLeftRight size={17} />
                       </button>
                       <div className="field">
-                        <label htmlFor="target-language">译文</label>
+                        <label htmlFor="target-language">{copy.target}</label>
                         <LanguageSelect
                           id="target-language"
                           value={settings.targetLanguage}
@@ -698,7 +699,7 @@ export function App() {
               )}
             </div>
             {page === 'appearance' && (
-              <aside className="preview-column" aria-label="字幕预览">
+              <aside className="preview-column" aria-label={copy.subtitlePreview}>
                 <SubtitlePreview settings={settings} />
               </aside>
             )}

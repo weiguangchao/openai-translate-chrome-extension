@@ -12,7 +12,7 @@
     "test:e2e": "playwright test",
     "verify": "npm run check && npm run test:discovery && npm test && npm run test:chrome-debug && npm run build && npm run test:e2e",
     "lint": "eslint . --max-warnings 0",
-    "check": "npm run lint && tsc --noEmit",
+    "check": "npm run lint && tsc --noEmit && node scripts/check-ui-copy.mjs",
     "preview": "vite preview --host 0.0.0.0",
     "format": "prettier --write src tests scripts e2e .github *.json *.ts *.mjs *.html README.md public/manifest.json",
     "format:check": "prettier --check src tests scripts e2e .github *.json *.ts *.mjs *.html README.md public/manifest.json"
