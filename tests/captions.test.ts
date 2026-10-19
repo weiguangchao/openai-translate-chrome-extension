@@ -353,7 +353,7 @@ it('finishes an in-flight translation while paused and does not start another un
   vi.stubGlobal('chrome', { runtime: { id: 'extension-id', sendMessage } });
   Object.defineProperty(video, 'paused', { value: true });
   controller = new CaptionController(createHboPlatform, settings());
-  await vi.advanceTimersByTimeAsync(30000);
+  await vi.advanceTimersByTimeAsync(16000);
   expect(sendMessage).toHaveBeenCalledExactlyOnceWith({
     type: 'translate',
     text: 'First cue',
@@ -368,13 +368,13 @@ it('finishes an in-flight translation while paused and does not start another un
   await vi.advanceTimersByTimeAsync(1);
   expect(translationNode()?.textContent).toBe('第一句译文');
   expect(translationNode()?.hidden).toBe(false);
-  await vi.advanceTimersByTimeAsync(30000);
+  await vi.advanceTimersByTimeAsync(16000);
   expect(translationNode()?.textContent).toBe('第一句译文');
   await setPaused(false);
-  await vi.advanceTimersByTimeAsync(30000);
+  await vi.advanceTimersByTimeAsync(16000);
   expect(translationNode()?.textContent).toBe('第一句译文');
   await setPaused(true);
-  await vi.advanceTimersByTimeAsync(30000);
+  await vi.advanceTimersByTimeAsync(16000);
   expect(translationNode()?.textContent).toBe('第一句译文');
   expect(translationNode()?.hidden).toBe(false);
   expect(sendMessage.mock.calls.map(([message]) => message)).toEqual([
