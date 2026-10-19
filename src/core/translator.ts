@@ -44,11 +44,11 @@ function failedLine(failure: TranslateFailure): TranslationLine {
   }
 }
 
-function captionView(caption: Caption | null): CaptionView {
+function captionView(caption: Caption | null, translationOnly: boolean): CaptionView {
   if (!caption) return { original: '', line: { kind: 'none' } };
   const { line } = caption;
   if (line.kind === 'repeated') return { original: caption.text, line: { kind: 'none' } };
-  const withSource = line.kind === 'ready' || line.kind === 'failed';
+  const withSource = !translationOnly && (line.kind === 'ready' || line.kind === 'failed');
   return { original: withSource ? caption.text : '', line };
 }
 
@@ -63,6 +63,7 @@ export class CaptionTranslator {
     private connection: ExtensionConnection,
     private overlay: SubtitleOverlay,
     private changed: () => void,
+    private translationOnly: () => boolean,
   ) {}
 
   get state(): ViewState {
@@ -156,7 +157,7 @@ export class CaptionTranslator {
   }
 
   private render(): void {
-    this.overlay.render(captionView(this.caption));
+    this.overlay.render(captionView(this.caption, this.translationOnly()));
   }
 
   private update(caption: Caption, frame: CaptionFrame): void {

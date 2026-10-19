@@ -14,6 +14,7 @@ export interface Settings {
   translation: SubtitleStyle;
   backgroundOpacity: number;
   subtitleGap: number;
+  translationOnly: boolean;
   youtube: boolean;
   hbo: boolean;
   x: boolean;
@@ -39,6 +40,7 @@ export const DEFAULT_SETTINGS: Settings = {
   translation: { color: '#B8E5CF', size: 20 },
   backgroundOpacity: 35,
   subtitleGap: 8,
+  translationOnly: false,
   youtube: true,
   hbo: true,
   x: true,
@@ -47,7 +49,7 @@ export const STORAGE_KEY = 'subline.settings.v1';
 export function normalizeSettings(value: unknown): Settings {
   const input = value && typeof value === 'object' ? (value as Partial<Settings>) : {};
   const result = structuredClone(DEFAULT_SETTINGS);
-  for (const key of ['enabled', 'youtube', 'hbo', 'x'] as const)
+  for (const key of ['enabled', 'translationOnly', 'youtube', 'hbo', 'x'] as const)
     if (typeof input[key] === 'boolean') result[key] = input[key];
   for (const key of ['baseUrl', 'apiKey', 'model', 'providerConsent'] as const)
     if (typeof input[key] === 'string') result[key] = input[key];
@@ -144,6 +146,7 @@ const SETTING_SCOPES: Record<keyof Settings, SettingScope> = {
   translation: 'style',
   backgroundOpacity: 'style',
   subtitleGap: 'style',
+  translationOnly: 'style',
   youtube: 'availability',
   hbo: 'availability',
   x: 'availability',

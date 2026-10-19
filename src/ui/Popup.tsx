@@ -116,7 +116,9 @@ export function Popup() {
   }, []);
 
   async function update(
-    changes: Partial<Pick<Settings, 'enabled' | 'sourceLanguage' | 'targetLanguage'>>,
+    changes: Partial<
+      Pick<Settings, 'enabled' | 'sourceLanguage' | 'targetLanguage' | 'translationOnly'>
+    >,
   ) {
     if (!ready || busy) return;
     setBusy(true);
@@ -211,6 +213,16 @@ export function Popup() {
           ready={ready}
         />
       </fieldset>
+
+      <label className="popup-translation-only">
+        <input
+          type="checkbox"
+          checked={ready && settings.translationOnly}
+          disabled={!ready || busy}
+          onChange={(event) => void update({ translationOnly: event.target.checked })}
+        />
+        只显示译文
+      </label>
 
       <section className="popup-model" aria-labelledby="popup-model-label">
         <div className="popup-model-row">
