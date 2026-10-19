@@ -315,11 +315,11 @@ it('cleans up when prefetch throws during teardown and ignores an in-flight tran
   expect(vi.getTimerCount()).toBe(0);
 });
 
-it('shows the original with the error, keeps the controller alive and retries the current caption', async () => {
+it('keeps the error on its caption without retrying it and translates the next caption', async () => {
   const sendMessage = vi
     .fn()
     .mockRejectedValueOnce(new Error('Receiving end does not exist.'))
-    .mockResolvedValue({ ok: true, data: '恢复后的译文' });
+    .mockResolvedValue({ ok: true, data: '第二句译文' });
   vi.stubGlobal('chrome', { runtime: { id: 'extension-id', sendMessage } });
   controller = new CaptionController(createHboPlatform, settings());
   await vi.advanceTimersByTimeAsync(450);
@@ -327,9 +327,12 @@ it('shows the original with the error, keeps the controller alive and retries th
   expect(originalNode()?.hidden).toBe(false);
   expect(originalNode()?.textContent).toBe('First cue');
   await vi.advanceTimersByTimeAsync(16000);
-  expect(translationNode()?.textContent).toBe('恢复后的译文');
-  expect(translationNode()?.hidden).toBe(false);
-  expect(originalNode()?.textContent).toBe('First cue');
+  expect(translationNode()?.textContent).toBe('Subline：Receiving end does not exist.');
+  expect(sendMessage).toHaveBeenCalledExactlyOnceWith({ type: 'translate', text: 'First cue' });
+  document.getElementById('cue')!.textContent = 'Second cue';
+  await vi.advanceTimersByTimeAsync(450);
+  expect(translationNode()?.textContent).toBe('第二句译文');
+  expect(originalNode()?.textContent).toBe('Second cue');
 });
 
 it('finishes an in-flight translation while paused and does not start another until playback resumes', async () => {

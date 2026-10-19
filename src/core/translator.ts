@@ -48,7 +48,6 @@ export class CaptionTranslator {
   private windowKey = '';
   private holdKey = '';
   private active = false;
-  private prefetchedAt = 0;
   private playbackHeld = false;
 
   constructor(
@@ -121,12 +120,10 @@ export class CaptionTranslator {
         ? [Math.floor(time / PLAN_REFRESH_SECONDS) * PLAN_REFRESH_SECONDS, rate, cues]
         : [rate, cues],
     );
-    if (key === this.windowKey && (cues.length === 0 || Date.now() - this.prefetchedAt < 15000))
-      return;
+    if (key === this.windowKey) return;
     this.windowKey = key;
     this.holdKey = '';
     this.active = cues.length > 0;
-    this.prefetchedAt = Date.now();
     void this.connection.sendMessage({ type: 'prefetch', time, rate, cues }).catch(() => {});
   }
 
@@ -155,13 +152,12 @@ export class CaptionTranslator {
 
   private update(caption: Caption, frame: CaptionFrame): void {
     const { line } = caption;
-    if (line.kind === 'ready' || line.kind === 'timedOut' || line.kind === 'repeated') return;
+    if (line.kind !== 'none' && line.kind !== 'loading') return;
     const pending = caption.request !== null;
     if (frame.cacheOnly && (caption.checked || pending)) return;
     const waited = Date.now() - caption.since;
     if (pending || waited < frame.debounce) {
-      if (!frame.cacheOnly && line.kind !== 'failed' && waited >= LOADING_DELAY_MS)
-        caption.line = { kind: 'loading' };
+      if (!frame.cacheOnly && waited >= LOADING_DELAY_MS) caption.line = { kind: 'loading' };
       return;
     }
     this.request(caption, frame.cacheOnly, waited);
@@ -174,8 +170,7 @@ export class CaptionTranslator {
     if (cacheOnly) caption.checked = true;
     else {
       this.active = true;
-      if (caption.line.kind === 'failed' || waited >= LOADING_DELAY_MS)
-        caption.line = { kind: 'loading' };
+      if (waited >= LOADING_DELAY_MS) caption.line = { kind: 'loading' };
     }
     void this.connection
       .sendMessage<unknown>({
@@ -202,10 +197,7 @@ export class CaptionTranslator {
         caption.request = null;
         if (message === repeatedSourceMessage) caption.line = { kind: 'repeated' };
         else if (message === providerTimeoutMessage) caption.line = { kind: 'timedOut' };
-        else {
-          caption.line = { kind: 'failed', message };
-          caption.since = Date.now() + 15000;
-        }
+        else caption.line = { kind: 'failed', message };
       })
       .finally(() => this.changed());
   }

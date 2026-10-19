@@ -58,7 +58,7 @@ it('retries only an invalid result, keeping its neighbors cached', async () => {
   expect(fetch).toHaveBeenCalledTimes(2);
 });
 
-it('retries a translation that copies its source and does not cache the copy', async () => {
+it('retries a translation that copies its source once, then neither caches nor resends it', async () => {
   const { fetch, requests } = pendingProvider();
   const queue = new TranslationQueue();
   const pending = queue.prefetch('tab', settings, packedCues(['Before.', 'Same.', 'After.']));
@@ -80,11 +80,11 @@ it('retries a translation that copies its source and does not cache the copy', a
   await expect(queue.lookup(settings, 'Before.')).resolves.toBe('之前。');
   await expect(queue.lookup(settings, 'Same.')).resolves.toBeNull();
   await vi.advanceTimersByTimeAsync(1000);
-  const again = queue.request('tab', settings, 'Same.');
+  await expect(queue.request('tab', settings, 'Same.')).rejects.toMatchObject({
+    name: 'RepeatedSourceError',
+  });
   await flush();
-  requests.at(-1)!.resolve(providerReply(['Same.'], () => '不同。'));
-  await expect(again).resolves.toBe('不同。');
-  expect(fetch).toHaveBeenCalledTimes(3);
+  expect(fetch).toHaveBeenCalledTimes(2);
 });
 
 it('stops after one corrective retry for a persistently invalid result and never caches it', async () => {

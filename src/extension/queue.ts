@@ -60,7 +60,7 @@ export class TranslationQueue {
   private consumers = new Map<string, Consumer>();
   private backoffUntil = 0;
   private backoffReason = '';
-  private expired = new Set<string>();
+  private failed = new Map<string, Error>();
   private detached = new WeakSet<AbortController>();
   private samples: number[] = [];
   private sendTimer: ReturnType<typeof setTimeout> | undefined;
@@ -102,10 +102,11 @@ export class TranslationQueue {
     state.held = false;
     this.consumers.set(consumer, state);
     this.prune('keep');
-    this.retainExpired();
+    this.retainFailed();
     const finished = this.finished.get(key);
     if (finished !== undefined) return Promise.resolve(finished);
-    if (this.expired.has(key)) return Promise.reject(new ProviderTimeoutError());
+    const failure = this.failed.get(key);
+    if (failure) return Promise.reject(failure);
     try {
       const job = this.enqueue(key, settings, text, consumer);
       this.drain();
@@ -125,7 +126,7 @@ export class TranslationQueue {
     if (!cues.length) {
       this.consumers.delete(consumer);
       this.prune('abort');
-      this.retainExpired();
+      this.retainFailed();
       this.drain();
       return Promise.resolve([]);
     }
@@ -136,7 +137,7 @@ export class TranslationQueue {
     }));
     const open = snapshot.filter(
       ({ key }) =>
-        !this.finished.has(key) && !this.expired.has(key) && !this.jobs.get(key)?.controller,
+        !this.finished.has(key) && !this.failed.has(key) && !this.jobs.get(key)?.controller,
     );
     const planned = planPlayback({
       time,
@@ -164,13 +165,13 @@ export class TranslationQueue {
       rate,
     });
     this.prune('abort');
-    this.retainExpired();
+    this.retainFailed();
     if (Date.now() >= this.backoffUntil)
       planned.forEach((request, index) => {
         const pack = packs[index];
         request.cues.forEach((cue, cueIndex) => {
           const key = pack.keys[cueIndex];
-          if (this.finished.has(key) || this.expired.has(key)) return;
+          if (this.finished.has(key) || this.failed.has(key)) return;
           const job = this.enqueue(key, settings, cue.text, consumer, {
             pack: pack.id,
           });
@@ -192,14 +193,14 @@ export class TranslationQueue {
       ({ key, cue }) => cue.start <= time && time < cue.end && this.jobs.get(key)?.sent,
     );
     this.prune('detach');
-    this.retainExpired();
+    this.retainFailed();
     this.drain();
   }
 
   release(consumers: readonly string[]): void {
     for (const consumer of consumers) this.consumers.delete(consumer);
     this.prune('abort');
-    this.retainExpired();
+    this.retainFailed();
     this.drain();
   }
 
@@ -223,7 +224,7 @@ export class TranslationQueue {
     this.prune('abort');
     this.backoffUntil = 0;
     this.backoffReason = '';
-    this.expired.clear();
+    this.failed.clear();
     clearTimeout(this.sendTimer);
     this.sendTimer = undefined;
   }
@@ -236,13 +237,13 @@ export class TranslationQueue {
     );
   }
 
-  private retainExpired(): void {
+  private retainFailed(): void {
     const live = new Set<string>();
     for (const state of this.consumers.values()) {
       if (state.current) live.add(state.current);
       for (const { key } of state.snapshot) live.add(key);
     }
-    for (const key of this.expired) if (!live.has(key)) this.expired.delete(key);
+    for (const key of this.failed.keys()) if (!live.has(key)) this.failed.delete(key);
   }
 
   private remember(key: string, translation: string): void {
@@ -394,6 +395,7 @@ export class TranslationQueue {
         if (this.jobs.get(job.key) !== job) continue;
         if (job.solo) {
           this.jobs.delete(job.key);
+          this.failed.set(job.key, failure);
           job.reject(failure);
           continue;
         }
@@ -504,7 +506,7 @@ export class TranslationQueue {
         }
         for (const job of batch) {
           if (this.jobs.get(job.key) !== job) continue;
-          if (timedOut) this.expired.add(job.key);
+          this.failed.set(job.key, failure);
           this.jobs.delete(job.key);
           job.reject(failure);
         }

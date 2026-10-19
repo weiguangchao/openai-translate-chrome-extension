@@ -7,6 +7,8 @@ import {
   nextSource,
   nextTranslation,
   source,
+  thirdSource,
+  thirdTranslation,
   translation,
   withPlayer,
   errorsShown,
@@ -85,26 +87,28 @@ for (const platform of ['youtube', 'hbo', 'x'] as const) {
     });
   });
 
-  test(`${platform}: a transient Provider failure recovers after backoff without extra requests`, async ({}, info) => {
+  test(`${platform}: a failed caption is not retried and the next caption translates after the backoff`, async ({}, info) => {
     test.setTimeout(60_000);
     await withPlayer(
       platform,
       info,
       async (p) => {
+        const failure = 'Subline：接口返回 HTTP 503，请稍后重试。';
         await expect.poll(() => p.downloads.length).toBeGreaterThan(0);
         const downloads = p.downloads.length;
         await p.page.evaluate(() => window.fixture.switchVideo('second'));
         await expect.poll(() => p.downloads.length).toBeGreaterThan(downloads);
         await p.play();
-        await expect(p.translated).toHaveText('Subline：接口返回 HTTP 503，请稍后重试。');
+        await expect(p.translated).toHaveText(failure);
         await expect(p.original, 'A failed caption shows its source').toHaveText(nextSource);
-        const failedAt = Date.now();
+        await p.page.waitForTimeout(16_000);
+        await expect(p.translated).toHaveText(failure);
         expect(p.posts.map((post) => post.status)).toEqual([503]);
-        await expect(p.translated).toHaveText(nextTranslation, { timeout: 25_000 });
-        expect(Date.now() - failedAt).toBeGreaterThan(14_000);
+        await p.page.evaluate(() => window.fixture.switchVideo('third'));
+        await p.play();
+        await p.pair(thirdSource, thirdTranslation);
         expect(p.posts.map((post) => post.status)).toEqual([503, 200]);
-        await p.pair(nextSource, nextTranslation);
-        expect(await errorsShown(p)).toEqual(['Subline：接口返回 HTTP 503，请稍后重试。']);
+        expect(await errorsShown(p)).toEqual([failure]);
       },
       { unavailable: 1 },
     );
