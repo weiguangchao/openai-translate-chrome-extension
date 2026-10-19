@@ -2,7 +2,8 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { CaptionController } from '../src/core/controller';
 import type { TimedCue } from '../src/core/cues';
 import { maxInFlightRequests } from '../src/shared/limits';
-import { providerSendWindowMs } from '../src/shared/provider/transport';
+import { translationSendsPerSecond } from '../src/shared/provider/transport';
+import { seekSettleMs } from '../src/core/playback';
 import { createHboPlatform } from '../src/platforms/hbo/platform';
 import { NativeTimeline } from '../src/core/native';
 import { publicSettings } from '../src/shared/settings';
@@ -243,7 +244,7 @@ it('preloads in the background and queries it at caption boundaries without anot
   expect(messages).toContain('translate');
 });
 
-it('cancels the opening window during a scrub and requests only the cues at the new position', async () => {
+it('lets the opening window finish during a scrub and requests only the cues at the new position', async () => {
   const dense = Array.from({ length: 30 }, (_, index) => ({
     startTime: 2 + index * 2,
     endTime: 4 + index * 2,
@@ -259,7 +260,7 @@ it('cancels the opening window during a scrub and requests only the cues at the 
   video.dispatchEvent(new Event('seeking'));
   await vi.advanceTimersByTimeAsync(200);
   expect(translated()?.hidden).toBe(true);
-  expect(pending.map((request) => request.signal.aborted)).toEqual(opening.map(() => true));
+  expect(pending.some((request) => request.signal.aborted)).toBe(false);
   expect(requested).toEqual(opening);
   video.currentTime = 80;
   Object.defineProperty(video, 'seeking', { value: false });
@@ -309,7 +310,7 @@ it('shows a timeout like the loading line, skips that batch, and translates the 
   expect(requested.some((request) => request.includes('Cue 6.'))).toBe(true);
 });
 
-it('holds a playback jump until it settles, then requests captions at the new anchor', async () => {
+it('keeps requests sent before a seek running, sends the landing at once and caches their replies', async () => {
   const dense = Array.from({ length: 30 }, (_, index) => ({
     startTime: 2 + index * 2,
     endTime: 4 + index * 2,
@@ -319,19 +320,25 @@ it('holds a playback jump until it settles, then requests captions at the new an
   controller = new CaptionController(createHboPlatform, publicSettings(saved));
   await vi.advanceTimersByTimeAsync(0);
   const started = requested.length;
+  expect(started).toBe(maxInFlightRequests);
   video.currentTime = 42;
   video.dispatchEvent(new Event('timeupdate'));
-  await vi.advanceTimersByTimeAsync(200);
-  expect(requested).toHaveLength(started);
-  expect(pending.slice(0, started).every((request) => request.signal.aborted)).toBe(true);
-  await vi.advanceTimersByTimeAsync(199);
+  await vi.advanceTimersByTimeAsync(seekSettleMs - 1);
   expect(requested).toHaveLength(started);
   await vi.advanceTimersByTimeAsync(1);
-  const landing = [['Cue 21.'], ['Cue 22.', 'Cue 23.', 'Cue 24.', 'Cue 25.']];
-  expect(requested.slice(started)).toEqual(landing);
-  await vi.advanceTimersByTimeAsync(providerSendWindowMs);
-  expect(requested.slice(started)).toEqual(landing);
-  expect(pending[started].signal.aborted).toBe(false);
+  expect(requested.slice(started)).toEqual([
+    ['Cue 21.'],
+    ['Cue 22.', 'Cue 23.', 'Cue 24.', 'Cue 25.'],
+  ]);
+  expect(started + 2).toBeGreaterThan(translationSendsPerSecond);
+  expect(pending.slice(0, started).some((request) => request.signal.aborted)).toBe(false);
+  await finish({ 'Cue 1.': '第一句' });
+  const sent = requested.length;
+  video.currentTime = 2.5;
+  video.dispatchEvent(new Event('timeupdate'));
+  await vi.advanceTimersByTimeAsync(seekSettleMs);
+  expect(translated()?.textContent).toBe('第一句');
+  expect(requested.slice(sent).flat()).not.toContain('Cue 1.');
 });
 
 it('keeps an untranslated short source hidden and waits out a seek before requesting the landing cues', async () => {
@@ -373,7 +380,6 @@ it('keeps an untranslated short source hidden and waits out a seek before reques
   expect(original()?.hidden).toBe(true);
   expect(translated()?.hidden).toBe(false);
   expect(translated()?.textContent).toBe('翻译中');
-  expect(pending.find((request) => request.texts.includes('Stay.'))?.signal.aborted).toBe(true);
 });
 
 it('finishes in-flight prefetch while paused and does not send more until playback resumes', async () => {

@@ -5,6 +5,7 @@ export const providerTimeoutMs = 60_000;
 export interface ProviderSendPolicy {
   canSend(): boolean;
   priority(): number;
+  counts(): boolean;
 }
 
 interface PendingSend {
@@ -15,8 +16,12 @@ interface PendingSend {
 }
 
 const pending: PendingSend[] = [];
-const sentAt: { at: number }[] = [];
+const sentAt: { at: number; policy?: ProviderSendPolicy }[] = [];
 let timer: ReturnType<typeof setTimeout> | undefined;
+
+function countedSends(): { at: number }[] {
+  return sentAt.filter((sent) => sent.policy?.counts() ?? true);
+}
 
 export function wakeProviderRequests(): void {
   clearTimeout(timer);
@@ -28,16 +33,17 @@ export function wakeProviderRequests(): void {
     (a, b) => (a.policy?.priority() ?? 0) - (b.policy?.priority() ?? 0),
   );
   for (const send of ordered) {
-    if (sentAt.length >= translationSendsPerSecond) break;
+    if (countedSends().length >= translationSendsPerSecond) break;
     if (send.policy && !send.policy.canSend()) continue;
     pending.splice(pending.indexOf(send), 1);
     send.signal?.removeEventListener('abort', send.cancel);
     send.start();
   }
-  if (pending.length && sentAt.length >= translationSendsPerSecond)
+  const counted = countedSends();
+  if (pending.length && counted.length >= translationSendsPerSecond)
     timer = setTimeout(
       wakeProviderRequests,
-      Math.max(0, providerSendWindowMs - (Date.now() - sentAt[0].at)),
+      Math.max(0, providerSendWindowMs - (Date.now() - counted[0].at)),
     );
 }
 
@@ -56,7 +62,7 @@ export function providerFetch(
           ? AbortSignal.any([signal, AbortSignal.timeout(providerTimeoutMs)])
           : AbortSignal.timeout(providerTimeoutMs);
         if (post) {
-          const sent = { at: Date.now() };
+          const sent = { at: Date.now(), policy };
           sentAt.push(sent);
           signal?.addEventListener(
             'abort',

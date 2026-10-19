@@ -263,57 +263,42 @@ it('sends a newly near cue without waiting for the pack already in flight', asyn
   expect(requests[0].signal.aborted).toBe(false);
 });
 
-it('aborts an in-flight pack that misses the playhead and does not enqueue during the seek', () => {
-  const { batches, requests } = pendingProvider();
+it('lets packs sent before a seek finish into the cache without holding back the landing', async () => {
+  const { batches, requests, reply } = pendingProvider();
   const queue = new TranslationQueue();
   queue.prefetch('tab', settings, prefetchItems(['Now', 'Soon', 'Later']));
   expect(batches()).toEqual([['Now'], ['Soon', 'Later']]);
-  queue.hold('tab', 1);
-  expect(requests[0].signal.aborted).toBe(false);
-  expect(requests[1].signal.aborted).toBe(true);
+  expect(batches()).toHaveLength(maxInFlightRequests);
   queue.hold('tab', 50);
-  expect(requests[0].signal.aborted).toBe(true);
   expect(batches()).toHaveLength(2);
-  queue.prefetch('tab', settings, []);
   queue.prefetch('tab', settings, prefetchItems(['Landed'], 50), 50);
   expect(batches().at(-1)).toEqual(['Landed']);
-  expect(requests.at(-1)?.signal.aborted).toBe(false);
+  expect(requests.some((request) => request.signal.aborted)).toBe(false);
+  reply(1);
+  await vi.advanceTimersByTimeAsync(0);
+  await expect(queue.lookup(settings, 'Later')).resolves.toBe('Later 译文');
 });
 
 it('drops an unsent pack at the seek position until a settled snapshot arrives', async () => {
-  const { batches, requests } = pendingProvider();
+  const { batches } = pendingProvider();
   const queue = new TranslationQueue();
   const cues = prefetchItems(['Now', 'Soon', 'Landing', 'After']);
   queue.prefetch('tab', settings, cues, 0, 1.5);
   expect(batches()).toEqual([['Now'], ['Soon', 'Landing']]);
   queue.hold('tab', 8.6);
   await vi.advanceTimersByTimeAsync(1000);
-  expect(requests.map((request) => request.signal.aborted)).toEqual([true, false]);
   expect(batches()).toHaveLength(2);
   queue.prefetch('tab', settings, cues, 8.6, 1.5);
   expect(batches().slice(2)).toEqual([['After']]);
 });
 
 it('resumes a DOM-only caption after holding a seek without requiring a timeline snapshot', () => {
-  const { batches, requests } = pendingProvider();
+  const { batches } = pendingProvider();
   const queue = new TranslationQueue();
   void queue.request('tab', settings, 'Old DOM caption').catch(() => {});
   queue.hold('tab', 20);
-  expect(requests[0].signal.aborted).toBe(true);
   queue.request('tab', settings, 'Landed DOM caption');
   expect(batches()).toEqual([['Old DOM caption'], ['Landed DOM caption']]);
-});
-
-it('aborts a sent pack when the seek lands in a gap between its cues', () => {
-  const { requests } = pendingProvider();
-  const queue = new TranslationQueue();
-  queue.prefetch('tab', settings, [
-    { text: 'Before gap', start: 5, end: 5.5 },
-    { text: 'After gap', start: 7, end: 7.5 },
-  ]);
-  expect(requests).toHaveLength(1);
-  queue.hold('tab', 6);
-  expect(requests[0].signal.aborted).toBe(true);
 });
 
 it('releases the previous visible caption when a new snapshot leaves it behind', () => {

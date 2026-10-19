@@ -61,6 +61,7 @@ export class TranslationQueue {
   private backoffUntil = 0;
   private backoffReason = '';
   private expired = new Set<string>();
+  private detached = new WeakSet<AbortController>();
   private samples: number[] = [];
   private sendTimer: ReturnType<typeof setTimeout> | undefined;
   private batches = 0;
@@ -100,7 +101,7 @@ export class TranslationQueue {
     state.current = key;
     state.held = false;
     this.consumers.set(consumer, state);
-    this.prune(false);
+    this.prune('keep');
     this.retainExpired();
     const finished = this.finished.get(key);
     if (finished !== undefined) return Promise.resolve(finished);
@@ -123,7 +124,7 @@ export class TranslationQueue {
   ): Promise<(string | null)[]> {
     if (!cues.length) {
       this.consumers.delete(consumer);
-      this.prune(true);
+      this.prune('abort');
       this.retainExpired();
       this.drain();
       return Promise.resolve([]);
@@ -162,7 +163,7 @@ export class TranslationQueue {
       time,
       rate,
     });
-    this.prune(true);
+    this.prune('abort');
     this.retainExpired();
     if (Date.now() >= this.backoffUntil)
       planned.forEach((request, index) => {
@@ -190,14 +191,14 @@ export class TranslationQueue {
     state.snapshot = state.snapshot.filter(
       ({ key, cue }) => cue.start <= time && time < cue.end && this.jobs.get(key)?.sent,
     );
-    this.prune(true);
+    this.prune('detach');
     this.retainExpired();
     this.drain();
   }
 
   release(consumers: readonly string[]): void {
     for (const consumer of consumers) this.consumers.delete(consumer);
-    this.prune(true);
+    this.prune('abort');
     this.retainExpired();
     this.drain();
   }
@@ -219,7 +220,7 @@ export class TranslationQueue {
   reset(): void {
     this.consumers.clear();
     this.samples = [];
-    this.prune(true);
+    this.prune('abort');
     this.backoffUntil = 0;
     this.backoffReason = '';
     this.expired.clear();
@@ -310,13 +311,15 @@ export class TranslationQueue {
     );
   }
 
-  private prune(abortUnused: boolean): void {
+  private prune(sent: 'keep' | 'abort' | 'detach'): void {
     const wanted = this.wanted();
     for (const [key, job] of this.jobs) {
-      if (wanted.has(key) || (job.sent && !abortUnused)) continue;
+      if (wanted.has(key) || (job.sent && sent === 'keep')) continue;
       this.jobs.delete(key);
       job.reject(new Error('字幕已更新。'));
-      if (!job.batch?.some((other) => this.jobs.get(other.key) === other)) job.controller?.abort();
+      if (job.batch?.some((other) => this.jobs.get(other.key) === other)) continue;
+      if (job.sent && sent === 'detach' && job.controller) this.detached.add(job.controller);
+      else job.controller?.abort();
     }
   }
 
@@ -465,6 +468,7 @@ export class TranslationQueue {
           if (consumers.some((item) => batch.some((job) => job.key === item.current))) return 0;
           return 1;
         },
+        counts: () => !this.detached.has(controller),
       },
     );
     void work.then(

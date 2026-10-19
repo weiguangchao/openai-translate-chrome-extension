@@ -333,16 +333,16 @@ it('accepts HBO edge subtitle URLs while rejecting lookalike hosts and unsafe UR
     expect(hboMediaUrl(url)).toBeUndefined();
 });
 
-it('cancels old model requests after seeking and translates the landing caption', async () => {
+it('lets old model requests finish after seeking and translates the landing caption', async () => {
   controller = new CaptionController(createHboPlatform, publicSettings(settings));
   await vi.advanceTimersByTimeAsync(0);
   video.currentTime = 65;
   video.dispatchEvent(new Event('seeking'));
   video.dispatchEvent(new Event('seeked'));
   await vi.advanceTimersByTimeAsync(400);
-  expect(
-    requested.slice(0, openingRequests.length).every((request) => request.signal.aborted),
-  ).toBe(true);
+  expect(requested.slice(0, openingRequests.length).some((request) => request.signal.aborted)).toBe(
+    false,
+  );
   expect(
     requested.some((request) => request.texts.includes('Cue 22') && !request.signal.aborted),
   ).toBe(true);
