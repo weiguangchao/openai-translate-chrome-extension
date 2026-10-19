@@ -214,3 +214,39 @@ it('releases all disabled consumers before waking any pending provider sends', a
   await expect(Promise.all(waiting)).resolves.toEqual(['字幕已更新。', '字幕已更新。']);
   expect(fetch).toHaveBeenCalledTimes(3);
 });
+
+it('keeps a rate slot for every POST that was sent, even when it is aborted later', async () => {
+  const sends: number[] = [];
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(
+      (_url: string, init: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
+          sends.push(Date.now());
+          init.signal!.addEventListener('abort', () => reject(init.signal!.reason), {
+            once: true,
+          });
+        }),
+    ),
+  );
+  const { providerFetch } = await import('../src/shared/provider/transport');
+  const controllers = Array.from(
+    { length: translationSendsPerSecond * 2 },
+    () => new AbortController(),
+  );
+  const work = controllers.map((controller) =>
+    providerFetch(
+      'https://provider.example/v1/chat/completions',
+      { method: 'POST' },
+      controller.signal,
+    ).catch(() => undefined),
+  );
+  await vi.advanceTimersByTimeAsync(10);
+  for (const controller of controllers.slice(0, translationSendsPerSecond)) controller.abort();
+  await vi.advanceTimersByTimeAsync(providerSendWindowMs - 11);
+  expect(sends).toHaveLength(translationSendsPerSecond);
+  await vi.advanceTimersByTimeAsync(1);
+  expect(sends).toHaveLength(controllers.length);
+  for (const controller of controllers) controller.abort();
+  await Promise.all(work);
+});

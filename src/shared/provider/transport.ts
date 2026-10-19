@@ -61,20 +61,7 @@ export function providerFetch(
         const deadline = signal
           ? AbortSignal.any([signal, AbortSignal.timeout(providerTimeoutMs)])
           : AbortSignal.timeout(providerTimeoutMs);
-        if (post) {
-          const sent = { at: Date.now(), policy };
-          sentAt.push(sent);
-          signal?.addEventListener(
-            'abort',
-            () => {
-              const index = sentAt.indexOf(sent);
-              if (index < 0) return;
-              sentAt.splice(index, 1);
-              wakeProviderRequests();
-            },
-            { once: true },
-          );
-        }
+        if (post) sentAt.push({ at: Date.now(), policy });
         void fetch(url, { ...init, signal: deadline }).then(
           (response) => resolve({ response, signal: deadline }),
           reject,
