@@ -123,7 +123,10 @@ it.each([
   await expect(send({ type: 'settings' })).resolves.toMatchObject({
     data: { configured: false },
   });
-  const refused = { ok: false, error: '请先在设置中同意将字幕发送给 Provider。' };
+  const refused = {
+    ok: false,
+    failure: { kind: 'error', message: '请先在设置中同意将字幕发送给 Provider。' },
+  };
   await expect(send({ type: 'translate', text: 'Hello' })).resolves.toEqual(refused);
   await expect(
     send({ type: 'prefetch', time: 0, rate: 1, cues: packedCues(['Hello']) }),
@@ -212,13 +215,13 @@ it('packs a prefetch by its time span and rejects a snapshot without usable time
   for (const cues of [['A'], [{ text: 'A', start: -1, end: 1 }], [{ text: 'A', start: 2, end: 2 }]])
     await expect(send({ type: 'prefetch', time: 0, rate: 1, cues })).resolves.toEqual({
       ok: false,
-      error: '预加载字幕内容无效。',
+      failure: { kind: 'error', message: '预加载字幕内容无效。' },
     });
   await expect(
     send({ type: 'prefetch', time: 0, rate: 0, cues: packedCues(['A']) }),
   ).resolves.toEqual({
     ok: false,
-    error: '预加载字幕内容无效。',
+    failure: { kind: 'error', message: '预加载字幕内容无效。' },
   });
   expect(fetch).not.toHaveBeenCalled();
   void send({

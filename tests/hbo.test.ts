@@ -4,10 +4,10 @@ import { createHboPlatform } from '../src/platforms/hbo/platform';
 import { hboMediaUrl, parseHboManifest } from '../src/platforms/hbo/captions';
 import { parseWebVtt } from '../src/core/webvtt';
 import { TranslationQueue } from '../src/extension/queue';
-import { providerSendWindowMs } from '../src/shared/provider/transport';
 import { publicSettings } from '../src/shared/settings';
 import { consentedSettings } from './fixtures/settings';
 import { providerReply, requestedTexts } from './fixtures/provider';
+import { providerSendWindowMs } from '../src/shared/tuning';
 
 const mediaUrl = 'https://cdn.prd.media.h264.io/episode/manifest.mpd';
 const edgeMediaUrl = 'https://v4-e-cebcc-lax-csla2-01-wm.e.hbo/episode/manifest.mpd';
@@ -333,16 +333,16 @@ it('accepts HBO edge subtitle URLs while rejecting lookalike hosts and unsafe UR
     expect(hboMediaUrl(url)).toBeUndefined();
 });
 
-it('cancels old model requests after seeking and translates the landing caption', async () => {
+it('lets old model requests finish after seeking and translates the landing caption', async () => {
   controller = new CaptionController(createHboPlatform, publicSettings(settings));
   await vi.advanceTimersByTimeAsync(0);
   video.currentTime = 65;
   video.dispatchEvent(new Event('seeking'));
   video.dispatchEvent(new Event('seeked'));
   await vi.advanceTimersByTimeAsync(400);
-  expect(
-    requested.slice(0, openingRequests.length).every((request) => request.signal.aborted),
-  ).toBe(true);
+  expect(requested.slice(0, openingRequests.length).some((request) => request.signal.aborted)).toBe(
+    false,
+  );
   expect(
     requested.some((request) => request.texts.includes('Cue 22') && !request.signal.aborted),
   ).toBe(true);

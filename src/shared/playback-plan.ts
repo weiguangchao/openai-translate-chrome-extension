@@ -8,7 +8,7 @@ import {
   planBufferSeconds,
   planSentenceCap,
   translationBatchLimit,
-} from './limits';
+} from './tuning';
 
 export interface PlaybackCue {
   readonly text: string;

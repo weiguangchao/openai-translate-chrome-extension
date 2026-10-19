@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { repeatedSourceMessage } from '../src/shared/provider-error';
 import { DEFAULT_SETTINGS } from '../src/shared/settings';
 
 let translateCaptionBatch: typeof import('../src/shared/api').translateCaptionBatch;
@@ -62,8 +61,10 @@ it.each([
 it.each(['One.', ' One. '])('rejects a translation that copies its source %j', async (text) => {
   respond(payload([result(0, 'One.')]));
   const published = vi.fn();
-  await expect(translateCaptionBatch(settings, [text], undefined, published)).rejects.toThrow(
-    repeatedSourceMessage,
+  await expect(translateCaptionBatch(settings, [text], undefined, published)).rejects.toMatchObject(
+    {
+      failure: { kind: 'copied-source' },
+    },
   );
   expect(published).not.toHaveBeenCalled();
 });

@@ -6,10 +6,10 @@ import {
   planLookaheadCues,
   planLookaheadSeconds,
   segmentCaptions,
-} from '../src/shared/limits';
+} from '../src/shared/tuning';
 
-vi.mock('../src/shared/limits', async (importOriginal) => {
-  const limits = await importOriginal<typeof import('../src/shared/limits')>();
+vi.mock('../src/shared/tuning', async (importOriginal) => {
+  const limits = await importOriginal<typeof import('../src/shared/tuning')>();
   return { ...limits, segmentCaptions: limits.translationBatchLimit + 1 };
 });
 

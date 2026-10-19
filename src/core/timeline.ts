@@ -3,7 +3,7 @@ import {
   planLookaheadCues,
   planLookaheadSeconds,
   segmentCaptions,
-} from '../shared/limits';
+} from '../shared/tuning';
 import type { PlaybackCue } from '../shared/playback-plan';
 import type { TimedCue } from './cues';
 

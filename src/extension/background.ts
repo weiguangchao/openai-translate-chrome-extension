@@ -1,4 +1,5 @@
 import { fetchModels, translate } from '../shared/api';
+import { failureOf } from '../shared/provider-error';
 import {
   readHoldRequest,
   readPrefetchRequest,
@@ -96,7 +97,7 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, respond) => {
     return contentRequest(type, message as object, platform, consumer, sender.documentId);
   })().then(
     (result) => respond({ ok: true, data: result }),
-    (error) => respond({ ok: false, error: error instanceof Error ? error.message : '请求失败。' }),
+    (error) => respond({ ok: false, failure: failureOf(error, '请求失败。') }),
   );
   return true;
 });

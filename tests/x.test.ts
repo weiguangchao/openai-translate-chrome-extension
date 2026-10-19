@@ -3,10 +3,10 @@ import { CaptionController } from '../src/core/controller';
 import { TranslationQueue } from '../src/extension/queue';
 import { parseXSubtitlePlaylist, xMediaUrl } from '../src/platforms/x/captions';
 import { createXPlatform } from '../src/platforms/x/platform';
-import { providerSendWindowMs } from '../src/shared/provider/transport';
 import { publicSettings } from '../src/shared/settings';
 import { consentedSettings } from './fixtures/settings';
 import { providerReply, requestedTexts } from './fixtures/provider';
+import { providerSendWindowMs } from '../src/shared/tuning';
 
 const media = 'https://video.twimg.com/amplify_video/100';
 const settings = { ...consentedSettings, apiKey: 'test', model: 'model' };

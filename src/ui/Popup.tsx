@@ -11,6 +11,7 @@ import {
   type TokenUsage,
 } from '../shared/token-usage';
 import { Logo, Select, Toggle } from './components';
+import { copy } from './copy';
 
 function PopupLanguage({
   id,
@@ -136,7 +137,7 @@ export function Popup() {
       await saveSettings(next);
       setSettings(next);
     } catch {
-      setError('保存失败，请重试。');
+      setError(copy.saveFailed);
     } finally {
       setBusy(false);
     }
@@ -174,7 +175,7 @@ export function Popup() {
         <h1>双语字幕</h1>
         <fieldset disabled={!ready || busy}>
           <Toggle
-            label="启用双语字幕"
+            label={copy.enableSubtitles}
             checked={ready && settings.enabled}
             onChange={(enabled) => void update({ enabled })}
           />
@@ -184,7 +185,7 @@ export function Popup() {
       <fieldset className="popup-languages" disabled={!ready || busy} aria-label="翻译语言">
         <PopupLanguage
           id="popup-source-language"
-          label="原文"
+          label={copy.source}
           value={settings.sourceLanguage}
           otherLanguage={settings.targetLanguage}
           onChange={(sourceLanguage) => void update({ sourceLanguage })}
@@ -192,8 +193,8 @@ export function Popup() {
         />
         <button
           className="popup-swap"
-          aria-label="互换原文和译文语言"
-          title="互换原文和译文语言"
+          aria-label={copy.swapLanguages}
+          title={copy.swapLanguages}
           onClick={() =>
             void update({
               sourceLanguage: settings.targetLanguage,
@@ -205,7 +206,7 @@ export function Popup() {
         </button>
         <PopupLanguage
           id="popup-target-language"
-          label="译文"
+          label={copy.target}
           value={settings.targetLanguage}
           otherLanguage={settings.sourceLanguage}
           onChange={(targetLanguage) => void update({ targetLanguage })}

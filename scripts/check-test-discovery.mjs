@@ -35,6 +35,17 @@ try {
     file: path.relative(process.cwd(), file).split(path.sep).join('/'),
     projectName,
   }));
+  const typed = collected.filter(({ projectName }) => projectName === 'types');
+  assert.deepEqual(
+    typed.map(({ file }) => file).sort(),
+    formal,
+    'The types project must type-check every formal test exactly once',
+  );
+  collected.splice(
+    0,
+    collected.length,
+    ...collected.filter(({ projectName }) => projectName !== 'types'),
+  );
   assert.deepEqual(
     collected.map(({ file }) => file).sort(),
     formal,

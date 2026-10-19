@@ -120,7 +120,7 @@ export class CaptionController {
   }
 
   private stop(): void {
-    if (this.overlay.mounted) this.unmount();
+    if (this.video) this.unmount();
     this.platform.reset();
   }
 
@@ -183,11 +183,10 @@ export class CaptionController {
     }
     const source = this.platform.source(video, player, this.settings.sourceLanguage);
     if (!this.settings.configured) {
-      if (this.overlay.mounted) this.unmount();
+      if (this.video) this.unmount();
       return;
     }
-    if (this.video !== video || this.overlay.player !== player || !this.overlay.connected)
-      this.mount(video, player);
+    if (this.video !== video || !this.overlay.showsIn(player)) this.mount(video, player);
     if (source.mode !== this.mode) {
       this.translator.release();
       this.translator.clear();

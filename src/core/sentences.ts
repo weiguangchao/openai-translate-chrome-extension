@@ -1,5 +1,5 @@
 import type { TimedCue } from './cues';
-import { sentencePauseSeconds } from '../shared/limits';
+import { sentencePauseSeconds } from '../shared/tuning';
 import { segmenterFor } from '../shared/segmenter';
 
 interface CaptionInput extends TimedCue {

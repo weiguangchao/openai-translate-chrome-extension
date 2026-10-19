@@ -1,7 +1,8 @@
 import { expect, it } from 'vitest';
-import { captionDisplayLimit, segmenterFor, subtitleDisplayLength } from '../src/shared/segmenter';
+import { segmenterFor, subtitleDisplayLength } from '../src/shared/segmenter';
 import { githubCaption } from './fixtures/github-caption';
 import { longCaption, longCaptionParts } from './fixtures/long-caption';
+import { captionDisplayLimit } from '../src/shared/tuning';
 
 function captions(language: string, text: string, cueBreaks?: number[]): string[] {
   return segmenterFor(language)

@@ -1,8 +1,12 @@
 import { packedCues, prefetchItems } from './fixtures/provider';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { maxInFlightRequests, translationBatchLimit } from '../src/shared/limits';
+import {
+  maxInFlightRequests,
+  providerSendWindowMs,
+  translationBatchLimit,
+  translationSendsPerSecond,
+} from '../src/shared/tuning';
 import { planPlayback } from '../src/shared/playback-plan';
-import { providerSendWindowMs, translationSendsPerSecond } from '../src/shared/provider/transport';
 let TranslationQueue: typeof import('../src/extension/queue').TranslationQueue;
 import { DEFAULT_SETTINGS } from '../src/shared/settings';
 import { providerReply, requestedTexts, structuredReply } from './fixtures/provider';
@@ -58,7 +62,7 @@ it('retries only an invalid result, keeping its neighbors cached', async () => {
   expect(fetch).toHaveBeenCalledTimes(2);
 });
 
-it('retries a translation that copies its source and does not cache the copy', async () => {
+it('retries a translation that copies its source once, then neither caches nor resends it', async () => {
   const { fetch, requests } = pendingProvider();
   const queue = new TranslationQueue();
   const pending = queue.prefetch('tab', settings, packedCues(['Before.', 'Same.', 'After.']));
@@ -80,11 +84,11 @@ it('retries a translation that copies its source and does not cache the copy', a
   await expect(queue.lookup(settings, 'Before.')).resolves.toBe('之前。');
   await expect(queue.lookup(settings, 'Same.')).resolves.toBeNull();
   await vi.advanceTimersByTimeAsync(1000);
-  const again = queue.request('tab', settings, 'Same.');
+  await expect(queue.request('tab', settings, 'Same.')).rejects.toMatchObject({
+    name: 'RepeatedSourceError',
+  });
   await flush();
-  requests.at(-1)!.resolve(providerReply(['Same.'], () => '不同。'));
-  await expect(again).resolves.toBe('不同。');
-  expect(fetch).toHaveBeenCalledTimes(3);
+  expect(fetch).toHaveBeenCalledTimes(2);
 });
 
 it('stops after one corrective retry for a persistently invalid result and never caches it', async () => {
@@ -263,57 +267,42 @@ it('sends a newly near cue without waiting for the pack already in flight', asyn
   expect(requests[0].signal.aborted).toBe(false);
 });
 
-it('aborts an in-flight pack that misses the playhead and does not enqueue during the seek', () => {
-  const { batches, requests } = pendingProvider();
+it('lets packs sent before a seek finish into the cache without holding back the landing', async () => {
+  const { batches, requests, reply } = pendingProvider();
   const queue = new TranslationQueue();
   queue.prefetch('tab', settings, prefetchItems(['Now', 'Soon', 'Later']));
   expect(batches()).toEqual([['Now'], ['Soon', 'Later']]);
-  queue.hold('tab', 1);
-  expect(requests[0].signal.aborted).toBe(false);
-  expect(requests[1].signal.aborted).toBe(true);
+  expect(batches()).toHaveLength(maxInFlightRequests);
   queue.hold('tab', 50);
-  expect(requests[0].signal.aborted).toBe(true);
   expect(batches()).toHaveLength(2);
-  queue.prefetch('tab', settings, []);
   queue.prefetch('tab', settings, prefetchItems(['Landed'], 50), 50);
   expect(batches().at(-1)).toEqual(['Landed']);
-  expect(requests.at(-1)?.signal.aborted).toBe(false);
+  expect(requests.some((request) => request.signal.aborted)).toBe(false);
+  reply(1);
+  await vi.advanceTimersByTimeAsync(0);
+  await expect(queue.lookup(settings, 'Later')).resolves.toBe('Later 译文');
 });
 
 it('drops an unsent pack at the seek position until a settled snapshot arrives', async () => {
-  const { batches, requests } = pendingProvider();
+  const { batches } = pendingProvider();
   const queue = new TranslationQueue();
   const cues = prefetchItems(['Now', 'Soon', 'Landing', 'After']);
   queue.prefetch('tab', settings, cues, 0, 1.5);
   expect(batches()).toEqual([['Now'], ['Soon', 'Landing']]);
   queue.hold('tab', 8.6);
   await vi.advanceTimersByTimeAsync(1000);
-  expect(requests.map((request) => request.signal.aborted)).toEqual([true, false]);
   expect(batches()).toHaveLength(2);
   queue.prefetch('tab', settings, cues, 8.6, 1.5);
   expect(batches().slice(2)).toEqual([['After']]);
 });
 
 it('resumes a DOM-only caption after holding a seek without requiring a timeline snapshot', () => {
-  const { batches, requests } = pendingProvider();
+  const { batches } = pendingProvider();
   const queue = new TranslationQueue();
   void queue.request('tab', settings, 'Old DOM caption').catch(() => {});
   queue.hold('tab', 20);
-  expect(requests[0].signal.aborted).toBe(true);
   queue.request('tab', settings, 'Landed DOM caption');
   expect(batches()).toEqual([['Old DOM caption'], ['Landed DOM caption']]);
-});
-
-it('aborts a sent pack when the seek lands in a gap between its cues', () => {
-  const { requests } = pendingProvider();
-  const queue = new TranslationQueue();
-  queue.prefetch('tab', settings, [
-    { text: 'Before gap', start: 5, end: 5.5 },
-    { text: 'After gap', start: 7, end: 7.5 },
-  ]);
-  expect(requests).toHaveLength(1);
-  queue.hold('tab', 6);
-  expect(requests[0].signal.aborted).toBe(true);
 });
 
 it('releases the previous visible caption when a new snapshot leaves it behind', () => {

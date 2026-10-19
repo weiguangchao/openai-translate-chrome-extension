@@ -1,13 +1,12 @@
-import { planLookaheadCues } from './limits';
+import { planLookaheadCues } from './tuning';
 import type { PlaybackCue } from './playback-plan';
+import type { TranslateFailure } from './provider-error';
 import type { PublicSettings } from './settings';
 import type { TraceRequest } from './trace';
 
-export interface Reply<T> {
-  ok?: boolean;
-  data?: T;
-  error?: string;
-}
+export type Reply<T> =
+  | { readonly ok: true; readonly data: T }
+  | { readonly ok: false; readonly failure: TranslateFailure };
 
 export interface TranslateRequest {
   type: 'translate';

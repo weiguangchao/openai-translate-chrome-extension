@@ -1,6 +1,7 @@
 import { Check, ChevronDown, Expand, Languages, Subtitles, X } from 'lucide-react';
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { LANGUAGES, type Settings } from '../shared/settings';
+import { copy } from './copy';
 
 export function Logo({ small = false }: { small?: boolean }) {
   return (
@@ -195,18 +196,18 @@ export function SubtitlePreview({ settings }: { settings: Settings }) {
       <section className="preview-panel">
         <div className="preview-heading">
           <h2>
-            <Subtitles size={18} /> 字幕预览
+            <Subtitles size={18} /> {copy.subtitlePreview}
           </h2>
         </div>
         {scene(false)}
         <div className="preview-details">
           <div className="style-legend">
             <span>
-              <i style={{ background: settings.original.color }} /> 原文{' '}
+              <i style={{ background: settings.original.color }} /> {copy.source}{' '}
               <b>{settings.original.size} px</b>
             </span>
             <span>
-              <i style={{ background: settings.translation.color }} /> 译文{' '}
+              <i style={{ background: settings.translation.color }} /> {copy.target}{' '}
               <b>{settings.translation.size} px</b>
             </span>
           </div>

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { PlaybackGate, seekJumpSeconds, seekSettleMs } from '../src/core/playback';
+import { PlaybackGate } from '../src/core/playback';
+import { seekJumpSeconds, seekSettleMs } from '../src/shared/tuning';
 
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => vi.useRealTimers());

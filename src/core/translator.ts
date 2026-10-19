@@ -1,12 +1,10 @@
 import { readStoredTranslation } from '../shared/caption-translation';
 import type { PlaybackCue } from '../shared/playback-plan';
-import { providerTimeoutMessage, repeatedSourceMessage } from '../shared/provider-error';
+import { failureOf, type TranslateFailure } from '../shared/provider-error';
 import type { ViewState } from '../shared/trace';
+import { loadingDelayMs, planRefreshSeconds } from '../shared/tuning';
 import type { ExtensionConnection } from './connection';
 import type { CaptionView, SubtitleOverlay, TranslationLine } from './overlay';
-
-const LOADING_DELAY_MS = 300;
-const PLAN_REFRESH_SECONDS = 1;
 
 export interface CaptionFrame {
   readonly text: string;
@@ -35,6 +33,17 @@ const VIEW_STATES: Record<TranslationLine['kind'], ViewState> = {
   repeated: 'empty',
 };
 
+function failedLine(failure: TranslateFailure): TranslationLine {
+  switch (failure.kind) {
+    case 'timeout':
+      return { kind: 'timedOut' };
+    case 'copied-source':
+      return { kind: 'repeated' };
+    case 'error':
+      return { kind: 'failed', message: failure.message };
+  }
+}
+
 function captionView(caption: Caption | null, translationOnly: boolean): CaptionView {
   if (!caption) return { original: '', line: { kind: 'none' } };
   const { line } = caption;
@@ -48,7 +57,6 @@ export class CaptionTranslator {
   private windowKey = '';
   private holdKey = '';
   private active = false;
-  private prefetchedAt = 0;
   private playbackHeld = false;
 
   constructor(
@@ -119,15 +127,13 @@ export class CaptionTranslator {
   plan(time: number, rate: number, cues: readonly PlaybackCue[]): void {
     const key = JSON.stringify(
       cues.length
-        ? [Math.floor(time / PLAN_REFRESH_SECONDS) * PLAN_REFRESH_SECONDS, rate, cues]
+        ? [Math.floor(time / planRefreshSeconds) * planRefreshSeconds, rate, cues]
         : [rate, cues],
     );
-    if (key === this.windowKey && (cues.length === 0 || Date.now() - this.prefetchedAt < 15000))
-      return;
+    if (key === this.windowKey) return;
     this.windowKey = key;
     this.holdKey = '';
     this.active = cues.length > 0;
-    this.prefetchedAt = Date.now();
     void this.connection.sendMessage({ type: 'prefetch', time, rate, cues }).catch(() => {});
   }
 
@@ -156,13 +162,12 @@ export class CaptionTranslator {
 
   private update(caption: Caption, frame: CaptionFrame): void {
     const { line } = caption;
-    if (line.kind === 'ready' || line.kind === 'timedOut' || line.kind === 'repeated') return;
+    if (line.kind !== 'none' && line.kind !== 'loading') return;
     const pending = caption.request !== null;
     if (frame.cacheOnly && (caption.checked || pending)) return;
     const waited = Date.now() - caption.since;
     if (pending || waited < frame.debounce) {
-      if (!frame.cacheOnly && line.kind !== 'failed' && waited >= LOADING_DELAY_MS)
-        caption.line = { kind: 'loading' };
+      if (!frame.cacheOnly && waited >= loadingDelayMs) caption.line = { kind: 'loading' };
       return;
     }
     this.request(caption, frame.cacheOnly, waited);
@@ -175,8 +180,7 @@ export class CaptionTranslator {
     if (cacheOnly) caption.checked = true;
     else {
       this.active = true;
-      if (caption.line.kind === 'failed' || waited >= LOADING_DELAY_MS)
-        caption.line = { kind: 'loading' };
+      if (waited >= loadingDelayMs) caption.line = { kind: 'loading' };
     }
     void this.connection
       .sendMessage<unknown>({
@@ -186,27 +190,21 @@ export class CaptionTranslator {
       })
       .then((response) => {
         if (!current()) return;
-        const data = response?.data;
-        if (cacheOnly && response?.ok && data === null) {
-          caption.request = null;
-          return;
-        }
-        const translation = readStoredTranslation(data);
-        if (!response?.ok || translation === null)
-          throw new Error(response?.error ?? '翻译未完成，请检查扩展配置。');
         caption.request = null;
-        caption.line = { kind: 'ready', translation };
+        if (response?.ok && cacheOnly && response.data === null) return;
+        const translation = response?.ok ? readStoredTranslation(response.data) : null;
+        if (translation !== null) caption.line = { kind: 'ready', translation };
+        else
+          caption.line = failedLine(
+            response?.ok === false
+              ? response.failure
+              : { kind: 'error', message: '翻译未完成，请检查扩展配置。' },
+          );
       })
       .catch((error) => {
         if (!current()) return;
-        const message = error instanceof Error ? error.message : '翻译失败，请检查配置。';
         caption.request = null;
-        if (message === repeatedSourceMessage) caption.line = { kind: 'repeated' };
-        else if (message === providerTimeoutMessage) caption.line = { kind: 'timedOut' };
-        else {
-          caption.line = { kind: 'failed', message };
-          caption.since = Date.now() + 15000;
-        }
+        caption.line = failedLine(failureOf(error, '翻译失败，请检查配置。'));
       })
       .finally(() => this.changed());
   }

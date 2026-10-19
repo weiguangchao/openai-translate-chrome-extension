@@ -23,6 +23,10 @@ export default defineConfig({
         },
       },
       ...domTestProjects.map((test) => ({ extends: true as const, test })),
+      {
+        extends: true,
+        test: { name: 'types', typecheck: { enabled: true, only: true, include: testInclude } },
+      },
     ],
   },
 });
