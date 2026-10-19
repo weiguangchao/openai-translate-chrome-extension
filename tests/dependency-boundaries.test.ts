@@ -1,3 +1,5 @@
+import { spawnSync } from 'node:child_process';
+import path from 'node:path';
 import { ESLint } from 'eslint';
 import { expect, it } from 'vitest';
 
@@ -69,10 +71,12 @@ it.each([
   expect(result.messages).toEqual([]);
 });
 
-it('forbids free-text translation in the caption queue', async () => {
-  const [result] = await eslint.lintText('import { translate as bypass } from "../shared/api";', {
-    filePath: 'src/extension/queue.ts',
-  });
+it.each([
+  ['src/extension/queue.ts', 'import { translate as bypass } from "../shared/api";'],
+  ['src/extension/queue.ts', 'import { translate } from "../shared/api.ts";'],
+  ['src/extension/prefetch.ts', 'import { translate } from "../shared/api";'],
+])('forbids free-text translation for captions in %s: %s', async (filePath, source) => {
+  const [result] = await eslint.lintText(source, { filePath });
   expect(result.messages).toEqual(
     expect.arrayContaining([
       expect.objectContaining({
@@ -80,6 +84,67 @@ it('forbids free-text translation in the caption queue', async () => {
       }),
     ]),
   );
+});
+
+it('lets the background run the connection check', async () => {
+  const [result] = await eslint.lintText('import { translate } from "../shared/api";', {
+    filePath: 'src/extension/background.ts',
+  });
+  expect(result.messages).toEqual([]);
+});
+
+it.each([
+  ['src/extension/background.ts', 'fetch(url, { method: "POST" });'],
+  ['src/extension/queue.ts', 'new XMLHttpRequest();'],
+  ['src/ui/App.tsx', 'navigator.sendBeacon(url, body);'],
+  ['src/shared/probe.ts', 'globalThis[name](url);'],
+])('rejects a network call outside the transport in %s: %s', async (filePath, source) => {
+  const [result] = await eslint.lintText(source, { filePath });
+  expect(result.messages).toEqual(
+    expect.arrayContaining([expect.objectContaining({ ruleId: 'local/provider-transport' })]),
+  );
+});
+
+it.each([
+  ['src/shared/settings.ts', 'chrome.storage.local.set({ settings });'],
+  ['src/extension/background.ts', 'chrome.storage.session.set({ settings });'],
+  ['src/ui/App.tsx', 'localStorage.setItem("settings", JSON.stringify(settings));'],
+])('rejects a storage write outside the storage owners in %s: %s', async (filePath, source) => {
+  const [result] = await eslint.lintText(source, { filePath });
+  expect(result.messages).toEqual([
+    expect.objectContaining({
+      ruleId: 'local/storage-writers',
+      message: expect.stringContaining('saveSettings'),
+    }),
+  ]);
+});
+
+it.each([
+  ['src/ui/probe.tsx', 'import "../core/overlay";'],
+  ['src/main.tsx', 'import "./extension/background";'],
+])('keeps the settings pages off content and worker code in %s: %s', async (filePath, source) => {
+  const [result] = await eslint.lintText(source, { filePath });
+  expect(result.messages).toEqual(
+    expect.arrayContaining([expect.objectContaining({ ruleId: 'local/dependency-boundaries' })]),
+  );
+});
+
+it('checks dependency boundaries when ESLint runs from a subdirectory', () => {
+  const run = spawnSync(
+    process.execPath,
+    [
+      path.resolve('node_modules/eslint/bin/eslint.js'),
+      '--stdin',
+      '--stdin-filename',
+      'core/probe.ts',
+    ],
+    {
+      cwd: path.resolve('src'),
+      input: 'import "../platforms/youtube/platform";',
+      encoding: 'utf8',
+    },
+  );
+  expect(run.stdout).toContain('local/dependency-boundaries');
 });
 
 it.each([

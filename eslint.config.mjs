@@ -1,5 +1,8 @@
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import tsParser from '@typescript-eslint/parser';
+
+const repository = path.dirname(fileURLToPath(import.meta.url));
 
 const noComments = {
   meta: {
@@ -20,6 +23,14 @@ const noComments = {
   },
 };
 
+const networkGlobals = new Set([
+  'fetch',
+  'XMLHttpRequest',
+  'WebSocket',
+  'EventSource',
+  'sendBeacon',
+]);
+
 const providerTransport = {
   meta: {
     type: 'problem',
@@ -27,15 +38,64 @@ const providerTransport = {
     messages: {
       bypass:
         'Provider POST must use src/shared/provider/transport.ts; retries also consume a send slot.',
+      computed: 'Use a literal property name so network calls can be checked.',
     },
   },
   create(context) {
     return {
       Identifier(node) {
-        if (node.name === 'fetch') context.report({ node, messageId: 'bypass' });
-      },
-      "MemberExpression[computed=true] > Literal.property[value='fetch']"(node) {
+        if (!networkGlobals.has(node.name)) return;
+        const parent = node.parent;
+        if (parent.type === 'Property' && parent.key === node && !parent.computed) return;
+        if (parent.type === 'ImportSpecifier' || parent.type === 'TSPropertySignature') return;
+        if (
+          parent.type === 'MemberExpression' &&
+          parent.property === node &&
+          !parent.computed &&
+          !['fetch', 'sendBeacon'].includes(node.name)
+        )
+          return;
         context.report({ node, messageId: 'bypass' });
+      },
+      MemberExpression(node) {
+        if (!node.computed) return;
+        if (node.property.type === 'Literal' && networkGlobals.has(node.property.value))
+          context.report({ node, messageId: 'bypass' });
+        else if (
+          node.object.type === 'Identifier' &&
+          ['globalThis', 'window', 'self'].includes(node.object.name) &&
+          node.property.type !== 'Literal'
+        )
+          context.report({ node, messageId: 'computed' });
+      },
+    };
+  },
+};
+
+const storageWriters = {
+  meta: {
+    type: 'problem',
+    schema: [],
+    messages: {
+      write:
+        'Settings are written only by saveSettings in src/shared/storage.ts, which encrypts the API key. Keep other storage writes in src/shared/storage.ts, src/shared/token-usage.ts or src/extension/translation-store.ts.',
+    },
+  },
+  create(context) {
+    return {
+      "CallExpression[callee.type='MemberExpression']"(node) {
+        const method = node.callee.property.name;
+        const target = context.sourceCode.getText(node.callee.object);
+        if (
+          /^chrome\.storage\.(local|session|sync)$/.test(target) &&
+          ['set', 'remove', 'clear'].includes(method)
+        )
+          context.report({ node, messageId: 'write' });
+        if (
+          /(^|\.)localStorage$/.test(target) &&
+          ['setItem', 'removeItem', 'clear'].includes(method)
+        )
+          context.report({ node, messageId: 'write' });
       },
     };
   },
@@ -192,7 +252,7 @@ const dependencyBoundaries = {
     },
   },
   create(context) {
-    const root = path.resolve('src');
+    const root = path.join(repository, 'src');
     const relative = (filename) => path.relative(root, filename).split(path.sep);
     const [layer, platform] = relative(context.filename);
     const forbidden = {
@@ -200,6 +260,8 @@ const dependencyBoundaries = {
       core: ['platforms', 'extension', 'ui'],
       extension: ['core', 'platforms', 'ui'],
       platforms: ['extension', 'ui'],
+      ui: ['core', 'platforms', 'extension'],
+      'main.tsx': ['core', 'platforms', 'extension'],
     }[layer];
     if (!forbidden) return {};
     function check(source) {
@@ -211,7 +273,7 @@ const dependencyBoundaries = {
       if (!specifier.startsWith('.') && !specifier.startsWith('/') && !specifier.startsWith('src/'))
         return;
       const resolved = specifier.startsWith('src/')
-        ? path.resolve(specifier)
+        ? path.join(repository, specifier)
         : path.resolve(path.dirname(context.filename), specifier);
       const [target, targetPlatform] = relative(resolved);
       if (
@@ -251,15 +313,25 @@ export default [
           'typed-outcomes': typedOutcomes,
           'write-only-overlay': writeOnlyOverlay,
           'tuning-home': tuningHome,
+          'storage-writers': storageWriters,
         },
       },
     },
     rules: { 'local/no-comments': 'error' },
   },
   {
-    files: ['src/shared/**/*.ts'],
+    files: ['src/shared/**/*.ts', 'src/extension/**/*.ts', 'src/ui/**/*.{ts,tsx}'],
     ignores: ['src/shared/provider/transport.ts'],
     rules: { 'local/provider-transport': 'error' },
+  },
+  {
+    files: ['src/**/*.{ts,tsx}'],
+    ignores: [
+      'src/shared/storage.ts',
+      'src/shared/token-usage.ts',
+      'src/extension/translation-store.ts',
+    ],
+    rules: { 'local/storage-writers': 'error' },
   },
   {
     files: ['src/**/*.ts', 'src/**/*.tsx'],
@@ -295,14 +367,15 @@ export default [
     rules: { 'local/write-only-overlay': 'error' },
   },
   {
-    files: ['src/extension/queue.ts'],
+    files: ['src/extension/**/*.ts'],
+    ignores: ['src/extension/background.ts'],
     rules: {
       'no-restricted-imports': [
         'error',
         {
-          paths: [
+          patterns: [
             {
-              name: '../shared/api',
+              regex: '(^|/)shared/api(\\.ts)?$',
               importNames: ['translate'],
               message:
                 'Caption queues must use translateCaptionBatch; free-text translation is only for connection checks.',
