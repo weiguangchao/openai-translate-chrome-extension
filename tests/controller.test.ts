@@ -191,6 +191,24 @@ it('updates styles in place while a translation is pending and shows its origina
   expect(lines()).toEqual(['Still waiting.', '等待后的译文']);
 });
 
+it('shows only the translation when translation-only is on and switches in place', async () => {
+  const settings = { ...consentedSettings, apiKey: 'key', model: 'model', translationOnly: true };
+  source = {
+    kind: 'live',
+    mode: 'model',
+    read: () => ({ text: 'DOM caption', layers: [], nativeTrack: false }),
+  };
+  controller = new CaptionController(() => platform, publicSettings(settings));
+  await vi.advanceTimersByTimeAsync(450);
+  expect(lines()).toEqual([null, '译文 DOM caption']);
+  const host = document.querySelector('[data-subline-overlay]');
+  const calls = sendMessage.mock.calls.length;
+  controller.update(publicSettings({ ...settings, translationOnly: false }));
+  expect(document.querySelector('[data-subline-overlay]')).toBe(host);
+  expect(sendMessage).toHaveBeenCalledTimes(calls);
+  expect(lines()).toEqual(['DOM caption', '译文 DOM caption']);
+});
+
 it.each(['translation', 'source'])(
   'discards a late cached response after the %s identity changes',
   async (change) => {

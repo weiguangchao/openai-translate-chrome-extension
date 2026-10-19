@@ -77,7 +77,12 @@ export class CaptionController {
     this.connection = connection ?? new ExtensionConnection(() => this.destroy());
     this.platform = createPlatform(() => this.tick());
     this.pageVideo = this.platform.videoId();
-    this.translator = new CaptionTranslator(this.connection, this.overlay, () => this.tick());
+    this.translator = new CaptionTranslator(
+      this.connection,
+      this.overlay,
+      () => this.tick(),
+      () => this.settings.translationOnly,
+    );
     this.trace = new TraceReporter(
       (message) => void this.connection.sendMessage(message).catch(() => {}),
       () => chrome.runtime.id,
