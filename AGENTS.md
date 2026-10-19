@@ -2,7 +2,7 @@
 
 ## Non-negotiables
 
-- Any prose surface → the unslop skill. Your reply is a prose surface. Write it per Writing the reply.
+- Any prose surface → the unslop skill. Your reply is a prose surface.
 - Before commit → the deslop skill
 - For testing -> the test-audit skill
 
