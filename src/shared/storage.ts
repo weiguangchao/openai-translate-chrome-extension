@@ -7,6 +7,8 @@ import {
 } from './settings';
 import { fetchModels, translate } from './api';
 import { decryptApiKey, encryptApiKey } from './api-key';
+import type { Reply } from './messages';
+import { failureText } from './provider-error';
 
 export const isExtension = typeof chrome !== 'undefined' && Boolean(chrome.runtime?.id);
 export async function loadSettings(): Promise<Settings> {
@@ -96,7 +98,11 @@ export async function apiAction(
     return kind === 'models'
       ? fetchModels(settings)
       : translate(settings, 'The world is full of wonderful things.');
-  const response = await chrome.runtime.sendMessage({ type: kind, settings });
-  if (!response?.ok) throw new Error(response?.error ?? '扩展后台没有响应，请重新加载扩展。');
+  const response: Reply<string[] | string> | undefined = await chrome.runtime.sendMessage({
+    type: kind,
+    settings,
+  });
+  if (!response) throw new Error('扩展后台没有响应，请重新加载扩展。');
+  if (!response.ok) throw new Error(failureText(response.failure));
   return response.data;
 }

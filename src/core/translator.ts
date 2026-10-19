@@ -1,6 +1,6 @@
 import { readStoredTranslation } from '../shared/caption-translation';
 import type { PlaybackCue } from '../shared/playback-plan';
-import { providerTimeoutMessage, repeatedSourceMessage } from '../shared/provider-error';
+import { failureOf, type TranslateFailure } from '../shared/provider-error';
 import type { ViewState } from '../shared/trace';
 import type { ExtensionConnection } from './connection';
 import type { CaptionView, SubtitleOverlay, TranslationLine } from './overlay';
@@ -34,6 +34,17 @@ const VIEW_STATES: Record<TranslationLine['kind'], ViewState> = {
   timedOut: 'timeout',
   repeated: 'empty',
 };
+
+function failedLine(failure: TranslateFailure): TranslationLine {
+  switch (failure.kind) {
+    case 'timeout':
+      return { kind: 'timedOut' };
+    case 'copied-source':
+      return { kind: 'repeated' };
+    case 'error':
+      return { kind: 'failed', message: failure.message };
+  }
+}
 
 function captionView(caption: Caption | null): CaptionView {
   if (!caption) return { original: '', line: { kind: 'none' } };
@@ -180,24 +191,21 @@ export class CaptionTranslator {
       })
       .then((response) => {
         if (!current()) return;
-        const data = response?.data;
-        if (cacheOnly && response?.ok && data === null) {
-          caption.request = null;
-          return;
-        }
-        const translation = readStoredTranslation(data);
-        if (!response?.ok || translation === null)
-          throw new Error(response?.error ?? '翻译未完成，请检查扩展配置。');
         caption.request = null;
-        caption.line = { kind: 'ready', translation };
+        if (response?.ok && cacheOnly && response.data === null) return;
+        const translation = response?.ok ? readStoredTranslation(response.data) : null;
+        if (translation !== null) caption.line = { kind: 'ready', translation };
+        else
+          caption.line = failedLine(
+            response?.ok === false
+              ? response.failure
+              : { kind: 'error', message: '翻译未完成，请检查扩展配置。' },
+          );
       })
       .catch((error) => {
         if (!current()) return;
-        const message = error instanceof Error ? error.message : '翻译失败，请检查配置。';
         caption.request = null;
-        if (message === repeatedSourceMessage) caption.line = { kind: 'repeated' };
-        else if (message === providerTimeoutMessage) caption.line = { kind: 'timedOut' };
-        else caption.line = { kind: 'failed', message };
+        caption.line = failedLine(failureOf(error, '翻译失败，请检查配置。'));
       })
       .finally(() => this.changed());
   }

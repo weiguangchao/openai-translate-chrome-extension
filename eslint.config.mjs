@@ -41,6 +41,86 @@ const providerTransport = {
   },
 };
 
+const cjk = /[㐀-鿿]/;
+
+function copyName(node) {
+  if (node.type === 'Identifier') return /(^message$|Message$)/.test(node.name) ? node.name : null;
+  if (node.type === 'MemberExpression' && !node.computed && node.property.type === 'Identifier')
+    return ['message', 'textContent', 'innerText'].includes(node.property.name)
+      ? `.${node.property.name}`
+      : null;
+  if (node.type === 'Literal' && typeof node.value === 'string' && cjk.test(node.value))
+    return `'${node.value}'`;
+  return null;
+}
+
+function rewritesSameNode(node, sourceCode) {
+  const statement = node.parent;
+  if (statement?.type !== 'IfStatement' || statement.test !== node || node.operator !== '!==')
+    return false;
+  const body =
+    statement.consequent.type === 'BlockStatement' && statement.consequent.body.length === 1
+      ? statement.consequent.body[0]
+      : statement.consequent;
+  const assignment = body.type === 'ExpressionStatement' ? body.expression : null;
+  return (
+    assignment?.type === 'AssignmentExpression' &&
+    sourceCode.getText(assignment.left) === sourceCode.getText(node.left) &&
+    sourceCode.getText(assignment.right) === sourceCode.getText(node.right)
+  );
+}
+
+const typedOutcomes = {
+  meta: {
+    type: 'problem',
+    schema: [],
+    messages: {
+      compare:
+        "Don't decide state by comparing {{name}}. Carry the outcome as a typed kind: TranslateFailure in src/shared/provider-error.ts across messages, TranslationLine in src/core/overlay.ts for what a caption shows.",
+      dom: "Don't read {{name}} back as state. CaptionTranslator owns what a caption shows; keep the state in its TranslationLine.",
+    },
+  },
+  create(context) {
+    const sourceCode = context.sourceCode;
+    const copyConstants = new Set();
+    return {
+      'Program > VariableDeclaration > VariableDeclarator, Program > ExportNamedDeclaration > VariableDeclaration > VariableDeclarator'(
+        node,
+      ) {
+        if (
+          node.id.type === 'Identifier' &&
+          node.init?.type === 'Literal' &&
+          typeof node.init.value === 'string' &&
+          cjk.test(node.init.value)
+        )
+          copyConstants.add(node.id.name);
+      },
+      BinaryExpression(node) {
+        if (!['===', '!==', '==', '!='].includes(node.operator)) return;
+        if (rewritesSameNode(node, sourceCode)) return;
+        for (const side of [node.left, node.right]) {
+          const name =
+            copyName(side) ??
+            (side.type === 'Identifier' && copyConstants.has(side.name) ? side.name : null);
+          if (name) {
+            context.report({ node, messageId: 'compare', data: { name } });
+            return;
+          }
+        }
+      },
+      SwitchStatement(node) {
+        const name = copyName(node.discriminant);
+        if (name) context.report({ node, messageId: 'compare', data: { name } });
+      },
+      "CallExpression[callee.property.name='contains'][callee.object.property.name='classList']"(
+        node,
+      ) {
+        context.report({ node, messageId: 'dom', data: { name: 'classList' } });
+      },
+    };
+  },
+};
+
 const dependencyBoundaries = {
   meta: {
     type: 'problem',
@@ -108,6 +188,7 @@ export default [
           'no-comments': noComments,
           'provider-transport': providerTransport,
           'dependency-boundaries': dependencyBoundaries,
+          'typed-outcomes': typedOutcomes,
         },
       },
     },
@@ -121,6 +202,10 @@ export default [
   {
     files: ['src/**/*.ts', 'src/**/*.tsx'],
     rules: { 'local/dependency-boundaries': 'error' },
+  },
+  {
+    files: ['src/core/**/*.ts', 'src/extension/**/*.ts', 'src/shared/**/*.ts'],
+    rules: { 'local/typed-outcomes': 'error' },
   },
   {
     files: ['src/extension/queue.ts'],

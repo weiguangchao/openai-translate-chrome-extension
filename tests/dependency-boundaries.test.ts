@@ -81,3 +81,27 @@ it('forbids free-text translation in the caption queue', async () => {
     ]),
   );
 });
+
+it.each([
+  'if (error.message === "译文与原文相同。") show();',
+  'const TIMEOUT = "接口调用超时"; if (node.textContent === TIMEOUT) show();',
+  'if (node.classList.contains("timeout")) show();',
+])('rejects caption state read back from a message or the DOM: %s', async (source) => {
+  const [result] = await eslint.lintText(source, { filePath: 'src/core/probe.ts' });
+  expect(result.messages).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        ruleId: 'local/typed-outcomes',
+        message: expect.stringContaining('TranslationLine'),
+      }),
+    ]),
+  );
+});
+
+it('allows a caption state chosen by its failure kind', async () => {
+  const [result] = await eslint.lintText(
+    'switch (failure.kind) { case "timeout": show(); break; }',
+    { filePath: 'src/core/probe.ts' },
+  );
+  expect(result.messages).toEqual([]);
+});

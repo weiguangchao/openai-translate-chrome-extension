@@ -2,7 +2,6 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { CaptionController } from '../src/core/controller';
 import type { CaptionSource, Platform } from '../src/core/platform';
 import type { Reply } from '../src/shared/messages';
-import { repeatedSourceMessage } from '../src/shared/provider-error';
 import { publicSettings } from '../src/shared/settings';
 import { consentedSettings } from './fixtures/settings';
 
@@ -157,7 +156,7 @@ it('shows no source while the caption source is still being checked', async () =
 
 it('updates styles in place while a translation is pending and shows its original result', async () => {
   const settings = { ...consentedSettings, apiKey: 'key', model: 'model' };
-  let finish!: (value: { ok: boolean; data: string }) => void;
+  let finish!: (value: Reply<string | null>) => void;
   sendMessage.mockImplementationOnce(() => Promise.resolve({ ok: true, data: null }));
   sendMessage.mockImplementationOnce(
     () =>
@@ -195,7 +194,7 @@ it.each(['translation', 'source'])(
   'discards a late cached response after the %s identity changes',
   async (change) => {
     const settings = { ...consentedSettings, apiKey: 'key', model: 'model' };
-    const replies: ((value: { ok: boolean; data: string }) => void)[] = [];
+    const replies: ((value: Reply<string | null>) => void)[] = [];
     sendMessage.mockImplementation((message) =>
       message.type === 'translate'
         ? new Promise((resolve) => {
@@ -236,7 +235,7 @@ it.each(['translation', 'source'])(
 );
 
 it('retries a paused cache lookup invalidated by a later seek event', async () => {
-  const replies: ((value: { ok: boolean; data: string }) => void)[] = [];
+  const replies: ((value: Reply<string | null>) => void)[] = [];
   sendMessage.mockImplementation((message) =>
     message.type === 'translate'
       ? new Promise((resolve) => {
@@ -388,8 +387,8 @@ it('shows only the source when the translation copies it and does not ask again'
   sendMessage.mockImplementation((message) =>
     Promise.resolve(
       message.type === 'translate'
-        ? { ok: false, error: repeatedSourceMessage }
-        : { ok: true, data: null },
+        ? { ok: false as const, failure: { kind: 'copied-source' as const } }
+        : { ok: true as const, data: null },
     ),
   );
   source = {

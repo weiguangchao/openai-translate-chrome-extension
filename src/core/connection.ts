@@ -10,7 +10,7 @@ export class ExtensionConnection {
     return !this.invalidated;
   }
 
-  async sendMessage<T = unknown>(message: ContentRequest): Promise<Reply<T>> {
+  async sendMessage<T = unknown>(message: ContentRequest): Promise<Reply<T> | undefined> {
     try {
       const response = await Promise.resolve().then(() => {
         if (!this.active) throw new Error('Extension context invalidated.');
