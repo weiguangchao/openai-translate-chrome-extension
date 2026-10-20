@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
-    "build": "tsc --noEmit && vite build && node scripts/build-extension.mjs",
+    "build": "npm run build:icons && tsc --noEmit && vite build && node scripts/build-extension.mjs",
+    "build:icons": "node scripts/build-icons.mjs",
     "test": "vitest run",
     "test:discovery": "node scripts/check-test-discovery.mjs",
     "test:chrome-debug": "cd .agents/skills/chrome-debug/tests && python3 -m unittest test_contract test_measure test_rules test_worker_trace",
@@ -24,6 +25,7 @@
   },
   "devDependencies": {
     "@playwright/test": "1.63.0",
+    "@resvg/resvg-js": "2.6.2",
     "@types/chrome": "^0.0.287",
     "@types/node": "24.19.1",
     "@types/react": "^19.0.0",
