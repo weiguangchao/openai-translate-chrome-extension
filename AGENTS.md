@@ -55,7 +55,7 @@ Each rule names what fails when it is broken. When the developer corrects a mist
 
 - Never make a PR unless the developer explicitly asks you to do so.
 - Conventional commit titles, plain language: fix(web): new threads no longer spike CPU.
-- Body: use `## Problem` and `## Fix` sections. Describe the problem in a sentence or two, then explain how you fixed it.
+- Body: the problem in a sentence or two, then how you fixed it.
 - UI changes need before/after images.
 
 ## Verifying
