@@ -38,7 +38,13 @@ function captionAt(time) {
   const cue = Math.floor(time / CUE_SECONDS);
   const start = cue * CUE_SECONDS;
   if (time - start >= CUE_LENGTH) return null;
-  return { cue, start, end: start + CUE_LENGTH, segment: Math.floor(cue / SEGMENT_CUES), text: `Line ${cue}` };
+  return {
+    cue,
+    start,
+    end: start + CUE_LENGTH,
+    segment: Math.floor(cue / SEGMENT_CUES),
+    text: `Line ${cue}`,
+  };
 }
 
 function translate(segment) {

@@ -17,9 +17,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-SKILL = HERE.parent
+REPO = HERE.parents[1]
+SKILL = REPO / ".agents/skills/chrome-debug"
 SCRIPTS = SKILL / "scripts"
-REPO = SKILL.parents[2]
 FIXTURES = HERE / "fixtures"
 LIVE = SCRIPTS / "live.py"
 

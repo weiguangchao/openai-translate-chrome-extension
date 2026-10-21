@@ -2,7 +2,7 @@
 
 Each class launches its own Chromium with the Subline test double and its own
 holder state, so nothing here reaches the user's Chrome or holder. Pages come
-from tests/fixtures/site and copy the site behaviour the history ran into.
+from tests/chrome-debug/fixtures/site and copy the site behaviour the history ran into.
 """
 import contextlib
 import io
