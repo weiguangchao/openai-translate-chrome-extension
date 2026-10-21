@@ -6,6 +6,14 @@
 - Before commit → the deslop skill
 - For testing -> the test-audit skill
 
+## Principles
+
+Read the leaf skill in full for any principle you apply. Each entry names when it applies. Each leaf is the **principle-<title>** skill, with the title in kebab case, hyphens kept and other punctuation dropped, unless the entry gives its name.
+
+### Delegation
+
+- **Never Block on the Human.** Tempted to ask "should I do X?" on reversible work. Proceed, present the result, let the human course-correct.
+
 ## Rules
 
 Each rule names what fails when it is broken. When the developer corrects a mistake, fix it and add its rule here; if the rule is already here and only judgment enforces it, enforce it in the same change.
