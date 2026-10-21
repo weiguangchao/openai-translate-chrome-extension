@@ -70,16 +70,13 @@ it('saves each language immediately and retains the latest provider and style se
   stored.model = 'provider/new-model';
   stored.apiKey = 'new-key';
   stored.translation.size = 32;
-  await choose('source', 'zh-TW');
   await choose('target', 'en');
   expect(stored).toMatchObject({
-    sourceLanguage: 'zh-TW',
     targetLanguage: 'en',
     model: 'provider/new-model',
     apiKey: 'new-key',
     translation: { size: 32 },
   });
-  expect(select('source').value).toBe('zh-TW');
   expect(select('target').value).toBe('en');
   expect(document.querySelector('.popup-model-id')?.textContent).toBe('provider/new-model');
 });
@@ -93,39 +90,15 @@ it.each([
   expect(document.querySelector('.popup-setup-hint')?.textContent).toBe(row.hint);
 });
 
-it('offers only English, Simplified Chinese and Traditional Chinese', async () => {
+it('offers one translation-language control with all four supported languages', async () => {
   await render();
-  for (const kind of ['source', 'target'] as const)
-    expect([...select(kind).options].map((option) => [option.value, option.text])).toEqual([
-      ['en', '英语'],
-      ['zh-CN', '简体中文'],
-      ['zh-TW', '繁体中文'],
-    ]);
-});
-
-it('swaps both languages in one save and prevents selecting identical languages', async () => {
-  await render();
-  expect(select('source').querySelector<HTMLOptionElement>('option[value="zh-CN"]')?.disabled).toBe(
-    true,
-  );
-  expect(select('target').querySelector<HTMLOptionElement>('option[value="en"]')?.disabled).toBe(
-    true,
-  );
-  await click('[aria-label="互换原文和译文语言"]');
-  expect(stored).toMatchObject({ sourceLanguage: 'zh-CN', targetLanguage: 'en' });
-  expect(saveSettings).toHaveBeenCalledTimes(1);
-  expect(select('source').value).toBe('zh-CN');
-  expect(select('target').value).toBe('en');
-});
-
-it('rejects a language that conflicts with a newer settings change', async () => {
-  await render();
-  stored.targetLanguage = 'zh-TW';
-  await choose('source', 'zh-TW');
-  expect(saveSettings).not.toHaveBeenCalled();
-  expect(select('source').value).toBe('en');
-  expect(select('target').value).toBe('zh-TW');
-  expect(document.querySelector('[role="alert"]')?.textContent).toBe('原文和译文语言需要不同。');
+  expect(document.querySelectorAll('select')).toHaveLength(1);
+  expect([...select('target').options].map((option) => [option.value, option.text])).toEqual([
+    ['en', '英语'],
+    ['zh-CN', '简体中文'],
+    ['zh-TW', '繁体中文'],
+    ['ja', '日语'],
+  ]);
 });
 
 it('toggles the extension without requiring a configured provider and keeps languages editable', async () => {
@@ -135,7 +108,7 @@ it('toggles the extension without requiring a configured provider and keeps lang
   await click('[role="switch"]');
   expect(stored.enabled).toBe(false);
   expect(document.querySelector('[role="switch"]')?.getAttribute('aria-checked')).toBe('false');
-  expect(select('source').matches(':disabled')).toBe(false);
+  expect(select('target').matches(':disabled')).toBe(false);
   await click('[role="switch"]');
   expect(stored.enabled).toBe(true);
 });
@@ -160,23 +133,23 @@ it('locks quick controls until a save finishes', async () => {
       }),
   );
   await click('[role="switch"]');
-  expect(select('source').matches(':disabled')).toBe(true);
+  expect(select('target').matches(':disabled')).toBe(true);
   expect(document.querySelector('[role="switch"]')?.matches(':disabled')).toBe(true);
   await act(async () => finish());
-  expect(select('source').matches(':disabled')).toBe(false);
+  expect(select('target').matches(':disabled')).toBe(false);
   expect(document.querySelector('[role="switch"]')?.getAttribute('aria-checked')).toBe('false');
 });
 
 it('restores the saved language after a write failure and clears the error after retrying', async () => {
   await render();
   vi.mocked(saveSettings).mockRejectedValueOnce(new Error('Storage unavailable'));
-  await choose('source', 'zh-TW');
-  expect(stored.sourceLanguage).toBe('en');
-  expect(select('source').value).toBe('en');
+  await choose('target', 'ja');
+  expect(stored.targetLanguage).toBe('zh-CN');
+  expect(select('target').value).toBe('zh-CN');
   expect(document.querySelector('[role="alert"]')?.textContent).toBe('保存失败，请重试。');
-  expect(select('source').matches(':disabled')).toBe(false);
-  await choose('source', 'zh-TW');
-  expect(stored.sourceLanguage).toBe('zh-TW');
+  expect(select('target').matches(':disabled')).toBe(false);
+  await choose('target', 'ja');
+  expect(stored.targetLanguage).toBe('ja');
   expect(document.querySelector('[role="alert"]')).toBeNull();
 });
 
@@ -231,7 +204,7 @@ it('updates the popup total when recorded tokens change', async () => {
 it('keeps controls disabled after a load failure and leaves settings accessible', async () => {
   vi.mocked(loadSettings).mockRejectedValueOnce(new Error('Storage unavailable'));
   await render();
-  expect(select('source').matches(':disabled')).toBe(true);
+  expect(select('target').matches(':disabled')).toBe(true);
   expect(document.querySelector('[role="switch"]')?.matches(':disabled')).toBe(true);
   expect(document.querySelector('[role="alert"]')?.textContent).toBe(
     '无法读取设置，请重新打开扩展。',

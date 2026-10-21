@@ -1,3 +1,5 @@
+import { supportedLanguage, type Language } from './languages';
+import { UnsupportedLanguageError } from './provider-error';
 import { planLookaheadCues } from './tuning';
 import type { PlaybackCue } from './playback-plan';
 import type { TranslateFailure } from './provider-error';
@@ -11,11 +13,13 @@ export type Reply<T> =
 export interface TranslateRequest {
   type: 'translate';
   text: string;
+  captionLanguage: Language;
   cacheOnly?: boolean;
 }
 
 export interface PrefetchRequest {
   type: 'prefetch';
+  captionLanguage: Language | null;
   time: number;
   rate: number;
   cues: readonly PlaybackCue[];
@@ -54,10 +58,22 @@ function validText(value: unknown): value is string {
   return typeof value === 'string' && Boolean(value.trim()) && value.length <= 5000;
 }
 
-export function readTranslateRequest(message: object): Required<TranslateRequest> {
+function captionLanguageOf(message: object): Language {
+  const { captionLanguage } = message as Record<string, unknown>;
+  const language = typeof captionLanguage === 'string' ? supportedLanguage(captionLanguage) : null;
+  if (!language) throw new UnsupportedLanguageError();
+  return language;
+}
+
+export function readTranslateRequest(message: object): TranslateRequest & { cacheOnly: boolean } {
   const { text, cacheOnly } = message as Record<string, unknown>;
   if (!validText(text)) throw new Error('字幕内容无效。');
-  return { type: 'translate', text, cacheOnly: cacheOnly === true };
+  return {
+    type: 'translate',
+    text,
+    cacheOnly: cacheOnly === true,
+    captionLanguage: captionLanguageOf(message),
+  };
 }
 
 function finiteTime(value: unknown): value is number {
@@ -77,6 +93,7 @@ export function readPrefetchRequest(message: object): PrefetchRequest {
   if (cues.length > planLookaheadCues) throw new Error('预加载字幕内容无效。');
   return {
     type: 'prefetch',
+    captionLanguage: cues.length ? captionLanguageOf(message) : null,
     time,
     rate,
     cues: cues.map((cue: unknown): PlaybackCue => {

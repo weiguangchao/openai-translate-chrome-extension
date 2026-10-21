@@ -1,5 +1,5 @@
 import { fetchModels, translate } from '../shared/api';
-import { failureOf } from '../shared/provider-error';
+import { failureOf, UnsupportedLanguageError } from '../shared/provider-error';
 import {
   readHoldRequest,
   readPrefetchRequest,
@@ -64,12 +64,20 @@ async function contentRequest(
       return;
     }
     requireEnabled(platform);
-    return queue.prefetch(consumer, settings, snapshot.cues, snapshot.time, snapshot.rate);
+    if (!snapshot.captionLanguage) throw new UnsupportedLanguageError();
+    return queue.prefetch(
+      consumer,
+      { ...settings, captionLanguage: snapshot.captionLanguage },
+      snapshot.cues,
+      snapshot.time,
+      snapshot.rate,
+    );
   }
   if (type === 'translate') {
     requireEnabled(platform);
-    const { text, cacheOnly } = readTranslateRequest(message);
-    return cacheOnly ? queue.lookup(settings, text) : queue.request(consumer, settings, text);
+    const { text, cacheOnly, captionLanguage } = readTranslateRequest(message);
+    const effective = { ...settings, captionLanguage };
+    return cacheOnly ? queue.lookup(effective, text) : queue.request(consumer, effective, text);
   }
   throw new Error('不支持的请求。');
 }
@@ -111,8 +119,8 @@ chrome.storage.onChanged.addListener((changes, area) => {
     if (sequence !== updateSequence) return;
     const change = classifySettingsChange(settings, next);
     settings = next;
-    if (change.translation || change.source) translationRevision = crypto.randomUUID();
-    if (change.translation || change.source || !settings.enabled || !hasProviderConsent(settings)) {
+    if (change.translation) translationRevision = crypto.randomUUID();
+    if (change.translation || !settings.enabled || !hasProviderConsent(settings)) {
       queue.reset();
       consumers.clear();
     } else if (change.availability) {

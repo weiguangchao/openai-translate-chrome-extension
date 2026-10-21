@@ -2,7 +2,7 @@ import type { TimedCue } from '../cues';
 import type { TimelineState } from './protocol';
 
 export class SourceCache {
-  private current: TimelineState = { mode: 'checking', source: null };
+  private current: TimelineState = { mode: 'checking', source: null, language: null };
   private version = 0;
 
   get state(): Readonly<Omit<TimelineState, 'source'>> & {
@@ -23,12 +23,17 @@ export class SourceCache {
 
   constructor(private changed: () => void) {}
 
-  select(video: string, track: string, language: string): void {
+  select(video: string, track: string, language: string | null): void {
     const key = JSON.stringify([video, track, language]);
     if (key === this.key) return;
     this.clear();
     this.key = key;
-    this.current = { mode: 'checking', source: null, sourceId: key };
+    this.current = {
+      mode: 'checking',
+      source: null,
+      sourceId: key,
+      language,
+    };
   }
 
   update(patch: Partial<Pick<TimelineState, 'mode' | 'source'>>): void {
@@ -81,7 +86,7 @@ export class SourceCache {
     this.key = '';
     this.resource = '';
     this.loaded = false;
-    this.current = { mode: 'checking', source: null };
+    this.current = { mode: 'checking', source: null, language: null };
     this.version++;
   }
 }

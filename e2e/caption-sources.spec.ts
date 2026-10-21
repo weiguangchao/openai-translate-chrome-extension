@@ -2,6 +2,8 @@ import { expect, test } from '@playwright/test';
 import {
   asrSource,
   asrTranslation,
+  japaneseSource,
+  japaneseTranslation,
   traditionalSource,
   traditionalTranslation,
   nextSource,
@@ -69,30 +71,54 @@ for (const platform of ['youtube', 'hbo', 'x'] as const) {
     );
   });
 
-  test(`${platform}: source and selected tracks change without consuming website translations`, async ({}, info) => {
+  test(`${platform}: caption language follows the selected track and unsupported languages never reach the Provider`, async ({}, info) => {
     await withPlayer(platform, info, async (p) => {
       await p.play();
       await p.pair(source, translation);
       await p.page.evaluate(() => window.fixture.select('en', 'asr'));
       await p.pair(asrSource, asrTranslation);
       await p.page.evaluate(() => window.fixture.select('zh-CN'));
-      await p.pair(source, translation);
-      expect(
-        p.downloads.some(
-          (r) => new URL(r.url).searchParams.has('tlang') || r.url.includes('zh-CN'),
-        ),
-      ).toBe(false);
-      await p.settings({ sourceLanguage: 'zh-TW' });
+      await p.pair(translation, translation);
       await p.page.evaluate(() => window.fixture.select('zh-TW'));
       await p.pair(traditionalSource, traditionalTranslation);
+      await p.page.evaluate(() => window.fixture.select('ja', 'asr'));
+      await p.pair(japaneseSource, japaneseTranslation);
+      const japanese = p.posts.filter((post) =>
+        post.inputs.some((input) => input.text === japaneseSource),
+      );
+      expect(japanese).toHaveLength(1);
+      expect(japanese[0].body.messages).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            role: 'system',
+            content: expect.stringMatching(
+              /^Translate the given Japanese into Simplified Chinese\./,
+            ),
+          }),
+        ]),
+      );
+      const sent = p.posts.length;
+      const downloaded = p.downloads.length;
+      await p.page.evaluate(() => window.fixture.select('fr'));
+      await expect(p.translated).toHaveText('原文语言不支持');
+      await expect(p.translated).toBeVisible();
+      await expect(p.original).toBeHidden();
+      expect(p.posts).toHaveLength(sent);
+      expect(p.downloads).toHaveLength(downloaded);
+      await p.page.screenshot({ path: info.outputPath('unsupported-language.png') });
+      await p.page.evaluate(() => window.fixture.select('en'));
+      await p.pair(source, translation);
+      expect(
+        p.posts.filter((post) => post.inputs.some((input) => input.text === source)),
+      ).toHaveLength(1);
+      expect(p.downloads.some((request) => new URL(request.url).searchParams.has('tlang'))).toBe(
+        false,
+      );
       if (platform !== 'youtube') {
         await p.page.evaluate(() => window.fixture.select(null));
         await expect(p.original).toBeHidden();
         await expect(p.translated).toBeHidden();
-        await p.page.evaluate(() => window.fixture.select('zh-TW'));
-        await p.pair(traditionalSource, traditionalTranslation);
       }
-      expect(p.downloads.some((r) => r.url.includes('zh-TW'))).toBe(true);
     });
   });
 

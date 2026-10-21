@@ -36,6 +36,7 @@ it('ends English sentences at terminal punctuation but not at abbreviations, dec
 
 it.each([
   ['zh-CN', '你好。我是谁？“走吧！”他说', [3, 7, 12]],
+  ['ja-JP', 'こんにちは。誰ですか？「行こう！」と言った', [6, 11, 17]],
   ['zh-TW', '你好。我是誰？「走吧！」他說', [3, 7, 12]],
   ['zh-CN', '真的吗?我不信! OK.', [4, 8]],
 ])('ends %s sentences at full-width punctuation and closing quotes', (language, text, ends) => {
@@ -177,3 +178,12 @@ it.each(['fr', 'constructor'])(
     expect(captions(language, longCaption)).toEqual(longCaptionParts);
   },
 );
+
+it('splits unspaced Japanese into captions within the display limit', () => {
+  const text =
+    '私たちは明日の朝に東京駅で友達と待ち合わせをして一緒に京都まで電車で旅行する予定ですが天気予報によると午後から雨が降るので傘を忘れないようにしてください';
+  const pieces = captions('ja', text);
+  expect(pieces).toHaveLength(2);
+  expect(pieces.join('')).toBe(text);
+  expect(pieces.every((piece) => subtitleDisplayLength(piece) <= captionDisplayLimit)).toBe(true);
+});

@@ -9,16 +9,22 @@ export const createYoutubePlatform: PlatformFactory = (changed): Platform => {
     style: `.subline-player ${CAPTION_LAYER} { opacity: 0 !important; pointer-events: none !important; }`,
     videoId: youtubeVideoId,
     findPlayer: (video) => video.closest<HTMLElement>(PLAYER) ?? video.parentElement,
-    source(video, _player, sourceLanguage) {
-      const state = bridge.read(youtubeVideoId(), sourceLanguage);
+    source(video) {
+      const state = bridge.read(youtubeVideoId());
       if (subtitlesHidden(video))
-        return { kind: 'timeline', mode: 'checking', cues: [], layers: () => [] };
+        return { kind: 'timeline', mode: 'checking', language: null, cues: [], layers: () => [] };
       if (!state?.source)
-        return { kind: 'waiting', mode: state?.mode ?? 'checking', id: state?.sourceId };
+        return {
+          kind: 'waiting',
+          mode: state?.mode ?? 'checking',
+          id: state?.sourceId,
+          language: state?.language ?? null,
+        };
       return {
         kind: 'timeline',
         mode: state.mode,
         id: state.sourceId,
+        language: state.language,
         cues: state.source,
         layers: () => [],
       };

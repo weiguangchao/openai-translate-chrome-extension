@@ -2,7 +2,12 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { DEFAULT_SETTINGS } from '../src/shared/settings';
 
 let translateCaptionBatch: typeof import('../src/shared/api').translateCaptionBatch;
-const settings = { ...DEFAULT_SETTINGS, apiKey: 'key', model: 'response-test' };
+const settings = {
+  ...DEFAULT_SETTINGS,
+  captionLanguage: 'en' as const,
+  apiKey: 'key',
+  model: 'response-test',
+};
 beforeEach(async () => {
   vi.resetModules();
   ({ translateCaptionBatch } = await import('../src/shared/api'));
@@ -67,6 +72,20 @@ it.each(['One.', ' One. '])('rejects a translation that copies its source %j', a
     },
   );
   expect(published).not.toHaveBeenCalled();
+});
+
+it('accepts unchanged text when the caption and translation languages match', async () => {
+  respond(payload([result(0, '今日はいい天気ですね。')]));
+  const published = vi.fn();
+  await expect(
+    translateCaptionBatch(
+      { ...settings, captionLanguage: 'ja', targetLanguage: 'ja' },
+      ['今日はいい天気ですね。'],
+      undefined,
+      published,
+    ),
+  ).resolves.toEqual(['今日はいい天気ですね。']);
+  expect(published.mock.calls).toEqual([[0, '今日はいい天気ですね。']]);
 });
 
 it('selects the final JSON once for both its return value and publications', async () => {

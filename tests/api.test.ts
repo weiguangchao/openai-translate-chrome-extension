@@ -9,11 +9,12 @@ import {
   normalizeSettings,
   publicSettings,
   validateSettings,
-  type Settings,
+  type CaptionTranslationSettings,
 } from '../src/shared/settings';
 
-const config = (): Settings => ({
+const config = (): CaptionTranslationSettings => ({
   ...structuredClone(DEFAULT_SETTINGS),
+  captionLanguage: 'en',
   baseUrl: 'https://provider.example/api/v1/',
   apiKey: 'private-test-key',
   model: 'subtitle-model',
@@ -88,7 +89,7 @@ describe('OpenAI-compatible provider contract', () => {
       const body = JSON.parse(init.body);
       expect(body.model).toBe('subtitle-model');
       const instructions: string = body.messages[0].content;
-      expect(instructions).toMatch(/^Translate the given English into Simplified Chinese\./);
+      expect(instructions).toMatch(/^Translate the given text into Simplified Chinese\./);
       expect(instructions).toContain('Output only the translation');
       expect(instructions).not.toMatch(/subtitle|film|movie/i);
       expect(instructions).toMatch(/^[\x20-\x7E\n]+$/);
@@ -118,7 +119,7 @@ describe('OpenAI-compatible provider contract', () => {
       const published = vi.fn();
       await expect(
         translateCaptionBatch(
-          normalizeSettings({ ...config(), apiFormat }),
+          { ...normalizeSettings({ ...config(), apiFormat }), captionLanguage: 'en' },
           texts,
           undefined,
           published,
@@ -394,7 +395,10 @@ describe('batch replies', () => {
     vi.stubGlobal('fetch', fetch);
     await expect(
       translateCaptionBatch(
-        normalizeSettings({ ...config(), apiFormat: 'completions', model: 'legacy-400' }),
+        {
+          ...normalizeSettings({ ...config(), apiFormat: 'completions', model: 'legacy-400' }),
+          captionLanguage: 'en',
+        },
         ['A', 'B'],
       ),
     ).rejects.toThrow('HTTP 400');
@@ -422,9 +426,9 @@ describe('batch replies', () => {
 });
 
 describe('saved configuration contract', () => {
-  it('allows partial setup, but requires different languages', () => {
+  it('allows partial setup without a configured caption language', () => {
     expect(() => validateSettings(structuredClone(DEFAULT_SETTINGS))).not.toThrow();
-    expect(() => validateSettings({ ...config(), sourceLanguage: 'zh-CN' })).toThrow('需要不同');
+    expect(() => validateSettings({ ...config(), targetLanguage: 'en' })).not.toThrow();
   });
 
   it('bounds persisted styles and strips service secrets from content-script settings', () => {
@@ -443,7 +447,7 @@ describe('saved configuration contract', () => {
     expect(settings.translation).toEqual({ color: '#ffe3a3', size: 12 });
     expect(settings.backgroundOpacity).toBe(90);
     expect(settings.enabled).toBe(true);
-    expect(settings.sourceLanguage).toBe('en');
+    expect(settings).not.toHaveProperty('sourceLanguage');
     const exposed = publicSettings(settings);
     expect(exposed.configured).toBe(true);
     for (const secret of ['apiKey', 'baseUrl', 'model', 'providerConsent', 'apiFormat'])
@@ -452,13 +456,13 @@ describe('saved configuration contract', () => {
   });
 
   it.each([
-    [{ sourceLanguage: 'ja', targetLanguage: 'ko' }, ['en', 'zh-CN']],
-    [{ sourceLanguage: 'zh-CN', targetLanguage: 'ja' }, ['zh-CN', 'en']],
-    [{ sourceLanguage: 'fr', targetLanguage: 'en' }, ['zh-CN', 'en']],
-    [{ sourceLanguage: 'zh-TW', targetLanguage: 'en' }, ['zh-TW', 'en']],
-    [{ sourceLanguage: 'en', targetLanguage: 'en' }, ['en', 'en']],
-  ])('replaces a removed language without pairing it with the other one: %o', (saved, pair) => {
+    [{ sourceLanguage: 'ja', targetLanguage: 'ko' }, 'zh-CN'],
+    [{ sourceLanguage: 'zh-CN', targetLanguage: 'ja' }, 'ja'],
+    [{ sourceLanguage: 'fr', targetLanguage: 'en' }, 'en'],
+    [{ sourceLanguage: 'zh-TW', targetLanguage: 'zh-TW' }, 'zh-TW'],
+  ])('migrates saved languages to a translation-only preference: %o', (saved, target) => {
     const settings = normalizeSettings({ ...config(), ...saved });
-    expect([settings.sourceLanguage, settings.targetLanguage]).toEqual(pair);
+    expect(settings.targetLanguage).toBe(target);
+    expect(settings).not.toHaveProperty('sourceLanguage');
   });
 });

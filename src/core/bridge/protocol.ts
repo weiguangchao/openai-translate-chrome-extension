@@ -7,11 +7,11 @@ export interface TimelineState {
   mode: SourceMode;
   source: TimedCue[] | null;
   sourceId?: string;
+  language: string | null;
 }
 
 export interface TimelineRequest {
   videoId: string;
-  sourceLanguage: string;
 }
 
 export function bridgeMessages(channel: PlatformId) {
@@ -27,12 +27,14 @@ export function readTimelineState(value: unknown): TimelineState | null {
   if (
     !state ||
     (state.mode !== 'checking' && state.mode !== 'model') ||
-    (state.source !== null && !validCues(state.source))
+    (state.source !== null && !validCues(state.source)) ||
+    (state.language !== null && typeof state.language !== 'string')
   )
     return null;
   return {
     mode: state.mode,
     source: state.source === null ? null : copyCues(state.source),
     sourceId: typeof state.sourceId === 'string' ? state.sourceId : undefined,
+    language: state.language,
   };
 }

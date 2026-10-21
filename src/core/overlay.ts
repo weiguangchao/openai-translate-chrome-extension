@@ -1,3 +1,4 @@
+import { failureText } from '../shared/provider-error';
 import type { PublicSettings } from '../shared/settings';
 
 const LOADING_TRANSLATION = '翻译中';
@@ -9,7 +10,8 @@ export type TranslationLine =
   | { readonly kind: 'ready'; readonly translation: string }
   | { readonly kind: 'failed'; readonly message: string }
   | { readonly kind: 'timedOut' }
-  | { readonly kind: 'repeated' };
+  | { readonly kind: 'repeated' }
+  | { readonly kind: 'unsupported-language' };
 
 export interface CaptionView {
   readonly original: string;
@@ -30,6 +32,8 @@ function lineContent(line: TranslationLine): { text: string; status: Status } {
       return { text: `Subline：${line.message}`, status: 'error' };
     case 'timedOut':
       return { text: TIMEOUT_TRANSLATION, status: 'timeout' };
+    case 'unsupported-language':
+      return { text: failureText({ kind: 'unsupported-language' }), status: 'error' };
     case 'repeated':
       return { text: '', status: null };
   }

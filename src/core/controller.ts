@@ -1,3 +1,4 @@
+import { supportedLanguage } from '../shared/languages';
 import { classifySettingsChange, type PublicSettings } from '../shared/settings';
 import type { SourceMode } from './bridge/protocol';
 import { ExtensionConnection } from './connection';
@@ -105,7 +106,7 @@ export class CaptionController {
     if (this.destroyed) return;
     const change = classifySettingsChange(this.settings, settings);
     this.settings = settings;
-    if (change.source || change.translation) this.unmount();
+    if (change.translation) this.unmount();
     else if (change.style) this.overlay.updateStyle(settings);
     this.tick();
   }
@@ -181,7 +182,7 @@ export class CaptionController {
       this.stop();
       return;
     }
-    const source = this.platform.source(video, player, this.settings.sourceLanguage);
+    const source = this.platform.source(video, player);
     if (!this.settings.configured) {
       if (this.video) this.unmount();
       return;
@@ -200,7 +201,7 @@ export class CaptionController {
       return;
     }
     this.gate.observe(time);
-    const track = selectedTrack(video, this.settings.sourceLanguage);
+    const track = selectedTrack(video);
     const sourceId = source.id ?? video.currentSrc;
     if (sourceId !== this.source || track !== this.nativeTrack) {
       this.source = sourceId;
@@ -212,10 +213,19 @@ export class CaptionController {
     const usesModel = source.mode === 'model';
     const caption = currentCaption(source, captions ? captionAt(captions, time) : '');
     this.translator.notePlayback(video.paused);
-    if (usesModel && !video.paused && !this.gate.settling && captions)
-      this.translator.plan(time, video.playbackRate || 1, playbackCues(captions, time));
     this.overlay.hide(caption.layers);
     video.classList.toggle('subline-native', caption.nativeTrack);
+    const language = source.language === null ? null : supportedLanguage(source.language);
+    if (!language) {
+      if (source.language !== null || caption.text) this.translator.unsupportedLanguage();
+      else {
+        this.translator.release();
+        this.translator.clear();
+      }
+      return;
+    }
+    if (usesModel && !video.paused && !this.gate.settling && captions)
+      this.translator.plan(time, video.playbackRate || 1, playbackCues(captions, time), language);
     const cueIndex =
       captions?.findIndex(
         (item) => item.startTime <= time && time < item.endTime && item.text === caption.text,
@@ -236,6 +246,7 @@ export class CaptionController {
     };
     this.translator.show({
       text: caption.text,
+      captionLanguage: language,
       cacheOnly: video.paused || this.gate.settling,
       debounce: captions ? 0 : 300,
     });

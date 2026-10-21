@@ -32,7 +32,7 @@ beforeEach(() => {
     readyState: { value: 1 },
     paused: { value: false, configurable: true },
   });
-  source = { kind: 'waiting', mode: 'checking' };
+  source = { kind: 'waiting', language: null, mode: 'checking' };
   platform = {
     id: 'hbo',
     style: '.subline-player #layer { opacity: 0 !important; }',
@@ -65,6 +65,7 @@ const lines = () =>
 it('releases a DOM-only consumer when the controller is destroyed', async () => {
   source = {
     kind: 'live',
+    language: 'en',
     mode: 'model',
     read: () => ({ text: 'DOM caption', layers: [], nativeTrack: false }),
   };
@@ -77,7 +78,32 @@ it('releases a DOM-only consumer when the controller is destroyed', async () => 
   sendMessage.mockClear();
   controller.destroy();
   await vi.advanceTimersByTimeAsync(0);
-  expect(sendMessage).toHaveBeenCalledWith({ type: 'prefetch', time: 0, rate: 1, cues: [] });
+  expect(sendMessage).toHaveBeenCalledWith({
+    type: 'prefetch',
+    captionLanguage: null,
+    time: 0,
+    rate: 1,
+    cues: [],
+  });
+});
+
+it('replaces a live translation when its language changes but its text stays the same', async () => {
+  source = {
+    kind: 'live',
+    language: 'en',
+    mode: 'model',
+    read: () => ({ text: 'Same text', layers: [], nativeTrack: false }),
+  };
+  controller = new CaptionController(
+    () => platform,
+    publicSettings({ ...consentedSettings, apiKey: 'key', model: 'model' }),
+  );
+  await vi.advanceTimersByTimeAsync(450);
+  expect(lines()).toEqual(['Same text', '译文 Same text']);
+  sendMessage.mockImplementation(async () => ({ ok: true, data: '日语译文' }));
+  source = { ...source, language: 'ja' };
+  await vi.advanceTimersByTimeAsync(450);
+  expect(lines()).toEqual(['Same text', '日语译文']);
 });
 
 it('drives any platform through the waiting, live and timeline caption sources', async () => {
@@ -93,6 +119,7 @@ it('drives any platform through the waiting, live and timeline caption sources',
 
   source = {
     kind: 'live',
+    language: 'en',
     mode: 'model',
     read: () => ({ text: 'Live cue', layers: [layer], nativeTrack: false }),
   };
@@ -102,6 +129,7 @@ it('drives any platform through the waiting, live and timeline caption sources',
 
   source = {
     kind: 'timeline',
+    language: 'en',
     mode: 'model',
     id: 'track',
     cues: [{ startTime: 0, endTime: 10, text: 'Timed cue.' }],
@@ -112,6 +140,7 @@ it('drives any platform through the waiting, live and timeline caption sources',
   expect(layer.hasAttribute('data-subline-caption')).toBe(false);
   expect(sendMessage).toHaveBeenCalledWith({
     type: 'prefetch',
+    captionLanguage: 'en',
     time: 0,
     rate: 1,
     cues: [{ text: 'Timed cue.', start: 0, end: 10 }],
@@ -128,11 +157,13 @@ it('shows no source while the caption source is still being checked', async () =
   const checking: CaptionSource[] = [
     {
       kind: 'live',
+      language: 'en',
       mode: 'checking',
       read: () => ({ text: 'Live cue', layers: [layer], nativeTrack: false }),
     },
     {
       kind: 'timeline',
+      language: 'en',
       mode: 'checking',
       cues: [{ startTime: 0, endTime: 10, text: 'Timed cue.' }],
       layers: () => [layer],
@@ -166,6 +197,7 @@ it('updates styles in place while a translation is pending and shows its origina
   );
   source = {
     kind: 'timeline',
+    language: 'en',
     mode: 'model',
     cues: [{ startTime: 0, endTime: 10, text: 'Still waiting.' }],
     layers: () => [],
@@ -194,6 +226,7 @@ it('shows only the translation when translation-only is on and switches in place
   const settings = { ...consentedSettings, apiKey: 'key', model: 'model', translationOnly: true };
   source = {
     kind: 'live',
+    language: 'en',
     mode: 'model',
     read: () => ({ text: 'DOM caption', layers: [], nativeTrack: false }),
   };
@@ -224,6 +257,7 @@ it.each(['translation', 'source'])(
     Object.defineProperty(video, 'paused', { value: true });
     source = {
       kind: 'timeline',
+      language: 'en',
       mode: 'model',
       id: 'old-track',
       cues: [{ startTime: 0, endTime: 10, text: 'Old source.' }],
@@ -265,6 +299,7 @@ it('retries a paused cache lookup invalidated by a later seek event', async () =
   Object.defineProperty(video, 'paused', { value: true });
   source = {
     kind: 'timeline',
+    language: 'en',
     mode: 'model',
     cues: [{ startTime: 0, endTime: 90, text: 'Cached source.' }],
     layers: () => [],
@@ -285,8 +320,8 @@ it('retries a paused cache lookup invalidated by a later seek event', async () =
   await vi.advanceTimersByTimeAsync(450);
   expect(lines()).toEqual(['Cached source.', '缓存译文']);
   expect(sendMessage.mock.calls.filter(([m]) => m.type === 'translate').map(([m]) => m)).toEqual([
-    { type: 'translate', text: 'Cached source.', cacheOnly: true },
-    { type: 'translate', text: 'Cached source.', cacheOnly: true },
+    { type: 'translate', captionLanguage: 'en', text: 'Cached source.', cacheOnly: true },
+    { type: 'translate', captionLanguage: 'en', text: 'Cached source.', cacheOnly: true },
   ]);
 });
 
@@ -304,6 +339,7 @@ it('keeps a displayed translation when playback resumes through a rebuffer seek'
   video.currentTime = 2;
   source = {
     kind: 'timeline',
+    language: 'en',
     mode: 'model',
     id: 'track',
     cues: [{ startTime: 0, endTime: 10, text: 'Already translated.' }],
@@ -333,6 +369,7 @@ it('keeps a displayed translation when playback resumes through a rebuffer seek'
 it('reports what the viewer sees only while the page asks for a trace', async () => {
   source = {
     kind: 'timeline',
+    language: 'en',
     mode: 'model',
     id: 'track',
     cues: [{ startTime: 0, endTime: 10, text: 'Timed cue.' }],
@@ -375,6 +412,7 @@ it('treats a translation that reads like the loading placeholder as a translatio
   document.documentElement.setAttribute('data-subline-trace', 'run');
   source = {
     kind: 'timeline',
+    language: 'en',
     mode: 'model',
     id: 'track',
     cues: [{ startTime: 0, endTime: 10, text: 'Translating.' }],
@@ -411,6 +449,7 @@ it('shows only the source when the translation copies it and does not ask again'
   );
   source = {
     kind: 'live',
+    language: 'en',
     mode: 'model',
     read: () => ({ text: 'Live cue', layers: [], nativeTrack: false }),
   };
@@ -429,6 +468,7 @@ it('shows only the source when the translation copies it and does not ask again'
 it('keeps ready captions when the playback rate changes and plans at the new rate', async () => {
   source = {
     kind: 'timeline',
+    language: 'en',
     mode: 'model',
     id: 'track',
     cues: [
@@ -452,6 +492,7 @@ it('keeps ready captions when the playback rate changes and plans at the new rat
   expect(sendMessage.mock.calls.map(([message]) => message)).toEqual([
     {
       type: 'prefetch',
+      captionLanguage: 'en',
       time: 0,
       rate: 1.5,
       cues: [
@@ -471,6 +512,7 @@ it('keeps captions inside a fullscreen ancestor and restores native layers for v
   fullscreen.append(player);
   source = {
     kind: 'timeline',
+    language: 'en',
     mode: 'model',
     cues: [{ startTime: 0, endTime: 10, text: 'Visible caption.' }],
     layers: () => [layer],

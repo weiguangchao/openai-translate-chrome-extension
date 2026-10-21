@@ -1,3 +1,4 @@
+import type { Language } from '../src/shared/languages';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { CaptionController } from '../src/core/controller';
 import { TranslationQueue } from '../src/extension/queue';
@@ -134,9 +135,9 @@ beforeEach(async () => {
     'fetch',
     vi.fn(async (url: string, init: RequestInit) => {
       const path = new URL(url).pathname;
-      const subtitle = path.match(/\/pl\/s0\/(\w+)\.m3u8$/);
+      const subtitle = path.match(/\/pl\/s0\/([\w-]+)\.m3u8$/);
       if (subtitle) return new Response(playlist(path.split('/')[3], subtitle[1]));
-      const file = path.match(/\/(\w+)\/(\w+)\/(\d)-segment\.vtt$/);
+      const file = path.match(/\/(\w+)\/([\w-]+)\/(\d)-segment\.vtt$/);
       if (file) return new Response(vtt(Number(file[3]), file[2] === 'EN' ? 'Cue' : '字幕'));
       const texts = requestedTexts(init);
       requested.push({ at: 0, texts, signal: init.signal! });
@@ -158,6 +159,7 @@ beforeEach(async () => {
       id: 'extension-id',
       sendMessage: async (message: {
         type: string;
+        captionLanguage?: Language | null;
         text?: string;
         time?: number;
         rate?: number;
@@ -179,7 +181,7 @@ beforeEach(async () => {
             ok: true,
             data: await queue.prefetch(
               'x',
-              settings,
+              { ...settings, captionLanguage: message.captionLanguage! },
               message.cues,
               message.time ?? 0,
               message.rate ?? 1,
@@ -190,8 +192,15 @@ beforeEach(async () => {
           return {
             ok: true,
             data: await (message.cacheOnly
-              ? queue.lookup(settings, message.text)
-              : queue.request('x', settings, message.text)),
+              ? queue.lookup(
+                  { ...settings, captionLanguage: message.captionLanguage! },
+                  message.text,
+                )
+              : queue.request(
+                  'x',
+                  { ...settings, captionLanguage: message.captionLanguage! },
+                  message.text,
+                )),
           };
         return { ok: true };
       },
@@ -256,19 +265,19 @@ it('stops prefetch and clears the overlay when X captions are turned off', async
   expect(lines()?.[1].textContent).toBe('译文 Cue 11');
 });
 
-it('reads the source-language track when X shows another language and never downloads it', async () => {
+it('downloads the selected X subtitle track and follows language changes', async () => {
   const { video, hls } = addPlayer('a', { top: 0, bottom: 360 }, false, [
     track('a', 'zh-Hans'),
     track('a', 'EN'),
   ]);
   controller = new CaptionController(createXPlatform, publicSettings(settings));
   await playTo(video, 3);
+  expect(lines()?.[1].textContent).toBe('译文 字幕 1');
+  expect(downloads(/zh-Hans/)).toHaveLength(4);
+  hls.subtitleTrack = 1;
+  await vi.advanceTimersByTimeAsync(5000);
+  expect(lines()?.[0].textContent).toBe('Cue 1');
   expect(lines()?.[1].textContent).toBe('译文 Cue 1');
-  expect(downloads(/zh-Hans/)).toEqual([]);
-  hls.subtitleTracks = [track('a', 'zh-Hans')];
-  await vi.advanceTimersByTimeAsync(1200);
-  expect(lines()?.[0].hidden).toBe(true);
-  expect(downloads(/zh-Hans/)).toEqual([]);
 });
 
 it('follows the playing, most visible video and moves the overlay when another one takes over', async () => {
@@ -338,25 +347,65 @@ it('aborts subtitle downloads when the video changes or the X toggle is turned o
   expect(lines()).toBeUndefined();
 });
 
-it('translates live hls.js cues in the source language when the X player adapter is unavailable', async () => {
+it('uses the selected HLS language for hidden live cues when the playlist cannot provide a timeline', async () => {
+  const originalFetch = fetch;
+  vi.stubGlobal(
+    'fetch',
+    vi.fn((url: string, init: RequestInit) =>
+      url.endsWith('.m3u8')
+        ? Promise.resolve(new Response('#EXTM3U\n#EXT-X-TARGETDURATION:30\n'))
+        : originalFetch(url, init),
+    ),
+  );
   const { video } = addPlayer('a', { top: 0, bottom: 360 }, false);
-  Reflect.deleteProperty(video.parentElement!, '__reactFiber$test');
-  const cue = { text: 'Live cue' };
   Object.defineProperty(video, 'textTracks', {
     value: [
-      { kind: 'captions', language: '', mode: 'showing', activeCues: [cue] },
-      { kind: 'subtitles', language: 'zh-Hans', mode: 'hidden', activeCues: [{ text: '中文' }] },
-      { kind: 'subtitles', language: 'EN', mode: 'hidden', activeCues: [cue] },
+      {
+        kind: 'subtitles',
+        language: 'zh-Hans',
+        mode: 'hidden',
+        activeCues: [{ text: '其他字幕' }],
+      },
+      { kind: 'subtitles', language: 'EN', mode: 'hidden', activeCues: [{ text: 'Live cue' }] },
     ],
   });
   controller = new CaptionController(createXPlatform, publicSettings(settings));
-  await vi.advanceTimersByTimeAsync(3000);
+  await vi.advanceTimersByTimeAsync(4000);
   expect(requested.map((request) => request.texts)).toEqual([['Live cue']]);
   expect(lines()?.[0].textContent).toBe('Live cue');
   expect(lines()?.[1].textContent).toBe('译文 Live cue');
-  expect(video.classList.contains('subline-native')).toBe(true);
-  expect(downloads(/\.m3u8|\.vtt/)).toEqual([]);
 });
+
+it.each([
+  { language: '', original: null, translated: '原文语言不支持', texts: [] },
+  { language: 'EN', original: 'Live cue', translated: '译文 Live cue', texts: [['Live cue']] },
+])(
+  'uses the showing native track with language %j when the X player adapter is unavailable',
+  async ({ language, original, translated, texts }) => {
+    const { video } = addPlayer('a', { top: 0, bottom: 360 }, false);
+    Reflect.deleteProperty(video.parentElement!, '__reactFiber$test');
+    Object.defineProperty(video, 'textTracks', {
+      value: [
+        {
+          kind: 'subtitles',
+          language: 'EN',
+          mode: 'hidden',
+          activeCues: [{ text: 'Old hidden cue' }],
+        },
+        { kind: 'subtitles', language: 'zh-Hans', mode: 'hidden', activeCues: [{ text: '中文' }] },
+        { kind: 'captions', language, mode: 'showing', activeCues: [{ text: 'Live cue' }] },
+      ],
+    });
+    controller = new CaptionController(createXPlatform, publicSettings(settings));
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(requested.map((request) => request.texts)).toEqual(texts);
+    const first = lines()?.[0];
+    expect(first?.hidden ? null : first?.textContent).toBe(original);
+    expect(lines()?.[1].textContent).toBe(translated);
+    expect(video.classList.contains('subline-native')).toBe(true);
+    expect(downloads(/\.m3u8|\.vtt/)).toEqual([]);
+  },
+);
 
 it('accepts only X video CDN URLs and finished subtitle playlists', () => {
   expect(xMediaUrl('/subtitles/a.vtt', `${media}/pl/s0/a.m3u8`)).toBe(

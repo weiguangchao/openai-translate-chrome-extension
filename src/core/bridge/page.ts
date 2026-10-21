@@ -37,12 +37,10 @@ export function servePageTimeline(channel: PlatformId, timeline: PageTimeline): 
       data?.type !== messages.request ||
       !Number.isSafeInteger(data.requestId) ||
       typeof data.videoId !== 'string' ||
-      data.videoId !== timeline.videoId() ||
-      typeof data.sourceLanguage !== 'string' ||
-      data.sourceLanguage.length > 40
+      data.videoId !== timeline.videoId()
     )
       return;
-    timeline.update({ videoId: data.videoId, sourceLanguage: data.sourceLanguage }, cache);
+    timeline.update({ videoId: data.videoId }, cache);
     latest = { requestId: data.requestId, revision: data.revision };
     publish();
   });

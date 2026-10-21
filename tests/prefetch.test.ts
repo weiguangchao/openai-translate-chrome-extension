@@ -525,7 +525,7 @@ it('translates the displayed overlap together and splits a following long cue in
 
 it('reuses the cues read from a track until the track changes', () => {
   const timeline = new NativeTimeline();
-  const read = () => timeline.read(video, 'en').source;
+  const read = () => timeline.read(video).source;
   const first = read();
   expect(read()).toBe(first);
   Object.defineProperty(video.textTracks[0], 'cues', {

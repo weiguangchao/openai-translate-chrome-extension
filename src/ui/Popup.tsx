@@ -1,6 +1,7 @@
+import { LANGUAGES } from '../shared/languages';
 import { useEffect, useState } from 'react';
-import { ArrowLeftRight, Settings2, Subtitles } from 'lucide-react';
-import { DEFAULT_SETTINGS, hasProviderConsent, LANGUAGES, type Settings } from '../shared/settings';
+import { Settings2, Subtitles } from 'lucide-react';
+import { DEFAULT_SETTINGS, hasProviderConsent, type Settings } from '../shared/settings';
 import { isExtension, loadSettings, saveSettings } from '../shared/storage';
 import {
   formatExactTokens,
@@ -17,14 +18,12 @@ function PopupLanguage({
   id,
   label,
   value,
-  otherLanguage,
   onChange,
   ready,
 }: {
   id: string;
   label: string;
   value: string;
-  otherLanguage: string;
   onChange: (value: string) => void;
   ready: boolean;
 }) {
@@ -34,11 +33,7 @@ function PopupLanguage({
       <Select id={id} value={ready ? value : ''} onChange={onChange}>
         {!ready && <option value="">读取中…</option>}
         {LANGUAGES.map((language) => (
-          <option
-            key={language.value}
-            value={language.value}
-            disabled={language.value === otherLanguage}
-          >
+          <option key={language.value} value={language.value}>
             {language.label}
           </option>
         ))}
@@ -116,9 +111,7 @@ export function Popup() {
   }, []);
 
   async function update(
-    changes: Partial<
-      Pick<Settings, 'enabled' | 'sourceLanguage' | 'targetLanguage' | 'translationOnly'>
-    >,
+    changes: Partial<Pick<Settings, 'enabled' | 'targetLanguage' | 'translationOnly'>>,
   ) {
     if (!ready || busy) return;
     setBusy(true);
@@ -126,14 +119,6 @@ export function Popup() {
     try {
       const latest = await loadSettings();
       const next = { ...latest, ...changes };
-      if (
-        (changes.sourceLanguage !== undefined || changes.targetLanguage !== undefined) &&
-        next.sourceLanguage === next.targetLanguage
-      ) {
-        setSettings(latest);
-        setError('原文和译文语言需要不同。');
-        return;
-      }
       await saveSettings(next);
       setSettings(next);
     } catch {
@@ -184,31 +169,9 @@ export function Popup() {
 
       <fieldset className="popup-languages" disabled={!ready || busy} aria-label="翻译语言">
         <PopupLanguage
-          id="popup-source-language"
-          label={copy.source}
-          value={settings.sourceLanguage}
-          otherLanguage={settings.targetLanguage}
-          onChange={(sourceLanguage) => void update({ sourceLanguage })}
-          ready={ready}
-        />
-        <button
-          className="popup-swap"
-          aria-label={copy.swapLanguages}
-          title={copy.swapLanguages}
-          onClick={() =>
-            void update({
-              sourceLanguage: settings.targetLanguage,
-              targetLanguage: settings.sourceLanguage,
-            })
-          }
-        >
-          <ArrowLeftRight size={16} aria-hidden />
-        </button>
-        <PopupLanguage
           id="popup-target-language"
           label={copy.target}
           value={settings.targetLanguage}
-          otherLanguage={settings.sourceLanguage}
           onChange={(targetLanguage) => void update({ targetLanguage })}
           ready={ready}
         />
