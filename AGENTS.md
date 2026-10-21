@@ -58,6 +58,10 @@ Each rule names what fails when it is broken. When the developer corrects a mist
 - Body: the problem in a sentence or two, then how you fixed it.
 - UI changes need before/after images.
 
+## Additional tips
+
+- Don't verify with real-browser unless the user explicitly agrees or requests it.
+
 ## Verifying
 
 When use the chrome-debug skill for a real-browser check, report the metrics below for each build on YouTube, HBO Max and X at 1x, 1.25x, 1.5x and 2x. Each run reloads Subline so no translation is cached, opens the video, sets the rate and traces 45 s with `"since": "open"`. It then seeks once into a segment with no cached translations, away from where the opening trace played, traces 45 s with `"since": "seek"` for the landing trace, then keeps playing and traces 180 s; durations are video seconds. On YouTube, the first `media` step's `time` starts the video where someone is speaking; YouTube ignores `&t=`.
