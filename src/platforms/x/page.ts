@@ -1,6 +1,6 @@
 import { servePageTimeline } from '../../core/bridge/page';
 import { mediaIdentity } from '../../core/bridge/source-cache';
-import { languageTrack } from '../../core/languages';
+import { supportedLanguage } from '../../shared/languages';
 import { authoredSubtitleCaptions } from '../../core/sentences';
 import { fetchSubtitleText, loadWebVtt } from '../../core/webvtt';
 import { parseXSubtitlePlaylist, xMediaUrl } from './captions';
@@ -35,7 +35,7 @@ function hlsPlayer(video: HTMLVideoElement): HlsPlayer | undefined {
   }
 }
 
-function playerState(sourceLanguage: string) {
+function playerState() {
   const video = activeXVideo();
   const hls = video && hlsPlayer(video);
   const url = typeof hls?.url === 'string' ? xMediaUrl(hls.url) : undefined;
@@ -43,12 +43,8 @@ function playerState(sourceLanguage: string) {
   const tracks = Array.isArray(hls.subtitleTracks) ? hls.subtitleTracks : [];
   const index = hls.subtitleTrack;
   const selected = Number.isInteger(index) ? tracks[index!] : undefined;
-  const source = selected
-    ? (languageTrack([selected], (track) => track.lang ?? '', sourceLanguage) ??
-      languageTrack(tracks, (track) => track.lang ?? '', sourceLanguage))
-    : undefined;
-  const playlist = typeof source?.url === 'string' ? xMediaUrl(source.url) : undefined;
-  return { url, playlist };
+  const playlist = typeof selected?.url === 'string' ? xMediaUrl(selected.url) : undefined;
+  return { url, playlist, language: selected ? (selected.lang ?? '') : null };
 }
 
 servePageTimeline('x', {
@@ -56,11 +52,19 @@ servePageTimeline('x', {
   update(request, cache) {
     let player: ReturnType<typeof playerState> = null;
     try {
-      player = playerState(request.sourceLanguage);
+      player = playerState();
     } catch {}
     const videoId = JSON.stringify([request.videoId, player ? mediaIdentity(player.url) : null]);
     const playlist = player?.playlist;
-    cache.select(videoId, playlist ? mediaIdentity(playlist) : '', request.sourceLanguage);
+    cache.select(videoId, playlist ? mediaIdentity(playlist) : '', player?.language ?? null);
+    if (
+      player?.language !== null &&
+      player?.language !== undefined &&
+      !supportedLanguage(player.language)
+    ) {
+      if (cache.state.mode !== 'model') cache.update({ mode: 'model', source: [] });
+      return;
+    }
     if (!player && cache.state.mode !== 'model') cache.update({ mode: 'model' });
     else if (player && !playlist && cache.state.source === null) cache.update({ source: [] });
     if (playlist)
@@ -72,7 +76,7 @@ servePageTimeline('x', {
             files.map((url) => ({ url, offset: 0 })),
             signal,
           ),
-          request.sourceLanguage,
+          player!.language!,
         );
       });
   },

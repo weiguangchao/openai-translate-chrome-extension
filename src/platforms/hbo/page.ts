@@ -1,5 +1,6 @@
 import { servePageTimeline } from '../../core/bridge/page';
 import { mediaIdentity } from '../../core/bridge/source-cache';
+import { supportedLanguage } from '../../shared/languages';
 import { languageTrack } from '../../core/languages';
 import { authoredSubtitleCaptions } from '../../core/sentences';
 import { fetchSubtitleText, loadWebVtt } from '../../core/webvtt';
@@ -42,14 +43,17 @@ function playerState() {
     }
     if (fiber || (root?.stateNode?.current && root.stateNode.current !== root)) continue;
     const url = stream?.url && hboMediaUrl(stream.url);
-    if (!url || stream?.streamMode !== 'VOD' || typeof selection?.subscribe !== 'function')
-      continue;
+    if (typeof selection?.subscribe !== 'function') continue;
     let event: SelectionEvent | undefined;
     const subscription = selection.subscribe((value) => {
       event = value;
     });
     subscription.unsubscribe();
-    return { url, selected: event?.selectedTextTrack, known: Boolean(event) };
+    return {
+      url: stream?.streamMode === 'VOD' ? url : undefined,
+      selected: event?.selectedTextTrack,
+      known: Boolean(event),
+    };
   }
   return null;
 }
@@ -61,37 +65,34 @@ servePageTimeline('hbo', {
     try {
       player = playerState();
     } catch {}
-    const videoId = JSON.stringify([request.videoId, player ? mediaIdentity(player.url) : null]);
+    const videoId = JSON.stringify([
+      request.videoId,
+      player?.url ? mediaIdentity(player.url) : null,
+    ]);
     const role = player?.selected?.role === 'closedcaptions' ? 'caption' : 'subtitle';
     const selected = player?.selected;
-    const selectedSource =
-      selected &&
-      languageTrack([selected], (track) => track.language ?? '', request.sourceLanguage);
-    const language = selectedSource ? selectedSource.language! : request.sourceLanguage;
-    const track = player?.known && selected?.language ? JSON.stringify([language, role]) : '';
-    cache.select(videoId, track, request.sourceLanguage);
-    if (!player && cache.state.mode !== 'model') cache.update({ mode: 'model' });
+    const language = selected?.language ?? null;
+    const track = player?.known && language ? JSON.stringify([language, role]) : '';
+    cache.select(videoId, track, language);
+    if (language !== null && !supportedLanguage(language)) {
+      if (cache.state.mode !== 'model') cache.update({ mode: 'model', source: [] });
+      return;
+    }
+    if (!player?.url && cache.state.mode !== 'model') cache.update({ mode: 'model' });
     else if (player?.known && !player.selected?.language && cache.state.source === null)
       cache.update({ source: [] });
-    if (player?.known && player.selected?.language) {
+    if (player?.url && player.known && player.selected?.language) {
       const url = player.url;
-      cache.load(
-        url,
-        async (signal) => {
-          const tracks = parseHboManifest(await fetchSubtitleText(url, signal), url);
-          const preferred = [...tracks].sort(
-            (a, b) => Number(b.role === role) - Number(a.role === role),
-          );
-          const source = languageTrack(preferred, (track) => track.language, language);
-          return source
-            ? authoredSubtitleCaptions(
-                await loadWebVtt(source.files, signal),
-                request.sourceLanguage,
-              )
-            : [];
-        },
-        selectedSource ? null : [],
-      );
+      cache.load(url, async (signal) => {
+        const tracks = parseHboManifest(await fetchSubtitleText(url, signal), url);
+        const preferred = [...tracks].sort(
+          (a, b) => Number(b.role === role) - Number(a.role === role),
+        );
+        const source = languageTrack(preferred, (track) => track.language, language!);
+        return source
+          ? authoredSubtitleCaptions(await loadWebVtt(source.files, signal), language!)
+          : [];
+      });
     }
   },
 });

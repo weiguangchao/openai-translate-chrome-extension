@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
-  ArrowLeftRight,
   Check,
   ChevronRight,
   CircleHelp,
@@ -24,7 +23,6 @@ import {
 import {
   DEFAULT_SETTINGS,
   hasProviderConsent,
-  languageName,
   providerOrigin,
   validateSettings,
   type Settings,
@@ -302,42 +300,14 @@ export function App() {
                     />
                   </div>
                   <Section icon={<Languages size={19} />} title="字幕语言">
-                    <div className="language-pair">
-                      <div className="field">
-                        <label htmlFor="source-language">{copy.source}</label>
-                        <LanguageSelect
-                          id="source-language"
-                          value={settings.sourceLanguage}
-                          onChange={(value) => update('sourceLanguage', value)}
-                        />
-                      </div>
-                      <button
-                        className="swap-button"
-                        aria-label={copy.swapLanguages}
-                        title="交换语言"
-                        onClick={() =>
-                          setSettings((previous) => ({
-                            ...previous,
-                            sourceLanguage: previous.targetLanguage,
-                            targetLanguage: previous.sourceLanguage,
-                          }))
-                        }
-                      >
-                        <ArrowLeftRight size={17} />
-                      </button>
-                      <div className="field">
-                        <label htmlFor="target-language">{copy.target}</label>
-                        <LanguageSelect
-                          id="target-language"
-                          value={settings.targetLanguage}
-                          onChange={(value) => update('targetLanguage', value)}
-                        />
-                      </div>
+                    <div className="field">
+                      <label htmlFor="target-language">{copy.target}</label>
+                      <LanguageSelect
+                        id="target-language"
+                        value={settings.targetLanguage}
+                        onChange={(value) => update('targetLanguage', value)}
+                      />
                     </div>
-                    <p className="field-hint language-hint">
-                      <Info size={13} /> 请在视频播放器中，将原字幕语言设置为
-                      {languageName(settings.sourceLanguage)}。
-                    </p>
                   </Section>
                   <Section icon={<PlugZap size={19} />} title="Provider" className="api-section">
                     <div className={`connection-badge ${connected ? 'connected' : ''}`}>
@@ -674,7 +644,7 @@ export function App() {
                       OpenAI 兼容接口翻译，再把原文和译文一起显示在播放器里。
                     </p>
                     <ul className="about-features">
-                      <li>原文和译文可选英语、简体中文和繁体中文。</li>
+                      <li>支持英语、简体中文、繁体中文和日语字幕，自动识别字幕语言。</li>
                       <li>字幕按句子翻译，并提前翻译即将播放的部分，减少等待。</li>
                       <li>
                         可以调整原文和译文的颜色、字号、两行间距和译文背景，也可以按网站单独开关。

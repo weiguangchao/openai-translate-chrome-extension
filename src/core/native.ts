@@ -1,6 +1,6 @@
 import type { TimelineState } from './bridge/protocol';
 import type { TimedCue } from './cues';
-import { languageTrack } from './languages';
+import { supportedLanguage } from '../shared/languages';
 import type { LiveCaption } from './platform';
 import { authoredSubtitleCaptions } from './sentences';
 
@@ -21,15 +21,15 @@ export function captionText(cue: TextTrackCue): string {
   return text;
 }
 
-export function selectedTrack(video: HTMLVideoElement, language: string): TextTrack | undefined {
+export function selectedTrack(video: HTMLVideoElement): TextTrack | undefined {
   const tracks = [...video.textTracks].filter(
     (track) => track.mode === 'showing' && ['subtitles', 'captions'].includes(track.kind),
   );
-  return languageTrack(tracks, (track) => track.language, language);
+  return tracks[0];
 }
 
-export function activeTrackCaption(video: HTMLVideoElement, sourceLanguage: string): LiveCaption {
-  const track = selectedTrack(video, sourceLanguage);
+export function activeTrackCaption(video: HTMLVideoElement): LiveCaption {
+  const track = selectedTrack(video);
   const text = track?.activeCues ? [...track.activeCues].map(captionText).join('\n').trim() : '';
   return { text, layers: [], nativeTrack: Boolean(text) };
 }
@@ -38,23 +38,16 @@ export class NativeTimeline {
   private video: HTMLVideoElement | null = null;
   private src = '';
   private track: TextTrack | undefined;
-  private language = '';
   private cues: TimedCue[] | null = null;
   private captions: TimedCue[] | null = null;
 
-  read(video: HTMLVideoElement, sourceLanguage: string): TimelineState {
-    const track = selectedTrack(video, sourceLanguage);
-    if (
-      video !== this.video ||
-      video.currentSrc !== this.src ||
-      track !== this.track ||
-      sourceLanguage !== this.language
-    ) {
+  read(video: HTMLVideoElement): TimelineState {
+    const track = selectedTrack(video);
+    if (video !== this.video || video.currentSrc !== this.src || track !== this.track) {
       this.reset();
       this.video = video;
       this.src = video.currentSrc;
       this.track = track;
-      this.language = sourceLanguage;
     }
     const cues = track?.cues
       ? [...track.cues].map((cue) => ({
@@ -75,16 +68,15 @@ export class NativeTimeline {
       )
     ) {
       this.cues = cues;
-      this.captions = cues && authoredSubtitleCaptions(cues, sourceLanguage);
+      this.captions =
+        cues && track && supportedLanguage(track.language)
+          ? authoredSubtitleCaptions(cues, track.language)
+          : cues;
     }
-    const otherLanguage =
-      !track &&
-      [...video.textTracks].some(
-        (track) => track.mode === 'showing' && ['subtitles', 'captions'].includes(track.kind),
-      );
     return {
       mode: video.readyState >= 1 ? 'model' : 'checking',
-      source: otherLanguage ? [] : this.captions,
+      source: this.captions,
+      language: track ? track.language : null,
     };
   }
 
@@ -92,7 +84,6 @@ export class NativeTimeline {
     this.video = null;
     this.src = '';
     this.track = undefined;
-    this.language = '';
     this.cues = null;
     this.captions = null;
   }

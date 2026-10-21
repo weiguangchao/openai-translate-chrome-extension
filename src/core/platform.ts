@@ -11,6 +11,7 @@ export interface LiveCaption {
 interface SourceBase {
   mode: SourceMode;
   id?: string;
+  language: string | null;
 }
 
 export type CaptionSource =
@@ -28,7 +29,7 @@ export interface Platform {
   videoId(): string;
   findVideo?(): HTMLVideoElement | undefined;
   findPlayer(video: HTMLVideoElement): HTMLElement | null;
-  source(video: HTMLVideoElement, player: HTMLElement, sourceLanguage: string): CaptionSource;
+  source(video: HTMLVideoElement, player: HTMLElement): CaptionSource;
   reset(): void;
   destroy(): void;
 }

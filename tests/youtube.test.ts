@@ -223,7 +223,6 @@ it('loads the selected YouTube track before playback, aligns rolling captions, a
       ...consentedSettings,
       apiKey: 'key',
       model: 'model',
-      sourceLanguage: 'zh-TW',
     }),
   );
   await vi.advanceTimersByTimeAsync(1100);
@@ -340,7 +339,11 @@ it('uses the current video session to load source subtitles and removes duplicat
   await vi.advanceTimersByTimeAsync(1100);
   expect(lines()[0].textContent).toBe('This field behind me');
   expect(lines()[1].textContent).toBe('译文：This field behind me');
-  expect(sendMessage).toHaveBeenCalledWith({ type: 'translate', text: 'This field behind me' });
+  expect(sendMessage).toHaveBeenCalledWith({
+    type: 'translate',
+    captionLanguage: 'en',
+    text: 'This field behind me',
+  });
 });
 
 it('translates authored English sentences even when authored, automatic and browser target tracks exist', async () => {
@@ -355,7 +358,7 @@ it('translates authored English sentences even when authored, automatic and brow
     baseUrl: `https://www.youtube.com/api/timedtext?v=video-1&lang=${track.languageCode}&track=${track.vssId}`,
   }));
   Object.assign(player, {
-    getOption: () => ({ languageCode: 'zh-Hans', vssId: '.zh-Hans' }),
+    getOption: () => ({ languageCode: 'en', vssId: '.en' }),
     getPlayerResponse: () => ({
       videoDetails: { videoId: 'video-1' },
       captions: {
@@ -425,56 +428,67 @@ it('translates authored English sentences even when authored, automatic and brow
   ).not.toBe('0');
 });
 
-it('downloads the source language and calls the Provider when website auto-translation is selected', async () => {
-  const { video, player, sendMessage, lines } = setup();
-  Object.assign(player, {
-    getOption: () => ({
-      languageCode: 'en',
-      vssId: '.en',
-      translationLanguage: { languageCode: 'zh-CN' },
-    }),
-    getPlayerResponse: () => ({
-      videoDetails: { videoId: 'video-1' },
-      captions: {
-        playerCaptionsTracklistRenderer: {
-          captionTracks: [
-            {
-              languageCode: 'en',
-              vssId: '.en',
-              baseUrl: 'https://www.youtube.com/api/timedtext?v=video-1&lang=en&tlang=zh-CN',
-            },
-          ],
+it.each([
+  { language: 'en', target: 'zh-CN', text: 'Source phrase', vssId: '.en', kind: undefined },
+  { language: 'ja', target: 'en', text: '今日はいい天気ですね。', vssId: 'a.ja', kind: 'asr' },
+])(
+  'downloads the $language source when website auto-translation is selected',
+  async ({ language, target, text, vssId, kind }) => {
+    const { video, player, sendMessage, lines } = setup();
+    Object.assign(player, {
+      getOption: () => ({
+        languageCode: language,
+        vssId,
+        kind,
+        translationLanguage: { languageCode: target },
+      }),
+      getPlayerResponse: () => ({
+        videoDetails: { videoId: 'video-1' },
+        captions: {
+          playerCaptionsTracklistRenderer: {
+            captionTracks: [
+              {
+                languageCode: language,
+                vssId,
+                kind,
+                baseUrl: `https://www.youtube.com/api/timedtext?v=video-1&lang=${language}&tlang=${target}`,
+              },
+            ],
+          },
         },
-      },
-    }),
-  });
-  vi.stubGlobal(
-    'fetch',
-    vi.fn((url: string) =>
-      Promise.resolve(
-        Response.json({
-          events: [
-            {
-              tStartMs: 2000,
-              dDurationMs: 2000,
-              segs: [{ utf8: url.includes('tlang=zh-CN') ? '网站已提供的译文' : 'Source phrase' }],
-            },
-          ],
-        }),
+      }),
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) =>
+        Promise.resolve(
+          Response.json({
+            events: [
+              {
+                tStartMs: 2000,
+                dDurationMs: 2000,
+                segs: [
+                  { utf8: new URL(url).searchParams.has('tlang') ? '网站已提供的译文' : text },
+                ],
+              },
+            ],
+          }),
+        ),
       ),
-    ),
-  );
-  await import('../src/platforms/youtube/page');
-  video.currentTime = 2;
-  controller = new CaptionController(
-    createYoutubePlatform,
-    publicSettings({ ...consentedSettings, apiKey: 'key', model: 'model' }),
-  );
-  await vi.advanceTimersByTimeAsync(1500);
-  expect(lines()[0].textContent).toBe('Source phrase');
-  expect(lines()[1].textContent).toBe('译文：Source phrase');
-  expect(sendMessage).toHaveBeenCalledWith({ type: 'translate', text: 'Source phrase' });
-});
+    );
+    await import('../src/platforms/youtube/page');
+    video.currentTime = 2;
+    controller = new CaptionController(
+      createYoutubePlatform,
+      publicSettings({ ...consentedSettings, apiKey: 'key', model: 'model' }),
+    );
+    await vi.advanceTimersByTimeAsync(1500);
+    expect([...lines()].map((line) => line.textContent)).toEqual([text, `译文：${text}`]);
+    expect(sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'translate', captionLanguage: language, text }),
+    );
+  },
+);
 
 it.each([
   { kind: 'asr', availableUrl: true },
@@ -553,38 +567,75 @@ it.each([
       'We are ready.',
       '译文：We are ready.',
     ]);
-    expect(sendMessage).toHaveBeenCalledWith({ type: 'translate', text: 'We are ready.' });
+    expect(sendMessage).toHaveBeenCalledWith({
+      type: 'translate',
+      captionLanguage: 'en',
+      text: 'We are ready.',
+    });
     controller.destroy();
     expect(getComputedStyle(root).opacity).not.toBe('0');
     expect(root.textContent).toBe('We are ready.');
   },
 );
 
-it('waits for the configured source language instead of translating the website target-language DOM', async () => {
+it.each([undefined, 'https://untrusted.example/captions'])(
+  'reports unsupported track metadata without a downloadable resource %j',
+  async (baseUrl) => {
+    const { player, sendMessage, lines } = setup();
+    const track = { languageCode: 'fr', vssId: '.fr', baseUrl };
+    Object.assign(player, {
+      getOption: () => track,
+      getPlayerResponse: () => ({
+        videoDetails: { videoId: 'video-1' },
+        captions: { playerCaptionsTracklistRenderer: { captionTracks: [track] } },
+      }),
+    });
+    const fetch = vi.fn();
+    vi.stubGlobal('fetch', fetch);
+    await import('../src/platforms/youtube/page');
+    controller = new CaptionController(
+      createYoutubePlatform,
+      publicSettings({ ...consentedSettings, apiKey: 'key', model: 'model' }),
+    );
+    await vi.advanceTimersByTimeAsync(1500);
+    expect([...lines()].map((line) => (line.hidden ? null : line.textContent))).toEqual([
+      null,
+      '原文语言不支持',
+    ]);
+    expect(fetch).not.toHaveBeenCalled();
+    expect(sendMessage).not.toHaveBeenCalled();
+  },
+);
+
+it('follows selected caption language changes without a settings update', async () => {
   const { video, player, sendMessage, lines } = setup();
-  let englishAvailable = false;
+  let active = 'zh-Hans';
   Object.assign(player, {
-    getOption: () => ({ languageCode: 'zh-Hans', vssId: '.zh-Hans' }),
+    getOption: () => ({ languageCode: active, vssId: `.${active}` }),
     getPlayerResponse: () => ({
       videoDetails: { videoId: 'video-1' },
       captions: {
         playerCaptionsTracklistRenderer: {
-          captionTracks: (englishAvailable ? ['zh-Hans', 'en'] : ['zh-Hans']).map(
-            (languageCode) => ({
-              languageCode,
-              vssId: `.${languageCode}`,
-              baseUrl: `https://www.youtube.com/api/timedtext?v=video-1&lang=${languageCode}`,
-            }),
-          ),
+          captionTracks: ['zh-Hans', 'en'].map((languageCode) => ({
+            languageCode,
+            vssId: `.${languageCode}`,
+            baseUrl: `https://www.youtube.com/api/timedtext?v=video-1&lang=${languageCode}`,
+          })),
         },
       },
     }),
   });
   document.querySelector('.ytp-caption-window-container')!.innerHTML =
     '<span class="ytp-caption-segment">现有中文字幕。</span>';
-  const fetch = vi.fn(async () =>
+  const fetch = vi.fn(async (url: string) =>
     Response.json({
-      events: [{ tStartMs: 0, dDurationMs: 3000, segs: [{ utf8: 'English source.' }] }],
+      events: [
+        {
+          tStartMs: 0,
+          dDurationMs: 3000,
+          segs: [{ utf8: url.includes('lang=en') ? 'English source.' : '中文字幕。' }],
+        },
+      ],
     }),
   );
   vi.stubGlobal('fetch', fetch);
@@ -594,16 +645,24 @@ it('waits for the configured source language instead of translating the website 
     publicSettings({ ...consentedSettings, apiKey: 'key', model: 'model' }),
   );
   await vi.advanceTimersByTimeAsync(1500);
-  expect([...lines()].map((line) => line.hidden)).toEqual([true, true]);
-  expect(sendMessage.mock.calls).toEqual([]);
-  englishAvailable = true;
+  expect([...lines()].map((line) => line.textContent)).toEqual(['中文字幕。', '译文：中文字幕。']);
+  expect(sendMessage).toHaveBeenCalledWith({
+    type: 'translate',
+    captionLanguage: 'zh-CN',
+    text: '中文字幕。',
+  });
+  active = 'en';
   video.currentTime = 1;
   await vi.advanceTimersByTimeAsync(1500);
   expect([...lines()].map((line) => line.textContent)).toEqual([
     'English source.',
     '译文：English source.',
   ]);
-  expect(sendMessage).toHaveBeenCalledWith({ type: 'translate', text: 'English source.' });
+  expect(sendMessage).toHaveBeenCalledWith({
+    type: 'translate',
+    captionLanguage: 'en',
+    text: 'English source.',
+  });
 });
 
 it('keeps the YouTube source across target/provider/style changes, seeks, blob renewal and signed URL renewal', async () => {
@@ -671,7 +730,8 @@ it('keeps the YouTube source across target/provider/style changes, seeks, blob r
   active = 'a.en';
   await vi.advanceTimersByTimeAsync(1200);
   expect(fetch).toHaveBeenCalledTimes(2);
-  controller.update(publicSettings({ ...saved, sourceLanguage: 'zh-TW' }));
+  active = '.zh-Hant';
+  controller.update(publicSettings(saved));
   await vi.advanceTimersByTimeAsync(1200);
   expect(fetch).toHaveBeenCalledTimes(3);
   videoId = 'video-2';

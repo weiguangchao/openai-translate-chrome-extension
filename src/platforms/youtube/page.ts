@@ -1,5 +1,5 @@
 import { servePageTimeline } from '../../core/bridge/page';
-import { languageTrack } from '../../core/languages';
+import { supportedLanguage } from '../../shared/languages';
 import { parseYoutubeCaptions, type YoutubeCaptionKind } from './captions';
 import { PLAYER, subtitlesHidden, youtubeVideoId } from './player';
 
@@ -18,8 +18,9 @@ interface YoutubePlayer extends HTMLElement {
 }
 interface CaptionResource {
   id: string;
-  url: string;
+  url?: string;
   kind: YoutubeCaptionKind;
+  language: string;
 }
 
 const contextParameters = ['pot', 'potc', 'c', 'cver'] as const;
@@ -63,22 +64,24 @@ if (typeof PerformanceObserver !== 'undefined') {
 }
 
 function trackResource(track: Track | undefined): CaptionResource | undefined {
-  if (!track?.baseUrl) return;
-  const url = timedtextUrl(track.baseUrl);
-  if (!url) return;
-  const context = requestContexts.get(contextKey(url));
-  if (context) for (const [name, value] of context.parameters) url.searchParams.set(name, value);
-  url.searchParams.set('fmt', 'json3');
-  url.searchParams.delete('tlang');
+  if (!track) return;
+  const url = track.baseUrl ? timedtextUrl(track.baseUrl) : undefined;
+  if (url) {
+    const context = requestContexts.get(contextKey(url));
+    if (context) for (const [name, value] of context.parameters) url.searchParams.set(name, value);
+    url.searchParams.set('fmt', 'json3');
+    url.searchParams.delete('tlang');
+  }
   return {
     id: JSON.stringify([
       track.vssId ?? null,
-      track.languageCode ?? url.searchParams.get('lang'),
+      track.languageCode ?? url?.searchParams.get('lang'),
       captionKind(track),
-      url.searchParams.get('name'),
+      url?.searchParams.get('name'),
     ]),
-    url: url.href,
+    url: url?.href,
     kind: captionKind(track)!,
+    language: track.languageCode ?? url?.searchParams.get('lang') ?? '',
   };
 }
 
@@ -90,7 +93,7 @@ function captionKind(track: Track | undefined): YoutubeCaptionKind | null {
     : null;
 }
 
-function select(videoId: string, sourceLanguage: string): CaptionResource | undefined {
+function select(videoId: string): CaptionResource | undefined {
   const player = document.querySelector<YoutubePlayer>(PLAYER);
   const response = player?.getPlayerResponse?.();
   const tracks = response?.captions?.playerCaptionsTracklistRenderer?.captionTracks;
@@ -105,39 +108,40 @@ function select(videoId: string, sourceLanguage: string): CaptionResource | unde
   const active =
     tracks.find((track) => selected?.vssId && track.vssId === selected.vssId) ??
     tracks.find(
-      (track) => selected?.languageCode === track.languageCode && selected?.kind === track.kind,
+      (track) =>
+        Boolean(selected?.languageCode) &&
+        selected?.languageCode === track.languageCode &&
+        selected?.kind === track.kind,
     );
-  const source =
-    languageTrack(active ? [active] : [], (track) => track.languageCode ?? '', sourceLanguage) ??
-    languageTrack(
-      tracks.filter((track) => captionKind(track) === 'authored'),
-      (track) => track.languageCode ?? '',
-      sourceLanguage,
-    ) ??
-    languageTrack(tracks, (track) => track.languageCode ?? '', sourceLanguage);
-  return trackResource(source);
+  return trackResource(active);
 }
 
 servePageTimeline('youtube', {
   videoId: youtubeVideoId,
-  update({ videoId, sourceLanguage }, cache) {
+  update({ videoId }, cache) {
     let selected: CaptionResource | undefined;
     try {
-      selected = select(videoId, sourceLanguage);
+      selected = select(videoId);
     } catch {}
     const source = selected;
-    cache.select(videoId, source?.id ?? '', sourceLanguage);
-    if (source)
-      cache.load(source.url, async (signal) => {
-        const response = await fetch(source.url, {
+    cache.select(videoId, source?.id ?? '', source?.language ?? null);
+    if (source && !supportedLanguage(source.language)) {
+      if (cache.state.mode !== 'model') cache.update({ mode: 'model', source: [] });
+      return;
+    }
+    if (source?.url) {
+      const url = source.url;
+      cache.load(url, async (signal) => {
+        const response = await fetch(url, {
           credentials: 'same-origin',
           signal: AbortSignal.any([signal, AbortSignal.timeout(15000)]),
         });
         if (!response.ok) throw new Error('Caption track unavailable');
-        const cues = parseYoutubeCaptions(await response.json(), source.kind, sourceLanguage);
+        const cues = parseYoutubeCaptions(await response.json(), source.kind, source.language);
         if (!cues.length) throw new Error('Empty caption track');
         return cues;
       });
+    }
   },
 });
 

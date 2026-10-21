@@ -38,7 +38,12 @@ function pendingProvider() {
     requests[index].resolve(providerReply(requests[index].texts, (text) => `${text} 译文`));
   return { fetch, requests, batches, reply };
 }
-const settings = { ...DEFAULT_SETTINGS, apiKey: 'test-key', model: 'test-model' };
+const settings = {
+  ...DEFAULT_SETTINGS,
+  captionLanguage: 'en' as const,
+  apiKey: 'test-key',
+  model: 'test-model',
+};
 
 it('retries only an invalid result, keeping its neighbors cached', async () => {
   const { fetch, requests } = pendingProvider();

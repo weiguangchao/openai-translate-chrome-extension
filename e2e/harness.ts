@@ -28,15 +28,19 @@ export const traditionalSource = '火車明天到達。';
 export const traditionalTranslation = '火车明天到达。';
 export const asrSource = 'This is the automatic caption.';
 export const asrTranslation = '这是自动字幕。';
+export const japaneseSource = '今日はいい天気ですね。';
+export const japaneseTranslation = '今天天气真好。';
 export const thirdSource = 'The ferry leaves at noon.';
 export const thirdTranslation = '渡轮中午出发。';
 export const gardenSource = 'The garden is quiet.';
 export const draftPrefix = '草稿：';
 const translations: Record<string, string> = {
   [source]: translation,
+  [translation]: translation,
   [nextSource]: nextTranslation,
   [traditionalSource]: traditionalTranslation,
   [asrSource]: asrTranslation,
+  [japaneseSource]: japaneseTranslation,
   [thirdSource]: thirdTranslation,
   [gardenSource]: '花园很安静。',
 };
@@ -178,7 +182,6 @@ export class Player {
       apiKey,
       model: 'e2e-fixed-model',
       providerConsent: new URL(providerUrl).origin,
-      sourceLanguage: 'en',
       targetLanguage: 'zh-CN',
     });
     this.page = await this.context.newPage();
@@ -281,8 +284,8 @@ export class Player {
     await post.route.fulfill({ json: { choices: [{ message: { content } }] } });
   }
   private cues(id: string, language: string, kind: string): Cue[] {
-    if (language === 'zh-CN')
-      throw new Error('Website target-language track must never be downloaded');
+    if (language === 'zh-CN') return [{ start: 0, end: 90, text: translation }];
+    if (language === 'ja') return [{ start: 0, end: 90, text: japaneseSource }];
     if (language === 'zh-TW') return [{ start: 0, end: 90, text: traditionalSource }];
     if (kind === 'asr') return [{ start: 0, end: 90, text: asrSource }];
     if (id === 'second') return [{ start: 0, end: 90, text: nextSource }];
@@ -358,7 +361,7 @@ export class Player {
       });
     }
     const resource = url.pathname.match(
-      /^\/e2e\/(first|second|third)\/(manifest\.mpd|en\.vtt|en-asr\.vtt|zh-TW\.vtt|zh-CN\.vtt)$/,
+      /^\/e2e\/(first|second|third)\/(manifest\.mpd|en\.vtt|en-asr\.vtt|zh-TW\.vtt|zh-CN\.vtt|ja-asr\.vtt)$/,
     );
     if (this.platform === 'hbo' && url.origin === this.origin && resource) {
       const [, id, file] = resource;
@@ -366,22 +369,26 @@ export class Player {
         await this.timeline;
         return route.fulfill({
           contentType: 'application/dash+xml',
-          body: `<MPD type="static" mediaPresentationDuration="PT90S"><Period start="PT0S" duration="PT90S">${['en', 'en-asr', 'zh-TW', 'zh-CN'].map((lang) => `<AdaptationSet contentType="text" lang="${lang === 'en-asr' ? 'en' : lang}"><Role value="${lang === 'en-asr' ? 'caption' : 'subtitle'}"/><Representation id="${lang}" mimeType="text/vtt"><BaseURL>${lang}.vtt</BaseURL></Representation></AdaptationSet>`).join('')}</Period></MPD>`,
+          body: `<MPD type="static" mediaPresentationDuration="PT90S"><Period start="PT0S" duration="PT90S">${['en', 'en-asr', 'zh-TW', 'zh-CN', 'ja-asr'].map((lang) => `<AdaptationSet contentType="text" lang="${lang.replace('-asr', '')}"><Role value="${lang.endsWith('-asr') ? 'caption' : 'subtitle'}"/><Representation id="${lang}" mimeType="text/vtt"><BaseURL>${lang}.vtt</BaseURL></Representation></AdaptationSet>`).join('')}</Period></MPD>`,
         });
       }
       const cues = this.cues(
         id,
         file.replace('.vtt', '').replace('-asr', ''),
-        file === 'en-asr.vtt' ? 'asr' : 'authored',
+        file.endsWith('-asr.vtt') ? 'asr' : 'authored',
       );
       return route.fulfill({ contentType: 'text/vtt', body: webvtt(cues) });
     }
     const hls = url.pathname.match(
-      /^\/e2e\/(first|second|third)\/(pl\/s0|subs)\/(en|en-asr|zh-TW|zh-CN)\.(m3u8|vtt)$/,
+      /^\/e2e\/(first|second|third)\/(pl\/s0|subs)\/(en|en-asr|zh-TW|zh-CN|ja-asr)\.(m3u8|vtt)$/,
     );
     if (this.platform === 'x' && url.origin === 'https://video.twimg.com' && hls) {
       const [, id, folder, file, extension] = hls;
-      const cues = this.cues(id, file.replace('-asr', ''), file === 'en-asr' ? 'asr' : 'authored');
+      const cues = this.cues(
+        id,
+        file.replace('-asr', ''),
+        file.endsWith('-asr') ? 'asr' : 'authored',
+      );
       const headers = { 'access-control-allow-origin': '*' };
       if (folder === 'pl/s0' && extension === 'm3u8') {
         await this.timeline;

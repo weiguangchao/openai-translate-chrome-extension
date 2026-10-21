@@ -1,7 +1,7 @@
-import { visible } from '../../core/dom';
 import { languageTrack } from '../../core/languages';
-import { captionText } from '../../core/native';
+import { captionText, selectedTrack } from '../../core/native';
 import type { LiveCaption } from '../../core/platform';
+import { visible } from '../../core/dom';
 
 export const PLAYER = '[data-testid="videoPlayer"]';
 
@@ -36,11 +36,13 @@ export function findXPlayer(video: HTMLVideoElement): HTMLElement | null {
   return video.closest<HTMLElement>(PLAYER) ?? video.parentElement;
 }
 
-export function readXCaption(video: HTMLVideoElement, sourceLanguage: string): LiveCaption {
+export function readXCaption(video: HTMLVideoElement, language: string | null): LiveCaption {
   const tracks = [...video.textTracks].filter(
     (track) => track.mode !== 'disabled' && ['subtitles', 'captions'].includes(track.kind),
   );
-  const track = languageTrack(tracks, (track) => track.language, sourceLanguage);
+  const track = language
+    ? languageTrack(tracks, (track) => track.language, language)
+    : selectedTrack(video);
   const text = track?.activeCues ? [...track.activeCues].map(captionText).join('\n').trim() : '';
   return { text, layers: [], nativeTrack: Boolean(text) };
 }

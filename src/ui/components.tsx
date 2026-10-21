@@ -1,6 +1,7 @@
+import { LANGUAGES } from '../shared/languages';
 import { Check, ChevronDown, Expand, Languages, Subtitles, X } from 'lucide-react';
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
-import { LANGUAGES, type Settings } from '../shared/settings';
+import { type Settings } from '../shared/settings';
 import { copy } from './copy';
 
 export function Logo({ small = false }: { small?: boolean }) {
@@ -143,6 +144,7 @@ const SAMPLES: Record<string, [string, string]> = {
   en: ['There’s a whole world waiting for us.', 'Some moments are worth slowing down for.'],
   'zh-CN': ['总有一个世界，等待着我们去探索。', '有些时刻，值得我们放慢脚步。'],
   'zh-TW': ['總有一個世界，等待著我們去探索。', '有些時刻，值得我們放慢腳步。'],
+  ja: ['私たちが探検する世界が、いつも待っている。', 'ゆっくり味わいたい瞬間がある。'],
 };
 export function SubtitlePreview({ settings }: { settings: Settings }) {
   const [expanded, setExpanded] = useState(false);
@@ -178,7 +180,7 @@ export function SubtitlePreview({ settings }: { settings: Settings }) {
         aria-label="字幕样式预览"
       >
         <div style={style('original')} dir="auto">
-          {sampleText(settings.sourceLanguage)}
+          {sampleText('en')}
         </div>
         <div style={style('translation')} dir="auto">
           {sampleText(settings.targetLanguage)}

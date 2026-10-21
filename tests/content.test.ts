@@ -14,7 +14,9 @@ beforeEach(() => {
   vi.resetModules();
   document.body.innerHTML =
     '<div data-testid="playerContainer"><video></video><div data-testid="caption_renderer_overlay">First cue</div></div>';
-  Object.defineProperty(document.querySelector('video'), 'textTracks', { value: [] });
+  Object.defineProperty(document.querySelector('video'), 'textTracks', {
+    value: [{ mode: 'showing', kind: 'subtitles', language: 'en', cues: null, activeCues: [] }],
+  });
   Object.defineProperty(document.querySelector('video'), 'readyState', { value: 1 });
   Object.defineProperty(document.querySelector('video'), 'paused', { value: false });
   runtime = {

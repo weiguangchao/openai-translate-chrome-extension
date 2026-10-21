@@ -1,3 +1,4 @@
+import type { Language } from '../src/shared/languages';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { CaptionController } from '../src/core/controller';
 import { createHboPlatform } from '../src/platforms/hbo/platform';
@@ -163,6 +164,7 @@ beforeEach(async () => {
       id: 'extension-id',
       sendMessage: async (message: {
         type: string;
+        captionLanguage?: Language | null;
         text?: string;
         time?: number;
         rate?: number;
@@ -184,7 +186,7 @@ beforeEach(async () => {
             ok: true,
             data: await queue.prefetch(
               'hbo',
-              settings,
+              { ...settings, captionLanguage: message.captionLanguage! },
               message.cues,
               message.time ?? 0,
               message.rate ?? 1,
@@ -195,8 +197,15 @@ beforeEach(async () => {
           return {
             ok: true,
             data: await (message.cacheOnly
-              ? queue.lookup(settings, message.text)
-              : queue.request('hbo', settings, message.text)),
+              ? queue.lookup(
+                  { ...settings, captionLanguage: message.captionLanguage! },
+                  message.text,
+                )
+              : queue.request(
+                  'hbo',
+                  { ...settings, captionLanguage: message.captionLanguage! },
+                  message.text,
+                )),
           };
         return { ok: true };
       },
@@ -591,14 +600,14 @@ it('keeps the HBO source across target/provider/style changes, seeks, blob renew
   expect(downloads()).toHaveLength(4);
 });
 
-it('replaces the HBO source for source-language, track-role and episode changes', async () => {
+it('replaces the HBO source for selected language, track-role and episode changes', async () => {
   targetLanguage = 'zh-Hant';
   controller = new CaptionController(createHboPlatform, publicSettings(settings));
   await playTo(3);
   const manifests = () =>
     vi.mocked(fetch).mock.calls.filter(([url]) => new URL(String(url)).pathname.endsWith('.mpd'));
   expect(manifests()).toHaveLength(1);
-  controller.update(publicSettings({ ...settings, sourceLanguage: 'zh-TW' }));
+  selected = { language: 'zh-Hant', role: 'closedcaptions' };
   await vi.advanceTimersByTimeAsync(1200);
   expect(manifests()).toHaveLength(2);
   expect(requested.some((request) => request.texts.includes('已有字幕 1'))).toBe(true);
@@ -611,7 +620,7 @@ it('replaces the HBO source for source-language, track-role and episode changes'
   expect(manifests()).toHaveLength(4);
 });
 
-it('does not translate a known target-language DOM when the HBO source track is absent', async () => {
+it('translates the selected Chinese track when no English track exists', async () => {
   const originalFetch = fetch;
   vi.stubGlobal(
     'fetch',
@@ -625,21 +634,26 @@ it('does not translate a known target-language DOM when the HBO source track is 
   document.querySelector('[data-testid="caption_renderer_overlay"]')!.textContent = '已有中文字幕';
   controller = new CaptionController(createHboPlatform, publicSettings(settings));
   await playTo(3);
-  expect(lines()?.[1].hidden).toBe(true);
-  expect(requested).toEqual([]);
-  expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).endsWith('.vtt'))).toBe(false);
+  expect(lines()?.[0].textContent).toBe('已有字幕 1');
+  expect(lines()?.[1].textContent).toBe('译文 已有字幕 1');
+  expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).endsWith('.vtt'))).toBe(true);
 });
 
-it('does not send target-language DOM to the provider after a source download fails', async () => {
+it('uses selected-language DOM captions after a timeline download fails', async () => {
   selected = { language: 'zh-Hans', role: 'subtitle' };
   document.querySelector('[data-testid="caption_renderer_overlay"]')!.textContent = '已有中文字幕';
+  const originalFetch = fetch;
   vi.stubGlobal(
     'fetch',
-    vi.fn(async () => new Response('', { status: 503 })),
+    vi.fn((url: string, init: RequestInit) =>
+      new URL(url).pathname.endsWith('.mpd')
+        ? Promise.resolve(new Response('', { status: 503 }))
+        : originalFetch(url, init),
+    ),
   );
   controller = new CaptionController(createHboPlatform, publicSettings(settings));
   await playTo(3);
-  expect(lines()?.[1].hidden).toBe(true);
-  expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1);
-  expect(requested).toEqual([]);
+  expect(lines()?.[0].textContent).toBe('已有中文字幕');
+  expect(lines()?.[1].textContent).toBe('译文 已有中文字幕');
+  expect(requested.map((request) => request.texts)).toEqual([['已有中文字幕']]);
 });

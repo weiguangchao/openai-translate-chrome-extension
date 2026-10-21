@@ -1,3 +1,4 @@
+import { selectedTrack } from '../../core/native';
 import { BridgeTimeline } from '../../core/bridge/client';
 import type { Platform, PlatformFactory } from '../../core/platform';
 import { activeXVideo, findXPlayer, readXCaption, xVideoId } from './player';
@@ -10,13 +11,15 @@ export const createXPlatform: PlatformFactory = (changed): Platform => {
     videoId: xVideoId,
     findVideo: activeXVideo,
     findPlayer: findXPlayer,
-    source(video, _player, sourceLanguage) {
-      const state = bridge.read(xVideoId(), sourceLanguage);
+    source(video) {
+      const state = bridge.read(xVideoId());
+      const language = state?.language ?? selectedTrack(video)?.language ?? null;
       if (state?.source)
         return {
           kind: 'timeline',
           mode: state.mode,
           id: state.sourceId,
+          language,
           cues: state.source,
           layers: () => [],
         };
@@ -25,9 +28,15 @@ export const createXPlatform: PlatformFactory = (changed): Platform => {
           kind: 'live',
           mode: state.mode,
           id: state.sourceId,
-          read: () => readXCaption(video, sourceLanguage),
+          language,
+          read: () => readXCaption(video, state.language),
         };
-      return { kind: 'waiting', mode: state?.mode ?? 'checking', id: state?.sourceId };
+      return {
+        kind: 'waiting',
+        mode: state?.mode ?? 'checking',
+        id: state?.sourceId,
+        language: state?.language ?? null,
+      };
     },
     reset: () => bridge.reset(),
     destroy: () => bridge.destroy(),

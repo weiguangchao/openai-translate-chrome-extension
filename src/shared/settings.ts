@@ -1,3 +1,5 @@
+import { LANGUAGES, type Language } from './languages';
+
 export interface SubtitleStyle {
   color: string;
   size: number;
@@ -8,7 +10,6 @@ export interface Settings {
   apiKey: string;
   model: string;
   providerConsent: string;
-  sourceLanguage: string;
   targetLanguage: string;
   original: SubtitleStyle;
   translation: SubtitleStyle;
@@ -23,18 +24,12 @@ export type PublicSettings = Omit<Settings, 'apiKey' | 'baseUrl' | 'model' | 'pr
   configured: boolean;
   translationRevision: string;
 };
-export const LANGUAGES = [
-  { value: 'en', label: '英语', native: 'English', english: 'English' },
-  { value: 'zh-CN', label: '简体中文', native: '简体中文', english: 'Simplified Chinese' },
-  { value: 'zh-TW', label: '繁体中文', native: '繁體中文', english: 'Traditional Chinese' },
-];
 export const DEFAULT_SETTINGS: Settings = {
   enabled: true,
   baseUrl: 'https://api.openai.com/v1',
   apiKey: '',
   model: '',
   providerConsent: '',
-  sourceLanguage: 'en',
   targetLanguage: 'zh-CN',
   original: { color: '#FFFFFF', size: 24 },
   translation: { color: '#B8E5CF', size: 20 },
@@ -53,13 +48,8 @@ export function normalizeSettings(value: unknown): Settings {
     if (typeof input[key] === 'boolean') result[key] = input[key];
   for (const key of ['baseUrl', 'apiKey', 'model', 'providerConsent'] as const)
     if (typeof input[key] === 'string') result[key] = input[key];
-  for (const key of ['sourceLanguage', 'targetLanguage'] as const)
-    if (LANGUAGES.some((l) => l.value === input[key])) result[key] = input[key]!;
-  const replaced = (['targetLanguage', 'sourceLanguage'] as const).find(
-    (key) => result[key] !== input[key],
-  );
-  if (replaced && result.sourceLanguage === result.targetLanguage)
-    result[replaced] = LANGUAGES.find((l) => l.value !== result[replaced])!.value;
+  if (LANGUAGES.some((language) => language.value === input.targetLanguage))
+    result.targetLanguage = input.targetLanguage!;
   for (const key of ['original', 'translation'] as const) {
     if (/^#[\da-f]{6}$/i.test(input[key]?.color ?? '')) result[key].color = input[key]!.color;
     if (Number.isFinite(input[key]?.size))
@@ -120,19 +110,10 @@ export function hasProviderConsent(settings: Settings): boolean {
 }
 export function validateSettings(settings: Settings, requireConnection = false): void {
   validateBaseUrl(settings.baseUrl);
-  if (settings.sourceLanguage === settings.targetLanguage)
-    throw new Error('学习语言和母语需要不同。');
   if (requireConnection && !settings.apiKey.trim()) throw new Error('请先填写 API Key。');
   if (requireConnection && !settings.model.trim()) throw new Error('请先选择或填写 Model ID。');
 }
-export function languageName(value: string): string {
-  return LANGUAGES.find((l) => l.value === value)?.native ?? value;
-}
-export function englishLanguageName(value: string): string {
-  return LANGUAGES.find((l) => l.value === value)?.english ?? value;
-}
-
-type SettingScope = 'availability' | 'credentials' | 'source' | 'translation' | 'style';
+type SettingScope = 'availability' | 'credentials' | 'translation' | 'style';
 
 const SETTING_SCOPES: Record<keyof Settings, SettingScope> = {
   enabled: 'availability',
@@ -140,7 +121,6 @@ const SETTING_SCOPES: Record<keyof Settings, SettingScope> = {
   apiKey: 'credentials',
   model: 'translation',
   providerConsent: 'availability',
-  sourceLanguage: 'source',
   targetLanguage: 'translation',
   original: 'style',
   translation: 'style',
@@ -158,17 +138,18 @@ function settingsIn(...scopes: SettingScope[]): (keyof Settings)[] {
   );
 }
 
-const identityKeys = settingsIn('source', 'translation');
+export type CaptionTranslationSettings = Settings & { captionLanguage: Language };
+
+const identityKeys = [...settingsIn('translation'), 'captionLanguage'] as const;
 
 export const translationIdentityLength = identityKeys.length;
 
-export function translationIdentity(settings: Settings): unknown[] {
+export function translationIdentity(settings: CaptionTranslationSettings): unknown[] {
   return identityKeys.map((key) => settings[key]);
 }
 
 export interface SettingsChange {
   style: boolean;
-  source: boolean;
   translation: boolean;
   availability: boolean;
 }
@@ -184,7 +165,6 @@ export function classifySettingsChange(
   const changedIn = (...scopes: SettingScope[]) => settingsIn(...scopes).some(changed);
   return {
     style: changedIn('style'),
-    source: changedIn('source'),
     translation: changedIn('translation', 'credentials') || changed('translationRevision'),
     availability: changedIn('availability') || changed('configured'),
   };

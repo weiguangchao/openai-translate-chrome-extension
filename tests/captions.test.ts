@@ -17,7 +17,7 @@ beforeEach(() => {
     '<div data-testid="playerContainer"><video></video><div data-testid="caption_renderer_overlay"><div id="cue">First cue</div></div></div>';
   Object.defineProperty(document.querySelector('video'), 'textTracks', {
     configurable: true,
-    value: [],
+    value: [{ mode: 'showing', kind: 'subtitles', language: 'en', cues: null, activeCues: [] }],
   });
   Object.defineProperty(document.querySelector('video'), 'readyState', { value: 1 });
   Object.defineProperty(document.querySelector('video'), 'paused', {
@@ -50,7 +50,11 @@ it('shows the current translation, ignores a late reply, clears a missing cue an
   vi.stubGlobal('chrome', { runtime: { id: 'extension-id', sendMessage } });
   controller = new CaptionController(createHboPlatform, settings());
   await vi.advanceTimersByTimeAsync(450);
-  expect(sendMessage).toHaveBeenCalledWith({ type: 'translate', text: 'First cue' });
+  expect(sendMessage).toHaveBeenCalledWith({
+    type: 'translate',
+    captionLanguage: 'en',
+    text: 'First cue',
+  });
   expect(translationNode()?.textContent).toBe('翻译中');
   expect(translationNode()?.hidden).toBe(false);
   expect(
@@ -103,7 +107,7 @@ it.each(['[data-testid="caption_renderer_overlay"]', '#cue'])(
       ],
     });
     expect(
-      readHboCaption(document.querySelector('[data-testid="playerContainer"]')!, video, 'en'),
+      readHboCaption(document.querySelector('[data-testid="playerContainer"]')!, video),
     ).toEqual({
       text: 'Track subtitle',
       layers: [],
@@ -123,14 +127,20 @@ it.each([
   ],
 ])('finds an HBO subtitle layer when it is %s', async (_placement, html) => {
   document.body.innerHTML = html;
-  Object.defineProperty(document.querySelector('video'), 'textTracks', { value: [] });
+  Object.defineProperty(document.querySelector('video'), 'textTracks', {
+    value: [{ mode: 'showing', kind: 'subtitles', language: 'en', cues: null, activeCues: [] }],
+  });
   Object.defineProperty(document.querySelector('video'), 'readyState', { value: 1 });
   Object.defineProperty(document.querySelector('video'), 'paused', { value: false });
   const sendMessage = vi.fn().mockResolvedValue({ ok: true, data: 'HBO 译文' });
   vi.stubGlobal('chrome', { runtime: { id: 'extension-id', sendMessage } });
   controller = new CaptionController(createHboPlatform, settings());
   await vi.advanceTimersByTimeAsync(450);
-  expect(sendMessage).toHaveBeenCalledWith({ type: 'translate', text: 'HBO cue' });
+  expect(sendMessage).toHaveBeenCalledWith({
+    type: 'translate',
+    captionLanguage: 'en',
+    text: 'HBO cue',
+  });
   expect(originalNode()?.textContent).toBe('HBO cue');
   expect(translationNode()?.textContent).toBe('HBO 译文');
 });
@@ -149,7 +159,10 @@ function stackNode() {
 async function playMax(html: string) {
   document.body.innerHTML = html;
   const video = document.querySelector('video')!;
-  Object.defineProperty(video, 'textTracks', { configurable: true, value: [] });
+  Object.defineProperty(video, 'textTracks', {
+    configurable: true,
+    value: [{ mode: 'showing', kind: 'subtitles', language: 'en', cues: null, activeCues: [] }],
+  });
   Object.defineProperty(video, 'readyState', { configurable: true, value: 1 });
   Object.defineProperty(video, 'paused', { configurable: true, value: false });
   const sendMessage = vi.fn().mockResolvedValue({ ok: true, data: '是吗?' });
@@ -184,7 +197,7 @@ it('reads Max text without hidden old cues or platform line breaks after taking 
     '<div data-testid="playerContainer"><video></video><div data-testid="caption_renderer_overlay"><div>Oh, thank you.</div><div>I\'ve got to talk to that<br>mailman.</div><span style="visibility:hidden">Old cue</span></div></div>',
   );
   const text = "Oh, thank you. I've got to talk to that mailman.";
-  expect(sendMessage).toHaveBeenCalledWith({ type: 'translate', text });
+  expect(sendMessage).toHaveBeenCalledWith({ type: 'translate', captionLanguage: 'en', text });
   expect(stackNode()?.querySelector('.original')?.textContent).toBe(text);
   await vi.advanceTimersByTimeAsync(1500);
   expect(stackNode()?.querySelector('.original')?.textContent).toBe(text);
@@ -286,7 +299,7 @@ it('stops a cached caption when Chrome removes the runtime ID, even without anot
   expect(document.querySelector('.subline-player')).toBeNull();
   expect(vi.getTimerCount()).toBe(0);
   expect(runtime.sendMessage.mock.calls.map(([message]) => message)).toEqual([
-    { type: 'translate', text: 'First cue' },
+    { type: 'translate', captionLanguage: 'en', text: 'First cue' },
   ]);
 });
 
@@ -328,7 +341,11 @@ it('keeps the error on its caption without retrying it and translates the next c
   expect(originalNode()?.textContent).toBe('First cue');
   await vi.advanceTimersByTimeAsync(16000);
   expect(translationNode()?.textContent).toBe('Subline：Receiving end does not exist.');
-  expect(sendMessage).toHaveBeenCalledExactlyOnceWith({ type: 'translate', text: 'First cue' });
+  expect(sendMessage).toHaveBeenCalledExactlyOnceWith({
+    type: 'translate',
+    captionLanguage: 'en',
+    text: 'First cue',
+  });
   document.getElementById('cue')!.textContent = 'Second cue';
   await vi.advanceTimersByTimeAsync(450);
   expect(translationNode()?.textContent).toBe('第二句译文');
@@ -356,11 +373,16 @@ it('finishes an in-flight translation while paused and does not start another un
   await vi.advanceTimersByTimeAsync(16000);
   expect(sendMessage).toHaveBeenCalledExactlyOnceWith({
     type: 'translate',
+    captionLanguage: 'en',
     text: 'First cue',
     cacheOnly: true,
   });
   await setPaused(false);
-  expect(sendMessage).toHaveBeenLastCalledWith({ type: 'translate', text: 'First cue' });
+  expect(sendMessage).toHaveBeenLastCalledWith({
+    type: 'translate',
+    captionLanguage: 'en',
+    text: 'First cue',
+  });
   await setPaused(true);
   expect(sendMessage).toHaveBeenLastCalledWith({ type: 'prefetch-pause' });
   expect(translationNode()?.textContent).toBe('翻译中');
@@ -378,8 +400,8 @@ it('finishes an in-flight translation while paused and does not start another un
   expect(translationNode()?.textContent).toBe('第一句译文');
   expect(translationNode()?.hidden).toBe(false);
   expect(sendMessage.mock.calls.map(([message]) => message)).toEqual([
-    { type: 'translate', text: 'First cue', cacheOnly: true },
-    { type: 'translate', text: 'First cue' },
+    { type: 'translate', captionLanguage: 'en', text: 'First cue', cacheOnly: true },
+    { type: 'translate', captionLanguage: 'en', text: 'First cue' },
     { type: 'prefetch-pause' },
     { type: 'prefetch-resume' },
     { type: 'prefetch-pause' },

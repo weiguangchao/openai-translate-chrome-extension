@@ -18,8 +18,8 @@ export class BridgeTimeline {
     window.addEventListener('message', this.receive);
   }
 
-  read(videoId: string, sourceLanguage: string): TimelineState | null {
-    const context = JSON.stringify([videoId, sourceLanguage]);
+  read(videoId: string): TimelineState | null {
+    const context = videoId;
     if (context !== this.context) {
       this.reset();
       this.context = context;
@@ -32,7 +32,6 @@ export class BridgeTimeline {
           type: this.messages.request,
           requestId: this.pendingId,
           videoId,
-          sourceLanguage,
           revision: this.revision,
         },
         location.origin,

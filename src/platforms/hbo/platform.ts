@@ -11,17 +11,19 @@ export const createHboPlatform: PlatformFactory = (changed): Platform => {
     style: '',
     videoId: hboVideoId,
     findPlayer: findHboPlayer,
-    source(video, player, sourceLanguage) {
-      const bridged = bridge.read(hboVideoId(), sourceLanguage);
+    source(video, player) {
+      const bridged = bridge.read(hboVideoId());
+      const local = native.read(video);
       const state =
         bridged && (bridged.source !== null || bridged.mode !== 'model')
           ? bridged
-          : native.read(video, sourceLanguage);
+          : { ...local, language: bridged?.language ?? local.language };
       if (state.source)
         return {
           kind: 'timeline',
           mode: state.mode,
           id: state.sourceId,
+          language: state.language,
           cues: state.source,
           layers: () => [...player.querySelectorAll<HTMLElement>(CAPTION_LAYERS)],
         };
@@ -29,7 +31,8 @@ export const createHboPlatform: PlatformFactory = (changed): Platform => {
         kind: 'live',
         mode: state.mode,
         id: state.sourceId,
-        read: () => readHboCaption(player, video, sourceLanguage),
+        language: state.language,
+        read: () => readHboCaption(player, video),
       };
     },
     reset() {

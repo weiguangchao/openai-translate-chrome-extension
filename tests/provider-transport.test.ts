@@ -9,7 +9,12 @@ import {
 
 let api: typeof import('../src/shared/api');
 let TranslationQueue: typeof import('../src/extension/queue').TranslationQueue;
-const settings = { ...DEFAULT_SETTINGS, apiKey: 'key', model: 'budget-test' };
+const settings = {
+  ...DEFAULT_SETTINGS,
+  captionLanguage: 'en' as const,
+  apiKey: 'key',
+  model: 'budget-test',
+};
 
 beforeEach(async () => {
   vi.useFakeTimers();

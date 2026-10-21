@@ -10,6 +10,10 @@
 
 Read the leaf skill in full for any principle you apply. Each entry names when it applies. Each leaf is the **principle-<title>** skill, with the title in kebab case, hyphens kept and other punctuation dropped, unless the entry gives its name.
 
+### Core
+
+- **Laziness Protocol.** Refactoring, sizing a diff, or tempted to add abstractions, layers, or signal threading. Bias to deletion and the smallest change that solves the problem.
+
 ### Delegation
 
 - **Never Block on the Human.** Tempted to ask "should I do X?" on reversible work. Proceed, present the result, let the human course-correct.
@@ -23,6 +27,7 @@ Each rule names what fails when it is broken. When the developer corrects a mist
 | A Provider reply is read as `{"results":[{"id","translation"}]}`, and each translation is stored under the input it answers. The only variants accepted are the ones `tests/provider-responses.test.ts` covers: thinking or fenced wrappers, string or one-based ids, truncated results and the reasoning channel. | `src/shared/api.ts`; `tests/provider-responses.test.ts` |
 | A failure reaches the page as a `TranslateFailure` kind; nothing decides state by comparing a message, `textContent` or a class name. | The `Reply` type in `src/shared/messages.ts`; ESLint `local/typed-outcomes` |
 | `CaptionTranslator` owns what each caption shows; the overlay only renders it. | ESLint `local/write-only-overlay`; `TranslationLine` switches are exhaustive; `tests/controller.test.ts` |
+| Subtitle language comes from the selected video caption track, never a saved setting. Settings choose only the translation language. English, Simplified Chinese, Traditional Chinese and Japanese are supported; other languages show `原文语言不支持` without Provider traffic. | `src/shared/languages.ts`; `tests/youtube.test.ts`; `e2e/caption-sources.spec.ts` |
 | Every setting has one scope, which decides what changing it invalidates and whether it is part of the translation cache key. | `SETTING_SCOPES` in `src/shared/settings.ts`; `tests/settings-scope.test.ts` |
 | Every number that shapes playback, Provider traffic or what a caption shows lives in `src/shared/tuning.ts`. | ESLint `local/tuning-home` |
 | A new tuning value, failure kind or test runner setting needs a `Requested-by:` line in its commit message. | `scripts/check-policy.mjs` in `npm run check` |

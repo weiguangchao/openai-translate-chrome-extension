@@ -1,3 +1,4 @@
+import type { Language } from '../shared/languages';
 import { readStoredTranslation } from '../shared/caption-translation';
 import type { PlaybackCue } from '../shared/playback-plan';
 import { failureOf, type TranslateFailure } from '../shared/provider-error';
@@ -10,6 +11,7 @@ export interface CaptionFrame {
   readonly text: string;
   readonly cacheOnly: boolean;
   readonly debounce: number;
+  readonly captionLanguage: Language;
 }
 
 interface Request {
@@ -18,6 +20,7 @@ interface Request {
 
 interface Caption {
   readonly text: string;
+  readonly captionLanguage: Language | null;
   since: number;
   line: TranslationLine;
   request: Request | null;
@@ -31,6 +34,7 @@ const VIEW_STATES: Record<TranslationLine['kind'], ViewState> = {
   failed: 'error',
   timedOut: 'timeout',
   repeated: 'empty',
+  'unsupported-language': 'error',
 };
 
 function failedLine(failure: TranslateFailure): TranslationLine {
@@ -39,6 +43,8 @@ function failedLine(failure: TranslateFailure): TranslationLine {
       return { kind: 'timedOut' };
     case 'copied-source':
       return { kind: 'repeated' };
+    case 'unsupported-language':
+      return { kind: 'unsupported-language' };
     case 'error':
       return { kind: 'failed', message: failure.message };
   }
@@ -99,15 +105,29 @@ export class CaptionTranslator {
   }
 
   show(frame: CaptionFrame): void {
-    if (frame.text !== this.caption?.text)
+    if (frame.text !== this.caption?.text || frame.captionLanguage !== this.caption.captionLanguage)
       this.caption = {
         text: frame.text,
+        captionLanguage: frame.captionLanguage,
         since: Date.now(),
         line: { kind: 'none' },
         request: null,
         checked: false,
       };
     this.update(this.caption, frame);
+    this.render();
+  }
+
+  unsupportedLanguage(): void {
+    this.release();
+    this.caption = {
+      text: '',
+      captionLanguage: null,
+      since: Date.now(),
+      line: { kind: 'unsupported-language' },
+      request: null,
+      checked: true,
+    };
     this.render();
   }
 
@@ -124,17 +144,25 @@ export class CaptionTranslator {
       .catch(() => {});
   }
 
-  plan(time: number, rate: number, cues: readonly PlaybackCue[]): void {
+  plan(time: number, rate: number, cues: readonly PlaybackCue[], captionLanguage: Language): void {
     const key = JSON.stringify(
       cues.length
-        ? [Math.floor(time / planRefreshSeconds) * planRefreshSeconds, rate, cues]
-        : [rate, cues],
+        ? [Math.floor(time / planRefreshSeconds) * planRefreshSeconds, rate, cues, captionLanguage]
+        : [rate, cues, captionLanguage],
     );
     if (key === this.windowKey) return;
     this.windowKey = key;
     this.holdKey = '';
     this.active = cues.length > 0;
-    void this.connection.sendMessage({ type: 'prefetch', time, rate, cues }).catch(() => {});
+    void this.connection
+      .sendMessage({
+        type: 'prefetch',
+        time,
+        rate,
+        cues,
+        captionLanguage,
+      })
+      .catch(() => {});
   }
 
   hold(time: number): void {
@@ -152,7 +180,7 @@ export class CaptionTranslator {
     this.windowKey = '';
     this.holdKey = '';
     void this.connection
-      .sendMessage({ type: 'prefetch', time: 0, rate: 1, cues: [] })
+      .sendMessage({ type: 'prefetch', time: 0, rate: 1, cues: [], captionLanguage: null })
       .catch(() => {});
   }
 
@@ -170,10 +198,15 @@ export class CaptionTranslator {
       if (!frame.cacheOnly && waited >= loadingDelayMs) caption.line = { kind: 'loading' };
       return;
     }
-    this.request(caption, frame.cacheOnly, waited);
+    this.request(caption, frame.cacheOnly, waited, frame.captionLanguage);
   }
 
-  private request(caption: Caption, cacheOnly: boolean, waited: number): void {
+  private request(
+    caption: Caption,
+    cacheOnly: boolean,
+    waited: number,
+    captionLanguage: Language,
+  ): void {
     const request: Request = { cacheOnly };
     const current = () => this.caption === caption && caption.request === request;
     caption.request = request;
@@ -186,6 +219,7 @@ export class CaptionTranslator {
       .sendMessage<unknown>({
         type: 'translate',
         text: caption.text,
+        captionLanguage,
         ...(cacheOnly ? { cacheOnly: true } : {}),
       })
       .then((response) => {

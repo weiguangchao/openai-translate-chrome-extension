@@ -8,7 +8,7 @@ import {
 } from '../shared/playback-plan';
 import { ProviderTimeoutError, RepeatedSourceError } from '../shared/provider-error';
 import { wakeProviderRequests } from '../shared/provider/transport';
-import { translationIdentity, type Settings } from '../shared/settings';
+import { translationIdentity, type CaptionTranslationSettings } from '../shared/settings';
 import type { TraceEvent } from '../shared/trace';
 
 export const translationCacheLimit = 5000;
@@ -21,7 +21,7 @@ export interface TranslationStore {
 interface Job {
   key: string;
   consumer: string;
-  settings: Settings;
+  settings: CaptionTranslationSettings;
   text: string;
   solo: boolean;
   pack?: string;
@@ -72,7 +72,7 @@ export class TranslationQueue {
     private trace: (event: TraceEvent) => void = () => {},
   ) {}
 
-  private key(settings: Settings, text: string): string {
+  private key(settings: CaptionTranslationSettings, text: string): string {
     return JSON.stringify([...translationIdentity(settings), text]);
   }
 
@@ -83,14 +83,14 @@ export class TranslationQueue {
     this.evict();
   }
 
-  lookup(settings: Settings, text: string): Promise<string | null> {
+  lookup(settings: CaptionTranslationSettings, text: string): Promise<string | null> {
     const key = this.key(settings, text);
     return Promise.resolve(
       this.finished.get(key) ?? this.jobs.get(key)?.promise.catch(() => null) ?? null,
     );
   }
 
-  request(consumer: string, settings: Settings, text: string): Promise<string> {
+  request(consumer: string, settings: CaptionTranslationSettings, text: string): Promise<string> {
     const key = this.key(settings, text);
     const state: Consumer = this.consumers.get(consumer) ?? {
       packs: [],
@@ -118,7 +118,7 @@ export class TranslationQueue {
 
   prefetch(
     consumer: string,
-    settings: Settings,
+    settings: CaptionTranslationSettings,
     cues: readonly PlaybackCue[],
     time = 0,
     rate = 1,
@@ -269,7 +269,7 @@ export class TranslationQueue {
 
   private enqueue(
     key: string,
-    settings: Settings,
+    settings: CaptionTranslationSettings,
     text: string,
     consumer: string,
     options?: { pack: string },
