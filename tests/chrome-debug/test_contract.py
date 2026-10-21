@@ -1,6 +1,6 @@
 """What chrome-debug reads from Subline, checked against Subline's source and the test double.
 
-The browser tests run against tests/fixtures/extension. These checks keep that
+The browser tests run against tests/chrome-debug/fixtures/extension. These checks keep that
 double, holder.py and Subline speaking the same protocol, so a rename in
 Subline fails here instead of making every trace report "no trace events".
 """

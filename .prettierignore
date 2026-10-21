@@ -2,3 +2,4 @@ node_modules
 dist
 package-lock.json
 .artifacts
+tests/chrome-debug/fixtures/traces/
