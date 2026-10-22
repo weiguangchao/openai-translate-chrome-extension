@@ -632,7 +632,10 @@ it('translates the selected Chinese track when no English track exists', async (
   );
   selected = { language: 'zh-Hans', role: 'subtitle' };
   document.querySelector('[data-testid="caption_renderer_overlay"]')!.textContent = '已有中文字幕';
-  controller = new CaptionController(createHboPlatform, publicSettings(settings));
+  controller = new CaptionController(
+    createHboPlatform,
+    publicSettings({ ...settings, targetLanguage: 'en' }),
+  );
   await playTo(3);
   expect(lines()?.[0].textContent).toBe('已有字幕 1');
   expect(lines()?.[1].textContent).toBe('译文 已有字幕 1');
@@ -651,7 +654,10 @@ it('uses selected-language DOM captions after a timeline download fails', async 
         : originalFetch(url, init),
     ),
   );
-  controller = new CaptionController(createHboPlatform, publicSettings(settings));
+  controller = new CaptionController(
+    createHboPlatform,
+    publicSettings({ ...settings, targetLanguage: 'en' }),
+  );
   await playTo(3);
   expect(lines()?.[0].textContent).toBe('已有中文字幕');
   expect(lines()?.[1].textContent).toBe('译文 已有中文字幕');

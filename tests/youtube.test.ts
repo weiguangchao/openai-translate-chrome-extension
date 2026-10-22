@@ -642,7 +642,7 @@ it('follows selected caption language changes without a settings update', async 
   await import('../src/platforms/youtube/page');
   controller = new CaptionController(
     createYoutubePlatform,
-    publicSettings({ ...consentedSettings, apiKey: 'key', model: 'model' }),
+    publicSettings({ ...consentedSettings, apiKey: 'key', model: 'model', targetLanguage: 'ja' }),
   );
   await vi.advanceTimersByTimeAsync(1500);
   expect([...lines()].map((line) => line.textContent)).toEqual(['中文字幕。', '译文：中文字幕。']);

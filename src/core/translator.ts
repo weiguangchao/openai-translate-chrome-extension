@@ -70,6 +70,7 @@ export class CaptionTranslator {
     private overlay: SubtitleOverlay,
     private changed: () => void,
     private translationOnly: () => boolean,
+    private targetLanguage: () => string,
   ) {}
 
   get state(): ViewState {
@@ -145,6 +146,10 @@ export class CaptionTranslator {
   }
 
   plan(time: number, rate: number, cues: readonly PlaybackCue[], captionLanguage: Language): void {
+    if (captionLanguage === this.targetLanguage()) {
+      this.release();
+      return;
+    }
     const key = JSON.stringify(
       cues.length
         ? [Math.floor(time / planRefreshSeconds) * planRefreshSeconds, rate, cues, captionLanguage]
@@ -191,6 +196,10 @@ export class CaptionTranslator {
   private update(caption: Caption, frame: CaptionFrame): void {
     const { line } = caption;
     if (line.kind !== 'none' && line.kind !== 'loading') return;
+    if (frame.captionLanguage === this.targetLanguage()) {
+      caption.line = { kind: 'repeated' };
+      return;
+    }
     const pending = caption.request !== null;
     if (frame.cacheOnly && (caption.checked || pending)) return;
     const waited = Date.now() - caption.since;

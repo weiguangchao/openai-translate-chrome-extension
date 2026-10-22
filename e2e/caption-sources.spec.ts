@@ -78,7 +78,9 @@ for (const platform of ['youtube', 'hbo', 'x'] as const) {
       await p.page.evaluate(() => window.fixture.select('en', 'asr'));
       await p.pair(asrSource, asrTranslation);
       await p.page.evaluate(() => window.fixture.select('zh-CN'));
-      await p.pair(translation, translation);
+      await expect(p.original).toHaveText(translation);
+      await expect(p.original).toBeVisible();
+      await expect(p.translated).toBeHidden();
       await p.page.evaluate(() => window.fixture.select('zh-TW'));
       await p.pair(traditionalSource, traditionalTranslation);
       await p.page.evaluate(() => window.fixture.select('ja', 'asr'));
@@ -87,6 +89,10 @@ for (const platform of ['youtube', 'hbo', 'x'] as const) {
         post.inputs.some((input) => input.text === japaneseSource),
       );
       expect(japanese).toHaveLength(1);
+      expect(
+        p.posts.filter((post) => post.inputs.some((input) => input.text === translation)),
+        'A track already in the target language never reaches the Provider',
+      ).toEqual([]);
       expect(japanese[0].body.messages).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
