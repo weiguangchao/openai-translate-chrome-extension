@@ -1,4 +1,9 @@
+import { readFile, writeFile } from 'node:fs/promises';
 import { build } from 'esbuild';
+import { renderIcons, toAlphaSvg } from './build-icons.mjs';
+
+const ALPHA_NAME = 'Subline · Alpha';
+const alpha = process.argv.includes('--alpha');
 
 await build({
   entryPoints: ['src/extension/background.ts'],
@@ -25,4 +30,12 @@ for (const [entry, output] of [
     minify: true,
   });
 
-console.log('Chrome extension built in dist/');
+if (alpha) {
+  const manifest = JSON.parse(await readFile('dist/manifest.json', 'utf8'));
+  manifest.name = ALPHA_NAME;
+  await writeFile('dist/manifest.json', `${JSON.stringify(manifest, null, 2)}\n`);
+  await writeFile('dist/logo.svg', toAlphaSvg(await readFile('public/logo.svg', 'utf8')));
+  await renderIcons('dist', toAlphaSvg);
+}
+
+console.log(`Chrome extension (${alpha ? ALPHA_NAME : 'store'}) built in dist/`);

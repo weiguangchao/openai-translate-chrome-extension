@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "build": "npm run build:icons && tsc --noEmit && vite build && node scripts/build-extension.mjs",
+    "build:dev": "npm run build:icons && tsc --noEmit && vite build && node scripts/build-extension.mjs --alpha",
     "build:icons": "node scripts/build-icons.mjs",
     "test": "vitest run",
     "test:discovery": "node scripts/check-test-discovery.mjs",
