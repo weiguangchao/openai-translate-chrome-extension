@@ -83,6 +83,7 @@ export class CaptionController {
       this.overlay,
       () => this.tick(),
       () => this.settings.translationOnly,
+      () => this.settings.targetLanguage,
     );
     this.trace = new TraceReporter(
       (message) => void this.connection.sendMessage(message).catch(() => {}),

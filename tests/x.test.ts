@@ -270,7 +270,10 @@ it('downloads the selected X subtitle track and follows language changes', async
     track('a', 'zh-Hans'),
     track('a', 'EN'),
   ]);
-  controller = new CaptionController(createXPlatform, publicSettings(settings));
+  controller = new CaptionController(
+    createXPlatform,
+    publicSettings({ ...settings, targetLanguage: 'ja' }),
+  );
   await playTo(video, 3);
   expect(lines()?.[1].textContent).toBe('译文 字幕 1');
   expect(downloads(/zh-Hans/)).toHaveLength(4);

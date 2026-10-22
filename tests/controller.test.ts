@@ -465,6 +465,36 @@ it('shows only the source when the translation copies it and does not ask again'
   );
 });
 
+it.each([false, true])(
+  'shows a caption already in the target language without asking the Provider (translation-only %s)',
+  async (translationOnly) => {
+    source = {
+      kind: 'timeline',
+      language: 'zh-Hans',
+      mode: 'model',
+      id: 'track',
+      cues: [
+        { startTime: 0, endTime: 10, text: '已经是中文。' },
+        { startTime: 10, endTime: 20, text: '下一句中文。' },
+      ],
+      layers: () => [],
+    };
+    controller = new CaptionController(
+      () => platform,
+      publicSettings({
+        ...consentedSettings,
+        apiKey: 'key',
+        model: 'model',
+        targetLanguage: 'zh-CN',
+        translationOnly,
+      }),
+    );
+    await vi.advanceTimersByTimeAsync(450);
+    expect(lines()).toEqual(['已经是中文。', null]);
+    expect(sendMessage).not.toHaveBeenCalled();
+  },
+);
+
 it('keeps ready captions when the playback rate changes and plans at the new rate', async () => {
   source = {
     kind: 'timeline',
