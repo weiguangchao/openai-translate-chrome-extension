@@ -24,3 +24,7 @@ chrome-debug skill 的测试、辅助代码和 fixtures 位于 [`tests/chrome-de
 字幕先按句末标点断成句子；2 秒以上的静音、歌词行（♪）和音效标注（[…]）也会断开。超过 90 列（汉字算两列）的句子再由扩展按原文语言在本地切成几条字幕：先在逗号、分号等子句标点处或原字幕片段之间切，仍超过 90 列的再按词切，英文按空格，中文和日语用各自语言的 `Intl.Segmenter` 分词。每条字幕单独翻译、单独显示，Provider 不负责断句。规则和浏览器验证见 [改造记录](docs/reviews/2026-10-10-caption-split.md)。
 
 字幕队列提前请求未来至少 30 秒播放时间的字幕，近期请求耗时的 90 分位越慢，提前量越长，播放速度越快，覆盖的视频时间越长。每个请求最多四条字幕，且跨度不超过 10 秒视频；即将播放的字幕单独请求，1 秒内就要消失的字幕不进计划。同时最多两个字幕请求在途，已发出的请求不会因播放或拖动被取消。拖动过程中不发送新请求，落点稳定 400 毫秒后才恢复调度；拖动前已发出的请求继续完成并写入缓存，但不再占用在途和每秒发送的名额。翻译失败的字幕不会重试，仍在预取范围内时也不会再次请求。调度测试和浏览器验证见 [改造记录](docs/reviews/2026-10-09-playback-buffer-plan.md)。
+
+## 发布
+
+把 `package.json` 和 `public/manifest.json` 的 `version` 改成新版本并合入 `main`，然后在 `main` 上推送同名 tag，例如 `git tag v0.2.0 && git push origin v0.2.0`。`.github/workflows/release.yml` 会检查 tag 与两处版本一致，运行 `npm run verify`，把 `dist/` 打包成 zip 发布到 GitHub Release，再用服务账号上传到 Chrome Web Store 并提交审核。仓库需要 Secret `GCP_SA_KEY`（服务账号 JSON 密钥）和 Variables `CHROME_PUBLISHER_ID`、`CHROME_EXTENSION_ID`。
