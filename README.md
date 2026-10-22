@@ -4,7 +4,7 @@
 
 ## 使用
 
-需要 Node.js 22.13 或更高版本。执行 `npm install` 和 `npm run build`，在 `chrome://extensions` 开启「开发者模式」，加载本项目的 `dist` 文件夹，并在安装或重新加载后刷新已经打开的视频页面。点击扩展图标可以开关双语字幕、选择译文语言；在设置页填写 Base URL、API Key 和 Model ID。扩展自动读取当前视频字幕轨道的语言，支持英语、简体中文、繁体中文和日语。遇到其他语言时，译文位置显示「原文语言不支持」，不发送翻译请求。在设置页的「数据使用说明」里勾选同意并保存后，在 YouTube、HBO Max 或 X 的播放器中打开原文字幕。没有同意时扩展不发送字幕；换成另一个域名的 Base URL 后要重新同意。扩展只把原文发给你选定的 API 翻译，设置留在本机，API Key 加密后保存，已发出的请求仍可能计费。扩展处理哪些数据、保存多久和怎样删除，见[隐私政策](PRIVACY.md)。
+需要 Node.js 22.13 或更高版本。执行 `npm install` 和 `npm run build`（本地开发调试可执行 `npm run build:dev`），在 `chrome://extensions` 开启「开发者模式」，加载本项目的 `dist` 文件夹，并在安装或重新加载后刷新已经打开的视频页面。点击扩展图标可以开关双语字幕、选择译文语言；在设置页填写 Base URL、API Key 和 Model ID。扩展自动读取当前视频字幕轨道的语言，支持英语、简体中文、繁体中文和日语。遇到其他语言时，译文位置显示「原文语言不支持」，不发送翻译请求。在设置页的「数据使用说明」里勾选同意并保存后，在 YouTube、HBO Max 或 X 的播放器中打开原文字幕。没有同意时扩展不发送字幕；换成另一个域名的 Base URL 后要重新同意。扩展只把原文发给你选定的 API 翻译，设置留在本机，API Key 加密后保存，已发出的请求仍可能计费。扩展处理哪些数据、保存多久和怎样删除，见[隐私政策](PRIVACY.md)。
 
 ## 开发
 
@@ -13,10 +13,11 @@ npm ci
 npm run dev
 npm test
 npm run build
+npm run build:dev
 npm run verify
 ```
 
-`npm ci` 按锁文件安装依赖。`npm run dev` 启动设置页预览，默认地址是 http://localhost:5173。`npm test` 运行接口、配置、翻译队列和字幕生命周期测试。`npm run build`把扩展输出到`dist/`。`npm run verify` 依次执行 lint、类型检查、测试、构建和 YouTube、HBO、X 的浏览器回归，任一步失败时进程以非零状态退出。
+`npm ci` 按锁文件安装依赖。`npm run dev` 启动设置页预览，默认地址是 http://localhost:5173。`npm test` 运行接口、配置、翻译队列和字幕生命周期测试。`npm run build`把正式上架扩展输出到`dist/`；`npm run build:dev`把本地开发版（名称为`Subline · Alpha`，使用玫瑰粉背景图标）输出到 `dist/`。`npm run verify` 依次执行 lint、类型检查、测试、构建和 YouTube、HBO、X 的浏览器回归，任一步失败时进程以非零状态退出。
 
 chrome-debug skill 的测试、辅助代码和 fixtures 位于 [`tests/chrome-debug/`](tests/chrome-debug/README.md)。`npm run test:chrome-debug` 运行其中不需要浏览器的测试，完整测试的运行方法见该目录的说明。
 
