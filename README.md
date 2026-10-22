@@ -27,4 +27,4 @@ chrome-debug skill 的测试、辅助代码和 fixtures 位于 [`tests/chrome-de
 
 ## 发布
 
-把 `package.json` 和 `public/manifest.json` 的 `version` 改成新版本并合入 `main`，然后在 `main` 上推送同名 tag，例如 `git tag v0.2.0 && git push origin v0.2.0`。`.github/workflows/release.yml` 会检查 tag 与两处版本一致，运行 `npm run verify`，把 `dist/` 打包成 zip 发布到 GitHub Release，再用服务账号上传到 Chrome Web Store 并提交审核。仓库需要 Secret `GCP_SA_KEY`（服务账号 JSON 密钥）和 Variables `CHROME_PUBLISHER_ID`、`CHROME_EXTENSION_ID`。
+把 `package.json` 和 `public/manifest.json` 的 `version` 改成新版本并合入 `main`，然后在 `main` 上推送同名 tag，例如 `git tag v0.2.0 && git push origin v0.2.0`。`.github/workflows/release.yml` 会检查 tag 与两处版本一致，运行 `npm run verify`，把 `dist/` 打包成 zip 发布到 GitHub Release，再用服务账号上传到 Chrome Web Store 并提交审核。仓库需要 Secrets `GCP_SA_KEY`（服务账号 JSON 密钥）、`CHROME_PUBLISHER_ID` 和 `CHROME_EXTENSION_ID`。
