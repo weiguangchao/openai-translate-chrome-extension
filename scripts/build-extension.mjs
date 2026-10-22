@@ -33,6 +33,7 @@ for (const [entry, output] of [
 if (alpha) {
   const manifest = JSON.parse(await readFile('dist/manifest.json', 'utf8'));
   manifest.name = ALPHA_NAME;
+  manifest.action.default_title = ALPHA_NAME;
   await writeFile('dist/manifest.json', `${JSON.stringify(manifest, null, 2)}\n`);
   await writeFile('dist/logo.svg', toAlphaSvg(await readFile('public/logo.svg', 'utf8')));
   await renderIcons('dist', toAlphaSvg);
