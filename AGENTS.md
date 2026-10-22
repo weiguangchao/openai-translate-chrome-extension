@@ -52,10 +52,6 @@ Each rule names what fails when it is broken. When the developer corrects a mist
 | The settings page and popup show a label and its control without explanatory secondary text; links are icons or quiet underlined text. | Judgment |
 | When you name a gap you could close, such as failing tests or a check you skipped, close it before you stop. | Judgment |
 
-## Git
-
-- When Codex creates a commit, append `Co-authored-by: Codex <noreply@openai.com>` to the commit message.
-
 ## Pull requests
 
 - Never make a PR unless the developer explicitly asks you to do so.
