@@ -1,0 +1,53 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*.*.*']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      VERSION: ${{ github.ref_name }}
+      ZIP: subline-${{ github.ref_name }}.zip
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Check version
+        run: |
+          for file in package.json public/manifest.json; do
+            found="v$(jq -r .version "$file")"
+            if [ "$found" != "$VERSION" ]; then
+              echo "::error file=$file::version is $found, tag is $VERSION"
+              exit 1
+            fi
+          done
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run verify
+      - name: Package
+        run: cd dist && zip -qr "../$ZIP" .
+      - uses: softprops/action-gh-release@v3
+        with:
+          files: ${{ env.ZIP }}
+          generate_release_notes: true
+      - name: Publish to Chrome Web Store
+        env:
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+          CHROME_PUBLISHER_ID: ${{ vars.CHROME_PUBLISHER_ID }}
+          CHROME_EXTENSION_ID: ${{ vars.CHROME_EXTENSION_ID }}
+        run: node scripts/publish-chrome.mjs "$ZIP"
