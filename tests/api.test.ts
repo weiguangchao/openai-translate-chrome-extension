@@ -2,7 +2,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import manifest from '../public/manifest.json';
 import { fetchModels, translate, translateCaptionBatch } from '../src/shared/api';
 import { translationBatchLimit } from '../src/shared/tuning';
-import { structuredReply } from './fixtures/provider';
 import { TOKEN_USAGE_KEY } from '../src/shared/token-usage';
 import {
   DEFAULT_SETTINGS,
@@ -98,7 +97,7 @@ describe('OpenAI-compatible provider contract', () => {
       expect(body).not.toHaveProperty('prompt');
       expect(body.stream).toBe(false);
       expect(body.max_tokens).toBe(65536);
-      expect(body.reasoning_effort).toBe('low');
+      expect(body).not.toHaveProperty('reasoning_effort');
       expect(init.redirect).toBe('error');
       expect(init.credentials).toBe('omit');
     },
@@ -140,7 +139,7 @@ describe('OpenAI-compatible provider contract', () => {
       expect(body).not.toHaveProperty('prompt');
       expect(body.stream).toBe(false);
       expect(body.max_tokens).toBe(65536);
-      expect(body.reasoning_effort).toBe('low');
+      expect(body).not.toHaveProperty('reasoning_effort');
       expect(body.response_format).toEqual({ type: 'json_object' });
     },
   );
@@ -157,46 +156,15 @@ describe('OpenAI-compatible provider contract', () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
-  it('retries without reasoning_effort when a model rejects it and remembers that model', async () => {
-    const fetch = vi
-      .fn()
-      .mockResolvedValueOnce(
-        Response.json(
-          { error: { message: "Unsupported value: 'reasoning_effort' does not support 'low'" } },
-          { status: 400 },
-        ),
-      )
-      .mockImplementation(async () =>
-        Response.json({ choices: [{ message: { content: '你好' } }] }),
-      );
-    vi.stubGlobal('fetch', fetch);
-    const settings = { ...config(), model: 'non-reasoning-model' };
-    await expect(translate(settings, 'Hello')).resolves.toBe('你好');
-    await expect(translate(settings, 'Hi')).resolves.toBe('你好');
-    await expect(translate({ ...settings, model: 'reasoning-model' }, 'Hey')).resolves.toBe('你好');
-    expect(
-      fetch.mock.calls.map((call) => {
-        const body = JSON.parse(call[1].body);
-        return [body.model, body.reasoning_effort, body.max_tokens, body.stream];
-      }),
-    ).toEqual([
-      ['non-reasoning-model', 'low', 65536, false],
-      ['non-reasoning-model', undefined, 65536, false],
-      ['non-reasoning-model', undefined, 65536, false],
-      ['reasoning-model', 'low', 65536, false],
-    ]);
-  });
-
-  it.each([401, 429, 500])(
-    'does not resend without reasoning_effort after HTTP %s',
+  it.each([400, 401, 422, 429, 500])(
+    'reports HTTP %s without retrying either translation request',
     async (status) => {
       const fetch = vi.fn().mockImplementation(async () => new Response('', { status }));
       vi.stubGlobal('fetch', fetch);
-      await expect(translate({ ...config(), model: `model-${status}` }, 'Hello')).rejects.toThrow();
+      await expect(translate(config(), 'Hello')).rejects.toThrow();
       expect(fetch).toHaveBeenCalledTimes(1);
-      const body = JSON.parse(fetch.mock.calls[0][1].body as string);
-      expect(body.max_tokens).toBe(65536);
-      expect(body.stream).toBe(false);
+      await expect(translateCaptionBatch(config(), ['Hello'])).rejects.toThrow();
+      expect(fetch).toHaveBeenCalledTimes(2);
     },
   );
 
@@ -288,140 +256,6 @@ describe('OpenAI-compatible provider contract', () => {
     expect(
       manifest.optional_host_permissions.filter((origin) => origin.startsWith('http:')),
     ).toEqual(localHttpProviders.map((baseUrl) => `http://${new URL(baseUrl).hostname}/*`));
-  });
-});
-
-describe('batch replies', () => {
-  it('drops response_format after a 400 and keeps reasoning and max_tokens on the batch retry', async () => {
-    const fetch = vi
-      .fn()
-      .mockResolvedValueOnce(new Response('', { status: 400 }))
-      .mockImplementation(async () =>
-        structuredReply([
-          { id: 0, translation: '甲' },
-          { id: 1, translation: '乙' },
-        ]),
-      );
-    vi.stubGlobal('fetch', fetch);
-    const settings = { ...config(), model: 'no-json-batch' };
-    await expect(translateCaptionBatch(settings, ['A', 'B'])).resolves.toEqual(['甲', '乙']);
-    await expect(translateCaptionBatch(settings, ['C', 'D'])).resolves.toEqual(['甲', '乙']);
-    const bodies = fetch.mock.calls.map((call) => JSON.parse(call[1].body));
-    expect(bodies.map((body) => body.stream)).toEqual([false, false, false]);
-    expect(bodies.map((body) => body.response_format)).toEqual([
-      { type: 'json_object' },
-      undefined,
-      undefined,
-    ]);
-    expect(bodies.map((body) => body.reasoning_effort)).toEqual(['low', 'low', 'low']);
-    expect(bodies[0].max_tokens).toBeGreaterThan(0);
-    expect(bodies[1].max_tokens).toBe(bodies[0].max_tokens);
-    expect(bodies[2].max_tokens).toBe(bodies[1].max_tokens);
-  });
-
-  it('drops reasoning_effort after a caption batch rejects both response_format and reasoning', async () => {
-    const fetch = vi.fn(async (_url: string, init: RequestInit) => {
-      const body = JSON.parse(init.body as string) as {
-        response_format?: unknown;
-        reasoning_effort?: string;
-      };
-      if (body.response_format || body.reasoning_effort) return new Response('', { status: 400 });
-      return structuredReply([
-        { id: 0, translation: '甲' },
-        { id: 1, translation: '乙' },
-      ]);
-    });
-    vi.stubGlobal('fetch', fetch);
-    const settings = { ...config(), model: 'no-reasoning-batch' };
-    await expect(translateCaptionBatch(settings, ['A', 'B'])).resolves.toEqual(['甲', '乙']);
-    await expect(translateCaptionBatch(settings, ['C', 'D'])).resolves.toEqual(['甲', '乙']);
-    const bodies = fetch.mock.calls.map((call) => JSON.parse(call[1].body as string));
-    expect(bodies.map((body) => [body.response_format?.type, body.reasoning_effort])).toEqual([
-      ['json_object', 'low'],
-      [undefined, 'low'],
-      [undefined, undefined],
-      ['json_object', undefined],
-      [undefined, undefined],
-    ]);
-  });
-
-  it('remembers a chat max_tokens rejection only after the bare request succeeds', async () => {
-    const fetch = vi.fn(async (_url: string, init: RequestInit) => {
-      const body = JSON.parse(init.body as string) as {
-        reasoning_effort?: string;
-        max_tokens?: number;
-      };
-      if (body.reasoning_effort || body.max_tokens) return new Response('', { status: 422 });
-      return Response.json({ choices: [{ message: { content: '你好' } }] });
-    });
-    vi.stubGlobal('fetch', fetch);
-    const settings = { ...config(), model: 'no-max-tokens' };
-    await expect(translate(settings, 'Hello')).resolves.toBe('你好');
-    expect(
-      fetch.mock.calls.map((call) => {
-        const body = JSON.parse(call[1].body as string);
-        return [body.reasoning_effort, body.max_tokens];
-      }),
-    ).toEqual([
-      ['low', 65536],
-      [undefined, 65536],
-      [undefined, undefined],
-    ]);
-    await expect(translate(settings, 'Hi')).resolves.toBe('你好');
-    const again = fetch.mock.calls.slice(3).map((call) => JSON.parse(call[1].body as string));
-    expect(again.map((body) => [body.reasoning_effort, body.max_tokens])).toEqual([
-      ['low', undefined],
-      [undefined, undefined],
-    ]);
-    await expect(translate(settings, 'Hey')).resolves.toBe('你好');
-    expect(fetch).toHaveBeenCalledTimes(6);
-    expect(JSON.parse(fetch.mock.calls[5][1].body as string).max_tokens).toBeUndefined();
-    expect(JSON.parse(fetch.mock.calls[5][1].body as string).reasoning_effort).toBeUndefined();
-  });
-
-  it('does not remember a max_tokens rejection when the bare request also fails', async () => {
-    const fetch = vi.fn().mockImplementation(async () => new Response('', { status: 422 }));
-    vi.stubGlobal('fetch', fetch);
-    const settings = { ...config(), model: 'reject-chat-options' };
-    await expect(translate(settings, 'Hello')).rejects.toThrow('HTTP 422');
-    expect(fetch).toHaveBeenCalledTimes(3);
-    await expect(translate(settings, 'Hello')).rejects.toThrow('HTTP 422');
-    expect(fetch).toHaveBeenCalledTimes(6);
-    expect(JSON.parse(fetch.mock.calls[3][1].body).max_tokens).toBe(65536);
-  });
-
-  it('keeps every batch retry on chat completions for a legacy completions setting', async () => {
-    const fetch = vi.fn().mockImplementation(async () => new Response('', { status: 400 }));
-    vi.stubGlobal('fetch', fetch);
-    await expect(
-      translateCaptionBatch(
-        {
-          ...normalizeSettings({ ...config(), apiFormat: 'completions', model: 'legacy-400' }),
-          captionLanguage: 'en',
-        },
-        ['A', 'B'],
-      ),
-    ).rejects.toThrow('HTTP 400');
-    expect(fetch).toHaveBeenCalledTimes(4);
-    expect(fetch.mock.calls.map((call) => call[0])).toEqual(
-      Array(4).fill('https://provider.example/api/v1/chat/completions'),
-    );
-    const bodies = fetch.mock.calls.map((call) => JSON.parse(call[1].body));
-    expect(bodies.map((body) => body.stream)).toEqual([false, false, false, false]);
-    expect(bodies.map((body) => body.response_format)).toEqual([
-      { type: 'json_object' },
-      undefined,
-      undefined,
-      undefined,
-    ]);
-    expect(bodies.map((body) => body.reasoning_effort)).toEqual([
-      'low',
-      'low',
-      undefined,
-      undefined,
-    ]);
-    expect(bodies.map((body) => body.max_tokens)).toEqual([65536, 65536, 65536, undefined]);
-    expect(bodies.every((body) => Array.isArray(body.messages) && !('prompt' in body))).toBe(true);
   });
 });
 

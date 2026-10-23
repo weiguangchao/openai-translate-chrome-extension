@@ -28,34 +28,28 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-it.each([400, 422])(
-  'budgets every compatibility probe and corrective retry after HTTP %s',
-  async (status) => {
-    const sends: number[] = [];
-    const attempts = new Map<string, number>();
-    const fetch = vi.fn(async (_url: string, init: RequestInit) => {
-      sends.push(Date.now());
-      const texts = requestedTexts(init);
-      const key = texts.join('|');
-      const attempt = (attempts.get(key) ?? 0) + 1;
-      attempts.set(key, attempt);
-      if (attempt <= 3) return new Response('', { status });
-      return providerReply(texts, () => (attempt === 4 ? '' : `译文 ${texts[0]}`));
-    });
-    vi.stubGlobal('fetch', fetch);
-    const queue = new TranslationQueue();
-    const work = ['A', 'B', 'C'].map((text) =>
-      queue.request(text, { ...settings, model: `${settings.model}-${text}` }, text),
-    );
-    await vi.advanceTimersByTimeAsync(999);
-    expect(sends).toHaveLength(3);
-    await vi.advanceTimersByTimeAsync(4001);
-    await expect(Promise.all(work)).resolves.toEqual(['译文 A', '译文 B', '译文 C']);
-    expect(sends).toHaveLength(15);
-    for (const at of sends)
-      expect(sends.filter((time) => at <= time && time < at + 1000).length).toBeLessThanOrEqual(3);
-  },
-);
+it('budgets corrective retries across concurrent captions', async () => {
+  const sends: number[] = [];
+  const attempts = new Map<string, number>();
+  const fetch = vi.fn(async (_url: string, init: RequestInit) => {
+    sends.push(Date.now());
+    const texts = requestedTexts(init);
+    const key = texts.join('|');
+    const attempt = (attempts.get(key) ?? 0) + 1;
+    attempts.set(key, attempt);
+    return providerReply(texts, () => (attempt === 1 ? '' : `译文 ${texts[0]}`));
+  });
+  vi.stubGlobal('fetch', fetch);
+  const queue = new TranslationQueue();
+  const work = ['A', 'B', 'C'].map((text) => queue.request(text, settings, text));
+  await vi.advanceTimersByTimeAsync(999);
+  expect(sends).toHaveLength(3);
+  await vi.advanceTimersByTimeAsync(1);
+  await expect(Promise.all(work)).resolves.toEqual(['译文 A', '译文 B', '译文 C']);
+  expect(sends).toHaveLength(6);
+  for (const at of sends)
+    expect(sends.filter((time) => at <= time && time < at + 1000).length).toBeLessThanOrEqual(3);
+});
 
 it('shares the POST budget with connection checks while GET models remain available', async () => {
   const fetch = vi.fn(async (_url: string, init: RequestInit) =>

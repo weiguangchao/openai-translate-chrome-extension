@@ -16,31 +16,6 @@ import {
 import { providerTimeoutMs } from '../src/shared/tuning';
 
 for (const platform of ['youtube', 'hbo', 'x'] as const) {
-  test(`${platform}: compatibility retry uses actual worker HTTP and finishes`, async ({}, info) => {
-    await withPlayer(
-      platform,
-      info,
-      async (p) => {
-        await p.play();
-        await p.pair(source, translation);
-        const rejected = p.posts.filter((post) => post.status === 400);
-        expect(rejected).toHaveLength(1);
-        expect(rejected[0].body).toHaveProperty('response_format');
-        const retry = p.posts.filter(
-          (post) =>
-            post !== rejected[0] &&
-            post.inputs.length === rejected[0].inputs.length &&
-            post.inputs.every((input, index) => input.text === rejected[0].inputs[index]?.text),
-        );
-        expect(retry).toHaveLength(1);
-        expect(retry[0].body).not.toHaveProperty('response_format');
-        expect(retry[0].inputs).toEqual(rejected[0].inputs);
-        expect(p.posts).toHaveLength(2);
-      },
-      { retry: true },
-    );
-  });
-
   for (const draft of ['complete', 'truncated'] as const) {
     test(`${platform}: a ${draft} draft before the final JSON never reaches the overlay or cache`, async ({}, info) => {
       await withPlayer(

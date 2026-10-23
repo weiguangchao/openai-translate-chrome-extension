@@ -18,7 +18,6 @@ export const loadingDelayMs = 300;
 export const planRefreshSeconds = 1;
 export const seekSettleMs = 400;
 export const seekJumpSeconds = 1;
-export const reasoningEffort = 'low';
 export const translationSendsPerSecond = 3;
 export const providerSendWindowMs = 1000;
 export const providerTimeoutMs = 60_000;

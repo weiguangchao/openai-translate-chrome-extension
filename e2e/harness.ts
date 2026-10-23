@@ -84,7 +84,6 @@ interface Options {
   dense?: boolean;
   stallFirst?: boolean;
   hold?: boolean;
-  retry?: boolean;
   draft?: 'complete' | 'truncated';
   unavailable?: number;
   holdTimeline?: boolean;
@@ -416,11 +415,9 @@ export class Player {
       this.posts.push(post);
       if (key !== apiKey) post.status = 401;
       else if (unavailable < (this.options.unavailable ?? 0)) post.status = 503;
-      else if (this.options.retry && this.posts.length === 1) post.status = 400;
       if (post.status !== 200) {
         post.released = true;
         const message = {
-          400: 'response_format is not supported',
           401: `Incorrect API key provided: ${key}`,
           503: 'Service temporarily unavailable',
         }[post.status];

@@ -1,6 +1,6 @@
 import { ProviderTimeoutError, RepeatedSourceError } from './provider-error';
 import { providerFetch, type ProviderSendPolicy } from './provider/transport';
-import { reasoningEffort, translationBatchLimit } from './tuning';
+import { translationBatchLimit } from './tuning';
 import {
   validateBaseUrl,
   validateSettings,
@@ -119,73 +119,6 @@ function checkText(text: string): void {
   if (!text.trim() || text.length > 5000) throw new Error('字幕内容为空或过长。');
 }
 
-const reasoningRejected = new Set<string>();
-const maxTokensRejected = new Set<string>();
-const jsonObjectRejected = new Set<string>();
-type Dropped = 'reasoning' | 'maxTokens' | 'jsonObject' | null;
-interface Probe {
-  reasoning: boolean;
-  maxTokens: boolean;
-  jsonObject: boolean;
-  dropped: Dropped;
-}
-
-function providerKey(settings: Settings): string {
-  return JSON.stringify([settings.baseUrl.trim(), settings.model.trim()]);
-}
-
-function probes(settings: Settings, jsonObject: boolean): Probe[] {
-  const key = providerKey(settings);
-  const steps: Probe[] = [];
-  let reasoning = !reasoningRejected.has(key);
-  let maxTokens = !maxTokensRejected.has(key);
-  let object = jsonObject && !jsonObjectRejected.has(key);
-  const push = (dropped: Dropped) =>
-    steps.push({ reasoning, maxTokens, jsonObject: object, dropped });
-  push(null);
-  if (object) {
-    object = false;
-    push('jsonObject');
-  }
-  if (reasoning) {
-    reasoning = false;
-    push('reasoning');
-  }
-  if (maxTokens) {
-    maxTokens = false;
-    push('maxTokens');
-  }
-  return steps;
-}
-
-function rememberRejection(settings: Settings, dropped: Dropped): void {
-  if (!dropped) return;
-  const key = providerKey(settings);
-  if (dropped === 'reasoning') reasoningRejected.add(key);
-  if (dropped === 'maxTokens') maxTokensRejected.add(key);
-  if (dropped === 'jsonObject') jsonObjectRejected.add(key);
-}
-
-function completionBody(
-  settings: Settings,
-  instructions: string,
-  input: string,
-  maxTokens: number,
-  probe: Probe,
-): object {
-  return {
-    model: settings.model.trim(),
-    messages: [
-      { role: 'system', content: instructions },
-      { role: 'user', content: input },
-    ],
-    stream: false,
-    ...(probe.jsonObject ? { response_format: { type: 'json_object' as const } } : {}),
-    ...(probe.maxTokens ? { max_tokens: maxTokens } : {}),
-    ...(probe.reasoning ? { reasoning_effort: reasoningEffort } : {}),
-  };
-}
-
 async function complete(
   settings: Settings,
   task: string,
@@ -197,43 +130,25 @@ async function complete(
   language?: Language,
 ): Promise<string> {
   validateSettings(settings, true);
-  const instructions = translatorInstructions(settings, task, language);
-  let lastError: unknown;
-  for (const probe of probes(settings, caption)) {
-    try {
-      const text = await postModel(
-        settings,
-        completionBody(settings, instructions, input, maxTokens, probe),
-        signal,
-        caption,
-        policy,
-      );
-      rememberRejection(settings, probe.dropped);
-      if (!text.trim()) throw new Error('模型未返回译文，请确认该模型支持 /chat/completions。');
-      return text.trim();
-    } catch (error) {
-      lastError = error;
-      if (!(error instanceof HttpError) || ![400, 422].includes(error.status)) throw error;
-    }
-  }
-  throw lastError;
-}
-
-async function postModel(
-  settings: Settings,
-  body: object,
-  signal: AbortSignal | undefined,
-  caption = false,
-  policy?: ProviderSendPolicy,
-): Promise<string> {
   const { response, signal: deadline } = await fetchApi(
     settings,
     '/chat/completions',
-    body,
+    {
+      model: settings.model.trim(),
+      messages: [
+        { role: 'system', content: translatorInstructions(settings, task, language) },
+        { role: 'user', content: input },
+      ],
+      stream: false,
+      max_tokens: maxTokens,
+      ...(caption ? { response_format: { type: 'json_object' } } : {}),
+    },
     signal,
     policy,
   );
-  return readModelText(response, deadline, caption);
+  const text = await readModelText(response, deadline, caption);
+  if (!text.trim()) throw new Error('模型未返回译文，请确认该模型支持 /chat/completions。');
+  return text.trim();
 }
 
 export async function translate(
