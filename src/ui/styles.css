@@ -182,6 +182,15 @@ button:hover:not(:disabled) {
 .brand-period {
   color: var(--accent);
 }
+.brand-version {
+  margin-left: 8px;
+  color: #797e90;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 14px;
+  white-space: nowrap;
+}
 .sidebar-rule {
   margin: 29px 12px 24px;
   border-top: 1px solid #f0f0f5;
