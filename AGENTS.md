@@ -62,7 +62,7 @@ Each rule names what fails when it is broken. When the developer corrects a mist
 
 ## Additional tips
 
-- Don't verify with real-browser unless the user explicitly agrees or requests it.
+- Don't invoke the chrome-debug skill on your own unless the user explicitly asks for it.
 
 ## Verifying
 
