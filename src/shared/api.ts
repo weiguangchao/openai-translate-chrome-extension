@@ -134,6 +134,7 @@ async function complete(
       ],
       stream: false,
       max_tokens: maxTokens,
+      reasoning_effort: 'low',
       ...(caption ? { response_format: { type: 'json_object' } } : {}),
     },
     signal,

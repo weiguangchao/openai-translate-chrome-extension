@@ -32,7 +32,7 @@ Each rule names what fails when it is broken. When the developer corrects a mist
 | Every number that shapes playback, Provider traffic or what a caption shows lives in `src/shared/tuning.ts`. | ESLint `local/tuning-home` |
 | A new tuning value, failure kind or test runner setting needs a `Requested-by:` line in its commit message. | `scripts/check-policy.mjs` in `npm run check` |
 | Provider HTTP goes through `src/shared/provider/transport.ts`. | ESLint `local/provider-transport` over `src/shared`, `src/extension` and `src/ui` |
-| Translation requests omit `reasoning_effort` so the Provider chooses its default, and HTTP errors return without compatibility retries or remembered parameter rejections. | `src/shared/api.ts`; `tests/api.test.ts` |
+| Translation requests send `reasoning_effort: "low"`, and HTTP errors return without compatibility retries or remembered parameter rejections. | `src/shared/api.ts`; `tests/api.test.ts` |
 | A sent Provider POST keeps its rate slot for `providerSendWindowMs`, even if it is aborted. | `tests/provider-transport.test.ts` |
 | A seek drops only unsent work. Requests already sent finish into the cache and stop counting toward `maxInFlightRequests` and `translationSendsPerSecond`. | `tests/prefetch.test.ts`; `tests/queue.test.ts` |
 | A failed caption is not retried, and is not requested again while it stays in the prefetch window. | `tests/queue.test.ts`; `tests/captions.test.ts`; `e2e/provider.spec.ts` |
