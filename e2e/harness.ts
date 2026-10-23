@@ -561,7 +561,7 @@ export async function expectNativeHidden(p: Player, hidden: boolean) {
 
 export const errorsShown = async (p: Player) =>
   [...new Set((await p.frames()).map((f) => f.translation))].filter((t) =>
-    t.startsWith('Subline：'),
+    t.startsWith('Subline: '),
   );
 
 const openingInputs = [[{ id: 0, text: source }]];

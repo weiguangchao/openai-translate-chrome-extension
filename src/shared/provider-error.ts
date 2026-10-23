@@ -1,3 +1,4 @@
+import { t } from './i18n';
 export type TranslateFailure =
   | { readonly kind: 'timeout' }
   | { readonly kind: 'copied-source' }
@@ -7,11 +8,14 @@ export type TranslateFailure =
 export function failureText(failure: TranslateFailure): string {
   switch (failure.kind) {
     case 'timeout':
-      return '接口请求超时，请检查网络或更换响应更快的模型。';
+      return t(
+        '接口请求超时，请检查网络或更换响应更快的模型。',
+        'The request timed out. Check your network or choose a faster model.',
+      );
     case 'unsupported-language':
-      return '原文语言不支持';
+      return t('原文语言不支持', 'Unsupported subtitle language');
     case 'copied-source':
-      return '译文与原文相同。';
+      return t('译文与原文相同。', 'The translation matches the source text.');
     case 'error':
       return failure.message;
   }

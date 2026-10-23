@@ -49,7 +49,7 @@ for (const platform of ['youtube', 'hbo', 'x'] as const) {
     await withPlayer(platform, info, async (p) => {
       await p.settings({ apiKey: 'e2e-invalid-key' });
       await p.play();
-      await expect(p.translated).toHaveText('Subline：API Key 无效或已过期。');
+      await expect(p.translated).toHaveText('Subline: The API Key is invalid or expired.');
       await expect(p.translated).toHaveClass(/error/);
       await expect(p.original).toHaveText(source);
       expect(p.posts.map((post) => post.status)).toContain(401);
@@ -58,7 +58,7 @@ for (const platform of ['youtube', 'hbo', 'x'] as const) {
       await p.pair(source, translation);
       await expect(p.translated).not.toHaveClass(/error/);
       expect(p.posts.at(-1)!.status).toBe(200);
-      expect(await errorsShown(p)).toEqual(['Subline：API Key 无效或已过期。']);
+      expect(await errorsShown(p)).toEqual(['Subline: The API Key is invalid or expired.']);
     });
   });
 
@@ -68,7 +68,7 @@ for (const platform of ['youtube', 'hbo', 'x'] as const) {
       platform,
       info,
       async (p) => {
-        const failure = 'Subline：接口返回 HTTP 503，请稍后重试。';
+        const failure = 'Subline: The provider returned HTTP 503. Try again later.';
         await expect.poll(() => p.downloads.length).toBeGreaterThan(0);
         const downloads = p.downloads.length;
         await p.page.evaluate(() => window.fixture.switchVideo('second'));
@@ -99,7 +99,7 @@ test('youtube: a stalled opening batch times out without a retry and the next ba
       await p.play();
       await expect.poll(() => p.posts.length).toBeGreaterThan(0);
       expect(p.posts[0].inputs.map((input) => input.text)).toEqual([denseCue(0).text]);
-      await expect(p.translated).toHaveText('翻译中');
+      await expect(p.translated).toHaveText('Translating');
       await expect(p.translated).toHaveCSS('font-size', '20px');
       await p.pause();
       expect(
@@ -110,7 +110,7 @@ test('youtube: a stalled opening batch times out without a retry and the next ba
       expect(
         p.posts.filter((post) => post.inputs.map((input) => input.text).join('\n') === first),
       ).toHaveLength(1);
-      await expect(p.translated).toHaveText('接口调用超时');
+      await expect(p.translated).toHaveText('Request timed out');
       await expect(p.translated).toHaveCSS('color', 'rgb(255, 204, 0)');
       await expect(p.translated).toHaveCSS('font-size', '20px');
       const later = denseCue(4);

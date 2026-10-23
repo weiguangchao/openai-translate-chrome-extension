@@ -1,3 +1,4 @@
+import { t } from '../shared/i18n';
 import { fetchModels, translate } from '../shared/api';
 import { failureOf, UnsupportedLanguageError } from '../shared/provider-error';
 import {
@@ -33,8 +34,15 @@ const ready = (async () => {
 })();
 
 function requireEnabled(platform: PlatformId): void {
-  if (!settings.enabled || !settings[platform]) throw new Error('双语字幕已关闭。');
-  if (!hasProviderConsent(settings)) throw new Error('请先在设置中同意将字幕发送给 Provider。');
+  if (!settings.enabled || !settings[platform])
+    throw new Error(t('双语字幕已关闭。', 'Bilingual subtitles are off.'));
+  if (!hasProviderConsent(settings))
+    throw new Error(
+      t(
+        '请先在设置中同意将字幕发送给 Provider。',
+        'Allow subtitles to be sent to your provider in settings first.',
+      ),
+    );
 }
 
 async function contentRequest(
@@ -79,7 +87,7 @@ async function contentRequest(
     const effective = { ...settings, captionLanguage };
     return cacheOnly ? queue.lookup(effective, text) : queue.request(consumer, effective, text);
   }
-  throw new Error('不支持的请求。');
+  throw new Error(t('不支持的请求。', 'Unsupported request.'));
 }
 
 chrome.runtime.onMessage.addListener((message: unknown, sender, respond) => {
@@ -98,14 +106,15 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, respond) => {
         ? fetchModels(draft)
         : translate(draft, 'The world is full of wonderful things.');
     }
-    if (!platform) throw new Error('不支持的请求。');
+    if (!platform) throw new Error(t('不支持的请求。', 'Unsupported request.'));
     const consumer = `${sender.tab?.id}:${sender.frameId}`;
     if (type === 'trace')
       return printTrace({ e: 'view', tab: consumer, ...readTraceRequest(message as object) });
     return contentRequest(type, message as object, platform, consumer, sender.documentId);
   })().then(
     (result) => respond({ ok: true, data: result }),
-    (error) => respond({ ok: false, failure: failureOf(error, '请求失败。') }),
+    (error) =>
+      respond({ ok: false, failure: failureOf(error, t('请求失败。', 'Request failed.')) }),
   );
   return true;
 });

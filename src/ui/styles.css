@@ -1218,6 +1218,9 @@ button:hover:not(:disabled) {
   align-items: center;
   gap: 8px;
 }
+html:lang(en) .popup-languages {
+  grid-template-columns: minmax(0, 1fr);
+}
 .popup-language {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);

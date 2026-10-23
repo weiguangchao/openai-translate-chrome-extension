@@ -27,7 +27,7 @@ for (const platform of ['youtube', 'hbo', 'x'] as const) {
       const shown = (await p.frames()).filter((f) => f.original);
       expect(shown.length).toBeGreaterThan(0);
       expect(
-        shown.filter((f) => !f.translation || f.translation === '翻译中'),
+        shown.filter((f) => !f.translation || f.translation === 'Translating'),
         'The source never appears before its translation',
       ).toEqual([]);
       expect(p.downloads).toHaveLength(platform === 'youtube' ? 1 : 2);
@@ -106,7 +106,7 @@ for (const platform of ['youtube', 'hbo', 'x'] as const) {
       const sent = p.posts.length;
       const downloaded = p.downloads.length;
       await p.page.evaluate(() => window.fixture.select('fr'));
-      await expect(p.translated).toHaveText('原文语言不支持');
+      await expect(p.translated).toHaveText('Unsupported subtitle language');
       await expect(p.translated).toBeVisible();
       await expect(p.original).toBeHidden();
       expect(p.posts).toHaveLength(sent);
@@ -215,7 +215,7 @@ for (const platform of ['hbo', 'x'] as const) {
         await p.pair(source, translation);
         expect(
           (await p.frames()).filter(
-            (f) => f.original && (!f.translation || f.translation === '翻译中'),
+            (f) => f.original && (!f.translation || f.translation === 'Translating'),
           ),
           'The source never appears before its translation',
         ).toEqual([]);

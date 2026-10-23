@@ -1,8 +1,9 @@
+import { t } from '../shared/i18n';
 import { failureText } from '../shared/provider-error';
 import type { PublicSettings } from '../shared/settings';
 
-const LOADING_TRANSLATION = '翻译中';
-const TIMEOUT_TRANSLATION = '接口调用超时';
+const LOADING_TRANSLATION = t('翻译中', 'Translating');
+const TIMEOUT_TRANSLATION = t('接口调用超时', 'Request timed out');
 
 export type TranslationLine =
   | { readonly kind: 'none' }
@@ -29,7 +30,7 @@ function lineContent(line: TranslationLine): { text: string; status: Status } {
     case 'ready':
       return { text: line.translation, status: null };
     case 'failed':
-      return { text: `Subline：${line.message}`, status: 'error' };
+      return { text: t(`Subline：${line.message}`, `Subline: ${line.message}`), status: 'error' };
     case 'timedOut':
       return { text: TIMEOUT_TRANSLATION, status: 'timeout' };
     case 'unsupported-language':

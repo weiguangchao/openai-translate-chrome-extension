@@ -1,3 +1,4 @@
+import { t } from './i18n';
 import {
   DEFAULT_SETTINGS,
   normalizeSettings,
@@ -78,7 +79,12 @@ export async function saveCachedModels(settings: ModelProvider, models: string[]
     if (isExtension) await chrome.storage.local.set({ [key]: ids });
     else localStorage.setItem(key, JSON.stringify(ids));
   } catch {
-    throw new Error('模型已获取，但无法缓存到本地，请重试。');
+    throw new Error(
+      t(
+        '模型已获取，但无法缓存到本地，请重试。',
+        'Models were fetched but could not be cached locally. Try again.',
+      ),
+    );
   }
 }
 
@@ -88,7 +94,13 @@ export async function allowApiHost(settings: Settings): Promise<void> {
   const granted = await chrome.permissions.request({
     origins: [`${url.protocol}//${url.hostname}/*`],
   });
-  if (!granted) throw new Error('需要授权访问此 API 地址，才能获取模型或翻译字幕。');
+  if (!granted)
+    throw new Error(
+      t(
+        '需要授权访问此 API 地址，才能获取模型或翻译字幕。',
+        'Allow access to this API address to fetch models or translate subtitles.',
+      ),
+    );
 }
 export async function apiAction(
   kind: 'models' | 'test',
@@ -102,7 +114,13 @@ export async function apiAction(
     type: kind,
     settings,
   });
-  if (!response) throw new Error('扩展后台没有响应，请重新加载扩展。');
+  if (!response)
+    throw new Error(
+      t(
+        '扩展后台没有响应，请重新加载扩展。',
+        'The extension background did not respond. Reload the extension.',
+      ),
+    );
   if (!response.ok) throw new Error(failureText(response.failure));
   return response.data;
 }

@@ -1,3 +1,4 @@
+import { t } from './i18n';
 import { LANGUAGES, type Language } from './languages';
 
 export interface SubtitleStyle {
@@ -82,19 +83,37 @@ export function validateBaseUrl(raw: string): URL {
   try {
     url = new URL(raw.trim());
   } catch {
-    throw new Error('请输入完整的 Base URL，例如 https://api.openai.com/v1');
+    throw new Error(
+      t(
+        '请输入完整的 Base URL，例如 https://api.openai.com/v1',
+        'Enter a complete Base URL, such as https://api.openai.com/v1',
+      ),
+    );
   }
   if (
     url.protocol !== 'https:' &&
     !(url.protocol === 'http:' && localHttpHosts.includes(url.hostname))
   )
     throw new Error(
-      'Base URL 需要使用 HTTPS。只有本机服务（localhost 或 127.0.0.1）可以使用 HTTP。',
+      t(
+        'Base URL 需要使用 HTTPS。只有本机服务（localhost 或 127.0.0.1）可以使用 HTTP。',
+        'The Base URL must use HTTPS. HTTP is allowed only for localhost or 127.0.0.1.',
+      ),
     );
   if (url.username || url.password || url.search || url.hash)
-    throw new Error('Base URL 不能包含用户名、密码、查询参数或锚点。');
+    throw new Error(
+      t(
+        'Base URL 不能包含用户名、密码、查询参数或锚点。',
+        'The Base URL cannot contain credentials, query parameters, or a fragment.',
+      ),
+    );
   if (/\/(chat\/completions|completions|models?)\/?$/.test(url.pathname))
-    throw new Error('请填写接口根地址，例如 /v1，不要包含 /chat/completions 或 /models。');
+    throw new Error(
+      t(
+        '请填写接口根地址，例如 /v1，不要包含 /chat/completions 或 /models。',
+        'Enter the API base path, such as /v1, without /chat/completions or /models.',
+      ),
+    );
   return url;
 }
 export function providerOrigin(baseUrl: string): string {
@@ -110,8 +129,10 @@ export function hasProviderConsent(settings: Settings): boolean {
 }
 export function validateSettings(settings: Settings, requireConnection = false): void {
   validateBaseUrl(settings.baseUrl);
-  if (requireConnection && !settings.apiKey.trim()) throw new Error('请先填写 API Key。');
-  if (requireConnection && !settings.model.trim()) throw new Error('请先选择或填写 Model ID。');
+  if (requireConnection && !settings.apiKey.trim())
+    throw new Error(t('请先填写 API Key。', 'Enter an API Key first.'));
+  if (requireConnection && !settings.model.trim())
+    throw new Error(t('请先选择或填写 Model ID。', 'Select or enter a Model ID first.'));
 }
 type SettingScope = 'availability' | 'credentials' | 'translation' | 'style';
 

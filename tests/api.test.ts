@@ -65,7 +65,7 @@ describe('OpenAI-compatible provider contract', () => {
         Response.json({ error: { message: 'Your private-test-key is invalid' } }, { status: 401 }),
       );
     vi.stubGlobal('fetch', fetch);
-    await expect(fetchModels(config())).rejects.toThrow('API Key 无效或已过期。');
+    await expect(fetchModels(config())).rejects.toThrow('The API Key is invalid or expired.');
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 
@@ -213,9 +213,9 @@ describe('OpenAI-compatible provider contract', () => {
         }),
       );
     vi.stubGlobal('fetch', fetch);
-    await expect(translate(config(), 'Hello')).rejects.toThrow('有效的 JSON');
+    await expect(translate(config(), 'Hello')).rejects.toThrow('invalid JSON');
     expect(values[TOKEN_USAGE_KEY]).toBeUndefined();
-    await expect(translate(config(), 'Hello')).rejects.toThrow('模型未返回译文');
+    await expect(translate(config(), 'Hello')).rejects.toThrow('The model returned no translation');
     await expect(translate(config(), 'Hello')).resolves.toBe('第一句');
     await expect(translate(config(), 'Next')).resolves.toBe('第二句');
     expect(values[TOKEN_USAGE_KEY]).toEqual({ input: 1831, output: 266, cache: 906 });
@@ -230,8 +230,8 @@ describe('OpenAI-compatible provider contract', () => {
         .mockResolvedValueOnce(new Response('<html>login</html>'))
         .mockResolvedValueOnce(Response.json({ choices: [{ message: { content: null } }] })),
     );
-    await expect(translate(config(), 'Hello')).rejects.toThrow('有效的 JSON');
-    await expect(translate(config(), 'Hello')).rejects.toThrow('模型未返回译文');
+    await expect(translate(config(), 'Hello')).rejects.toThrow('invalid JSON');
+    await expect(translate(config(), 'Hello')).rejects.toThrow('The model returned no translation');
   });
 
   it('rejects unsafe URLs before sending any credentials', async () => {

@@ -88,7 +88,9 @@ it.each([true, false])(
       setItem.mockImplementationOnce(() => {
         throw new Error('Quota exceeded');
       });
-    await expect(cache.saveCachedModels(provider, ['model-b'])).rejects.toThrow('无法缓存到本地');
+    await expect(cache.saveCachedModels(provider, ['model-b'])).rejects.toThrow(
+      'could not be cached locally',
+    );
     await expect(cache.loadCachedModels(provider)).resolves.toEqual(['model-a']);
   },
 );

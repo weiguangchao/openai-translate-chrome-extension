@@ -1,3 +1,4 @@
+import { t } from './i18n';
 import { supportedLanguage, type Language } from './languages';
 import { UnsupportedLanguageError } from './provider-error';
 import { planLookaheadCues } from './tuning';
@@ -67,7 +68,7 @@ function captionLanguageOf(message: object): Language {
 
 export function readTranslateRequest(message: object): TranslateRequest & { cacheOnly: boolean } {
   const { text, cacheOnly } = message as Record<string, unknown>;
-  if (!validText(text)) throw new Error('字幕内容无效。');
+  if (!validText(text)) throw new Error(t('字幕内容无效。', 'Invalid subtitle text.'));
   return {
     type: 'translate',
     text,
@@ -82,25 +83,28 @@ function finiteTime(value: unknown): value is number {
 
 export function readHoldRequest(message: object): PrefetchHoldRequest {
   const { time } = message as Record<string, unknown>;
-  if (!finiteTime(time)) throw new Error('预加载字幕内容无效。');
+  if (!finiteTime(time))
+    throw new Error(t('预加载字幕内容无效。', 'Invalid subtitle prefetch data.'));
   return { type: 'prefetch-hold', time };
 }
 
 export function readPrefetchRequest(message: object): PrefetchRequest {
   const { time, rate, cues } = message as Record<string, unknown>;
   if (!finiteTime(time) || !finiteTime(rate) || rate === 0 || !Array.isArray(cues))
-    throw new Error('预加载字幕内容无效。');
-  if (cues.length > planLookaheadCues) throw new Error('预加载字幕内容无效。');
+    throw new Error(t('预加载字幕内容无效。', 'Invalid subtitle prefetch data.'));
+  if (cues.length > planLookaheadCues)
+    throw new Error(t('预加载字幕内容无效。', 'Invalid subtitle prefetch data.'));
   return {
     type: 'prefetch',
     captionLanguage: cues.length ? captionLanguageOf(message) : null,
     time,
     rate,
     cues: cues.map((cue: unknown): PlaybackCue => {
-      if (!cue || typeof cue !== 'object') throw new Error('预加载字幕内容无效。');
+      if (!cue || typeof cue !== 'object')
+        throw new Error(t('预加载字幕内容无效。', 'Invalid subtitle prefetch data.'));
       const { text, start, end } = cue as Record<string, unknown>;
       if (!validText(text) || !finiteTime(start) || !finiteTime(end) || end <= start)
-        throw new Error('预加载字幕内容无效。');
+        throw new Error(t('预加载字幕内容无效。', 'Invalid subtitle prefetch data.'));
       return { text, start, end };
     }),
   };

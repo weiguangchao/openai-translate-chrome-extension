@@ -380,7 +380,7 @@ it('uses the selected HLS language for hidden live cues when the playlist cannot
 });
 
 it.each([
-  { language: '', original: null, translated: '原文语言不支持', texts: [] },
+  { language: '', original: null, translated: 'Unsupported subtitle language', texts: [] },
   { language: 'EN', original: 'Live cue', translated: '译文 Live cue', texts: [['Live cue']] },
 ])(
   'uses the showing native track with language %j when the X player adapter is unavailable',

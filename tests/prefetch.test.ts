@@ -183,7 +183,7 @@ it('cuts a long cue into captions, translates each on its own, and shows each on
   controller = new CaptionController(createHboPlatform, publicSettings(saved));
   await advance(8);
   expect(requested.flat()).not.toContain(longCaption);
-  expect(translated()?.textContent).toBe('翻译中');
+  expect(translated()?.textContent).toBe('Translating');
   expect(original()?.hidden).toBe(true);
   const translations = {
     ...Object.fromEntries(longCaptionParts.map((part, index) => [part, longTranslations[index]])),
@@ -286,13 +286,13 @@ it('shows a timeout like the loading line, skips that batch, and translates the 
   expect(requested).toEqual(opening);
   await advance(3);
   expect(requested).toEqual(opening);
-  expect(translated()?.textContent).toBe('翻译中');
+  expect(translated()?.textContent).toBe('Translating');
   const timeout = new Error('The operation was aborted due to timeout');
   timeout.name = 'TimeoutError';
   pending.find((request) => request.texts.includes('Cue 1.'))!.reject(timeout);
   await vi.advanceTimersByTimeAsync(0);
   const translation = translated();
-  expect(translation?.textContent).toBe('接口调用超时');
+  expect(translation?.textContent).toBe('Request timed out');
   expect(translation?.classList.contains('error')).toBe(false);
   expect(translation?.classList.contains('timeout')).toBe(true);
   expect(translation?.style.fontSize).toBe('20px');
@@ -301,7 +301,7 @@ it('shows a timeout like the loading line, skips that batch, and translates the 
   await vi.advanceTimersByTimeAsync(20000);
   expect(requested.filter((request) => request.includes('Cue 1.'))).toHaveLength(1);
   expect(requested).toHaveLength(sent);
-  expect(translated()?.textContent).toBe('接口调用超时');
+  expect(translated()?.textContent).toBe('Request timed out');
   await advance(12);
   await finish({ 'Cue 6.': '第六句' });
   expect(translated()?.textContent).toBe('第六句');
@@ -364,7 +364,7 @@ it('keeps an untranslated short source hidden and waits out a seek before reques
   const sent = requested.length;
   expect(pending.find((request) => request.texts.includes('Stay.'))?.signal.aborted).toBe(false);
   expect(original()?.hidden).toBe(true);
-  expect(translated()?.textContent).toBe('翻译中');
+  expect(translated()?.textContent).toBe('Translating');
   Object.defineProperty(video, 'seeking', { configurable: true, value: true });
   video.currentTime = 20;
   video.dispatchEvent(new Event('seeking'));
@@ -377,7 +377,7 @@ it('keeps an untranslated short source hidden and waits out a seek before reques
   expect(requested.slice(sent)).toEqual([['After.'], ['Seek tail.']]);
   expect(original()?.hidden).toBe(true);
   expect(translated()?.hidden).toBe(false);
-  expect(translated()?.textContent).toBe('翻译中');
+  expect(translated()?.textContent).toBe('Translating');
 });
 
 it('finishes in-flight prefetch while paused and does not send more until playback resumes', async () => {
