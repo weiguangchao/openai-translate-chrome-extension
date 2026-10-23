@@ -2,6 +2,7 @@ export type TranslateFailure =
   | { readonly kind: 'timeout' }
   | { readonly kind: 'copied-source' }
   | { readonly kind: 'unsupported-language' }
+  | { readonly kind: 'http'; readonly status: number; readonly message: string }
   | { readonly kind: 'error'; readonly message: string };
 
 export function failureText(failure: TranslateFailure): string {
@@ -12,8 +13,20 @@ export function failureText(failure: TranslateFailure): string {
       return '原文语言不支持';
     case 'copied-source':
       return '译文与原文相同。';
+    case 'http':
     case 'error':
       return failure.message;
+  }
+}
+
+export class ProviderHttpError extends Error {
+  readonly failure: TranslateFailure;
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+    this.failure = { kind: 'http', status, message };
   }
 }
 
@@ -43,6 +56,7 @@ export class UnsupportedLanguageError extends Error {
 
 export function failureOf(error: unknown, fallback: string): TranslateFailure {
   if (
+    error instanceof ProviderHttpError ||
     error instanceof ProviderTimeoutError ||
     error instanceof RepeatedSourceError ||
     error instanceof UnsupportedLanguageError
