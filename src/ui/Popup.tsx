@@ -175,17 +175,16 @@ export function Popup() {
           onChange={(targetLanguage) => void update({ targetLanguage })}
           ready={ready}
         />
+        <label className="popup-translation-only">
+          <input
+            type="checkbox"
+            checked={ready && settings.translationOnly}
+            disabled={!ready || busy}
+            onChange={(event) => void update({ translationOnly: event.target.checked })}
+          />
+          只显示译文
+        </label>
       </fieldset>
-
-      <label className="popup-translation-only">
-        <input
-          type="checkbox"
-          checked={ready && settings.translationOnly}
-          disabled={!ready || busy}
-          onChange={(event) => void update({ translationOnly: event.target.checked })}
-        />
-        只显示译文
-      </label>
 
       <section className="popup-model" aria-labelledby="popup-model-label">
         <div className="popup-model-row">
