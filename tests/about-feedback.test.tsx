@@ -52,13 +52,13 @@ afterEach(async () => {
 it('opens the repository and a new GitHub issue from the about page', async () => {
   await act(async () => root.render(<App />));
   const about = [...document.querySelectorAll('button')].find(
-    (button) => button.textContent?.trim() === '关于',
+    (button) => button.textContent?.trim() === 'About',
   );
   await act(async () => about!.click());
 
-  const repository = document.querySelector<HTMLAnchorElement>('a[aria-label="GitHub 仓库"]');
+  const repository = document.querySelector<HTMLAnchorElement>('a[aria-label="GitHub repository"]');
   const feedback = [...document.querySelectorAll('a')].find(
-    (link) => link.textContent?.trim() === '反馈',
+    (link) => link.textContent?.trim() === 'Feedback',
   );
   expect(repository?.getAttribute('href')).toBe(REPOSITORY);
   expect(repository?.getAttribute('target')).toBe('_blank');
@@ -68,6 +68,6 @@ it('opens the repository and a new GitHub issue from the about page', async () =
   expect(feedback?.getAttribute('rel')).toBe('noreferrer');
   expect(document.querySelector('textarea')).toBeNull();
   expect([...document.querySelectorAll('h2')].map((heading) => heading.textContent)).not.toContain(
-    '项目与反馈',
+    'Project and feedback',
   );
 });

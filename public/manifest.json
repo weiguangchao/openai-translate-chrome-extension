@@ -1,8 +1,9 @@
 {
   "manifest_version": 3,
-  "name": "Subline · 双语字幕",
+  "name": "__MSG_extensionName__",
   "version": "0.1.1",
-  "description": "观看 YouTube、HBO Max、X（推特）视频时，使用自己的 OpenAI 兼容接口，在原字幕下方显示母语翻译。",
+  "description": "__MSG_extensionDescription__",
+  "default_locale": "en",
   "minimum_chrome_version": "120",
   "permissions": ["storage"],
   "host_permissions": [
@@ -18,7 +19,7 @@
   "background": { "service_worker": "background.js", "type": "module" },
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Subline 双语字幕",
+    "default_title": "__MSG_extensionTitle__",
     "default_icon": {
       "16": "icons/16.png",
       "32": "icons/32.png",

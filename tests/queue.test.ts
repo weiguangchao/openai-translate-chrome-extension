@@ -102,7 +102,7 @@ it('stops after one corrective retry for a persistently invalid result and never
     .mockImplementation(async () => structuredReply([{ id: 0, translation: '' }]));
   vi.stubGlobal('fetch', fetch);
   const queue = new TranslationQueue();
-  await expect(queue.request('tab', settings, 'Broken.')).rejects.toThrow('模型返回的译文无效');
+  await expect(queue.request('tab', settings, 'Broken.')).rejects.toThrow('invalid translation');
   await vi.advanceTimersByTimeAsync(3000);
   expect(fetch).toHaveBeenCalledTimes(2);
   await expect(queue.lookup(settings, 'Broken.')).resolves.toBeNull();
@@ -151,7 +151,7 @@ it('translates the next caption after a timeout without pausing or retrying that
   queue.prefetch('tab', settings, prefetchItems(['Stale', 'Passed']));
   await flush();
   expect(fetch).toHaveBeenCalledTimes(2);
-  await expect(queue.request('tab', settings, 'Stale')).rejects.toThrow('接口请求超时');
+  await expect(queue.request('tab', settings, 'Stale')).rejects.toThrow('The request timed out');
   expect(fetch).toHaveBeenCalledTimes(2);
   const next = queue.prefetch('tab', settings, prefetchItems(['Later'], 1));
   await expect(next).resolves.toEqual(['Later 译文']);
@@ -164,7 +164,7 @@ it('keeps reporting why the provider failed while it backs off after a prefetch'
   const queue = new TranslationQueue();
   await expect(queue.prefetch('tab', settings, prefetchItems(['Ahead']))).resolves.toEqual([null]);
   await expect(queue.request('tab', settings, 'Visible')).rejects.toThrow(
-    new Error('API Key 无效或已过期。'),
+    new Error('The API Key is invalid or expired.'),
   );
   expect(fetch).toHaveBeenCalledTimes(1);
   queue.reset();
@@ -180,8 +180,8 @@ it('does not cache a failed request, but still serves cached cues while the prov
   vi.stubGlobal('fetch', fetch);
   const queue = new TranslationQueue();
   await expect(queue.request('tab', settings, 'Cached')).resolves.toBe('已缓存');
-  await expect(queue.request('tab', settings, 'First')).rejects.toThrow('请求过于频繁');
-  await expect(queue.request('tab', settings, 'Second')).rejects.toThrow('请求过于频繁');
+  await expect(queue.request('tab', settings, 'First')).rejects.toThrow('Rate limit');
+  await expect(queue.request('tab', settings, 'Second')).rejects.toThrow('Rate limit');
   await expect(queue.request('tab', settings, 'Cached')).resolves.toBe('已缓存');
   await expect(queue.prefetch('tab', settings, packedCues(['Cached', 'First']))).resolves.toEqual([
     '已缓存',
@@ -189,7 +189,7 @@ it('does not cache a failed request, but still serves cached cues while the prov
   ]);
   expect(fetch).toHaveBeenCalledTimes(2);
   await vi.advanceTimersByTimeAsync(15000);
-  await expect(queue.request('tab', settings, 'First')).rejects.toThrow('请求过于频繁');
+  await expect(queue.request('tab', settings, 'First')).rejects.toThrow('Rate limit');
   expect(fetch).toHaveBeenCalledTimes(3);
 });
 
@@ -389,7 +389,7 @@ it('keeps a batch running while any of its cues is still needed, caches all of i
   const visible = queue.request('other-tab', settings, 'Shared cue');
   const dropped = queue.request('tab', settings, 'Next cue').catch((error) => error.message);
   queue.prefetch('tab', settings, []);
-  await expect(dropped).resolves.toBe('字幕已更新。');
+  await expect(dropped).resolves.toBe('Subtitles have changed.');
   expect(requests[0].signal.aborted).toBe(false);
   requests[0].resolve(
     providerReply(requests[0].texts, (text) => (text === 'Shared cue' ? '共享字幕' : '下一句')),
@@ -495,8 +495,8 @@ it('cancels an in-flight batch when playback leaves and does not retry it', asyn
   expect(fetch).toHaveBeenCalledTimes(1);
   queue.prefetch('tab', settings, []);
   expect(requests[0].signal.aborted).toBe(true);
-  await expect(first).rejects.toThrow('字幕已更新');
-  await expect(second).rejects.toThrow('字幕已更新');
+  await expect(first).rejects.toThrow('Subtitles have changed');
+  await expect(second).rejects.toThrow('Subtitles have changed');
   await expect(pending).resolves.toEqual([null, null]);
   requests[0].resolve(providerReply(['First', 'Second'], () => '过期译文'));
   await flush();

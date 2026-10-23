@@ -1,3 +1,4 @@
+import { t } from '../shared/i18n';
 import { CircleCheck, CircleAlert, Info, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -40,7 +41,7 @@ function Alert({ notice, onDismiss }: { notice: Notice; onDismiss: (id: number) 
         <button
           type="button"
           className="alert-close"
-          aria-label="关闭提示"
+          aria-label={t('关闭提示', 'Dismiss notification')}
           onClick={() => setClosing(true)}
         >
           <X size={16} aria-hidden />

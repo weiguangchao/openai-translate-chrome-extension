@@ -111,11 +111,11 @@ it('renders each translation line with its own text and class', () => {
   });
   expect(shown()).toEqual({ text: null, error: false, timeout: false });
   render({ kind: 'loading' });
-  expect(shown()).toEqual({ text: '翻译中', error: false, timeout: false });
+  expect(shown()).toEqual({ text: 'Translating', error: false, timeout: false });
   render({ kind: 'ready', translation: '你好' });
   expect(shown()).toEqual({ text: '你好', error: false, timeout: false });
   render({ kind: 'timedOut' });
-  expect(shown()).toEqual({ text: '接口调用超时', error: false, timeout: true });
+  expect(shown()).toEqual({ text: 'Request timed out', error: false, timeout: true });
   expect(translation.style.fontSize).toBe('20px');
   overlay.updateStyle(
     publicSettings({ ...DEFAULT_SETTINGS, translation: { color: '#112233', size: 18 } }),
@@ -123,10 +123,10 @@ it('renders each translation line with its own text and class', () => {
   expect(shown().timeout).toBe(true);
   expect(translation.style.color).toBe('rgb(17, 34, 51)');
   expect(translation.style.fontSize).toBe('18px');
-  render({ kind: 'failed', message: '翻译失败。' });
-  expect(shown()).toEqual({ text: 'Subline：翻译失败。', error: true, timeout: false });
+  render({ kind: 'failed', message: 'Translation failed.' });
+  expect(shown()).toEqual({ text: 'Subline: Translation failed.', error: true, timeout: false });
   render({ kind: 'timedOut' });
-  expect(shown()).toEqual({ text: '接口调用超时', error: false, timeout: true });
+  expect(shown()).toEqual({ text: 'Request timed out', error: false, timeout: true });
   render({ kind: 'ready', translation: '你好' });
   expect(shown()).toEqual({ text: '你好', error: false, timeout: false });
   expect(translation.style.color).toBe('rgb(17, 34, 51)');

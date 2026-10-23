@@ -1,3 +1,4 @@
+import { t } from '../shared/i18n';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   Check,
@@ -55,17 +56,17 @@ const REPOSITORY_URL = 'https://github.com/weiguangchao/openai-translate-chrome-
 const PAGES = [
   {
     id: 'general' as const,
-    name: '常规设置',
+    name: t('常规设置', 'General'),
     icon: Settings2,
   },
   {
     id: 'appearance' as const,
-    name: '字幕样式',
+    name: t('字幕样式', 'Subtitle style'),
     icon: SlidersHorizontal,
   },
   {
     id: 'about' as const,
-    name: '关于',
+    name: t('关于', 'About'),
     icon: Info,
   },
 ];
@@ -117,7 +118,7 @@ export function App() {
   const fingerprint = JSON.stringify([settings.baseUrl, settings.apiKey, settings.model]);
   const connected = connection === fingerprint;
   const origin = providerOrigin(settings.baseUrl);
-  const provider = origin ? new URL(origin).host : '你填写的 Provider';
+  const provider = origin ? new URL(origin).host : t('你填写的 Provider', 'your provider');
   const consented = hasProviderConsent(settings);
 
   useEffect(() => {
@@ -127,10 +128,22 @@ export function App() {
         setSaved(JSON.stringify(value));
         setReady(true);
         if (!isExtension)
-          showAlert({ kind: 'info', text: '浏览器预览：API Key 刷新后需重新填写。' });
+          showAlert({
+            kind: 'info',
+            text: t(
+              '浏览器预览：API Key 刷新后需重新填写。',
+              'Browser preview: re-enter your API Key after refreshing.',
+            ),
+          });
       })
       .catch(() => {
-        showAlert({ kind: 'error', text: '无法读取本地设置，请检查浏览器存储权限。' });
+        showAlert({
+          kind: 'error',
+          text: t(
+            '无法读取本地设置，请检查浏览器存储权限。',
+            'Could not load local settings. Check browser storage permissions.',
+          ),
+        });
       });
   }, [showAlert]);
   useEffect(() => {
@@ -177,12 +190,24 @@ export function App() {
       setSaved(JSON.stringify(normalized));
       showAlert(
         normalized.apiKey && normalized.model && !hasProviderConsent(normalized)
-          ? { kind: 'info', text: '设置已保存。同意数据使用说明后，才会翻译字幕。' }
+          ? {
+              kind: 'info',
+              text: t(
+                '设置已保存。同意数据使用说明后，才会翻译字幕。',
+                'Settings saved. Accept the data use notice to translate subtitles.',
+              ),
+            }
           : {
               kind: 'success',
               text: isExtension
-                ? '设置已保存，已打开的视频页面会自动应用。'
-                : '预览设置已保存。API Key 仅保留在当前页面，安装扩展后可本地保存。',
+                ? t(
+                    '设置已保存，已打开的视频页面会自动应用。',
+                    'Settings saved and applied to open video pages.',
+                  )
+                : t(
+                    '预览设置已保存。API Key 仅保留在当前页面，安装扩展后可本地保存。',
+                    'Preview settings saved. The API Key stays on this page. Install the extension to save it locally.',
+                  ),
             },
       );
     } catch (error) {
@@ -196,7 +221,13 @@ export function App() {
   }
   async function runApi(kind: 'models' | 'test') {
     try {
-      if (!settings.apiKey.trim()) throw new Error('请先填写 API Key，再连接翻译服务。');
+      if (!settings.apiKey.trim())
+        throw new Error(
+          t(
+            '请先填写 API Key，再连接翻译服务。',
+            'Enter an API Key before connecting to the translation service.',
+          ),
+        );
       if (kind === 'test') validateSettings(settings, true);
       const permission = allowApiHost(settings);
       const requestSettings = structuredClone(settings);
@@ -212,7 +243,10 @@ export function App() {
         await saveCachedModels(requestSettings, ids);
         showAlert({
           kind: 'success',
-          text: `已获取 ${ids.length} 个模型，请选择支持文本翻译的模型。`,
+          text: t(
+            `已获取 ${ids.length} 个模型，请选择支持文本翻译的模型。`,
+            `Fetched ${ids.length} models. Choose one that supports text translation.`,
+          ),
         });
       } else {
         setConnection(
@@ -220,12 +254,15 @@ export function App() {
         );
         showAlert({
           kind: 'success',
-          text: '连接测试成功',
+          text: t('连接测试成功', 'Connection test passed'),
         });
       }
     } catch (error) {
       if (kind === 'test') setConnection('');
-      showAlert({ kind: 'error', text: error instanceof Error ? error.message : '接口请求失败。' });
+      showAlert({
+        kind: 'error',
+        text: error instanceof Error ? error.message : t('接口请求失败。', 'API request failed.'),
+      });
     } finally {
       setBusy(null);
     }
@@ -237,7 +274,7 @@ export function App() {
       <aside className="sidebar">
         <Logo />
         <div className="sidebar-rule" />
-        <nav aria-label="设置导航">
+        <nav aria-label={t('设置导航', 'Settings navigation')}>
           {PAGES.map(({ id, name, icon: Icon }) => (
             <button
               key={id}
@@ -256,7 +293,7 @@ export function App() {
         <header className="topbar">
           <div className="breadcrumb">
             <Settings2 size={15} />
-            <span>偏好设置</span>
+            <span>{t('偏好设置', 'Preferences')}</span>
             <ChevronRight size={13} />
             <span>{current.name}</span>
           </div>
@@ -275,7 +312,7 @@ export function App() {
                 ) : (
                   <Check size={17} />
                 )}{' '}
-                {dirty ? '保存更改' : '已保存'}
+                {dirty ? t('保存更改', 'Save changes') : t('已保存', 'Saved')}
               </button>
             )}
           </div>
@@ -290,7 +327,9 @@ export function App() {
                     <div>
                       <h2>
                         {copy.enableSubtitles}{' '}
-                        <span className="small-tag">{settings.enabled ? '已开启' : '已关闭'}</span>
+                        <span className="small-tag">
+                          {settings.enabled ? t('已开启', 'On') : t('已关闭', 'Off')}
+                        </span>
                       </h2>
                     </div>
                     <Toggle
@@ -299,7 +338,10 @@ export function App() {
                       onChange={(value) => update('enabled', value)}
                     />
                   </div>
-                  <Section icon={<Languages size={19} />} title="字幕语言">
+                  <Section
+                    icon={<Languages size={19} />}
+                    title={t('字幕语言', 'Subtitle language')}
+                  >
                     <div className="field">
                       <label htmlFor="target-language">{copy.target}</label>
                       <LanguageSelect
@@ -313,10 +355,10 @@ export function App() {
                     <div className={`connection-badge ${connected ? 'connected' : ''}`}>
                       <i />
                       {connected
-                        ? '连接正常'
+                        ? t('连接正常', 'Connected')
                         : settings.apiKey && settings.model
-                          ? '等待测试'
-                          : '待配置'}
+                          ? t('等待测试', 'Not tested')
+                          : t('待配置', 'Not configured')}
                     </div>
                     <fieldset disabled={Boolean(busy)}>
                       <div className="field">
@@ -324,7 +366,10 @@ export function App() {
                           Base URL{' '}
                           <span
                             className="field-tip"
-                            title="填写包含版本路径的接口根地址，例如 https://api.openai.com/v1"
+                            title={t(
+                              '填写包含版本路径的接口根地址，例如 https://api.openai.com/v1',
+                              'Enter the API base URL including its version path, such as https://api.openai.com/v1',
+                            )}
                           >
                             <CircleHelp size={13} />
                           </span>
@@ -340,7 +385,12 @@ export function App() {
                             spellCheck={false}
                           />
                         </div>
-                        <p className="field-hint">填写接口根地址，无需添加 /chat/completions</p>
+                        <p className="field-hint">
+                          {t(
+                            '填写接口根地址，无需添加 /chat/completions',
+                            'Enter the API base URL without /chat/completions',
+                          )}
+                        </p>
                       </div>
                       <div className="field">
                         <label htmlFor="api-key">API Key</label>
@@ -351,13 +401,17 @@ export function App() {
                             type={showKey ? 'text' : 'password'}
                             value={settings.apiKey}
                             onChange={(event) => update('apiKey', event.target.value)}
-                            placeholder="输入你的 API Key"
+                            placeholder={t('输入你的 API Key', 'Enter your API Key')}
                             autoComplete="off"
                             spellCheck={false}
                           />
                           <button
                             type="button"
-                            aria-label={showKey ? '隐藏 API Key' : '显示 API Key'}
+                            aria-label={
+                              showKey
+                                ? t('隐藏 API Key', 'Hide API Key')
+                                : t('显示 API Key', 'Show API Key')
+                            }
                             onClick={() => setShowKey((value) => !value)}
                           >
                             {showKey ? <EyeOff size={16} /> : <Eye size={16} />}
@@ -371,7 +425,9 @@ export function App() {
                             className="text-button"
                             onClick={() => setManualModel((value) => !value)}
                           >
-                            {manualModel ? '从列表选择' : '手动填写'}
+                            {manualModel
+                              ? t('从列表选择', 'Choose from list')
+                              : t('手动填写', 'Enter manually')}
                           </button>
                         </label>
                         <div className="model-row">
@@ -380,7 +436,10 @@ export function App() {
                               id="model"
                               value={settings.model}
                               onChange={(event) => update('model', event.target.value)}
-                              placeholder="输入服务商提供的 Model ID"
+                              placeholder={t(
+                                '输入服务商提供的 Model ID',
+                                'Enter the Model ID from your provider',
+                              )}
                               spellCheck={false}
                             />
                           ) : (
@@ -389,7 +448,9 @@ export function App() {
                               value={settings.model}
                               onChange={(value) => update('model', value)}
                             >
-                              <option value="">选择翻译模型</option>
+                              <option value="">
+                                {t('选择翻译模型', 'Choose a translation model')}
+                              </option>
                               {[
                                 ...new Set([
                                   ...(settings.model ? [settings.model] : []),
@@ -404,8 +465,8 @@ export function App() {
                           )}
                           <button
                             className="fetch-button"
-                            aria-label="获取模型"
-                            title="获取模型"
+                            aria-label={t('获取模型', 'Fetch models')}
+                            title={t('获取模型', 'Fetch models')}
                             onClick={() => void runApi('models')}
                           >
                             <RefreshCw size={16} className={busy === 'models' ? 'spinning' : ''} />
@@ -415,17 +476,27 @@ export function App() {
                     </fieldset>
                     <div className="data-notice">
                       <h3>
-                        <ShieldCheck size={15} /> 数据使用说明
+                        <ShieldCheck size={15} /> {t('数据使用说明', 'Data use')}
                       </h3>
                       <ul>
                         <li>
-                          在 YouTube、HBO Max、X 上播放带字幕的视频时，Subline 会把字幕原文发送到{' '}
-                          {provider} 翻译。
+                          {t(
+                            `在 YouTube、HBO Max、X 上播放带字幕的视频时，Subline 会把字幕原文发送到 ${provider} 翻译。`,
+                            `When you watch videos with subtitles on YouTube, HBO Max, or X, Subline sends subtitle text to ${provider} for translation.`,
+                          )}
                         </li>
                         <li>
-                          不发送视频网址、标题或你的视频网站账号信息。Subline 没有自己的服务器。
+                          {t(
+                            '不发送视频网址、标题或你的视频网站账号信息。Subline 没有自己的服务器。',
+                            'Subline does not send video URLs, titles, or video site account details. Subline has no servers of its own.',
+                          )}
                         </li>
-                        <li>字幕由 Provider 按其隐私政策处理，请求可能产生费用。</li>
+                        <li>
+                          {t(
+                            '字幕由 Provider 按其隐私政策处理，请求可能产生费用。',
+                            'Your provider processes subtitles under its privacy policy. Requests may incur charges.',
+                          )}
+                        </li>
                       </ul>
                       <label className="consent-check">
                         <input
@@ -436,7 +507,10 @@ export function App() {
                             update('providerConsent', event.target.checked ? origin : '')
                           }
                         />
-                        我同意将字幕原文发送到 {provider} 翻译
+                        {t(
+                          `我同意将字幕原文发送到 ${provider} 翻译`,
+                          `I agree to send subtitle text to ${provider} for translation`,
+                        )}
                       </label>
                     </div>
                     <div className="api-footer">
@@ -445,17 +519,22 @@ export function App() {
                         disabled={Boolean(busy)}
                         onClick={() => void runApi('test')}
                       >
-                        {busy === 'test' ? '连接中…' : '测试连接'}
+                        {busy === 'test'
+                          ? t('连接中…', 'Connecting…')
+                          : t('测试连接', 'Test connection')}
                       </button>
                     </div>
                   </Section>
-                  <Section icon={<MonitorPlay size={19} />} title="支持的网站">
+                  <Section
+                    icon={<MonitorPlay size={19} />}
+                    title={t('支持的网站', 'Supported sites')}
+                  >
                     <div className="site-options">
                       <div>
                         <YoutubeMark />
                         <span>YouTube</span>
                         <Toggle
-                          label="在 YouTube 启用"
+                          label={t('在 YouTube 启用', 'Enable on YouTube')}
                           checked={settings.youtube}
                           onChange={(value) => update('youtube', value)}
                         />
@@ -464,16 +543,16 @@ export function App() {
                         <HboMark />
                         <span>HBO Max</span>
                         <Toggle
-                          label="在 HBO Max 启用"
+                          label={t('在 HBO Max 启用', 'Enable on HBO Max')}
                           checked={settings.hbo}
                           onChange={(value) => update('hbo', value)}
                         />
                       </div>
                       <div>
                         <XMark />
-                        <span>X（推特）</span>
+                        <span>{t('X（推特）', 'X (Twitter)')}</span>
                         <Toggle
-                          label="在 X（推特）启用"
+                          label={t('在 X（推特）启用', 'Enable on X (Twitter)')}
                           checked={settings.x}
                           onChange={(value) => update('x', value)}
                         />
@@ -488,10 +567,14 @@ export function App() {
                     <Section
                       key={kind}
                       icon={kind === 'original' ? <Subtitles size={19} /> : <Languages size={19} />}
-                      title={kind === 'original' ? '原文样式' : '译文样式'}
+                      title={
+                        kind === 'original'
+                          ? t('原文样式', 'Source style')
+                          : t('译文样式', 'Translation style')
+                      }
                     >
                       <div className="color-field">
-                        <label htmlFor={`${kind}-color`}>字体颜色</label>
+                        <label htmlFor={`${kind}-color`}>{t('字体颜色', 'Font color')}</label>
                         <div className="color-controls">
                           <label
                             className="color-picker"
@@ -506,7 +589,9 @@ export function App() {
                               }
                             />
                             <span className="sr-only">
-                              {kind === 'original' ? '原文' : '译文'}字体颜色
+                              {kind === 'original'
+                                ? t('原文字体颜色', 'Source font color')
+                                : t('译文字体颜色', 'Translation font color')}
                             </span>
                           </label>
                           <span className="color-value">{settings[kind].color.toUpperCase()}</span>
@@ -515,7 +600,11 @@ export function App() {
                               (color) => (
                                 <button
                                   key={color}
-                                  aria-label={`${kind === 'original' ? '原文' : '译文'}颜色 ${color}`}
+                                  aria-label={
+                                    kind === 'original'
+                                      ? t(`原文颜色 ${color}`, `Source color ${color}`)
+                                      : t(`译文颜色 ${color}`, `Translation color ${color}`)
+                                  }
                                   title={color}
                                   className={
                                     settings[kind].color.toUpperCase() === color ? 'selected' : ''
@@ -534,7 +623,7 @@ export function App() {
                       </div>
                       <div className="range-field">
                         <label htmlFor={`${kind}-size`}>
-                          字体大小{' '}
+                          {t('字体大小', 'Font size')}{' '}
                           <output>
                             {settings[kind].size}
                             <small> px</small>
@@ -557,10 +646,13 @@ export function App() {
                       </div>
                     </Section>
                   ))}
-                  <Section icon={<Layers3 size={19} />} title="间距与背景">
+                  <Section
+                    icon={<Layers3 size={19} />}
+                    title={t('间距与背景', 'Spacing and background')}
+                  >
                     <div className="range-field">
                       <label htmlFor="subtitle-gap">
-                        两行字幕间距{' '}
+                        {t('两行字幕间距', 'Line spacing')}{' '}
                         <output>
                           {settings.subtitleGap}
                           <small> px</small>
@@ -575,13 +667,13 @@ export function App() {
                         onChange={(event) => update('subtitleGap', Number(event.target.value))}
                       />
                       <div className="range-labels">
-                        <span>紧凑</span>
-                        <span>宽松</span>
+                        <span>{t('紧凑', 'Compact')}</span>
+                        <span>{t('宽松', 'Wide')}</span>
                       </div>
                     </div>
                     <div className="range-field">
                       <label htmlFor="background-opacity">
-                        译文背景不透明度{' '}
+                        {t('译文背景不透明度', 'Translation background opacity')}{' '}
                         <output>
                           {settings.backgroundOpacity}
                           <small> %</small>
@@ -598,8 +690,8 @@ export function App() {
                         }
                       />
                       <div className="range-labels">
-                        <span>透明</span>
-                        <span>深色</span>
+                        <span>{t('透明', 'Transparent')}</span>
+                        <span>{t('深色', 'Dark')}</span>
                       </div>
                     </div>
                     <button
@@ -614,7 +706,7 @@ export function App() {
                         }))
                       }
                     >
-                      <RotateCcw size={13} /> 恢复默认样式
+                      <RotateCcw size={13} /> {t('恢复默认样式', 'Reset style')}
                     </button>
                   </Section>
                 </>
@@ -623,9 +715,14 @@ export function App() {
                 <>
                   <Section
                     icon={<Subtitles size={19} />}
-                    title="Subline 双语字幕"
+                    title={t('Subline 双语字幕', 'Subline bilingual subtitles')}
                     description={
-                      isExtension ? `版本 ${chrome.runtime.getManifest().version}` : undefined
+                      isExtension
+                        ? t(
+                            `版本 ${chrome.runtime.getManifest().version}`,
+                            `Version ${chrome.runtime.getManifest().version}`,
+                          )
+                        : undefined
                     }
                     action={
                       <a
@@ -633,25 +730,42 @@ export function App() {
                         href={REPOSITORY_URL}
                         target="_blank"
                         rel="noreferrer"
-                        aria-label="GitHub 仓库"
+                        aria-label={t('GitHub 仓库', 'GitHub repository')}
                       >
                         <GithubMark />
                       </a>
                     }
                   >
                     <p className="about-intro">
-                      在 YouTube、HBO Max 和 X 上看视频时，Subline 读取视频的原文字幕，用你自己的
-                      OpenAI 兼容接口翻译，再把原文和译文一起显示在播放器里。
+                      {t(
+                        '在 YouTube、HBO Max 和 X 上看视频时，Subline 读取视频的原文字幕，用你自己的 OpenAI 兼容接口翻译，再把原文和译文一起显示在播放器里。',
+                        'Subline reads subtitles on YouTube, HBO Max, and X, translates them through your OpenAI-compatible API, and displays the source and translation in the player.',
+                      )}
                     </p>
                     <ul className="about-features">
-                      <li>支持英语、简体中文、繁体中文和日语字幕，自动识别字幕语言。</li>
-                      <li>字幕按句子翻译，并提前翻译即将播放的部分，减少等待。</li>
                       <li>
-                        可以调整原文和译文的颜色、字号、两行间距和译文背景，也可以按网站单独开关。
+                        {t(
+                          '支持英语、简体中文、繁体中文和日语字幕，自动识别字幕语言。',
+                          'Supports English, Simplified Chinese, Traditional Chinese, and Japanese subtitles, with automatic subtitle language detection.',
+                        )}
                       </li>
                       <li>
-                        Subline 没有自己的服务器。字幕原文只发送给你选择的
-                        Provider，设置保存在本机，API Key 加密保存。
+                        {t(
+                          '字幕按句子翻译，并提前翻译即将播放的部分，减少等待。',
+                          'Translates subtitles by sentence and prepares upcoming translations to reduce waiting.',
+                        )}
+                      </li>
+                      <li>
+                        {t(
+                          '可以调整原文和译文的颜色、字号、两行间距和译文背景，也可以按网站单独开关。',
+                          'Adjust colors, font sizes, line spacing, and translation backgrounds. Enable or disable subtitles for each site.',
+                        )}
+                      </li>
+                      <li>
+                        {t(
+                          'Subline 没有自己的服务器。字幕原文只发送给你选择的 Provider，设置保存在本机，API Key 加密保存。',
+                          'Subline has no servers of its own. Subtitles go only to your chosen provider. Settings stay on your device, and your API Key is encrypted.',
+                        )}
                       </li>
                     </ul>
                     <div className="about-feedback">
@@ -661,7 +775,7 @@ export function App() {
                         target="_blank"
                         rel="noreferrer"
                       >
-                        反馈
+                        {t('反馈', 'Feedback')}
                       </a>
                     </div>
                   </Section>

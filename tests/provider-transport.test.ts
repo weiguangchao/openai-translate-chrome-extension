@@ -82,7 +82,7 @@ it('cancels a waiting send without fetching or consuming another consumer’s wo
   queue.prefetch('drop', settings, []);
   queue.prefetch('one', settings, []);
   await vi.advanceTimersByTimeAsync(1000);
-  await expect(dropped).resolves.toBe('字幕已更新。');
+  await expect(dropped).resolves.toBe('Subtitles have changed.');
   await expect(shared).resolves.toBe('完成');
   await expect(retained).resolves.toBe('完成');
   expect(fetch.mock.calls.map(([, init]) => requestedTexts(init))).toEqual([
@@ -129,13 +129,15 @@ it('starts each provider deadline only when its HTTP request is sent', async () 
   await vi.advanceTimersByTimeAsync(providerTimeoutMs - providerSendWindowMs);
   expect(sends.map(({ signal }) => signal.aborted)).toEqual([true, true, true, false]);
   await expect(Promise.all(work.slice(0, 3))).resolves.toEqual(
-    Array(3).fill('接口请求超时，请检查网络或更换响应更快的模型。'),
+    Array(3).fill('The request timed out. Check your network or choose a faster model.'),
   );
   await vi.advanceTimersByTimeAsync(providerSendWindowMs - 1);
   expect(sends[3].signal.aborted).toBe(false);
   await vi.advanceTimersByTimeAsync(1);
   expect(sends[3].signal.aborted).toBe(true);
-  await expect(work[3]).resolves.toBe('接口请求超时，请检查网络或更换响应更快的模型。');
+  await expect(work[3]).resolves.toBe(
+    'The request timed out. Check your network or choose a faster model.',
+  );
 });
 
 it('prioritizes the visible caption when the next send window opens', async () => {
@@ -210,7 +212,10 @@ it('releases all disabled consumers before waking any pending provider sends', a
   );
   vi.setSystemTime(Date.now() + 1000);
   queue.release(['one', 'two']);
-  await expect(Promise.all(waiting)).resolves.toEqual(['字幕已更新。', '字幕已更新。']);
+  await expect(Promise.all(waiting)).resolves.toEqual([
+    'Subtitles have changed.',
+    'Subtitles have changed.',
+  ]);
   expect(fetch).toHaveBeenCalledTimes(3);
 });
 

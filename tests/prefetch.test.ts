@@ -183,7 +183,7 @@ it('cuts a long cue into captions, translates each on its own, and shows each on
   controller = new CaptionController(createHboPlatform, publicSettings(saved));
   await advance(8);
   expect(requested.flat()).not.toContain(longCaption);
-  expect(translated()?.textContent).toBe('翻译中');
+  expect(translated()?.textContent).toBe('Translating');
   expect(original()?.hidden).toBe(true);
   const translations = {
     ...Object.fromEntries(longCaptionParts.map((part, index) => [part, longTranslations[index]])),
@@ -288,9 +288,9 @@ it.each(['timeout', '500'] as const)(
     expect(requested).toEqual(opening);
     await advance(3);
     expect(requested).toEqual(opening);
-    expect(translated()?.textContent).toBe('翻译中');
+    expect(translated()?.textContent).toBe('Translating');
     const request = pending.find((request) => request.texts.includes('Cue 1.'))!;
-    const message = failure === 'timeout' ? '接口调用超时' : '接口调用异常';
+    const message = failure === 'timeout' ? 'Request timed out' : 'Provider request failed';
     if (failure === 'timeout') {
       const timeout = new Error('The operation was aborted due to timeout');
       timeout.name = 'TimeoutError';
@@ -371,7 +371,7 @@ it('keeps an untranslated short source hidden and waits out a seek before reques
   const sent = requested.length;
   expect(pending.find((request) => request.texts.includes('Stay.'))?.signal.aborted).toBe(false);
   expect(original()?.hidden).toBe(true);
-  expect(translated()?.textContent).toBe('翻译中');
+  expect(translated()?.textContent).toBe('Translating');
   Object.defineProperty(video, 'seeking', { configurable: true, value: true });
   video.currentTime = 20;
   video.dispatchEvent(new Event('seeking'));
@@ -384,7 +384,7 @@ it('keeps an untranslated short source hidden and waits out a seek before reques
   expect(requested.slice(sent)).toEqual([['After.'], ['Seek tail.']]);
   expect(original()?.hidden).toBe(true);
   expect(translated()?.hidden).toBe(false);
-  expect(translated()?.textContent).toBe('翻译中');
+  expect(translated()?.textContent).toBe('Translating');
 });
 
 it('finishes in-flight prefetch while paused and does not send more until playback resumes', async () => {

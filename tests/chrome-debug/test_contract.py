@@ -57,7 +57,6 @@ class SublineContract(unittest.TestCase):
 
     def test_overlay(self):
         overlay = source("src/core/overlay.ts")
-        self.assertEqual(constant(overlay, "LOADING_TRANSLATION"), holder.LOADING_TEXT)
         self.assertIn("this.host.dataset.sublineOverlay = ''", overlay)
         self.assertIn("attachShadow({ mode: 'open' })", overlay)
         self.assertIn("className = 'line original'", overlay)
@@ -68,7 +67,12 @@ class SublineContract(unittest.TestCase):
 
     def test_manifest(self):
         manifest = json.loads(source("public/manifest.json"))
-        self.assertTrue(manifest["name"].startswith(holder.SUBLINE_NAME))
+        for locale in (manifest["default_locale"], "zh_CN", "zh_TW"):
+            messages = json.loads(source(f"public/_locales/{locale}/messages.json"))
+            for value in (manifest["name"], manifest["description"], manifest["action"]["default_title"]):
+                key = re.fullmatch(r"__MSG_(\w+)__", value).group(1)
+                self.assertTrue(messages[key]["message"])
+            self.assertTrue(messages["extensionName"]["message"].startswith(holder.SUBLINE_NAME))
         self.assertEqual(manifest["background"]["service_worker"], "background.js")
         self.assertEqual(manifest["action"]["default_popup"], "popup.html")
 
@@ -85,7 +89,7 @@ class TestDouble(unittest.TestCase):
         self.assertEqual(constant(self.background, "TRACE_PREFIX"), holder.TRACE_PREFIX)
         self.assertEqual(constant(self.content, "TRACE_ATTRIBUTE"), holder.TRACE_ATTRIBUTE)
         self.assertEqual(constant(self.content, "TRACE_WORKER_ATTRIBUTE"), holder.TRACE_WORKER_ATTRIBUTE)
-        self.assertEqual(constant(self.content, "LOADING_TRANSLATION"), holder.LOADING_TEXT)
+        self.assertIn(constant(self.content, "LOADING_TRANSLATION"), holder.LOADING_TEXTS)
         self.assertTrue(self.manifest["name"].startswith(holder.SUBLINE_NAME))
         self.assertEqual(self.manifest["background"]["service_worker"], "background.js")
         self.assertEqual(self.manifest["action"]["default_popup"], "popup.html")

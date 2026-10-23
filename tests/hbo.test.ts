@@ -286,7 +286,7 @@ it('displays a finished HBO segment while the other prefetched segment is still 
   expect(batches.map(({ texts }) => texts)).toEqual(openingRequests);
   await playTo(3);
   await vi.advanceTimersByTimeAsync(300);
-  expect(lines()?.[1].textContent).toBe('翻译中');
+  expect(lines()?.[1].textContent).toBe('Translating');
   batches[0].resolve(providerReply(batches[0].texts, (text) => `译文 ${text}`));
   await vi.advanceTimersByTimeAsync(0);
   expect(lines()?.[1].textContent).toBe('译文 Cue 1');

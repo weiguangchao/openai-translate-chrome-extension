@@ -43,7 +43,7 @@ STALL_SECONDS = 20
 MEDIA_SEEKS = 3
 FOCUS_SECONDS = 5
 TAB_IDLE_SECONDS = 900
-LOADING_TEXT = "翻译中"
+LOADING_TEXTS = ("翻译中", "Translating")
 ACTIVATE_CHROME = 'tell application "Google Chrome" to activate'
 
 MUTE_MEDIA = """(() => {
@@ -980,7 +980,7 @@ class Tab:
             if not value or not shown(value.get("original")) or not shown(value.get("translation")):
                 return False
             translation = value["translation"]
-            return translation["text"] != LOADING_TEXT and not translation["error"]
+            return translation["text"] not in LOADING_TEXTS and not translation["error"]
 
         ok, value = self.until(lambda: self.remember(self.sample(OVERLAY)), passed)
         return {"ok": ok is True, "overlay": value}
