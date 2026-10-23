@@ -15,6 +15,7 @@ vi.mock('../src/shared/storage', () => ({
 let root: Root;
 let stored: Settings;
 const openOptionsPage = vi.fn();
+const getManifest = () => ({ version: '0.1.1' });
 const pageValues = new Map<string, string>();
 
 beforeEach(() => {
@@ -35,7 +36,7 @@ beforeEach(() => {
     });
   openOptionsPage.mockReset().mockResolvedValue(undefined);
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
-  vi.stubGlobal('chrome', { runtime: { openOptionsPage } });
+  vi.stubGlobal('chrome', { runtime: { openOptionsPage, getManifest } });
   document.body.innerHTML = '<div id="root"></div>';
   root = createRoot(document.getElementById('root')!);
 });
@@ -171,7 +172,7 @@ it('updates the popup total when recorded tokens change', async () => {
   let listener!: (changes: Record<string, { newValue?: unknown }>, area: string) => void;
   const removeListener = vi.fn();
   vi.stubGlobal('chrome', {
-    runtime: { id: 'extension-id', openOptionsPage },
+    runtime: { id: 'extension-id', openOptionsPage, getManifest },
     storage: {
       local: {
         get: vi.fn(async (key: string) =>

@@ -3,6 +3,7 @@ import { LANGUAGES } from '../shared/languages';
 import { Check, ChevronDown, Expand, Languages, Subtitles, X } from 'lucide-react';
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { type Settings } from '../shared/settings';
+import { isExtension } from '../shared/storage';
 import { copy } from './copy';
 
 export function Logo({ small = false }: { small?: boolean }) {
@@ -12,6 +13,9 @@ export function Logo({ small = false }: { small?: boolean }) {
       <div>
         <strong>
           Subline<span className="brand-period">.</span>
+          {small && isExtension && (
+            <span className="brand-version">v{chrome.runtime.getManifest().version}</span>
+          )}
         </strong>
       </div>
     </div>
