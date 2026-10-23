@@ -1,3 +1,4 @@
+import { t } from './i18n';
 import { ProviderHttpError, ProviderTimeoutError, RepeatedSourceError } from './provider-error';
 import { providerFetch, type ProviderSendPolicy } from './provider/transport';
 import { translationBatchLimit } from './tuning';
@@ -19,7 +20,12 @@ function timeoutError(): Error {
   return new ProviderTimeoutError();
 }
 function invalidJson(): Error {
-  return new Error('接口没有返回有效的 JSON，请检查 Base URL 是否为 API 地址。');
+  return new Error(
+    t(
+      '接口没有返回有效的 JSON，请检查 Base URL 是否为 API 地址。',
+      'The provider returned invalid JSON. Check that the Base URL points to an API.',
+    ),
+  );
 }
 async function fetchApi(
   settings: Settings,
@@ -28,7 +34,7 @@ async function fetchApi(
   signal?: AbortSignal,
   policy?: ProviderSendPolicy,
 ): Promise<{ response: Response; signal: AbortSignal }> {
-  if (!settings.apiKey.trim()) throw new Error('请先填写 API Key。');
+  if (!settings.apiKey.trim()) throw new Error(t('请先填写 API Key。', 'Enter an API Key first.'));
   let result: { response: Response; signal: AbortSignal };
   try {
     result = await providerFetch(
@@ -51,20 +57,36 @@ async function fetchApi(
     if (error instanceof Error && ['TimeoutError', 'AbortError'].includes(error.name))
       throw timeoutError();
     throw new Error(
-      '无法连接接口。请检查 Base URL、网络和网站访问权限；浏览器预览还需要接口允许 CORS。',
+      t(
+        '无法连接接口。请检查 Base URL、网络和网站访问权限；浏览器预览还需要接口允许 CORS。',
+        'Could not connect to the provider. Check the Base URL, network, and site permissions. Browser previews also require CORS support.',
+      ),
     );
   }
   const { response } = result;
   if (!response.ok) {
     const errors: Record<number, string> = {
-      401: 'API Key 无效或已过期。',
-      403: '接口拒绝访问，请检查 API Key 权限。',
-      404: '接口地址或模型不存在，请检查配置。',
-      429: '请求过于频繁或额度不足，请稍后重试。',
-      500: '接口调用异常',
+      401: t('API Key 无效或已过期。', 'The API Key is invalid or expired.'),
+      403: t(
+        '接口拒绝访问，请检查 API Key 权限。',
+        'Access denied. Check your API Key permissions.',
+      ),
+      404: t(
+        '接口地址或模型不存在，请检查配置。',
+        'The API endpoint or model was not found. Check your settings.',
+      ),
+      429: t(
+        '请求过于频繁或额度不足，请稍后重试。',
+        'Rate limit or quota exceeded. Try again later.',
+      ),
+      500: t('接口调用异常', 'Provider request failed'),
     };
     throw new ProviderHttpError(
-      errors[response.status] ?? `接口返回 HTTP ${response.status}，请稍后重试。`,
+      errors[response.status] ??
+        t(
+          `接口返回 HTTP ${response.status}，请稍后重试。`,
+          `The provider returned HTTP ${response.status}. Try again later.`,
+        ),
       response.status,
     );
   }
@@ -93,11 +115,23 @@ export async function fetchModels(settings: Settings): Promise<string[]> {
   }
   const object = response as { data?: unknown; models?: unknown } | null;
   const items = Array.isArray(response) ? response : (object?.data ?? object?.models);
-  if (!Array.isArray(items)) throw new Error('模型列表格式不受支持，可手动填写 Model ID。');
+  if (!Array.isArray(items))
+    throw new Error(
+      t(
+        '模型列表格式不受支持，可手动填写 Model ID。',
+        'Unsupported model list format. Enter the Model ID manually.',
+      ),
+    );
   const ids = items
     .map((item) => (typeof item === 'string' ? item : item?.id))
     .filter((id): id is string => typeof id === 'string' && id.trim().length > 0);
-  if (!ids.length) throw new Error('接口没有返回可用模型，可手动填写 Model ID。');
+  if (!ids.length)
+    throw new Error(
+      t(
+        '接口没有返回可用模型，可手动填写 Model ID。',
+        'The provider returned no models. Enter the Model ID manually.',
+      ),
+    );
   return [...new Set(ids)].sort((a, b) => a.localeCompare(b));
 }
 function translatorInstructions(settings: Settings, task: string, language?: Language): string {
@@ -109,7 +143,8 @@ ${task}`;
 }
 
 function checkText(text: string): void {
-  if (!text.trim() || text.length > 5000) throw new Error('字幕内容为空或过长。');
+  if (!text.trim() || text.length > 5000)
+    throw new Error(t('字幕内容为空或过长。', 'Subtitle text is empty or too long.'));
 }
 
 async function complete(
@@ -141,7 +176,13 @@ async function complete(
     policy,
   );
   const text = await readModelText(response, deadline, caption);
-  if (!text.trim()) throw new Error('模型未返回译文，请确认该模型支持 /chat/completions。');
+  if (!text.trim())
+    throw new Error(
+      t(
+        '模型未返回译文，请确认该模型支持 /chat/completions。',
+        'The model returned no translation. Check that it supports /chat/completions.',
+      ),
+    );
   return text.trim();
 }
 
@@ -169,7 +210,7 @@ export async function translateCaptionBatch(
 ): Promise<string[] | null> {
   texts.forEach(checkText);
   if (!texts.length || texts.length > translationBatchLimit)
-    throw new Error('单次翻译的字幕过多。');
+    throw new Error(t('单次翻译的字幕过多。', 'Too many subtitles in one translation request.'));
   const response = await complete(
     settings,
     `The input is a JSON array of ordered captions from one passage. Use neighboring captions only as context; never move content between captions. Return only JSON {"results":[...]} with exactly one result per input id, in input order: {"id":0,"text":"..."} becomes {"id":0,"translation":"..."}.`,

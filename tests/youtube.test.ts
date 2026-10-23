@@ -600,7 +600,7 @@ it.each([undefined, 'https://untrusted.example/captions'])(
     await vi.advanceTimersByTimeAsync(1500);
     expect([...lines()].map((line) => (line.hidden ? null : line.textContent))).toEqual([
       null,
-      '原文语言不支持',
+      'Unsupported subtitle language',
     ]);
     expect(fetch).not.toHaveBeenCalled();
     expect(sendMessage).not.toHaveBeenCalled();

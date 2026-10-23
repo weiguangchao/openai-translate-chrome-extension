@@ -55,7 +55,7 @@ it('shows the current translation, ignores a late reply, clears a missing cue an
     captionLanguage: 'en',
     text: 'First cue',
   });
-  expect(translationNode()?.textContent).toBe('翻译中');
+  expect(translationNode()?.textContent).toBe('Translating');
   expect(translationNode()?.hidden).toBe(false);
   expect(
     document
@@ -317,7 +317,7 @@ it('cleans up when prefetch throws during teardown and ignores an in-flight tran
   vi.stubGlobal('chrome', { runtime: { id: 'extension-id', sendMessage } });
   controller = new CaptionController(createHboPlatform, settings());
   await vi.advanceTimersByTimeAsync(450);
-  expect(translationNode()?.textContent).toBe('翻译中');
+  expect(translationNode()?.textContent).toBe('Translating');
   invalidated = true;
   controller.destroy();
   finish({ ok: true, data: '迟到的译文' });
@@ -336,11 +336,11 @@ it('keeps the error on its caption without retrying it and translates the next c
   vi.stubGlobal('chrome', { runtime: { id: 'extension-id', sendMessage } });
   controller = new CaptionController(createHboPlatform, settings());
   await vi.advanceTimersByTimeAsync(450);
-  expect(translationNode()?.textContent).toBe('Subline：Receiving end does not exist.');
+  expect(translationNode()?.textContent).toBe('Subline: Receiving end does not exist.');
   expect(originalNode()?.hidden).toBe(false);
   expect(originalNode()?.textContent).toBe('First cue');
   await vi.advanceTimersByTimeAsync(16000);
-  expect(translationNode()?.textContent).toBe('Subline：Receiving end does not exist.');
+  expect(translationNode()?.textContent).toBe('Subline: Receiving end does not exist.');
   expect(sendMessage).toHaveBeenCalledExactlyOnceWith({
     type: 'translate',
     captionLanguage: 'en',
@@ -385,7 +385,7 @@ it('finishes an in-flight translation while paused and does not start another un
   });
   await setPaused(true);
   expect(sendMessage).toHaveBeenLastCalledWith({ type: 'prefetch-pause' });
-  expect(translationNode()?.textContent).toBe('翻译中');
+  expect(translationNode()?.textContent).toBe('Translating');
   replies[0]({ ok: true, data: '第一句译文' });
   await vi.advanceTimersByTimeAsync(1);
   expect(translationNode()?.textContent).toBe('第一句译文');

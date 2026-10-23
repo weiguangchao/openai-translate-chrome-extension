@@ -1,3 +1,4 @@
+import { t } from '../shared/i18n';
 import { translateCaptionBatch } from '../shared/api';
 import { latencySampleLimit, maxInFlightRequests, translationBatchLimit } from '../shared/tuning';
 import {
@@ -112,7 +113,9 @@ export class TranslationQueue {
       this.drain();
       return job.promise;
     } catch (error) {
-      return Promise.reject(error instanceof Error ? error : new Error('翻译失败。'));
+      return Promise.reject(
+        error instanceof Error ? error : new Error(t('翻译失败。', 'Translation failed.')),
+      );
     }
   }
 
@@ -317,7 +320,7 @@ export class TranslationQueue {
     for (const [key, job] of this.jobs) {
       if (wanted.has(key) || (job.sent && sent === 'keep')) continue;
       this.jobs.delete(key);
-      job.reject(new Error('字幕已更新。'));
+      job.reject(new Error(t('字幕已更新。', 'Subtitles have changed.')));
       if (job.batch?.some((other) => this.jobs.get(other.key) === other)) continue;
       if (job.sent && sent === 'detach' && job.controller) this.detached.add(job.controller);
       else job.controller?.abort();
@@ -478,7 +481,14 @@ export class TranslationQueue {
         if (controller.signal.aborted) return finish('aborted');
         finish(results ? 'ok' : 'invalid');
         if (!results) {
-          retryOrReject(new Error('模型返回的译文无效，请稍后重试。'));
+          retryOrReject(
+            new Error(
+              t(
+                '模型返回的译文无效，请稍后重试。',
+                'The model returned an invalid translation. Try again later.',
+              ),
+            ),
+          );
           return;
         }
         batch.forEach((job, index) => {
@@ -497,12 +507,13 @@ export class TranslationQueue {
           retryOrReject(error);
           return;
         }
-        const failure = error instanceof Error ? error : new Error('翻译失败。');
+        const failure =
+          error instanceof Error ? error : new Error(t('翻译失败。', 'Translation failed.'));
         const timedOut = failure instanceof ProviderTimeoutError;
         finish(timedOut ? 'timeout' : 'error');
         if (!timedOut) {
           this.backoffUntil = Date.now() + 15000;
-          this.backoffReason = failure.message || '翻译失败。';
+          this.backoffReason = failure.message || t('翻译失败。', 'Translation failed.');
         }
         for (const job of batch) {
           if (this.jobs.get(job.key) !== job) continue;

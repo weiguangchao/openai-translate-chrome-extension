@@ -1,3 +1,4 @@
+import { t } from '../shared/i18n';
 import { LANGUAGES } from '../shared/languages';
 import { Check, ChevronDown, Expand, Languages, Subtitles, X } from 'lucide-react';
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
@@ -130,9 +131,19 @@ function PreviewDialog({ children, onClose }: { children: ReactNode; onClose: ()
     return () => dialog.close();
   }, []);
   return (
-    <dialog ref={ref} className="preview-dialog" aria-label="放大的字幕预览" onCancel={onClose}>
+    <dialog
+      ref={ref}
+      className="preview-dialog"
+      aria-label={t('放大的字幕预览', 'Expanded subtitle preview')}
+      onCancel={onClose}
+    >
       <div>
-        <button autoFocus className="dialog-close" aria-label="关闭字幕预览" onClick={onClose}>
+        <button
+          autoFocus
+          className="dialog-close"
+          aria-label={t('关闭字幕预览', 'Close subtitle preview')}
+          onClick={onClose}
+        >
           <X size={21} />
         </button>
         {children}
@@ -160,14 +171,17 @@ export function SubtitlePreview({ settings }: { settings: Settings }) {
       <img
         className="landscape"
         src="./preview-landscape.jpg"
-        alt="群山环绕的湖泊，作为字幕样式的示例背景"
+        alt={t(
+          '群山环绕的湖泊，作为字幕样式的示例背景',
+          'A lake surrounded by mountains, used as the subtitle preview background',
+        )}
       />
       <div className="scene-shade" />
       <div className="scene-top">
         {!large && (
           <button
             className="scene-button"
-            aria-label="放大字幕预览"
+            aria-label={t('放大字幕预览', 'Expand subtitle preview')}
             onClick={() => setExpanded(true)}
           >
             <Expand size={15} />
@@ -177,7 +191,7 @@ export function SubtitlePreview({ settings }: { settings: Settings }) {
       <div
         className="sample-subtitles"
         style={{ gap: settings.subtitleGap }}
-        aria-label="字幕样式预览"
+        aria-label={t('字幕样式预览', 'Subtitle style preview')}
       >
         <div style={style('original')} dir="auto">
           {sampleText('en')}
@@ -188,7 +202,7 @@ export function SubtitlePreview({ settings }: { settings: Settings }) {
       </div>
       <div className="scene-bottom">
         <button onClick={() => setSample((value) => 1 - value)}>
-          切换示例 <span aria-hidden>↻</span>
+          {t('切换示例', 'Next sample')} <span aria-hidden>↻</span>
         </button>
       </div>
     </div>

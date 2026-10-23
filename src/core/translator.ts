@@ -1,3 +1,4 @@
+import { t } from '../shared/i18n';
 import type { Language } from '../shared/languages';
 import { readStoredTranslation } from '../shared/caption-translation';
 import type { PlaybackCue } from '../shared/playback-plan';
@@ -247,13 +248,21 @@ export class CaptionTranslator {
           caption.line = failedLine(
             response?.ok === false
               ? response.failure
-              : { kind: 'error', message: '翻译未完成，请检查扩展配置。' },
+              : {
+                  kind: 'error',
+                  message: t(
+                    '翻译未完成，请检查扩展配置。',
+                    'Translation incomplete. Check your extension settings.',
+                  ),
+                },
           );
       })
       .catch((error) => {
         if (!current()) return;
         caption.request = null;
-        caption.line = failedLine(failureOf(error, '翻译失败，请检查配置。'));
+        caption.line = failedLine(
+          failureOf(error, t('翻译失败，请检查配置。', 'Translation failed. Check your settings.')),
+        );
       })
       .finally(() => this.changed());
   }

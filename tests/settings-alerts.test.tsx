@@ -72,7 +72,7 @@ it.each(['preview', 'load-error', 'save'] as const)(
       vi.mocked(loadSettings).mockRejectedValue(new Error('Unavailable'));
     await render();
     if (source === 'save') {
-      await click('[aria-label="启用双语字幕"]');
+      await click('[aria-label="Enable bilingual subtitles"]');
       await click('.save-button');
       expect(saveSettings).toHaveBeenCalledOnce();
     }
@@ -80,10 +80,10 @@ it.each(['preview', 'load-error', 'save'] as const)(
     expect(notice.getAttribute('role')).toBe(source === 'load-error' ? 'alert' : 'status');
     expect(notice.textContent).toContain(
       source === 'preview'
-        ? '浏览器预览'
+        ? 'Browser preview'
         : source === 'load-error'
-          ? '无法读取本地设置'
-          : '设置已保存',
+          ? 'Could not load local settings'
+          : 'Settings saved',
     );
     expect(document.querySelector('.alert-layer')?.parentElement).toBe(document.body);
     expect(document.querySelector('.workspace .settings-alert')).toBeNull();
@@ -101,11 +101,11 @@ it('records consent for the Provider host only when the viewer ticks it and asks
   const consent = () => document.querySelector<HTMLInputElement>('.consent-check input')!;
   expect(consent().checked).toBe(false);
   expect(document.querySelector('.consent-check')?.textContent).toContain('api.openai.com');
-  await click('[aria-label="启用双语字幕"]');
+  await click('[aria-label="Enable bilingual subtitles"]');
   await click('.save-button');
   expect(saveSettings).toHaveBeenLastCalledWith(expect.objectContaining({ providerConsent: '' }));
   expect(document.querySelector('.settings-alert')?.textContent).toContain(
-    '同意数据使用说明后，才会翻译字幕',
+    'Accept the data use notice to translate subtitles',
   );
   await act(async () => consent().click());
   await click('.save-button');
@@ -133,14 +133,14 @@ it('shows only a brief connection success alert and gives its replacement a full
   expect(apiAction).toHaveBeenLastCalledWith('test', expect.any(Object));
   const notice = document.querySelector('.settings-alert')!;
   expect(document.querySelectorAll('.settings-alert')).toHaveLength(1);
-  expect(notice.textContent).toBe('连接测试成功');
+  expect(notice.textContent).toBe('Connection test passed');
   expect(document.querySelector('.test-result')).toBeNull();
   await advance(4900);
   await click('.fetch-button');
   expect(document.querySelectorAll('.settings-alert')).toHaveLength(1);
   expect(document.querySelector('.settings-alert')).not.toBe(notice);
   await advance(300);
-  expect(document.querySelector('.settings-alert')?.textContent).toContain('已获取 2 个模型');
+  expect(document.querySelector('.settings-alert')?.textContent).toContain('Fetched 2 models');
   await advance(4700);
   await advance(180);
   expect(document.querySelector('.settings-alert')).toBeNull();
@@ -151,14 +151,14 @@ it('restarts the lifetime for identical validation errors and allows manual dism
   await render();
   await click('.test-button');
   const first = document.querySelector('[role="alert"]')!;
-  expect(first.textContent).toContain('请先填写 API Key');
+  expect(first.textContent).toContain('Enter an API Key');
   await advance(4900);
   await click('.test-button');
   expect(document.querySelector('[role="alert"]')).not.toBe(first);
   await advance(300);
-  expect(document.querySelector('[role="alert"]')?.textContent).toContain('请先填写 API Key');
+  expect(document.querySelector('[role="alert"]')?.textContent).toContain('Enter an API Key');
   expect(apiAction).not.toHaveBeenCalled();
-  await click('[aria-label="关闭提示"]');
+  await click('[aria-label="Dismiss notification"]');
   await advance(180);
   expect(document.querySelector('.alert-layer')).toBeNull();
   await advance(5000);
@@ -166,15 +166,19 @@ it('restarts the lifetime for identical validation errors and allows manual dism
 });
 
 it('uses the same dismissible error alert for provider and save failures', async () => {
-  vi.mocked(apiAction).mockRejectedValue(new Error('API Key 无效或已过期。'));
-  vi.mocked(saveSettings).mockRejectedValue(new Error('保存失败，请重试。'));
+  vi.mocked(apiAction).mockRejectedValue(new Error('The API Key is invalid or expired.'));
+  vi.mocked(saveSettings).mockRejectedValue(new Error('Could not save. Try again.'));
   await render();
   await click('.test-button');
-  expect(document.querySelector('[role="alert"]')?.textContent).toContain('API Key 无效或已过期');
-  await click('[aria-label="启用双语字幕"]');
+  expect(document.querySelector('[role="alert"]')?.textContent).toContain(
+    'The API Key is invalid or expired',
+  );
+  await click('[aria-label="Enable bilingual subtitles"]');
   await click('.save-button');
   expect(document.querySelectorAll('.settings-alert')).toHaveLength(1);
-  expect(document.querySelector('[role="alert"]')?.textContent).toContain('保存失败，请重试');
+  expect(document.querySelector('[role="alert"]')?.textContent).toContain(
+    'Could not save. Try again',
+  );
   await advance(5000);
   await advance(180);
   expect(document.querySelector('.settings-alert')).toBeNull();

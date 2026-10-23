@@ -1,0 +1,7 @@
+{
+  "extensionName": { "message": "Subline · Bilingual subtitles" },
+  "extensionTitle": { "message": "Subline bilingual subtitles" },
+  "extensionDescription": {
+    "message": "Watch YouTube, HBO Max, and X videos with bilingual subtitles translated through your own OpenAI-compatible API."
+  }
+}

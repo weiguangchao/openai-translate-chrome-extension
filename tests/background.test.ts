@@ -171,7 +171,10 @@ it.each([
   });
   const refused = {
     ok: false,
-    failure: { kind: 'error', message: '请先在设置中同意将字幕发送给 Provider。' },
+    failure: {
+      kind: 'error',
+      message: 'Allow subtitles to be sent to your provider in settings first.',
+    },
   };
   await expect(send({ type: 'translate', captionLanguage: 'en', text: 'Hello' })).resolves.toEqual(
     refused,
@@ -277,13 +280,13 @@ it('packs a prefetch by its time span and rejects a snapshot without usable time
       send({ type: 'prefetch', captionLanguage: 'en', time: 0, rate: 1, cues }),
     ).resolves.toEqual({
       ok: false,
-      failure: { kind: 'error', message: '预加载字幕内容无效。' },
+      failure: { kind: 'error', message: 'Invalid subtitle prefetch data.' },
     });
   await expect(
     send({ type: 'prefetch', captionLanguage: 'en', time: 0, rate: 0, cues: packedCues(['A']) }),
   ).resolves.toEqual({
     ok: false,
-    failure: { kind: 'error', message: '预加载字幕内容无效。' },
+    failure: { kind: 'error', message: 'Invalid subtitle prefetch data.' },
   });
   expect(fetch).not.toHaveBeenCalled();
   void send({

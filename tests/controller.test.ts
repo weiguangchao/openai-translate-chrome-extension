@@ -407,7 +407,7 @@ it('reports what the viewer sees only while the page asks for a trace', async ()
 
 it('treats a translation that reads like the loading placeholder as a translation', async () => {
   sendMessage.mockImplementation((message) =>
-    Promise.resolve({ ok: true, data: message.type === 'translate' ? '翻译中' : null }),
+    Promise.resolve({ ok: true, data: message.type === 'translate' ? 'Translating' : null }),
   );
   document.documentElement.setAttribute('data-subline-trace', 'run');
   source = {
@@ -428,14 +428,14 @@ it('treats a translation that reads like the loading placeholder as a translatio
       .map(([message]) => message as { type: string; state?: string })
       .filter((message) => message.type === 'trace')
       .at(-1)?.state;
-  expect(lines()).toEqual(['Translating.', '翻译中']);
+  expect(lines()).toEqual(['Translating.', 'Translating']);
   expect(traced()).toBe('ready');
 
   const video = document.querySelector('video')!;
   Object.defineProperty(video, 'seeking', { configurable: true, value: true });
   video.dispatchEvent(new Event('seeking'));
   await vi.advanceTimersByTimeAsync(0);
-  expect(lines()).toEqual(['Translating.', '翻译中']);
+  expect(lines()).toEqual(['Translating.', 'Translating']);
   expect(traced()).toBe('ready');
 });
 

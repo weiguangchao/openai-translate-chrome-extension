@@ -106,7 +106,7 @@ for (const platform of ['youtube', 'hbo', 'x'] as const) {
     });
   });
 
-  test(`${platform}: a cached translation replaces the next caption without 翻译中`, async ({}, info) => {
+  test(`${platform}: a cached translation replaces the next caption without Translating`, async ({}, info) => {
     await withPlayer(platform, info, async (p) => {
       await p.play();
       await expect.poll(() => p.posts.length).toBeGreaterThan(0);
@@ -121,8 +121,8 @@ for (const platform of ['youtube', 'hbo', 'x'] as const) {
         frames.some((f) => f.original === nextSource && f.translation === nextTranslation),
       ).toBe(true);
       expect(
-        frames.filter((f) => f.translation === '翻译中'),
-        'A translation the worker already has never shows 翻译中 first',
+        frames.filter((f) => f.translation === 'Translating'),
+        'A translation the worker already has never shows Translating first',
       ).toEqual([]);
       expect(p.posts).toHaveLength(openingCount);
     });
@@ -143,7 +143,7 @@ test('youtube: 1.5x playback sends the imminent caption alone and stays silent t
         [denseCue(0).text],
         [denseCue(1).text, denseCue(2).text],
       ]);
-      await expect(p.translated).toHaveText('翻译中');
+      await expect(p.translated).toHaveText('Translating');
       await p.release(0);
       await p.pair(denseCue(0).text, denseCue(0).translation);
       await p.page.screenshot({ path: info.outputPath('opening.png') });
@@ -193,7 +193,9 @@ test('youtube: steady playback stays ahead of a Provider whose every fourth repl
         .toBeGreaterThan(steadyUntil);
       const frames = await p.frames();
       expect(
-        frames.filter((frame) => frame.time >= denseCue(1).start && frame.translation === '翻译中'),
+        frames.filter(
+          (frame) => frame.time >= denseCue(1).start && frame.translation === 'Translating',
+        ),
       ).toEqual([]);
       expect(frames.some((frame) => frame.translation === denseCue(14).translation)).toBe(true);
       expect(p.trace.filter((event) => event.e === 'done' && event.result === 'aborted')).toEqual(

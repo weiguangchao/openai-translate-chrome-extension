@@ -1,3 +1,4 @@
+import { t } from './i18n';
 export const TRACE_ATTRIBUTE = 'data-subline-trace';
 export const TRACE_WORKER_ATTRIBUTE = 'data-subline-trace-worker';
 export const TRACE_PREFIX = '[subline] ';
@@ -44,7 +45,7 @@ export function readTraceRequest(message: object): TraceEvent {
     typeof state !== 'string' ||
     !VIEW_STATES.includes(state)
   )
-    throw new Error('调试事件无效。');
+    throw new Error(t('调试事件无效。', 'Invalid debug event.'));
   const event: TraceEvent = { run, t: time, state, paused, seeking };
   if (Number.isSafeInteger(cue) && (cue as number) >= 0) event.cue = cue as number;
   if (finite(start)) event.start = start;

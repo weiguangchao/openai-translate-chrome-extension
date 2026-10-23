@@ -120,22 +120,24 @@ it('does not let a slow cache read overwrite a freshly fetched list', async () =
 });
 
 it('retains the last successful list after a failed refresh', async () => {
-  vi.mocked(apiAction).mockRejectedValue(new Error('接口请求失败。'));
+  vi.mocked(apiAction).mockRejectedValue(new Error('API request failed.'));
   await render();
   await fetchModels();
   expect(options()).toEqual(['', 'chosen-model', 'cached-a', 'cached-b']);
   expect(saveCachedModels).not.toHaveBeenCalled();
-  expect(document.querySelector('[role="alert"]')?.textContent).toBe('接口请求失败。');
+  expect(document.querySelector('[role="alert"]')?.textContent).toBe('API request failed.');
 });
 
 it('keeps fetched models usable but reports that persistence failed', async () => {
   vi.mocked(apiAction).mockResolvedValue(['fresh-model']);
   vi.mocked(saveCachedModels).mockRejectedValue(
-    new Error('模型已获取，但无法缓存到本地，请重试。'),
+    new Error('Models were fetched but could not be cached locally. Try again.'),
   );
   await render();
   await fetchModels();
   expect(options()).toEqual(['', 'chosen-model', 'fresh-model']);
-  expect(document.querySelector('[role="alert"]')?.textContent).toContain('无法缓存到本地');
+  expect(document.querySelector('[role="alert"]')?.textContent).toContain(
+    'could not be cached locally',
+  );
   expect(document.querySelector<HTMLButtonElement>('.fetch-button')!.disabled).toBe(false);
 });

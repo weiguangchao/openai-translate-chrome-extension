@@ -82,7 +82,7 @@ it('saves each language immediately and retains the latest provider and style se
 });
 
 it.each([
-  { providerConsent: '', hint: '请在设置中同意将字幕发送给 Provider。' },
+  { providerConsent: '', hint: 'Allow subtitles to be sent to your provider in settings.' },
   { providerConsent: 'https://api.openai.com', hint: undefined },
 ])('asks for consent when the configured Provider has none: $providerConsent', async (row) => {
   stored.providerConsent = row.providerConsent;
@@ -94,10 +94,10 @@ it('offers one translation-language control with all four supported languages', 
   await render();
   expect(document.querySelectorAll('select')).toHaveLength(1);
   expect([...select('target').options].map((option) => [option.value, option.text])).toEqual([
-    ['en', '英语'],
-    ['zh-CN', '简体中文'],
-    ['zh-TW', '繁体中文'],
-    ['ja', '日语'],
+    ['en', 'English'],
+    ['zh-CN', 'Simplified Chinese'],
+    ['zh-TW', 'Traditional Chinese'],
+    ['ja', 'Japanese'],
   ]);
 });
 
@@ -146,7 +146,7 @@ it('restores the saved language after a write failure and clears the error after
   await choose('target', 'ja');
   expect(stored.targetLanguage).toBe('zh-CN');
   expect(select('target').value).toBe('zh-CN');
-  expect(document.querySelector('[role="alert"]')?.textContent).toBe('保存失败，请重试。');
+  expect(document.querySelector('[role="alert"]')?.textContent).toBe('Could not save. Try again.');
   expect(select('target').matches(':disabled')).toBe(false);
   await choose('target', 'ja');
   expect(stored.targetLanguage).toBe('ja');
@@ -207,7 +207,7 @@ it('keeps controls disabled after a load failure and leaves settings accessible'
   expect(select('target').matches(':disabled')).toBe(true);
   expect(document.querySelector('[role="switch"]')?.matches(':disabled')).toBe(true);
   expect(document.querySelector('[role="alert"]')?.textContent).toBe(
-    '无法读取设置，请重新打开扩展。',
+    'Could not load settings. Reopen the extension.',
   );
   await click('.popup-settings');
   expect(openOptionsPage).toHaveBeenCalledOnce();
