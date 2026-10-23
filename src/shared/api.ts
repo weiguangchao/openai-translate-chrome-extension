@@ -1,4 +1,4 @@
-import { ProviderTimeoutError, RepeatedSourceError } from './provider-error';
+import { ProviderHttpError, ProviderTimeoutError, RepeatedSourceError } from './provider-error';
 import { providerFetch, type ProviderSendPolicy } from './provider/transport';
 import { translationBatchLimit } from './tuning';
 import {
@@ -12,14 +12,6 @@ import { addTokenUsage, readProviderUsage } from './token-usage';
 import { modelAnswer, parseModelJson, scanTranslationResults } from './model-json';
 import { readStoredTranslation } from './caption-translation';
 
-class HttpError extends Error {
-  constructor(
-    message: string,
-    readonly status: number,
-  ) {
-    super(message);
-  }
-}
 function endpoint(settings: Settings, path: string): string {
   return validateBaseUrl(settings.baseUrl).href.replace(/\/+$/, '') + path;
 }
@@ -69,8 +61,9 @@ async function fetchApi(
       403: '接口拒绝访问，请检查 API Key 权限。',
       404: '接口地址或模型不存在，请检查配置。',
       429: '请求过于频繁或额度不足，请稍后重试。',
+      500: '接口调用异常',
     };
-    throw new HttpError(
+    throw new ProviderHttpError(
       errors[response.status] ?? `接口返回 HTTP ${response.status}，请稍后重试。`,
       response.status,
     );
@@ -95,7 +88,7 @@ export async function fetchModels(settings: Settings): Promise<string[]> {
   try {
     response = await request(settings, '/models');
   } catch (error) {
-    if (!(error instanceof HttpError) || ![404, 405].includes(error.status)) throw error;
+    if (!(error instanceof ProviderHttpError) || ![404, 405].includes(error.status)) throw error;
     response = await request(settings, '/model');
   }
   const object = response as { data?: unknown; models?: unknown } | null;

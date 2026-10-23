@@ -32,6 +32,7 @@ const VIEW_STATES: Record<TranslationLine['kind'], ViewState> = {
   loading: 'loading',
   ready: 'ready',
   failed: 'error',
+  providerError: 'error',
   timedOut: 'timeout',
   repeated: 'empty',
   'unsupported-language': 'error',
@@ -45,6 +46,11 @@ function failedLine(failure: TranslateFailure): TranslationLine {
       return { kind: 'repeated' };
     case 'unsupported-language':
       return { kind: 'unsupported-language' };
+    case 'http':
+      return {
+        kind: failure.status === 500 ? 'providerError' : 'failed',
+        message: failure.message,
+      };
     case 'error':
       return { kind: 'failed', message: failure.message };
   }
