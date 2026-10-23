@@ -97,7 +97,7 @@ describe('OpenAI-compatible provider contract', () => {
       expect(body).not.toHaveProperty('prompt');
       expect(body.stream).toBe(false);
       expect(body.max_tokens).toBe(65536);
-      expect(body).not.toHaveProperty('reasoning_effort');
+      expect(body.reasoning_effort).toBe('low');
       expect(init.redirect).toBe('error');
       expect(init.credentials).toBe('omit');
     },
@@ -139,7 +139,7 @@ describe('OpenAI-compatible provider contract', () => {
       expect(body).not.toHaveProperty('prompt');
       expect(body.stream).toBe(false);
       expect(body.max_tokens).toBe(65536);
-      expect(body).not.toHaveProperty('reasoning_effort');
+      expect(body.reasoning_effort).toBe('low');
       expect(body.response_format).toEqual({ type: 'json_object' });
     },
   );
