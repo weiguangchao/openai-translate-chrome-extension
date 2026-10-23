@@ -273,40 +273,47 @@ it('lets the opening window finish during a scrub and requests only the cues at 
   expect(translated()?.textContent).toBe('跳转后的字幕');
 });
 
-it('shows a timeout like the loading line, skips that batch, and translates the later segment', async () => {
-  const dense = Array.from({ length: 30 }, (_, index) => ({
-    startTime: 2 + index * 2,
-    endTime: 4 + index * 2,
-    text: `Cue ${index + 1}.`,
-  }));
-  setCues(dense);
-  controller = new CaptionController(createHboPlatform, publicSettings(saved));
-  await vi.advanceTimersByTimeAsync(0);
-  const opening = [['Cue 1.'], ['Cue 2.', 'Cue 3.', 'Cue 4.', 'Cue 5.']];
-  expect(requested).toEqual(opening);
-  await advance(3);
-  expect(requested).toEqual(opening);
-  expect(translated()?.textContent).toBe('Translating');
-  const timeout = new Error('The operation was aborted due to timeout');
-  timeout.name = 'TimeoutError';
-  pending.find((request) => request.texts.includes('Cue 1.'))!.reject(timeout);
-  await vi.advanceTimersByTimeAsync(0);
-  const translation = translated();
-  expect(translation?.textContent).toBe('Request timed out');
-  expect(translation?.classList.contains('error')).toBe(false);
-  expect(translation?.classList.contains('timeout')).toBe(true);
-  expect(translation?.style.fontSize).toBe('20px');
-  expect(original()?.hidden).toBe(true);
-  const sent = requested.length;
-  await vi.advanceTimersByTimeAsync(20000);
-  expect(requested.filter((request) => request.includes('Cue 1.'))).toHaveLength(1);
-  expect(requested).toHaveLength(sent);
-  expect(translated()?.textContent).toBe('Request timed out');
-  await advance(12);
-  await finish({ 'Cue 6.': '第六句' });
-  expect(translated()?.textContent).toBe('第六句');
-  expect(requested.some((request) => request.includes('Cue 6.'))).toBe(true);
-});
+it.each(['timeout', '500'] as const)(
+  'shows %s like the loading line, skips that batch, and translates the later segment',
+  async (failure) => {
+    const dense = Array.from({ length: 30 }, (_, index) => ({
+      startTime: 2 + index * 2,
+      endTime: 4 + index * 2,
+      text: `Cue ${index + 1}.`,
+    }));
+    setCues(dense);
+    controller = new CaptionController(createHboPlatform, publicSettings(saved));
+    await vi.advanceTimersByTimeAsync(0);
+    const opening = [['Cue 1.'], ['Cue 2.', 'Cue 3.', 'Cue 4.', 'Cue 5.']];
+    expect(requested).toEqual(opening);
+    await advance(3);
+    expect(requested).toEqual(opening);
+    expect(translated()?.textContent).toBe('Translating');
+    const request = pending.find((request) => request.texts.includes('Cue 1.'))!;
+    const message = failure === 'timeout' ? 'Request timed out' : 'Provider request failed';
+    if (failure === 'timeout') {
+      const timeout = new Error('The operation was aborted due to timeout');
+      timeout.name = 'TimeoutError';
+      request.reject(timeout);
+    } else request.resolve(new Response('', { status: 500 }));
+    await vi.advanceTimersByTimeAsync(0);
+    const translation = translated();
+    expect(translation?.textContent).toBe(message);
+    expect(translation?.classList.contains('error')).toBe(false);
+    expect(translation?.classList.contains('timeout')).toBe(true);
+    expect(translation?.style.fontSize).toBe('20px');
+    expect(original()?.hidden).toBe(true);
+    const sent = requested.length;
+    await vi.advanceTimersByTimeAsync(20000);
+    expect(requested.filter((request) => request.includes('Cue 1.'))).toHaveLength(1);
+    if (failure === 'timeout') expect(requested).toHaveLength(sent);
+    expect(translated()?.textContent).toBe(message);
+    await advance(12);
+    await finish({ 'Cue 6.': '第六句' });
+    expect(translated()?.textContent).toBe('第六句');
+    expect(requested.some((request) => request.includes('Cue 6.'))).toBe(true);
+  },
+);
 
 it('keeps requests sent before a seek running, sends the landing at once and caches their replies', async () => {
   const dense = Array.from({ length: 30 }, (_, index) => ({

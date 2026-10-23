@@ -1,5 +1,5 @@
 import { t } from './i18n';
-import { ProviderTimeoutError, RepeatedSourceError } from './provider-error';
+import { ProviderHttpError, ProviderTimeoutError, RepeatedSourceError } from './provider-error';
 import { providerFetch, type ProviderSendPolicy } from './provider/transport';
 import { translationBatchLimit } from './tuning';
 import {
@@ -13,14 +13,6 @@ import { addTokenUsage, readProviderUsage } from './token-usage';
 import { modelAnswer, parseModelJson, scanTranslationResults } from './model-json';
 import { readStoredTranslation } from './caption-translation';
 
-class HttpError extends Error {
-  constructor(
-    message: string,
-    readonly status: number,
-  ) {
-    super(message);
-  }
-}
 function endpoint(settings: Settings, path: string): string {
   return validateBaseUrl(settings.baseUrl).href.replace(/\/+$/, '') + path;
 }
@@ -87,8 +79,9 @@ async function fetchApi(
         '请求过于频繁或额度不足，请稍后重试。',
         'Rate limit or quota exceeded. Try again later.',
       ),
+      500: t('接口调用异常', 'Provider request failed'),
     };
-    throw new HttpError(
+    throw new ProviderHttpError(
       errors[response.status] ??
         t(
           `接口返回 HTTP ${response.status}，请稍后重试。`,
@@ -117,7 +110,7 @@ export async function fetchModels(settings: Settings): Promise<string[]> {
   try {
     response = await request(settings, '/models');
   } catch (error) {
-    if (!(error instanceof HttpError) || ![404, 405].includes(error.status)) throw error;
+    if (!(error instanceof ProviderHttpError) || ![404, 405].includes(error.status)) throw error;
     response = await request(settings, '/model');
   }
   const object = response as { data?: unknown; models?: unknown } | null;

@@ -10,6 +10,7 @@ export type TranslationLine =
   | { readonly kind: 'loading' }
   | { readonly kind: 'ready'; readonly translation: string }
   | { readonly kind: 'failed'; readonly message: string }
+  | { readonly kind: 'providerError'; readonly message: string }
   | { readonly kind: 'timedOut' }
   | { readonly kind: 'repeated' }
   | { readonly kind: 'unsupported-language' };
@@ -33,6 +34,8 @@ function lineContent(line: TranslationLine): { text: string; status: Status } {
       return { text: t(`Subline：${line.message}`, `Subline: ${line.message}`), status: 'error' };
     case 'timedOut':
       return { text: TIMEOUT_TRANSLATION, status: 'timeout' };
+    case 'providerError':
+      return { text: line.message, status: 'timeout' };
     case 'unsupported-language':
       return { text: failureText({ kind: 'unsupported-language' }), status: 'error' };
     case 'repeated':
