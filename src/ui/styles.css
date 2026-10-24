@@ -147,7 +147,7 @@ button:hover:not(:disabled) {
   min-height: 100vh;
 }
 .sidebar {
-  width: 224px;
+  width: 256px;
   background: #fff;
   border-right: 1px solid var(--line);
   position: fixed;
@@ -228,8 +228,8 @@ button:hover:not(:disabled) {
   margin-left: auto;
 }
 .workspace {
-  margin-left: 224px;
-  width: calc(100% - 224px);
+  margin-left: 256px;
+  width: calc(100% - 256px);
   min-width: 0;
   height: 100vh;
   overflow-y: auto;
@@ -1417,7 +1417,7 @@ html:lang(en) .popup-languages {
 }
 @media (max-width: 1150px) {
   .sidebar {
-    width: 195px;
+    width: 227px;
     padding-left: 14px;
     padding-right: 14px;
   }
@@ -1432,8 +1432,8 @@ html:lang(en) .popup-languages {
     height: 35px;
   }
   .workspace {
-    margin-left: 195px;
-    width: calc(100% - 195px);
+    margin-left: 227px;
+    width: calc(100% - 227px);
   }
   .topbar {
     padding: 0 25px;
@@ -1498,7 +1498,7 @@ html:lang(en) .popup-languages {
 }
 @media (max-width: 950px) {
   .sidebar {
-    width: 177px;
+    width: 209px;
     padding-left: 12px;
     padding-right: 12px;
   }
@@ -1513,8 +1513,8 @@ html:lang(en) .popup-languages {
     height: 31px;
   }
   .workspace {
-    margin-left: 177px;
-    width: calc(100% - 177px);
+    margin-left: 209px;
+    width: calc(100% - 209px);
   }
   .page-content {
     padding: 26px 24px;
