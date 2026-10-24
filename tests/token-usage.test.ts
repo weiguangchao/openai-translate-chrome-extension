@@ -130,6 +130,19 @@ describe('stored totals', () => {
     expect(values[TOKEN_USAGE_KEY]).toEqual({ input: 6, output: 5, cache: 6 });
   });
 
+  it('keeps stored totals when reads fail and accepts later usage', async () => {
+    const values = memoryStorage();
+    values[TOKEN_USAGE_KEY] = { input: 1000, output: 100, cache: 20 };
+    vi.mocked(chrome.storage.local.get).mockRejectedValueOnce(new Error('unavailable'));
+    await expect(loadTokenUsage()).resolves.toEqual({ input: 0, output: 0, cache: 0 });
+    vi.mocked(chrome.storage.local.get).mockRejectedValueOnce(new Error('unavailable'));
+    await expect(addTokenUsage({ input: 10, output: 2, cache: 0 })).resolves.toBeUndefined();
+    expect(chrome.storage.local.set).not.toHaveBeenCalled();
+    await expect(loadTokenUsage()).resolves.toEqual({ input: 1000, output: 100, cache: 20 });
+    await addTokenUsage({ input: 10, output: 2, cache: 0 });
+    await expect(loadTokenUsage()).resolves.toEqual({ input: 1010, output: 102, cache: 20 });
+  });
+
   it('stores usage in localStorage outside the extension', async () => {
     const values = new Map<string, string>();
     vi.stubGlobal('localStorage', {

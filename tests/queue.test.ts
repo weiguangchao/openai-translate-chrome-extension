@@ -8,6 +8,7 @@ import {
 } from '../src/shared/tuning';
 import { planPlayback } from '../src/shared/playback-plan';
 let TranslationQueue: typeof import('../src/extension/queue').TranslationQueue;
+let failureOf: typeof import('../src/shared/provider-error').failureOf;
 import { DEFAULT_SETTINGS } from '../src/shared/settings';
 import { providerReply, requestedTexts, structuredReply } from './fixtures/provider';
 import type { TraceEvent } from '../src/shared/trace';
@@ -16,6 +17,7 @@ beforeEach(async () => {
   vi.useFakeTimers();
   vi.resetModules();
   ({ TranslationQueue } = await import('../src/extension/queue'));
+  ({ failureOf } = await import('../src/shared/provider-error'));
 });
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -158,19 +160,32 @@ it('translates the next caption after a timeout without pausing or retrying that
   expect(fetch).toHaveBeenCalledTimes(3);
 });
 
-it('keeps reporting why the provider failed while it backs off after a prefetch', async () => {
-  const fetch = vi.fn().mockResolvedValue(new Response('', { status: 401 }));
-  vi.stubGlobal('fetch', fetch);
-  const queue = new TranslationQueue();
-  await expect(queue.prefetch('tab', settings, prefetchItems(['Ahead']))).resolves.toEqual([null]);
-  await expect(queue.request('tab', settings, 'Visible')).rejects.toThrow(
-    new Error('The API Key is invalid or expired.'),
-  );
-  expect(fetch).toHaveBeenCalledTimes(1);
-  queue.reset();
-  fetch.mockResolvedValue(providerReply(['Visible'], () => '可见'));
-  await expect(queue.request('tab', settings, 'Visible')).resolves.toBe('可见');
-});
+it.each([
+  { status: 401, message: 'The API Key is invalid or expired.' },
+  { status: 500, message: 'Provider request failed' },
+])(
+  'keeps the HTTP $status failure while it backs off after a prefetch',
+  async ({ status, message }) => {
+    const fetch = vi.fn().mockResolvedValue(new Response('', { status }));
+    vi.stubGlobal('fetch', fetch);
+    const queue = new TranslationQueue();
+    const ahead = queue.prefetch('tab', settings, prefetchItems(['Ahead']));
+    const failure = { kind: 'http', status, message };
+    await expect(
+      queue.request('tab', settings, 'Ahead').catch((error) => failureOf(error, 'Request failed')),
+    ).resolves.toEqual(failure);
+    await expect(ahead).resolves.toEqual([null]);
+    await expect(
+      queue
+        .request('tab', settings, 'Visible')
+        .catch((error) => failureOf(error, 'Request failed')),
+    ).resolves.toEqual(failure);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    queue.reset();
+    fetch.mockResolvedValue(providerReply(['Visible'], () => '可见'));
+    await expect(queue.request('tab', settings, 'Visible')).resolves.toBe('可见');
+  },
+);
 
 it('does not cache a failed request, but still serves cached cues while the provider backs off', async () => {
   const fetch = vi
