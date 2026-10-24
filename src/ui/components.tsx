@@ -13,7 +13,7 @@ export function Logo({ small = false }: { small?: boolean }) {
       <div>
         <strong>
           Subline<span className="brand-period">.</span>
-          {small && isExtension && (
+          {isExtension && (
             <span className="brand-version">v{chrome.runtime.getManifest().version}</span>
           )}
         </strong>

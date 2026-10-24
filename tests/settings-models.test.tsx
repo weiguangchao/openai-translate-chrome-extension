@@ -33,6 +33,7 @@ beforeEach(() => {
   vi.mocked(saveCachedModels).mockResolvedValue(undefined);
   vi.mocked(allowApiHost).mockResolvedValue(undefined);
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  vi.stubGlobal('chrome', { runtime: { getManifest: () => ({ version: '0.1.2' }) } });
   document.body.innerHTML = '<div id="root"></div>';
   root = createRoot(document.getElementById('root')!);
 });
