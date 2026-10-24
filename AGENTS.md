@@ -6,9 +6,9 @@ The Principles section below grounds every trigger. In your reply, name each pri
 
 Remaining triggers:
 
-- Any prose surface → the unslop skill. Your reply is a prose surface.
-- Before commit → the deslop skill
-- For testing -> the test-audit skill
+- Any prose surface, your reply to the user included → the **unslop** skill. Write the reply per **Writing the reply.** 
+- Before commit → the `deslop` skill
+- For testing -> the **test-audit** skill
 
 ## Principles
 
