@@ -199,6 +199,43 @@ it('preserves simultaneous authored lines and removes duplicate drawing layers',
   ]);
 });
 
+it.each([
+  {
+    segments: [{ utf8: 'First person keeps talking.' }],
+    first: 'First person keeps talking.',
+    second: 'Second person answers.',
+  },
+  {
+    segments: [
+      { utf8: 'First person keeps', tOffsetMs: 0 },
+      { utf8: ' talking', tOffsetMs: 1000 },
+    ],
+    first: 'First person keeps talking',
+    second: 'while the second person answers',
+  },
+])('preserves staggered authored overlaps for $first', ({ segments, first, second }) => {
+  const cues = parseYoutubeCaptions(
+    {
+      events: [
+        { tStartMs: 1000, dDurationMs: 4000, segs: segments },
+        { tStartMs: 3000, dDurationMs: 4000, segs: [{ utf8: second }] },
+      ],
+    },
+    'authored',
+    'en',
+  );
+  expect(cues).toEqual([
+    { startTime: 1, endTime: 5, text: first },
+    { startTime: 3, endTime: 7, text: second },
+  ]);
+  expect(captionAt(cues, 4)).toBe(`${first}\n${second}`);
+  expect(playbackCues(timedCaptions(cues), 4)).toContainEqual({
+    text: `${first}\n${second}`,
+    start: 3,
+    end: 5,
+  });
+});
+
 it('uses pauses in unpunctuated word timings and leaves silence between sentences', () => {
   const cues = parseYoutubeCaptions(
     {

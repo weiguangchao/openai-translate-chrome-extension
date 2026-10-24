@@ -107,7 +107,7 @@ it.each(['[data-testid="caption_renderer_overlay"]', '#cue'])(
       ],
     });
     expect(
-      readHboCaption(document.querySelector('[data-testid="playerContainer"]')!, video),
+      readHboCaption(document.querySelector('[data-testid="playerContainer"]')!, video, true),
     ).toEqual({
       text: 'Track subtitle',
       layers: [],

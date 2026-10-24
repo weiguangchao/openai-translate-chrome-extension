@@ -1,5 +1,5 @@
 import type { TimedCue } from '../../core/cues';
-import { subtitleCaptions } from '../../core/sentences';
+import { authoredSubtitleCaptions, subtitleCaptions } from '../../core/sentences';
 
 export type YoutubeCaptionKind = 'authored' | 'asr';
 
@@ -77,23 +77,28 @@ export function parseYoutubeCaptions(
       previous.segments = [{ utf8: previous.text }];
     } else grouped.push(event);
   }
-  return subtitleCaptions(
-    grouped.flatMap((event, index) => {
-      const endTime = Math.min(event.endTime, grouped[index + 1]?.startTime ?? Infinity);
-      if (endTime <= event.startTime) return [];
-      const parts = timedParts(event, endTime);
-      return [
-        {
-          ...event,
-          endTime,
-          parts,
-          wordTimed:
-            parts.length > 1 ||
-            event.segments.some((segment) => Number.isFinite(segment.tOffsetMs)),
-        },
-      ];
-    }),
-    language,
-    kind === 'asr',
-  );
+  const cues = grouped.flatMap((event, index) => {
+    const endTime =
+      kind === 'asr'
+        ? Math.min(event.endTime, grouped[index + 1]?.startTime ?? Infinity)
+        : event.endTime;
+    if (endTime <= event.startTime) return [];
+    const parts = timedParts(event, endTime);
+    return [
+      {
+        ...event,
+        endTime,
+        parts,
+        wordTimed:
+          parts.length > 1 || event.segments.some((segment) => Number.isFinite(segment.tOffsetMs)),
+      },
+    ];
+  });
+  return kind === 'authored'
+    ? authoredSubtitleCaptions(cues, language).map(({ startTime, endTime, text }) => ({
+        startTime,
+        endTime,
+        text,
+      }))
+    : subtitleCaptions(cues, language, true);
 }

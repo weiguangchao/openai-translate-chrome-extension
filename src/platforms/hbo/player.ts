@@ -26,11 +26,15 @@ export function findHboPlayer(video: HTMLVideoElement): HTMLElement | null {
   return root ?? video.parentElement;
 }
 
-export function readHboCaption(player: HTMLElement, video: HTMLVideoElement): LiveCaption {
+export function readHboCaption(
+  player: HTMLElement,
+  video: HTMLVideoElement,
+  useNativeTrack: boolean,
+): LiveCaption {
   for (const element of player.querySelectorAll<HTMLElement>(CAPTION_LAYERS)) {
     const text = domCaptionText(element);
     if (text)
       return { text, layers: [element, ...captionBoxes(player, element)], nativeTrack: false };
   }
-  return activeTrackCaption(video);
+  return useNativeTrack ? activeTrackCaption(video) : { text: '', layers: [], nativeTrack: false };
 }
