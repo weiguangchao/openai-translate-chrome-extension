@@ -23,8 +23,10 @@ import {
 } from 'lucide-react';
 import {
   DEFAULT_SETTINGS,
+  applySettingsPatch,
   hasProviderConsent,
   providerOrigin,
+  settingsPatch,
   validateSettings,
   type Settings,
 } from '../shared/settings';
@@ -104,7 +106,7 @@ function Section({
 export function App() {
   const [page, setPage] = useState<Page>('general');
   const [settings, setSettings] = useState<Settings>(structuredClone(DEFAULT_SETTINGS));
-  const [saved, setSaved] = useState(JSON.stringify(DEFAULT_SETTINGS));
+  const [saved, setSaved] = useState<Settings>(structuredClone(DEFAULT_SETTINGS));
   const [ready, setReady] = useState(false);
   const { alert, showAlert } = useAlert();
   const [busy, setBusy] = useState<'save' | 'models' | 'test' | null>(null);
@@ -113,7 +115,7 @@ export function App() {
   const [manualModel, setManualModel] = useState(false);
   const [showKey, setShowKey] = useState(false);
   const [connection, setConnection] = useState('');
-  const dirty = ready && JSON.stringify(settings) !== saved;
+  const dirty = ready && JSON.stringify(settings) !== JSON.stringify(saved);
   const current = PAGES.find((item) => item.id === page)!;
   const fingerprint = JSON.stringify([settings.baseUrl, settings.apiKey, settings.model]);
   const connected = connection === fingerprint;
@@ -125,7 +127,7 @@ export function App() {
     void loadSettings()
       .then((value) => {
         setSettings(value);
-        setSaved(JSON.stringify(value));
+        setSaved(value);
         setReady(true);
         if (!isExtension)
           showAlert({
@@ -185,11 +187,13 @@ export function App() {
         apiKey: settings.apiKey.trim(),
         model: settings.model.trim(),
       };
-      await saveSettings(normalized);
-      setSettings(normalized);
-      setSaved(JSON.stringify(normalized));
+      const patch = settingsPatch(saved, normalized);
+      if (!isExtension) patch.apiKey = normalized.apiKey;
+      const persisted = await saveSettings(patch);
+      setSettings((draft) => applySettingsPatch(persisted, settingsPatch(settings, draft)));
+      setSaved(persisted);
       showAlert(
-        normalized.apiKey && normalized.model && !hasProviderConsent(normalized)
+        persisted.apiKey && persisted.model && !hasProviderConsent(persisted)
           ? {
               kind: 'info',
               text: t(

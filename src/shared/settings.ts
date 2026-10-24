@@ -21,6 +21,34 @@ export interface Settings {
   hbo: boolean;
   x: boolean;
 }
+export type SettingsPatch = Partial<Omit<Settings, 'original' | 'translation'>> & {
+  original?: Partial<SubtitleStyle>;
+  translation?: Partial<SubtitleStyle>;
+};
+
+export function settingsPatch(previous: Settings, next: Settings): SettingsPatch {
+  const patch: SettingsPatch = {};
+  for (const key of Object.keys(next) as (keyof Settings)[]) {
+    if (key === 'original' || key === 'translation') {
+      const style = Object.fromEntries(
+        Object.entries(next[key]).filter(
+          ([part, value]) => Reflect.get(previous[key], part) !== value,
+        ),
+      );
+      if (Object.keys(style).length) patch[key] = style;
+    } else if (previous[key] !== next[key]) Object.assign(patch, { [key]: next[key] });
+  }
+  return patch;
+}
+
+export function applySettingsPatch(settings: Settings, patch: SettingsPatch): Settings {
+  return {
+    ...settings,
+    ...patch,
+    original: { ...settings.original, ...patch.original },
+    translation: { ...settings.translation, ...patch.translation },
+  };
+}
 export type PublicSettings = Omit<Settings, 'apiKey' | 'baseUrl' | 'model' | 'providerConsent'> & {
   configured: boolean;
   translationRevision: string;

@@ -125,9 +125,7 @@ export function Popup() {
     setBusy(true);
     setError('');
     try {
-      const latest = await loadSettings();
-      const next = { ...latest, ...changes };
-      await saveSettings(next);
+      const next = await saveSettings(changes);
       setSettings(next);
     } catch {
       setError(copy.saveFailed);
