@@ -59,8 +59,7 @@ export class TranslationQueue {
   private jobs = new Map<string, Job>();
   private finished = new Map<string, string>();
   private consumers = new Map<string, Consumer>();
-  private backoffUntil = 0;
-  private backoffReason = '';
+  private backoff: { until: number; error: Error } | undefined;
   private failed = new Map<string, Error>();
   private detached = new WeakSet<AbortController>();
   private samples: number[] = [];
@@ -169,7 +168,7 @@ export class TranslationQueue {
     });
     this.prune('abort');
     this.retainFailed();
-    if (Date.now() >= this.backoffUntil)
+    if (Date.now() >= (this.backoff?.until ?? 0))
       planned.forEach((request, index) => {
         const pack = packs[index];
         request.cues.forEach((cue, cueIndex) => {
@@ -225,8 +224,7 @@ export class TranslationQueue {
     this.consumers.clear();
     this.samples = [];
     this.prune('abort');
-    this.backoffUntil = 0;
-    this.backoffReason = '';
+    this.backoff = undefined;
     this.failed.clear();
     clearTimeout(this.sendTimer);
     this.sendTimer = undefined;
@@ -284,7 +282,7 @@ export class TranslationQueue {
       }
       return existing;
     }
-    if (Date.now() < this.backoffUntil) throw new Error(this.backoffReason);
+    if (this.backoff && Date.now() < this.backoff.until) throw this.backoff.error;
     let resolve!: Job['resolve'], reject!: Job['reject'];
     const promise = new Promise<string>((yes, no) => {
       resolve = yes;
@@ -343,7 +341,11 @@ export class TranslationQueue {
       return job && !job.controller ? [job] : [];
     });
     const now = Date.now();
-    while (waiting.length && now >= this.backoffUntil && this.inFlight() < maxInFlightRequests) {
+    while (
+      waiting.length &&
+      now >= (this.backoff?.until ?? 0) &&
+      this.inFlight() < maxInFlightRequests
+    ) {
       const first = waiting[0];
       const batch =
         first.solo || !first.pack
@@ -362,7 +364,7 @@ export class TranslationQueue {
     clearTimeout(this.sendTimer);
     this.sendTimer = undefined;
     if (!waiting) return;
-    const delay = Math.max(0, this.backoffUntil - now);
+    const delay = Math.max(0, (this.backoff?.until ?? 0) - now);
     if (delay === 0) return;
     this.sendTimer = setTimeout(() => {
       this.sendTimer = undefined;
@@ -449,7 +451,7 @@ export class TranslationQueue {
       {
         canSend: () => {
           if (batch.some((job) => job.sent)) return true;
-          if (Date.now() < this.backoffUntil) return false;
+          if (this.backoff && Date.now() < this.backoff.until) return false;
           const live = [...this.consumers.values()].some(
             (item) =>
               !item.paused &&
@@ -512,8 +514,7 @@ export class TranslationQueue {
         const timedOut = failure instanceof ProviderTimeoutError;
         finish(timedOut ? 'timeout' : 'error');
         if (!timedOut) {
-          this.backoffUntil = Date.now() + 15000;
-          this.backoffReason = failure.message || t('翻译失败。', 'Translation failed.');
+          this.backoff = { until: Date.now() + 15000, error: failure };
         }
         for (const job of batch) {
           if (this.jobs.get(job.key) !== job) continue;

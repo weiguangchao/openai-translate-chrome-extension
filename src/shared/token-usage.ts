@@ -90,26 +90,18 @@ function extensionStorage(): boolean {
 }
 
 function pageStorage(): Storage | null {
-  try {
-    if (typeof localStorage === 'undefined') return null;
-    return localStorage;
-  } catch {
-    return null;
-  }
+  if (typeof localStorage === 'undefined') return null;
+  return localStorage;
 }
 
 async function readStored(): Promise<TokenUsage> {
-  try {
-    if (extensionStorage()) {
-      const stored = await chrome.storage.local.get(TOKEN_USAGE_KEY);
-      return normalizeTokenUsage(stored[TOKEN_USAGE_KEY]);
-    }
-    const storage = pageStorage();
-    if (!storage) return { input: 0, output: 0, cache: 0 };
-    return normalizeTokenUsage(JSON.parse(storage.getItem(TOKEN_USAGE_KEY) ?? 'null'));
-  } catch {
-    return { input: 0, output: 0, cache: 0 };
+  if (extensionStorage()) {
+    const stored = await chrome.storage.local.get(TOKEN_USAGE_KEY);
+    return normalizeTokenUsage(stored[TOKEN_USAGE_KEY]);
   }
+  const storage = pageStorage();
+  if (!storage) return { input: 0, output: 0, cache: 0 };
+  return normalizeTokenUsage(JSON.parse(storage.getItem(TOKEN_USAGE_KEY) ?? 'null'));
 }
 
 async function writeStored(usage: TokenUsage): Promise<void> {
@@ -141,7 +133,7 @@ export function addTokenUsage(delta: TokenUsage): Promise<void> {
 }
 
 export function loadTokenUsage(): Promise<TokenUsage> {
-  return readStored();
+  return readStored().catch(() => ({ input: 0, output: 0, cache: 0 }));
 }
 
 export function watchTokenUsage(onChange: (usage: TokenUsage) => void): () => void {

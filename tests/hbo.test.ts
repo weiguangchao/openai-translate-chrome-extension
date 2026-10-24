@@ -98,7 +98,7 @@ beforeEach(async () => {
   Object.defineProperties(video, {
     readyState: { value: 1 },
     paused: { value: false, configurable: true },
-    textTracks: { value: [] },
+    textTracks: { value: [], configurable: true },
     currentSrc: { value: 'blob:episode-1', configurable: true },
   });
   selected = { language: 'en-US', role: 'closedcaptions' };
@@ -642,24 +642,64 @@ it('translates the selected Chinese track when no English track exists', async (
   expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).endsWith('.vtt'))).toBe(true);
 });
 
-it('uses selected-language DOM captions after a timeline download fails', async () => {
-  selected = { language: 'zh-Hans', role: 'subtitle' };
-  document.querySelector('[data-testid="caption_renderer_overlay"]')!.textContent = '已有中文字幕';
-  const originalFetch = fetch;
-  vi.stubGlobal(
-    'fetch',
-    vi.fn((url: string, init: RequestInit) =>
-      new URL(url).pathname.endsWith('.mpd')
-        ? Promise.resolve(new Response('', { status: 503 }))
-        : originalFetch(url, init),
+it.each(
+  (['en', 'zh-CN'] as const).flatMap((targetLanguage) => [
+    ...[true, false].flatMap((timeline) =>
+      [true, false].map((dom) => ({ targetLanguage, timeline, dom, nativeLanguage: 'en' })),
     ),
-  );
-  controller = new CaptionController(
-    createHboPlatform,
-    publicSettings({ ...settings, targetLanguage: 'en' }),
-  );
-  await playTo(3);
-  expect(lines()?.[0].textContent).toBe('已有中文字幕');
-  expect(lines()?.[1].textContent).toBe('译文 已有中文字幕');
-  expect(requested.map((request) => request.texts)).toEqual([['已有中文字幕']]);
-});
+    { targetLanguage, timeline: true, dom: false, nativeLanguage: 'zh-CN' },
+  ]),
+)(
+  'keeps selected HBO captions after a download fails with target=$targetLanguage, native=$nativeLanguage, timeline=$timeline, DOM=$dom',
+  async ({ targetLanguage, timeline, dom, nativeLanguage }) => {
+    selected = { language: 'zh-Hans', role: 'subtitle' };
+    document.querySelector('[data-testid="caption_renderer_overlay"]')!.textContent = dom
+      ? '已有中文字幕'
+      : '';
+    const originalFetch = fetch;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string, init: RequestInit) =>
+        new URL(url).pathname.endsWith('.mpd')
+          ? Promise.resolve(new Response('', { status: 503 }))
+          : originalFetch(url, init),
+      ),
+    );
+    controller = new CaptionController(
+      createHboPlatform,
+      publicSettings({ ...settings, targetLanguage }),
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    const cue = {
+      startTime: 3,
+      endTime: 5,
+      text: nativeLanguage === 'en' ? 'Old English track.' : '已有原生中文字幕',
+    };
+    Object.defineProperty(video, 'textTracks', {
+      value: [
+        {
+          kind: 'subtitles',
+          mode: 'showing',
+          language: nativeLanguage,
+          cues: timeline ? [cue] : null,
+          activeCues: [cue],
+        },
+      ],
+    });
+    await playTo(3);
+    const expected = dom ? '已有中文字幕' : nativeLanguage === 'zh-CN' ? '已有原生中文字幕' : '';
+    if (!expected) {
+      expect(lines()?.[0].hidden).toBe(true);
+      expect(lines()?.[1].hidden).toBe(true);
+      expect(requested).toEqual([]);
+    } else if (targetLanguage === 'zh-CN') {
+      expect(lines()?.[0].textContent).toBe(expected);
+      expect(lines()?.[1].hidden).toBe(true);
+      expect(requested).toEqual([]);
+    } else {
+      expect(lines()?.[0].textContent).toBe(expected);
+      expect(lines()?.[1].textContent).toBe(`译文 ${expected}`);
+      expect(requested.map((request) => request.texts)).toEqual([[expected]]);
+    }
+  },
+);

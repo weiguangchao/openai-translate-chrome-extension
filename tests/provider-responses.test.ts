@@ -24,6 +24,54 @@ function respond(content: string) {
   );
 }
 
+it.each([
+  { label: 'an opening tag', translation: '使用 <think> 标签。' },
+  { label: 'a closing tag', translation: '使用 </think> 标签。' },
+  { label: 'escaped quotes', translation: '他说："使用 <think> 和 </think>。"' },
+  {
+    label: 'thinking around fenced JSON',
+    translation: '使用 <think> 和 </think> 标签。',
+    wrapper: '<think>draft</think>\n```json\n',
+    suffix: '\n```',
+  },
+  {
+    label: 'JSON inside thinking',
+    translation: '使用 <think> 和 </think> 标签。',
+    wrapper: '<think>',
+    suffix: '</think>',
+  },
+  {
+    label: 'an unmatched quote in adjacent thinking text',
+    translation: '最终',
+    wrapper: '<think>Translate "hello</think>',
+  },
+  {
+    label: 'an unfinished draft inside thinking',
+    translation: '最终',
+    wrapper: '<think>{"results":[{"id":0,"translation":"草稿</think>',
+  },
+  {
+    label: 'escaped quotes after unfinished thinking',
+    translation: '"最终"',
+    wrapper: '<think>{"results":[{"id":0,"translation":"草稿</think>',
+  },
+  {
+    label: 'escaped quotes and literal tags after unfinished thinking',
+    translation: '"使用 <think> 和 </think>。"',
+    wrapper: '<think>{"results":[{"id":0,"translation":"草稿</think>',
+  },
+])(
+  'reads $label without changing the translation text',
+  async ({ translation, wrapper = '', suffix = '' }) => {
+    respond(`${wrapper}${payload([result(0, translation)])}${suffix}`);
+    const published = vi.fn();
+    await expect(
+      translateCaptionBatch(settings, ['Explain the tags.'], undefined, published),
+    ).resolves.toEqual([translation]);
+    expect(published.mock.calls).toEqual([[0, translation]]);
+  },
+);
+
 const four = ['One.', 'Two.', 'Three.', 'Four.'];
 it.each([
   { label: 'translations by position', texts: four, reply: { translations: ['甲乙', '丙', '丁'] } },
@@ -162,12 +210,20 @@ it('does not treat an invalid single ID as a missing ID', async () => {
   expect(published).not.toHaveBeenCalled();
 });
 
-it('recovers complete results from a truncated response only after parsing fails', async () => {
-  const translation = '他说："{你好}"';
+it.each([
+  { label: 'a fenced answer', prefix: '' },
+  { label: 'an answer inside thinking', prefix: '<think>' },
+  {
+    label: 'an unfinished thinking draft',
+    prefix: '<think>{"results":[{"id":0,"translation":"草稿</think>',
+  },
+])('recovers complete results from a truncated response after $label', async ({ prefix }) => {
+  const translation = '他说："{使用 <think> 和 </think>}"';
   respond(
-    '```json\n{"note":[],"results":[' +
+    prefix +
+      '```json\n{"note":[],"results":[' +
       JSON.stringify(result(0, translation)) +
-      ',{"id":1,"translation":',
+      ',{"id":1,"translation":"使用 </think> 标签',
   );
   const published = vi.fn();
   await expect(

@@ -1,5 +1,6 @@
 import { BridgeTimeline } from '../../core/bridge/client';
 import { NativeTimeline } from '../../core/native';
+import { languageTrack } from '../../core/languages';
 import type { Platform, PlatformFactory } from '../../core/platform';
 import { CAPTION_LAYERS, findHboPlayer, hboVideoId, readHboCaption } from './player';
 
@@ -14,10 +15,14 @@ export const createHboPlatform: PlatformFactory = (changed): Platform => {
     source(video, player) {
       const bridged = bridge.read(hboVideoId());
       const local = native.read(video);
+      const useNativeTrack =
+        !bridged ||
+        bridged.language === null ||
+        Boolean(languageTrack([local], (state) => state.language ?? '', bridged.language));
       const state =
-        bridged && (bridged.source !== null || bridged.mode !== 'model')
+        bridged && (bridged.source !== null || bridged.mode !== 'model' || !useNativeTrack)
           ? bridged
-          : { ...local, language: bridged?.language ?? local.language };
+          : local;
       if (state.source)
         return {
           kind: 'timeline',
@@ -32,7 +37,7 @@ export const createHboPlatform: PlatformFactory = (changed): Platform => {
         mode: state.mode,
         id: state.sourceId,
         language: state.language,
-        read: () => readHboCaption(player, video),
+        read: () => readHboCaption(player, video, useNativeTrack),
       };
     },
     reset() {

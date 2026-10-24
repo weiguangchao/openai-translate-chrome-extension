@@ -35,7 +35,7 @@ beforeEach(() => {
   vi.mocked(allowApiHost).mockResolvedValue(undefined);
   vi.mocked(loadCachedModels).mockResolvedValue([]);
   vi.mocked(saveCachedModels).mockResolvedValue(undefined);
-  vi.mocked(saveSettings).mockResolvedValue(undefined);
+  vi.mocked(saveSettings).mockResolvedValue(structuredClone(DEFAULT_SETTINGS));
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   Element.prototype.scrollTo = () => {};
   document.body.innerHTML = '<div id="root"></div>';

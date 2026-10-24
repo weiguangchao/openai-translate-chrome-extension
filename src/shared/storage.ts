@@ -1,10 +1,12 @@
 import { t } from './i18n';
 import {
   DEFAULT_SETTINGS,
+  applySettingsPatch,
   normalizeSettings,
   STORAGE_KEY,
   validateBaseUrl,
   type Settings,
+  type SettingsPatch,
 } from './settings';
 import { fetchModels, translate } from './api';
 import { decryptApiKey, encryptApiKey } from './api-key';
@@ -12,27 +14,36 @@ import type { Reply } from './messages';
 import { failureText } from './provider-error';
 
 export const isExtension = typeof chrome !== 'undefined' && Boolean(chrome.runtime?.id);
-export async function loadSettings(): Promise<Settings> {
+async function readSettings(): Promise<{ settings: Settings; plaintext: boolean }> {
   if (isExtension) {
     const stored = (await chrome.storage.local.get(STORAGE_KEY))[STORAGE_KEY];
-    if (typeof stored?.apiKey === 'string' && stored.apiKey) {
-      const settings = normalizeSettings(stored);
-      await saveSettings(settings);
-      return settings;
-    }
-    return normalizeSettings({ ...stored, apiKey: await decryptApiKey(stored?.apiKey) });
+    const plaintext = typeof stored?.apiKey === 'string' && Boolean(stored.apiKey);
+    const apiKey = plaintext ? stored.apiKey : await decryptApiKey(stored?.apiKey);
+    return { settings: normalizeSettings({ ...stored, apiKey }), plaintext };
   }
   try {
-    return normalizeSettings(JSON.parse(localStorage.getItem(STORAGE_KEY) ?? 'null'));
+    return {
+      settings: normalizeSettings(JSON.parse(localStorage.getItem(STORAGE_KEY) ?? 'null')),
+      plaintext: false,
+    };
   } catch {
-    return structuredClone(DEFAULT_SETTINGS);
+    return { settings: structuredClone(DEFAULT_SETTINGS), plaintext: false };
   }
 }
-export async function saveSettings(settings: Settings): Promise<void> {
-  if (isExtension) {
-    const apiKey = settings.apiKey && (await encryptApiKey(settings.apiKey));
-    await chrome.storage.local.set({ [STORAGE_KEY]: { ...settings, apiKey } });
-  } else localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...settings, apiKey: '' }));
+export async function loadSettings(): Promise<Settings> {
+  const { settings, plaintext } = await readSettings();
+  return plaintext ? saveSettings({}) : settings;
+}
+export async function saveSettings(patch: SettingsPatch): Promise<Settings> {
+  return navigator.locks.request(STORAGE_KEY, async () => {
+    const { settings } = await readSettings();
+    const next = applySettingsPatch(settings, patch);
+    if (isExtension) {
+      const apiKey = next.apiKey && (await encryptApiKey(next.apiKey));
+      await chrome.storage.local.set({ [STORAGE_KEY]: { ...next, apiKey } });
+    } else localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...next, apiKey: '' }));
+    return next;
+  });
 }
 
 type ModelProvider = Pick<Settings, 'baseUrl' | 'apiKey'>;

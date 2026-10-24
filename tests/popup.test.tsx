@@ -1,7 +1,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { DEFAULT_SETTINGS, type Settings } from '../src/shared/settings';
+import { DEFAULT_SETTINGS, applySettingsPatch, type Settings } from '../src/shared/settings';
 import { loadSettings, saveSettings } from '../src/shared/storage';
 import { TOKEN_USAGE_KEY } from '../src/shared/token-usage';
 import { Popup } from '../src/ui/Popup';
@@ -32,7 +32,8 @@ beforeEach(() => {
   vi.mocked(saveSettings)
     .mockReset()
     .mockImplementation(async (value) => {
-      stored = structuredClone(value);
+      stored = applySettingsPatch(stored, value);
+      return structuredClone(stored);
     });
   openOptionsPage.mockReset().mockResolvedValue(undefined);
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
@@ -128,9 +129,12 @@ it('locks quick controls until a save finishes', async () => {
   await render();
   let finish!: () => void;
   vi.mocked(saveSettings).mockImplementationOnce(
-    () =>
-      new Promise<void>((resolve) => {
-        finish = resolve;
+    (patch) =>
+      new Promise<Settings>((resolve) => {
+        finish = () => {
+          stored = applySettingsPatch(stored, patch);
+          resolve(structuredClone(stored));
+        };
       }),
   );
   await click('[role="switch"]');

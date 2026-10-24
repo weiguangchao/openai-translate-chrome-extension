@@ -1,7 +1,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { DEFAULT_SETTINGS } from '../src/shared/settings';
+import { DEFAULT_SETTINGS, applySettingsPatch, type Settings } from '../src/shared/settings';
 import {
   allowApiHost,
   apiAction,
@@ -26,20 +26,25 @@ vi.mock('../src/shared/storage', () => ({
 }));
 
 let root: Root;
+let stored: Settings;
 
 beforeEach(() => {
   vi.useFakeTimers();
   vi.resetAllMocks();
   environment.extension = true;
-  vi.mocked(loadSettings).mockResolvedValue({
+  stored = {
     ...structuredClone(DEFAULT_SETTINGS),
     apiKey: 'test-key',
     model: 'test-model',
-  });
+  };
+  vi.mocked(loadSettings).mockImplementation(async () => structuredClone(stored));
   vi.mocked(allowApiHost).mockResolvedValue(undefined);
   vi.mocked(loadCachedModels).mockResolvedValue([]);
   vi.mocked(saveCachedModels).mockResolvedValue(undefined);
-  vi.mocked(saveSettings).mockResolvedValue(undefined);
+  vi.mocked(saveSettings).mockImplementation(async (patch) => {
+    stored = applySettingsPatch(stored, patch);
+    return structuredClone(stored);
+  });
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   vi.stubGlobal('chrome', { runtime: { getManifest: () => ({ version: '0.1.2' }) } });
   document.body.innerHTML = '<div id="root"></div>';
@@ -64,6 +69,31 @@ async function click(selector: string) {
 async function advance(milliseconds: number) {
   await act(async () => vi.advanceTimersByTime(milliseconds));
 }
+
+it('keeps edits made while saving as an unsaved draft', async () => {
+  let finish!: () => void;
+  vi.mocked(saveSettings).mockImplementationOnce(
+    (patch) =>
+      new Promise((resolve) => {
+        finish = () => {
+          stored = applySettingsPatch(stored, patch);
+          resolve(structuredClone(stored));
+        };
+      }),
+  );
+  await render();
+  await click('[aria-label="Enable bilingual subtitles"]');
+  await click('.save-button');
+  await click('[aria-label="Enable bilingual subtitles"]');
+  await act(async () => finish());
+  expect(
+    document
+      .querySelector('[aria-label="Enable bilingual subtitles"]')
+      ?.getAttribute('aria-checked'),
+  ).toBe('true');
+  expect(document.querySelector('.save-button')?.textContent).toContain('Save changes');
+  expect(document.querySelector<HTMLButtonElement>('.save-button')!.disabled).toBe(false);
+});
 
 it.each(['preview', 'load-error', 'save'] as const)(
   'shows %s feedback outside the scrolling page and dismisses it automatically',
@@ -104,15 +134,13 @@ it('records consent for the Provider host only when the viewer ticks it and asks
   expect(document.querySelector('.consent-check')?.textContent).toContain('api.openai.com');
   await click('[aria-label="Enable bilingual subtitles"]');
   await click('.save-button');
-  expect(saveSettings).toHaveBeenLastCalledWith(expect.objectContaining({ providerConsent: '' }));
+  expect(stored.providerConsent).toBe('');
   expect(document.querySelector('.settings-alert')?.textContent).toContain(
     'Accept the data use notice to translate subtitles',
   );
   await act(async () => consent().click());
   await click('.save-button');
-  expect(saveSettings).toHaveBeenLastCalledWith(
-    expect.objectContaining({ providerConsent: 'https://api.openai.com' }),
-  );
+  expect(stored.providerConsent).toBe('https://api.openai.com');
   await act(async () => {
     const input = document.querySelector<HTMLInputElement>('#base-url')!;
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(

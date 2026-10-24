@@ -1,4 +1,5 @@
 import { IDBFactory } from 'fake-indexeddb';
+import { locks } from 'node:worker_threads';
 import { vi } from 'vitest';
 
 type Listener = (changes: Record<string, chrome.storage.StorageChange>, area: string) => void;
@@ -6,6 +7,7 @@ type Listener = (changes: Record<string, chrome.storage.StorageChange>, area: st
 export function extensionStorage(stored = new Map<string, unknown>()) {
   const listeners: Listener[] = [];
   vi.stubGlobal('indexedDB', new IDBFactory());
+  vi.stubGlobal('navigator', { language: navigator.language, locks });
   return {
     stored,
     local: {

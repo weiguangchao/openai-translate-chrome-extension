@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { DEFAULT_SETTINGS, STORAGE_KEY } from '../src/shared/settings';
+import { DEFAULT_SETTINGS, STORAGE_KEY, settingsPatch } from '../src/shared/settings';
 import { extensionStorage } from './fixtures/extension-storage';
 
 const saved = { ...DEFAULT_SETTINGS, apiKey: 'sk-private-key', model: 'model', subtitleGap: 16 };
@@ -38,4 +38,37 @@ it('reads an API key encrypted under a lost device key as unset and keeps the ot
   await first.saveSettings(saved);
   const other = await openStorage(first.stored);
   await expect(other.loadSettings()).resolves.toEqual({ ...saved, apiKey: '' });
+});
+
+it('preserves independent edits from stale drafts and serializes writes across contexts', async () => {
+  const first = await openStorage();
+  await first.saveSettings(saved);
+  const draft = await first.loadSettings();
+  vi.resetModules();
+  const second = await import('../src/shared/storage');
+  await second.saveSettings({ enabled: false });
+  await first.saveSettings(
+    settingsPatch(draft, { ...draft, translation: { ...draft.translation, size: 32 } }),
+  );
+  await expect(first.loadSettings()).resolves.toMatchObject({
+    enabled: false,
+    translation: { size: 32 },
+  });
+  await Promise.all([
+    first.saveSettings({ original: { color: '#123456' } }),
+    second.saveSettings({ original: { size: 30 }, targetLanguage: 'ja' }),
+  ]);
+  await expect(first.loadSettings()).resolves.toMatchObject({
+    enabled: false,
+    original: { color: '#123456', size: 30 },
+    translation: { size: 32 },
+    targetLanguage: 'ja',
+    apiKey: saved.apiKey,
+  });
+  await Promise.all([
+    first.saveSettings({ targetLanguage: 'en' }),
+    second.saveSettings({ targetLanguage: 'zh-TW' }),
+  ]);
+  await expect(first.loadSettings()).resolves.toMatchObject({ targetLanguage: 'zh-TW' });
+  expect(JSON.stringify([...first.stored])).not.toContain(saved.apiKey);
 });

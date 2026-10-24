@@ -1,16 +1,44 @@
 export function modelAnswer(source: string): string {
   const text = source.replace(/^\uFEFF/, '');
-  const marker = '</think>';
-  const end = text.toLowerCase().lastIndexOf(marker);
-  if (end >= 0) {
-    const after = text.slice(end + marker.length).trim();
-    if (after) return after;
-    return text
-      .slice(0, end)
-      .replace(/<think>/gi, '')
-      .trimStart();
+  let answer = '';
+  let start = 0;
+  let index = 0;
+  while (index < text.length) {
+    if (text[index] === '{' || text[index] === '[') {
+      const end = skipValue(text, index);
+      if (end >= 0 && parsedJson(text.slice(index, end))) {
+        index = end;
+        continue;
+      }
+      const tail = text.slice(index);
+      if (
+        resultsArray(tail) >= 0 &&
+        ![...tail.matchAll(/<\/think>/gi)].some((match) =>
+          lastTranslationPayload(stripOpeningFence(tail.slice(match.index + match[0].length))),
+        )
+      ) {
+        index = text.length;
+        continue;
+      }
+    }
+    if (text[index] === '"') {
+      const quoted = readString(text, index);
+      if (quoted && parsedJson(quoted.value)) {
+        index = quoted.end;
+        continue;
+      }
+    }
+    const marker = text[index] === '<' ? /^<\/?think>/i.exec(text.slice(index))?.[0] : undefined;
+    if (!marker) {
+      index++;
+      continue;
+    }
+    answer += text.slice(start, index);
+    index += marker.length;
+    start = index;
+    if (marker[1] === '/' && text.slice(index).trim()) answer = '';
   }
-  return text.replace(/<think>/gi, '').trimStart();
+  return (answer + text.slice(start)).trimStart();
 }
 
 function hasTranslationPayload(value: unknown): boolean {
