@@ -1,0 +1,83 @@
+{
+  "build": {
+    "sha": "4f117eaee1df77b43f29d48f2622041311264869",
+    "node": "v24.18.1",
+    "playwright": "1.63.0",
+    "browser": "153.0.8010.12",
+    "extensionId": "ncpejgcdkobfgaahcafpiloongkhllhi",
+    "buildSha256": "eea2bb267094bf56b4d94e56487ff064570f1c686fe51e8288d732cbccfb35db"
+  },
+  "settings": {
+    "R1": {
+      "steps": [
+        "Options loads enabled=true",
+        "Popup saves enabled=false",
+        "Existing options changes only translation size to 32 and saves",
+        "Reload popup and options, then read persisted settings"
+      ],
+      "expected": {
+        "enabled": true,
+        "translationSize": 32
+      },
+      "observed": {
+        "enabled": true,
+        "translationSize": 32
+      },
+      "baselineBugReproduced": true,
+      "passed": true
+    },
+    "R2": {
+      "steps": [
+        "Independent options starts enabled=true",
+        "Toggle off and save",
+        "Hold the real chrome.storage.local.set call before persistence",
+        "While held, toggle back on",
+        "Release the original storage call and observe completed save"
+      ],
+      "expected": {
+        "persistedEnabled": false,
+        "draftEnabled": false,
+        "saveButton": "Saved"
+      },
+      "observed": {
+        "persistedEnabled": false,
+        "draftEnabled": false,
+        "saveButton": "Saved"
+      },
+      "boundary": "Only the page-local chrome.storage.local.set API is delayed; its original implementation performs the write",
+      "baselineBugReproduced": true,
+      "passed": true
+    }
+  },
+  "runtime": {
+    "R3": {
+      "original": "Old English track.",
+      "targetLanguage": "zh-CN",
+      "selectedLanguage": "zh-CN",
+      "nativeLanguage": "en",
+      "posts": 0
+    },
+    "R4": {
+      "original": "The moon is bright tonight.",
+      "translation": "使用  标签。"
+    },
+    "R5": {
+      "translation": "Subline: Provider request failed",
+      "originalVisible": true,
+      "posts": 1
+    },
+    "R6": {
+      "totals": {
+        "input": 10,
+        "output": 2,
+        "cache": 0
+      },
+      "translationSucceeded": true
+    },
+    "R7": {
+      "time": 4.820325,
+      "original": "Second person answers.",
+      "translation": "第二位说话者回答。"
+    }
+  }
+}
