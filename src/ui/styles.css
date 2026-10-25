@@ -858,7 +858,6 @@ button:hover:not(:disabled) {
 .about-icon-link {
   width: 32px;
   height: 32px;
-  border: 1px solid #e4e6ee;
   border-radius: 8px;
   color: #5c6172;
   display: inline-flex;
@@ -867,7 +866,6 @@ button:hover:not(:disabled) {
   flex-shrink: 0;
 }
 .about-icon-link:hover {
-  border-color: #d9d3f7;
   background: #faf9ff;
   color: #6554d9;
 }
