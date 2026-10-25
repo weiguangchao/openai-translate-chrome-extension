@@ -12,6 +12,13 @@ export const createHboPlatform: PlatformFactory = (changed): Platform => {
     style: '',
     videoId: hboVideoId,
     findPlayer: findHboPlayer,
+    toolbar(player) {
+      const button = player.querySelector<HTMLElement>(
+        '[data-testid="player-ux-track-selector-button"]',
+      );
+      const container = button?.parentElement;
+      return container && button ? { container, button } : null;
+    },
     source(video, player) {
       const bridged = bridge.read(hboVideoId());
       const local = native.read(video);

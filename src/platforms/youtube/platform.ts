@@ -9,6 +9,11 @@ export const createYoutubePlatform: PlatformFactory = (changed): Platform => {
     style: `.subline-player ${CAPTION_LAYER} { opacity: 0 !important; pointer-events: none !important; }`,
     videoId: youtubeVideoId,
     findPlayer: (video) => video.closest<HTMLElement>(PLAYER) ?? video.parentElement,
+    toolbar(player) {
+      const container = player.querySelector<HTMLElement>('.ytp-right-controls');
+      const button = container?.querySelector<HTMLElement>('.ytp-settings-button');
+      return container && button ? { container, button } : null;
+    },
     source(video) {
       const state = bridge.read(youtubeVideoId());
       if (subtitlesHidden(video))

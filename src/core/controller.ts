@@ -7,6 +7,7 @@ import { selectedTrack } from './native';
 import { SubtitleOverlay } from './overlay';
 import type { CaptionSource, LiveCaption, Platform, PlatformFactory } from './platform';
 import { PlaybackGate } from './playback';
+import { PlayerLogo } from './player-logo';
 import { captionAt, playbackCues, timedCaptions } from './timeline';
 import { TraceReporter, type TraceCaption } from './trace';
 import { CaptionTranslator } from './translator';
@@ -52,6 +53,7 @@ export class CaptionController {
   private connection: ExtensionConnection;
   private platform: Platform;
   private overlay = new SubtitleOverlay();
+  private logo = new PlayerLogo();
   private translator: CaptionTranslator;
   private trace: TraceReporter;
   private shown: TraceCaption | null = null;
@@ -117,11 +119,13 @@ export class CaptionController {
     this.destroyed = true;
     clearInterval(this.interval);
     this.unmount();
+    this.logo.unmount();
     this.style.remove();
     this.platform.destroy();
   }
 
   private stop(): void {
+    this.logo.unmount();
     if (this.video) this.unmount();
     this.platform.reset();
   }
@@ -183,6 +187,7 @@ export class CaptionController {
       this.stop();
       return;
     }
+    this.logo.update(this.platform.toolbar(player));
     const source = this.platform.source(video, player);
     if (!this.settings.configured) {
       if (this.video) this.unmount();

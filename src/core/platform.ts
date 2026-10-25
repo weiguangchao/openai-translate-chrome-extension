@@ -23,12 +23,18 @@ export type CaptionSource =
   | (SourceBase & { kind: 'live'; read(): LiveCaption })
   | (SourceBase & { kind: 'waiting' });
 
+export interface PlayerToolbar {
+  container: HTMLElement;
+  button: HTMLElement;
+}
+
 export interface Platform {
   readonly id: PlatformId;
   readonly style: string;
   videoId(): string;
   findVideo?(): HTMLVideoElement | undefined;
   findPlayer(video: HTMLVideoElement): HTMLElement | null;
+  toolbar(player: HTMLElement): PlayerToolbar | null;
   source(video: HTMLVideoElement, player: HTMLElement): CaptionSource;
   reset(): void;
   destroy(): void;
