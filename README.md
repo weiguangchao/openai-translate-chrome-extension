@@ -1,31 +1,68 @@
 # Subline 双语字幕
 
-在 YouTube、HBO Max 和 X 上显示双语字幕。扩展读取原文字幕时间轴，用你自己的 OpenAI 兼容 API 分段翻译，再以自定义字幕显示原文和译文。项目使用 Chrome Manifest V3、React、TypeScript 和 Vite，没有后端。
+## 项目介绍
+
+Subline 是一个 Chrome 扩展，在 YouTube、HBO Max 和 X 的播放器中显示原文字幕和译文。它读取视频已有的字幕，用你自己的 OpenAI 兼容 API 翻译。使用前需要准备 API Key 和可用的模型。
+
+## 项目功能
+
+- 支持 YouTube、HBO Max 和 X 的视频字幕翻译。
+- 自动读取当前字幕轨道的语言，支持英语、简体中文、繁体中文和日语，也可将这些语言设为译文语言。
+- 提前翻译即将播放的字幕，并缓存译文供回看使用。
+- 支持双语显示或只显示译文，可调整字号、颜色、行间距和译文背景不透明度。
+- 支持自定义 OpenAI 兼容 API 的地址和模型，设置保存在本机，API Key 加密保存。
+
+## 安装
+
+以下步骤从源码构建并安装到 Chrome。需要 Chrome 120 或更高版本，以及 Node.js 和 npm。Node.js 版本请使用 [`.nvmrc`](.nvmrc) 中指定的版本。
+
+1. 获取源码并构建扩展。
+
+   ```sh
+   git clone https://github.com/weiguangchao/openai-translate-chrome-extension.git
+   cd openai-translate-chrome-extension
+   npm ci
+   npm run build
+   ```
+
+2. 在 Chrome 地址栏打开 `chrome://extensions`，开启「开发者模式」。
+3. 点击「加载已解压的扩展程序」，选择项目中的 `dist/` 文件夹。
+4. 确认扩展列表中出现 `Subline · Alpha`，然后刷新已经打开的视频页面。
 
 ## 使用
 
-需要 Node.js 22.13 或更高版本。执行 `npm install` 和 `npm run build`，在 `chrome://extensions` 开启「开发者模式」，加载本项目的 `dist` 文件夹。本地版在所有语言下都显示为 `Subline · Alpha`。安装或重新加载后，刷新已经打开的视频页面。点击扩展图标可以开关双语字幕、选择译文语言；在设置页填写 Base URL、API Key 和 Model ID。扩展自动读取当前视频字幕轨道的语言，支持英语、简体中文、繁体中文和日语。遇到其他语言时，译文位置显示「原文语言不支持」，不发送翻译请求。在设置页的「数据使用说明」里勾选同意并保存后，在 YouTube、HBO Max 或 X 的播放器中打开原文字幕。没有同意时扩展不发送字幕；换成另一个域名的 Base URL 后要重新同意。扩展只把原文发给你选定的 API 翻译，设置留在本机，API Key 加密后保存，已发出的请求仍可能计费。扩展处理哪些数据、保存多久和怎样删除，见[隐私政策](PRIVACY.md)。
+1. 点击扩展图标，再点击弹窗右上角的设置图标。在「常规设置」中填写翻译服务信息。
+   - `Base URL` 是包含版本路径的接口根地址，例如 `https://api.openai.com/v1`。
+   - `API Key` 是你的翻译服务密钥。
+   - `Model ID` 是服务商提供的模型标识，可手动填写或获取模型列表后选择。
+2. 选择译文语言，在「数据使用说明」中勾选同意发送字幕原文，然后保存。Chrome 提示网站访问权限时，允许扩展连接你填写的 API 地址。
+3. 在 YouTube、HBO Max 或 X 上打开带字幕的视频，并在播放器中开启原文字幕。
+4. 点击扩展图标，开启「启用双语字幕」。弹窗中可以切换译文语言，或勾选「只显示译文」。
+
+原文语言由视频当前选择的字幕轨道决定。原文与译文语言相同时，扩展只显示原文，不请求翻译。遇到不支持的原文语言时，扩展显示「原文语言不支持」，不发送翻译请求。
+
+在设置页的「字幕样式」中可以调整显示效果。安装或重新加载扩展后，需要刷新视频页面。
+
+Subline 没有自己的服务器。字幕原文只发送给你选定的翻译服务，请求可能产生费用。未同意数据使用说明时，扩展不发送字幕。更换 API 的协议、域名或端口后，需要重新同意。API 地址须使用 HTTPS，只有 `localhost` 和 `127.0.0.1` 的本机服务可以使用 HTTP。数据保存和删除方式见[隐私政策](PRIVACY.md)。
 
 ## 开发
 
+项目使用 Chrome Manifest V3、React、TypeScript 和 Vite，没有后端。完成上面的依赖安装后，可以启动设置页预览。
+
 ```sh
-npm ci
 npm run dev
+```
+
+默认预览地址是 `http://localhost:5173`。预览只用于设置页开发。验证视频字幕功能时，运行 `npm run build`，在 `chrome://extensions` 重新加载扩展，再刷新视频页面。
+
+常用检查命令如下。
+
+```sh
 npm test
-npm run build
-npm run build:dev
-npm run build:store
+npx playwright install chromium
 npm run verify
 ```
 
-`npm ci` 按锁文件安装依赖。`npm run dev` 启动设置页预览，默认地址是 http://localhost:5173。`npm test` 运行接口、配置、翻译队列和字幕生命周期测试。`npm run build`和`npm run build:dev`把本地开发版输出到`dist/`，名称固定为 `Subline · Alpha`，使用玫瑰粉背景图标。`npm run build:store`把正式上架扩展输出到`dist/`，使用本地化名称和紫色图标。`npm run verify` 依次执行 lint、类型检查、测试、上架版构建和 YouTube、HBO、X 的浏览器回归，任一步失败时进程以非零状态退出。
+`npm test` 运行单元测试。完整检查前需安装 Playwright 的 Chromium。`npm run verify` 运行 lint、类型检查、测试、上架版构建和浏览器回归。`npm run build:store` 可单独构建上架版，输出目录同为 `dist/`。
 
-chrome-debug skill 的测试、辅助代码和 fixtures 位于 [`tests/chrome-debug/`](tests/chrome-debug/README.md)。`npm run test:chrome-debug` 运行其中不需要浏览器的测试，完整测试的运行方法见该目录的说明。
-
-字幕先按句末标点断成句子；2 秒以上的静音、歌词行（♪）和音效标注（[…]）也会断开。超过 90 列（汉字算两列）的句子再由扩展按原文语言在本地切成几条字幕：先在逗号、分号等子句标点处或原字幕片段之间切，仍超过 90 列的再按词切，英文按空格，中文和日语用各自语言的 `Intl.Segmenter` 分词。每条字幕单独翻译、单独显示，Provider 不负责断句。规则和浏览器验证见 [改造记录](docs/reviews/2026-10-10-caption-split.md)。
-
-字幕队列提前请求未来至少 30 秒播放时间的字幕，近期请求耗时的 90 分位越慢，提前量越长，播放速度越快，覆盖的视频时间越长。每个请求最多四条字幕，且跨度不超过 10 秒视频；即将播放的字幕单独请求，1 秒内就要消失的字幕不进计划。同时最多两个字幕请求在途，已发出的请求不会因播放或拖动被取消。拖动过程中不发送新请求，落点稳定 400 毫秒后才恢复调度；拖动前已发出的请求继续完成并写入缓存，但不再占用在途和每秒发送的名额。翻译失败的字幕不会重试，仍在预取范围内时也不会再次请求。调度测试和浏览器验证见 [改造记录](docs/reviews/2026-10-09-playback-buffer-plan.md)。
-
-## 发布
-
-把 `package.json` 和 `public/manifest.json` 的 `version` 改成新版本并合入 `main`，然后在 `main` 上推送同名 tag，例如 `git tag v0.2.0 && git push origin v0.2.0`。`.github/workflows/release.yml` 会检查 tag 与两处版本一致，运行 `npm run verify` 构建并验证上架版，把 `dist/` 打包成 zip 发布到 GitHub Release，再用服务账号上传到 Chrome Web Store 并提交审核。仓库需要 Secrets `GCP_SA_KEY`（服务账号 JSON 密钥）、`CHROME_PUBLISHER_ID` 和 `CHROME_EXTENSION_ID`。
+字幕切分和调度设计见[字幕切分记录](docs/reviews/2026-10-10-caption-split.md)和[播放缓冲记录](docs/reviews/2026-10-09-playback-buffer-plan.md)。浏览器调试说明见 [`tests/chrome-debug/`](tests/chrome-debug/README.md)。发布流程见 [release.yml](.github/workflows/release.yml)。
