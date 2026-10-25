@@ -107,6 +107,7 @@ Each rule names what fails when it is broken. When the developer corrects a mist
 | Attach a real-browser measurement to a tuning change only when the developer asks for one. | Judgment |
 | End-to-end tests run in real time. When one times out on this machine, say so in the notes; don't raise its timeout. | Judgment |
 | The settings page and popup show a label and its control without explanatory secondary text; links are icons or quiet underlined text. | Judgment |
+| The About page links to the author's X profile with the current X logo. | `src/ui/App.tsx` |
 | When you name a gap you could close, such as failing tests or a check you skipped, close it before you stop. | Judgment |
 
 ## Pull requests
