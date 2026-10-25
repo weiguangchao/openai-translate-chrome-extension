@@ -20,6 +20,7 @@ import {
   ShieldCheck,
   SlidersHorizontal,
   Subtitles,
+  Twitter,
 } from 'lucide-react';
 import {
   DEFAULT_SETTINGS,
@@ -729,15 +730,26 @@ export function App() {
                         : undefined
                     }
                     action={
-                      <a
-                        className="repo-link"
-                        href={REPOSITORY_URL}
-                        target="_blank"
-                        rel="noreferrer"
-                        aria-label={t('GitHub 仓库', 'GitHub repository')}
-                      >
-                        <GithubMark />
-                      </a>
+                      <div className="about-links">
+                        <a
+                          className="about-icon-link"
+                          href={REPOSITORY_URL}
+                          target="_blank"
+                          rel="noreferrer"
+                          aria-label={t('GitHub 仓库', 'GitHub repository')}
+                        >
+                          <GithubMark />
+                        </a>
+                        <a
+                          className="about-icon-link"
+                          href="https://x.com/itbuxiangma"
+                          target="_blank"
+                          rel="noreferrer"
+                          aria-label={t('作者的 X', 'Author on X')}
+                        >
+                          <Twitter size={18} aria-hidden />
+                        </a>
+                      </div>
                     }
                   >
                     <p className="about-intro">
