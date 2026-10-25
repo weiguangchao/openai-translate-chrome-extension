@@ -1,0 +1,133 @@
+<style>
+  .toolbar {
+    position: absolute;
+    inset: auto 16px 12px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    height: 44px;
+    color: white;
+    background: linear-gradient(transparent, #0009);
+  }
+  .toolbar::before {
+    content: '';
+    position: absolute;
+    inset: -8px 0 auto;
+    height: 3px;
+    background: #fffd;
+  }
+  .toolbar button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    margin: 0;
+    border: 0;
+    background: transparent;
+    color: white;
+  }
+  .toolbar button svg {
+    display: block;
+    width: 24px;
+    height: 24px;
+    fill: white;
+  }
+  .toolbar .right {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .toolbar .ytp-right-controls-left,
+  .toolbar .ytp-right-controls-right {
+    display: flex;
+    align-items: center;
+  }
+  .toolbar .ytp-right-controls button {
+    width: 36px;
+    height: 36px;
+  }
+  .toolbar .ytp-right-controls button svg {
+    width: 22px;
+    height: 22px;
+  }
+</style>
+<template id="youtube-toolbar">
+  <div class="toolbar">
+    <button aria-label="Play">
+      <svg viewBox="0 0 24 24"><path d="M6 4v16l14-8z" /></svg>
+    </button>
+    <span>4:32 / 19:24</span>
+    <div class="right ytp-right-controls">
+      <div class="ytp-right-controls-left">
+        <button class="ytp-subtitles-button ytp-button" aria-label="Subtitles">
+          <svg viewBox="0 0 24 24"><path d="M2 5h20v14H2z" /></svg>
+        </button>
+        <button class="ytp-settings-button ytp-button" aria-label="Settings">
+          <svg viewBox="0 0 24 24">
+            <path d="M12 2l3 4 5 1 2 5-2 5-5 1-3 4-3-4-5-1-2-5 2-5 5-1z" />
+          </svg>
+        </button>
+      </div>
+      <div class="ytp-right-controls-right">
+        <button class="ytp-size-button ytp-button" aria-label="Theater mode">
+          <svg viewBox="0 0 24 24"><path fill-rule="evenodd" d="M2 4h20v16H2zm2 2v12h16V6z" /></svg>
+        </button>
+        <button class="ytp-fullscreen-button ytp-button" aria-label="Full screen">
+          <svg viewBox="0 0 24 24">
+            <path d="M2 2h8v2H4v6H2zm12 0h8v8h-2V4h-6zM2 14h2v6h6v2H2zm18 0h2v8h-8v-2h6z" />
+          </svg>
+        </button>
+      </div>
+    </div>
+  </div>
+</template>
+<template id="x-toolbar">
+  <div class="toolbar">
+    <button aria-label="Play">
+      <svg viewBox="0 0 24 24"><path d="M6 4v16l14-8z" /></svg>
+    </button>
+    <span>0:46 / 2:14</span>
+    <div class="right">
+      <button aria-label="Closed captions">
+        <svg viewBox="0 0 24 24"><path d="M2 5h20v14H2z" /></svg>
+      </button>
+      <button aria-label="Unmute" aria-haspopup="dialog">
+        <svg viewBox="0 0 24 24"><path d="M2 9h5l7-6v18l-7-6H2z" /></svg>
+      </button>
+      <button aria-label="Playback settings" aria-haspopup="menu">
+        <svg viewBox="0 0 24 24">
+          <path d="M12 2l3 4 5 1 2 5-2 5-5 1-3 4-3-4-5-1-2-5 2-5 5-1z" />
+        </svg>
+      </button>
+      <button aria-label="Full screen">
+        <svg viewBox="0 0 24 24">
+          <path d="M2 2h8v2H4v6H2zm12 0h8v8h-2V4h-6zM2 14h2v6h6v2H2zm18 0h2v8h-8v-2h6z" />
+        </svg>
+      </button>
+    </div>
+  </div>
+</template>
+<template id="hbo-toolbar">
+  <div class="toolbar">
+    <button aria-label="Play">
+      <svg viewBox="0 0 24 24"><path d="M6 4v16l14-8z" /></svg>
+    </button>
+    <span>12:08 / 54:22</span>
+    <div class="right">
+      <button data-testid="player-ux-track-selector-button" aria-label="Audio and subtitles">
+        <svg viewBox="0 0 24 24"><path d="M2 5h20v14H2z" /></svg>
+      </button>
+      <button data-testid="player-ux-volume-button" aria-label="Volume">
+        <svg viewBox="0 0 24 24"><path d="M2 9h5l7-6v18l-7-6H2z" /></svg>
+      </button>
+      <button data-testid="player-ux-fullscreen-button" aria-label="Full screen">
+        <svg viewBox="0 0 24 24">
+          <path d="M2 2h8v2H4v6H2zm12 0h8v8h-2V4h-6zM2 14h2v6h6v2H2zm18 0h2v8h-8v-2h6z" />
+        </svg>
+      </button>
+    </div>
+  </div>
+</template>

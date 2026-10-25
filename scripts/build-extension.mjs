@@ -26,6 +26,7 @@ for (const [entry, output] of [
     outfile: `dist/${output}`,
     bundle: true,
     format: 'iife',
+    loader: { '.svg': 'text' },
     target: 'chrome120',
     minify: true,
   });
