@@ -28,4 +28,6 @@ chrome-debug skill 的测试、辅助代码和 fixtures 位于 [`tests/chrome-de
 
 ## 发布
 
+`.github/workflows/prerelease.yml` 每天北京时间 00:00 检查 `main` 在刚结束的自然日内是否有提交。有提交时运行 `npm run verify`，把检查时的 `main` 代码打包为 `subline-prerelease.zip`，更新固定的 `prerelease` 标签和同一个 GitHub 预发布。没有提交时跳过构建和发布。预发布不上传 Chrome Web Store。GitHub 定时任务可能延迟执行。
+
 把 `package.json` 和 `public/manifest.json` 的 `version` 改成新版本并合入 `main`，然后在 `main` 上推送同名 tag，例如 `git tag v0.2.0 && git push origin v0.2.0`。`.github/workflows/release.yml` 会检查 tag 与两处版本一致，运行 `npm run verify` 构建并验证上架版，把 `dist/` 打包成 zip 发布到 GitHub Release，再用服务账号上传到 Chrome Web Store 并提交审核。仓库需要 Secrets `GCP_SA_KEY`（服务账号 JSON 密钥）、`CHROME_PUBLISHER_ID` 和 `CHROME_EXTENSION_ID`。
