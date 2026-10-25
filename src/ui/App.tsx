@@ -729,15 +729,34 @@ export function App() {
                         : undefined
                     }
                     action={
-                      <a
-                        className="repo-link"
-                        href={REPOSITORY_URL}
-                        target="_blank"
-                        rel="noreferrer"
-                        aria-label={t('GitHub 仓库', 'GitHub repository')}
-                      >
-                        <GithubMark />
-                      </a>
+                      <div className="about-links">
+                        <a
+                          className="about-icon-link"
+                          href={REPOSITORY_URL}
+                          target="_blank"
+                          rel="noreferrer"
+                          aria-label={t('GitHub 仓库', 'GitHub repository')}
+                        >
+                          <GithubMark />
+                        </a>
+                        <a
+                          className="about-icon-link"
+                          href="https://x.com/itbuxiangma"
+                          target="_blank"
+                          rel="noreferrer"
+                          aria-label={t('作者的 X', 'Author on X')}
+                        >
+                          <svg
+                            width="18"
+                            height="18"
+                            viewBox="0 0 24 24"
+                            fill="currentColor"
+                            aria-hidden
+                          >
+                            <path d="M18.901 1.153h3.68l-8.04 9.19L24 22.846h-7.406l-5.8-7.584-6.64 7.584H.47l8.6-9.835L0 1.154h7.594l5.243 6.932 6.064-6.933ZM17.61 20.644h2.039L6.486 3.24H4.298L17.61 20.644Z" />
+                          </svg>
+                        </a>
+                      </div>
                     }
                   >
                     <p className="about-intro">

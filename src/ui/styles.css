@@ -848,12 +848,16 @@ button:hover:not(:disabled) {
   font-size: 12px;
   line-height: 1.9;
 }
-.repo-link {
-  width: 32px;
-  height: 32px;
+.about-links {
+  display: flex;
+  gap: 10px;
   margin-top: -4px;
   margin-left: auto;
-  border: 1px solid #e4e6ee;
+  flex-shrink: 0;
+}
+.about-icon-link {
+  width: 32px;
+  height: 32px;
   border-radius: 8px;
   color: #5c6172;
   display: inline-flex;
@@ -861,8 +865,7 @@ button:hover:not(:disabled) {
   justify-content: center;
   flex-shrink: 0;
 }
-.repo-link:hover {
-  border-color: #d9d3f7;
+.about-icon-link:hover {
   background: #faf9ff;
   color: #6554d9;
 }
