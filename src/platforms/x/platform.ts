@@ -11,6 +11,11 @@ export const createXPlatform: PlatformFactory = (changed): Platform => {
     videoId: xVideoId,
     findVideo: activeXVideo,
     findPlayer: findXPlayer,
+    toolbar(player) {
+      const button = player.querySelector<HTMLElement>('button[aria-haspopup="menu"]');
+      const container = button?.parentElement;
+      return container && button ? { container, button } : null;
+    },
     source(video) {
       const state = bridge.read(xVideoId());
       const language = state?.language ?? selectedTrack(video)?.language ?? null;

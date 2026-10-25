@@ -35,6 +35,7 @@ beforeEach(() => {
   source = { kind: 'waiting', language: null, mode: 'checking' };
   platform = {
     id: 'hbo',
+    toolbar: () => null,
     style: '.subline-player #layer { opacity: 0 !important; }',
     videoId: () => 'video',
     findPlayer: (element) => element.parentElement,
