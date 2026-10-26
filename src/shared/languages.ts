@@ -15,6 +15,7 @@ export const LANGUAGES = [
     english: 'Traditional Chinese',
   },
   { value: 'ja', label: t('日语', 'Japanese'), native: '日本語', english: 'Japanese' },
+  { value: 'ko', label: t('韩语', 'Korean'), native: '한국어', english: 'Korean' },
 ] as const;
 
 export type Language = (typeof LANGUAGES)[number]['value'];
@@ -24,6 +25,7 @@ export function supportedLanguage(value: string): Language | null {
     const locale = new Intl.Locale(value.replaceAll('_', '-')).maximize();
     if (locale.language === 'en' && locale.script === 'Latn') return 'en';
     if (locale.language === 'ja' && locale.script === 'Jpan') return 'ja';
+    if (locale.language === 'ko' && locale.script === 'Kore') return 'ko';
     if (locale.language === 'zh') {
       if (locale.script === 'Hans') return 'zh-CN';
       if (locale.script === 'Hant') return 'zh-TW';

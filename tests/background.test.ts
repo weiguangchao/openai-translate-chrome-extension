@@ -60,7 +60,7 @@ it('separates translations of identical text by actual caption language', async 
   expect(fetch).toHaveBeenCalledTimes(2);
 });
 
-it.each([undefined, '', 'fr', 'ko', 'invalid'])(
+it.each([undefined, '', 'fr', 'ko-Latn', 'invalid'])(
   'rejects unsupported caption language %j before Provider traffic',
   async (captionLanguage) => {
     const fetch = vi.fn();

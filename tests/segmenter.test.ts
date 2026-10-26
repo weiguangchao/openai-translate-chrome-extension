@@ -35,11 +35,12 @@ it('ends English sentences at terminal punctuation but not at abbreviations, dec
 });
 
 it.each([
+  ['ko-KR', '안녕하세요. 반갑습니다! "정말요?"', [6, 13, 20]],
   ['zh-CN', '你好。我是谁？“走吧！”他说', [3, 7, 12]],
   ['ja-JP', 'こんにちは。誰ですか？「行こう！」と言った', [6, 11, 17]],
   ['zh-TW', '你好。我是誰？「走吧！」他說', [3, 7, 12]],
   ['zh-CN', '真的吗?我不信! OK.', [4, 8]],
-])('ends %s sentences at full-width punctuation and closing quotes', (language, text, ends) => {
+])('ends %s sentences at terminal punctuation and closing quotes', (language, text, ends) => {
   expect(segmenterFor(language).sentenceEnds(text)).toEqual(ends);
 });
 
@@ -148,6 +149,7 @@ it('never starts a Chinese line with closing punctuation or a particle when anot
 
 it.each([
   ['en', 'word '.repeat(200)],
+  ['ko', '오늘 우리는 새로운 번역 기능을 함께 살펴보고 있습니다. '.repeat(20)],
   ['en', `${'Hello there, my friend; '.repeat(30)}goodbye.`],
   ['zh-CN', '我们一起去公园散步吧，'.repeat(40)],
   ['zh-TW', '這是一段沒有標點符號的很長的文字'.repeat(20)],

@@ -72,14 +72,14 @@ it('saves each language immediately and retains the latest provider and style se
   stored.model = 'provider/new-model';
   stored.apiKey = 'new-key';
   stored.translation.size = 32;
-  await choose('target', 'en');
+  await choose('target', 'ko');
   expect(stored).toMatchObject({
-    targetLanguage: 'en',
+    targetLanguage: 'ko',
     model: 'provider/new-model',
     apiKey: 'new-key',
     translation: { size: 32 },
   });
-  expect(select('target').value).toBe('en');
+  expect(select('target').value).toBe('ko');
   expect(document.querySelector('.popup-model-id')?.textContent).toBe('provider/new-model');
 });
 
@@ -92,7 +92,7 @@ it.each([
   expect(document.querySelector('.popup-setup-hint')?.textContent).toBe(row.hint);
 });
 
-it('offers one translation-language control with all four supported languages', async () => {
+it('offers one translation-language control with all supported languages', async () => {
   await render();
   expect(document.querySelectorAll('select')).toHaveLength(1);
   expect([...select('target').options].map((option) => [option.value, option.text])).toEqual([
@@ -100,6 +100,7 @@ it('offers one translation-language control with all four supported languages', 
     ['zh-CN', 'Simplified Chinese'],
     ['zh-TW', 'Traditional Chinese'],
     ['ja', 'Japanese'],
+    ['ko', 'Korean'],
   ]);
 });
 

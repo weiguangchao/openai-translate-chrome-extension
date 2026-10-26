@@ -290,7 +290,8 @@ describe('saved configuration contract', () => {
   });
 
   it.each([
-    [{ sourceLanguage: 'ja', targetLanguage: 'ko' }, 'zh-CN'],
+    [{ sourceLanguage: 'ja', targetLanguage: 'ko' }, 'ko'],
+    [{ sourceLanguage: 'ja', targetLanguage: 'fr' }, 'zh-CN'],
     [{ sourceLanguage: 'zh-CN', targetLanguage: 'ja' }, 'ja'],
     [{ sourceLanguage: 'fr', targetLanguage: 'en' }, 'en'],
     [{ sourceLanguage: 'zh-TW', targetLanguage: 'zh-TW' }, 'zh-TW'],
