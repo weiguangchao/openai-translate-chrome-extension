@@ -33,7 +33,6 @@ const VIEW_STATES: Record<TranslationLine['kind'], ViewState> = {
   loading: 'loading',
   ready: 'ready',
   failed: 'error',
-  providerError: 'error',
   timedOut: 'timeout',
   repeated: 'empty',
   'unsupported-language': 'error',
@@ -48,10 +47,6 @@ function failedLine(failure: TranslateFailure): TranslationLine {
     case 'unsupported-language':
       return { kind: 'unsupported-language' };
     case 'http':
-      return {
-        kind: failure.status === 500 ? 'providerError' : 'failed',
-        message: failure.message,
-      };
     case 'error':
       return { kind: 'failed', message: failure.message };
   }
@@ -61,7 +56,7 @@ function captionView(caption: Caption | null, translationOnly: boolean): Caption
   if (!caption) return { original: '', line: { kind: 'none' } };
   const { line } = caption;
   if (line.kind === 'repeated') return { original: caption.text, line: { kind: 'none' } };
-  const withSource = !translationOnly && (line.kind === 'ready' || line.kind === 'failed');
+  const withSource = !translationOnly && line.kind === 'ready';
   return { original: withSource ? caption.text : '', line };
 }
 

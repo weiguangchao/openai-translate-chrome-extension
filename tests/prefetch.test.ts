@@ -274,7 +274,7 @@ it('lets the opening window finish during a scrub and requests only the cues at 
 });
 
 it.each(['timeout', '500'] as const)(
-  'shows %s like the loading line, skips that batch, and translates the later segment',
+  'shows %s without its source, skips that batch, and translates the later segment',
   async (failure) => {
     const dense = Array.from({ length: 30 }, (_, index) => ({
       startTime: 2 + index * 2,
@@ -299,9 +299,7 @@ it.each(['timeout', '500'] as const)(
     await vi.advanceTimersByTimeAsync(0);
     const translation = translated();
     expect(translation?.textContent).toBe(message);
-    expect(translation?.classList.contains('error')).toBe(false);
-    expect(translation?.classList.contains('timeout')).toBe(true);
-    expect(translation?.style.fontSize).toBe('20px');
+    expect(translation?.hidden).toBe(false);
     expect(original()?.hidden).toBe(true);
     const sent = requested.length;
     await vi.advanceTimersByTimeAsync(20000);

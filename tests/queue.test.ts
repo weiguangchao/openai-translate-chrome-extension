@@ -98,17 +98,29 @@ it('retries a translation that copies its source once, then neither caches nor r
   expect(fetch).toHaveBeenCalledTimes(2);
 });
 
-it('stops after one corrective retry for a persistently invalid result and never caches it', async () => {
-  const fetch = vi
-    .fn()
-    .mockImplementation(async () => structuredReply([{ id: 0, translation: '' }]));
-  vi.stubGlobal('fetch', fetch);
-  const queue = new TranslationQueue();
-  await expect(queue.request('tab', settings, 'Broken.')).rejects.toThrow('invalid translation');
-  await vi.advanceTimersByTimeAsync(3000);
-  expect(fetch).toHaveBeenCalledTimes(2);
-  await expect(queue.lookup(settings, 'Broken.')).resolves.toBeNull();
-});
+it.each([
+  {
+    language: 'en-US',
+    message: 'Provider returned an invalid response stream. Unable to translate.',
+  },
+  { language: 'zh-CN', message: 'Provider 回复非法信息流，无法翻译' },
+])(
+  'stops after one corrective retry for an invalid result without caching it ($language)',
+  async ({ language, message }) => {
+    vi.resetModules();
+    vi.stubGlobal('navigator', { language });
+    ({ TranslationQueue } = await import('../src/extension/queue'));
+    const fetch = vi
+      .fn()
+      .mockImplementation(async () => structuredReply([{ id: 0, translation: '' }]));
+    vi.stubGlobal('fetch', fetch);
+    const queue = new TranslationQueue();
+    await expect(queue.request('tab', settings, 'Broken.')).rejects.toThrow(message);
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(fetch).toHaveBeenCalledTimes(2);
+    await expect(queue.lookup(settings, 'Broken.')).resolves.toBeNull();
+  },
+);
 
 it('shares in-flight work within the request cap and serves a completed cue from the cache', async () => {
   const { fetch, requests, batches } = pendingProvider();

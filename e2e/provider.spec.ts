@@ -10,7 +10,7 @@ import {
   thirdTranslation,
   translation,
   withPlayer,
-  errorsShown,
+  settledTranslations,
   preloadNext,
 } from './harness';
 import { providerTimeoutMs } from '../src/shared/tuning';
@@ -49,16 +49,24 @@ for (const platform of ['youtube', 'hbo', 'x'] as const) {
     await withPlayer(platform, info, async (p) => {
       await p.settings({ apiKey: 'e2e-invalid-key' });
       await p.play();
-      await expect(p.translated).toHaveText('Subline: The API Key is invalid or expired.');
-      await expect(p.translated).toHaveClass(/error/);
-      await expect(p.original).toHaveText(source);
+      await expect(p.translated).toHaveText('The API Key is invalid or expired.');
+      await expect(p.translated).toHaveCSS('color', 'rgb(255, 204, 0)');
+      await expect(p.translated).toHaveCSS('font-size', '20px');
+      await expect(p.translated).toHaveCSS('background-color', 'rgba(0, 0, 0, 0.35)');
+      await expect(p.original).toBeHidden();
       expect(p.posts.map((post) => post.status)).toContain(401);
       expect(p.posts.every((post) => post.status === 401)).toBe(true);
+      await p.settings({ translation: { size: 32, color: '#FF0000' } });
+      await expect(p.translated).toHaveCSS('font-size', '32px');
+      await expect(p.translated).toHaveCSS('color', 'rgb(255, 204, 0)');
       await p.settings({ apiKey });
       await p.pair(source, translation);
-      await expect(p.translated).not.toHaveClass(/error/);
+      await expect(p.translated).toHaveCSS('color', 'rgb(255, 0, 0)');
       expect(p.posts.at(-1)!.status).toBe(200);
-      expect(await errorsShown(p)).toEqual(['Subline: The API Key is invalid or expired.']);
+      expect(await settledTranslations(p)).toEqual([
+        'The API Key is invalid or expired.',
+        translation,
+      ]);
     });
   });
 
@@ -68,14 +76,14 @@ for (const platform of ['youtube', 'hbo', 'x'] as const) {
       platform,
       info,
       async (p) => {
-        const failure = 'Subline: The provider returned HTTP 503. Try again later.';
+        const failure = 'The provider returned HTTP 503. Try again later.';
         await expect.poll(() => p.downloads.length).toBeGreaterThan(0);
         const downloads = p.downloads.length;
         await p.page.evaluate(() => window.fixture.switchVideo('second'));
         await expect.poll(() => p.downloads.length).toBeGreaterThan(downloads);
         await p.play();
         await expect(p.translated).toHaveText(failure);
-        await expect(p.original, 'A failed caption shows its source').toHaveText(nextSource);
+        await expect(p.original).toBeHidden();
         await p.page.waitForTimeout(16_000);
         await expect(p.translated).toHaveText(failure);
         expect(p.posts.map((post) => post.status)).toEqual([503]);
@@ -83,7 +91,7 @@ for (const platform of ['youtube', 'hbo', 'x'] as const) {
         await p.play();
         await p.pair(thirdSource, thirdTranslation);
         expect(p.posts.map((post) => post.status)).toEqual([503, 200]);
-        expect(await errorsShown(p)).toEqual([failure]);
+        expect(await settledTranslations(p)).toEqual([failure, thirdTranslation]);
       },
       { unavailable: 1 },
     );

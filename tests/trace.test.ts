@@ -1,7 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { SubtitleOverlay, type TranslationLine } from '../src/core/overlay';
 import { TraceReporter } from '../src/core/trace';
-import { DEFAULT_SETTINGS, publicSettings } from '../src/shared/settings';
 import { readTraceRequest, TRACE_ATTRIBUTE, TRACE_WORKER_ATTRIBUTE } from '../src/shared/trace';
 
 afterEach(() => {
@@ -94,42 +92,4 @@ it('keeps only the known fields of a trace event and rejects malformed ones', ()
   expect(() => readTraceRequest({ ...event, state: 'shown' })).toThrow();
   expect(() => readTraceRequest({ ...event, run: '' })).toThrow();
   expect(() => readTraceRequest({ ...event, time: Number.NaN })).toThrow();
-});
-
-it('renders each translation line with its own text and class', () => {
-  const player = document.createElement('div');
-  document.body.append(player);
-  const overlay = new SubtitleOverlay();
-  overlay.mount(player, publicSettings(DEFAULT_SETTINGS));
-  const render = (line: TranslationLine) => overlay.render({ original: '', line });
-  const root = player.querySelector('[data-subline-overlay]')!.shadowRoot!;
-  const translation = root.querySelector<HTMLElement>('.translation')!;
-  const shown = () => ({
-    text: translation.hidden ? null : translation.textContent,
-    error: translation.classList.contains('error'),
-    timeout: translation.classList.contains('timeout'),
-  });
-  expect(shown()).toEqual({ text: null, error: false, timeout: false });
-  render({ kind: 'loading' });
-  expect(shown()).toEqual({ text: 'Translating', error: false, timeout: false });
-  render({ kind: 'ready', translation: '你好' });
-  expect(shown()).toEqual({ text: '你好', error: false, timeout: false });
-  render({ kind: 'timedOut' });
-  expect(shown()).toEqual({ text: 'Request timed out', error: false, timeout: true });
-  expect(translation.style.fontSize).toBe('20px');
-  overlay.updateStyle(
-    publicSettings({ ...DEFAULT_SETTINGS, translation: { color: '#112233', size: 18 } }),
-  );
-  expect(shown().timeout).toBe(true);
-  expect(translation.style.color).toBe('rgb(17, 34, 51)');
-  expect(translation.style.fontSize).toBe('18px');
-  render({ kind: 'failed', message: 'Translation failed.' });
-  expect(shown()).toEqual({ text: 'Subline: Translation failed.', error: true, timeout: false });
-  render({ kind: 'timedOut' });
-  expect(shown()).toEqual({ text: 'Request timed out', error: false, timeout: true });
-  render({ kind: 'ready', translation: '你好' });
-  expect(shown()).toEqual({ text: '你好', error: false, timeout: false });
-  expect(translation.style.color).toBe('rgb(17, 34, 51)');
-  render({ kind: 'none' });
-  expect(shown()).toEqual({ text: null, error: false, timeout: false });
 });

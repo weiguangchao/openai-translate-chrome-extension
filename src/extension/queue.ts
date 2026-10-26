@@ -486,8 +486,8 @@ export class TranslationQueue {
           retryOrReject(
             new Error(
               t(
-                '模型返回的译文无效，请稍后重试。',
-                'The model returned an invalid translation. Try again later.',
+                'Provider 回复非法信息流，无法翻译',
+                'Provider returned an invalid response stream. Unable to translate.',
               ),
             ),
           );

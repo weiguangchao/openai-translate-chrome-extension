@@ -336,11 +336,10 @@ it('keeps the error on its caption without retrying it and translates the next c
   vi.stubGlobal('chrome', { runtime: { id: 'extension-id', sendMessage } });
   controller = new CaptionController(createHboPlatform, settings());
   await vi.advanceTimersByTimeAsync(450);
-  expect(translationNode()?.textContent).toBe('Subline: Receiving end does not exist.');
-  expect(originalNode()?.hidden).toBe(false);
-  expect(originalNode()?.textContent).toBe('First cue');
+  expect(translationNode()?.textContent).toBe('Receiving end does not exist.');
+  expect(originalNode()?.hidden).toBe(true);
   await vi.advanceTimersByTimeAsync(16000);
-  expect(translationNode()?.textContent).toBe('Subline: Receiving end does not exist.');
+  expect(translationNode()?.textContent).toBe('Receiving end does not exist.');
   expect(sendMessage).toHaveBeenCalledExactlyOnceWith({
     type: 'translate',
     captionLanguage: 'en',

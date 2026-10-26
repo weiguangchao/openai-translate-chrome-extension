@@ -563,9 +563,9 @@ export async function expectNativeHidden(p: Player, hidden: boolean) {
   if (!hidden) await expect(p.page.locator('#native')).toBeVisible();
 }
 
-export const errorsShown = async (p: Player) =>
-  [...new Set((await p.frames()).map((f) => f.translation))].filter((t) =>
-    t.startsWith('Subline: '),
+export const settledTranslations = async (p: Player) =>
+  [...new Set((await p.frames()).map((f) => f.translation))].filter(
+    (t) => t && t !== 'Translating',
   );
 
 const openingInputs = [[{ id: 0, text: source }]];

@@ -10,7 +10,6 @@ export type TranslationLine =
   | { readonly kind: 'loading' }
   | { readonly kind: 'ready'; readonly translation: string }
   | { readonly kind: 'failed'; readonly message: string }
-  | { readonly kind: 'providerError'; readonly message: string }
   | { readonly kind: 'timedOut' }
   | { readonly kind: 'repeated' }
   | { readonly kind: 'unsupported-language' };
@@ -20,7 +19,7 @@ export interface CaptionView {
   readonly line: TranslationLine;
 }
 
-type Status = 'error' | 'timeout' | null;
+type Status = 'error' | null;
 
 function lineContent(line: TranslationLine): { text: string; status: Status } {
   switch (line.kind) {
@@ -31,11 +30,9 @@ function lineContent(line: TranslationLine): { text: string; status: Status } {
     case 'ready':
       return { text: line.translation, status: null };
     case 'failed':
-      return { text: t(`Subline：${line.message}`, `Subline: ${line.message}`), status: 'error' };
+      return { text: line.message, status: 'error' };
     case 'timedOut':
-      return { text: TIMEOUT_TRANSLATION, status: 'timeout' };
-    case 'providerError':
-      return { text: line.message, status: 'timeout' };
+      return { text: TIMEOUT_TRANSLATION, status: 'error' };
     case 'unsupported-language':
       return { text: failureText({ kind: 'unsupported-language' }), status: 'error' };
     case 'repeated':
@@ -46,13 +43,12 @@ function lineContent(line: TranslationLine): { text: string; status: Status } {
 function write(node: HTMLDivElement | null, text: string, status: Status): void {
   if (!node) return;
   node.classList.toggle('error', status === 'error');
-  node.classList.toggle('timeout', status === 'timeout');
   if (node.textContent !== text) node.textContent = text;
   node.hidden = !text;
 }
 
 const OVERLAY_STYLE =
-  ':host{all:initial}.stack{position:absolute;left:4%;width:92%;text-align:center;font-family:Arial,"PingFang SC",sans-serif;line-height:1.4;pointer-events:none}.line{width:fit-content;max-width:100%;margin-inline:auto;padding:1px 8px;border-radius:3px;white-space:normal;overflow-wrap:anywhere;text-shadow:0 1px 3px #000;box-sizing:border-box}.error{font-size:13px!important;color:#ffe3b0!important}.timeout{color:#ffcc00!important}';
+  ':host{all:initial}.stack{position:absolute;left:4%;width:92%;text-align:center;font-family:Arial,"PingFang SC",sans-serif;line-height:1.4;pointer-events:none}.line{width:fit-content;max-width:100%;margin-inline:auto;padding:1px 8px;border-radius:3px;white-space:normal;overflow-wrap:anywhere;text-shadow:0 1px 3px #000;box-sizing:border-box}.error{color:#ffcc00!important}';
 
 export class SubtitleOverlay {
   private player: HTMLElement | null = null;
