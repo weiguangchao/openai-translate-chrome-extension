@@ -30,6 +30,8 @@ export const asrSource = 'This is the automatic caption.';
 export const asrTranslation = '这是自动字幕。';
 export const japaneseSource = '今日はいい天気ですね。';
 export const japaneseTranslation = '今天天气真好。';
+export const koreanSource = '오늘은 날씨가 좋네요.';
+export const koreanTranslation = '今天天气不错。';
 export const thirdSource = 'The ferry leaves at noon.';
 export const thirdTranslation = '渡轮中午出发。';
 export const gardenSource = 'The garden is quiet.';
@@ -41,6 +43,7 @@ const translations: Record<string, string> = {
   [traditionalSource]: traditionalTranslation,
   [asrSource]: asrTranslation,
   [japaneseSource]: japaneseTranslation,
+  [koreanSource]: koreanTranslation,
   [thirdSource]: thirdTranslation,
   [gardenSource]: '花园很安静。',
 };
@@ -285,6 +288,7 @@ export class Player {
   private cues(id: string, language: string, kind: string): Cue[] {
     if (language === 'zh-CN') return [{ start: 0, end: 90, text: translation }];
     if (language === 'ja') return [{ start: 0, end: 90, text: japaneseSource }];
+    if (language === 'ko') return [{ start: 0, end: 90, text: koreanSource }];
     if (language === 'zh-TW') return [{ start: 0, end: 90, text: traditionalSource }];
     if (kind === 'asr') return [{ start: 0, end: 90, text: asrSource }];
     if (id === 'second') return [{ start: 0, end: 90, text: nextSource }];
@@ -360,7 +364,7 @@ export class Player {
       });
     }
     const resource = url.pathname.match(
-      /^\/e2e\/(first|second|third)\/(manifest\.mpd|en\.vtt|en-asr\.vtt|zh-TW\.vtt|zh-CN\.vtt|ja-asr\.vtt)$/,
+      /^\/e2e\/(first|second|third)\/(manifest\.mpd|en\.vtt|en-asr\.vtt|zh-TW\.vtt|zh-CN\.vtt|ja-asr\.vtt|ko-asr\.vtt)$/,
     );
     if (this.platform === 'hbo' && url.origin === this.origin && resource) {
       const [, id, file] = resource;
@@ -368,7 +372,7 @@ export class Player {
         await this.timeline;
         return route.fulfill({
           contentType: 'application/dash+xml',
-          body: `<MPD type="static" mediaPresentationDuration="PT90S"><Period start="PT0S" duration="PT90S">${['en', 'en-asr', 'zh-TW', 'zh-CN', 'ja-asr'].map((lang) => `<AdaptationSet contentType="text" lang="${lang.replace('-asr', '')}"><Role value="${lang.endsWith('-asr') ? 'caption' : 'subtitle'}"/><Representation id="${lang}" mimeType="text/vtt"><BaseURL>${lang}.vtt</BaseURL></Representation></AdaptationSet>`).join('')}</Period></MPD>`,
+          body: `<MPD type="static" mediaPresentationDuration="PT90S"><Period start="PT0S" duration="PT90S">${['en', 'en-asr', 'zh-TW', 'zh-CN', 'ja-asr', 'ko-asr'].map((lang) => `<AdaptationSet contentType="text" lang="${lang.replace('-asr', '')}"><Role value="${lang.endsWith('-asr') ? 'caption' : 'subtitle'}"/><Representation id="${lang}" mimeType="text/vtt"><BaseURL>${lang}.vtt</BaseURL></Representation></AdaptationSet>`).join('')}</Period></MPD>`,
         });
       }
       const cues = this.cues(
@@ -379,7 +383,7 @@ export class Player {
       return route.fulfill({ contentType: 'text/vtt', body: webvtt(cues) });
     }
     const hls = url.pathname.match(
-      /^\/e2e\/(first|second|third)\/(pl\/s0|subs)\/(en|en-asr|zh-TW|zh-CN|ja-asr)\.(m3u8|vtt)$/,
+      /^\/e2e\/(first|second|third)\/(pl\/s0|subs)\/(en|en-asr|zh-TW|zh-CN|ja-asr|ko-asr)\.(m3u8|vtt)$/,
     );
     if (this.platform === 'x' && url.origin === 'https://video.twimg.com' && hls) {
       const [, id, folder, file, extension] = hls;

@@ -11,6 +11,7 @@ const segmenters = new Map<string, LanguageSegmenter>([
   ['zh-CN', simplifiedChinese],
   ['zh-TW', traditionalChinese],
   ['ja', japanese],
+  ['ko', english],
 ]);
 
 export function segmenterFor(language: string): LanguageSegmenter {

@@ -4,6 +4,8 @@ import {
   asrTranslation,
   japaneseSource,
   japaneseTranslation,
+  koreanSource,
+  koreanTranslation,
   traditionalSource,
   traditionalTranslation,
   nextSource,
@@ -83,26 +85,32 @@ for (const platform of ['youtube', 'hbo', 'x'] as const) {
       await expect(p.translated).toBeHidden();
       await p.page.evaluate(() => window.fixture.select('zh-TW'));
       await p.pair(traditionalSource, traditionalTranslation);
-      await p.page.evaluate(() => window.fixture.select('ja', 'asr'));
-      await p.pair(japaneseSource, japaneseTranslation);
-      const japanese = p.posts.filter((post) =>
-        post.inputs.some((input) => input.text === japaneseSource),
-      );
-      expect(japanese).toHaveLength(1);
+      for (const [language, original, translated, name] of [
+        ['ja', japaneseSource, japaneseTranslation, 'Japanese'],
+        ['ko', koreanSource, koreanTranslation, 'Korean'],
+      ]) {
+        await p.page.evaluate((language) => window.fixture.select(language, 'asr'), language);
+        await p.pair(original, translated);
+        const posts = p.posts.filter((post) =>
+          post.inputs.some((input) => input.text === original),
+        );
+        expect(posts).toHaveLength(1);
+        expect(posts[0].body.messages).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              role: 'system',
+              content: expect.stringMatching(
+                `^Translate the given ${name} into Simplified Chinese[.]`,
+              ),
+            }),
+          ]),
+        );
+      }
       expect(
         p.posts.filter((post) => post.inputs.some((input) => input.text === translation)),
         'A track already in the target language never reaches the Provider',
       ).toEqual([]);
-      expect(japanese[0].body.messages).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            role: 'system',
-            content: expect.stringMatching(
-              /^Translate the given Japanese into Simplified Chinese\./,
-            ),
-          }),
-        ]),
-      );
+      await p.page.screenshot({ path: info.outputPath('korean-subtitles.png') });
       const sent = p.posts.length;
       const downloaded = p.downloads.length;
       await p.page.evaluate(() => window.fixture.select('fr'));

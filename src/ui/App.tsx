@@ -768,8 +768,8 @@ export function App() {
                     <ul className="about-features">
                       <li>
                         {t(
-                          '支持英语、简体中文、繁体中文和日语字幕，自动识别字幕语言。',
-                          'Supports English, Simplified Chinese, Traditional Chinese, and Japanese subtitles, with automatic subtitle language detection.',
+                          '支持英语、简体中文、繁体中文、日语和韩语字幕，自动识别字幕语言。',
+                          'Supports English, Simplified Chinese, Traditional Chinese, Japanese, and Korean subtitles, with automatic subtitle language detection.',
                         )}
                       </li>
                       <li>

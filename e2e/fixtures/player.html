@@ -99,7 +99,13 @@
                   ? [track('ja', 'asr')]
                   : state.language === 'fr'
                     ? [track('fr')]
-                    : [track('en'), track('en', 'asr'), track('zh-TW'), track('zh-CN')],
+                    : [
+                        track('en'),
+                        track('en', 'asr'),
+                        track('zh-TW'),
+                        track('zh-CN'),
+                        track('ko', 'asr'),
+                      ],
             },
           },
         });
@@ -110,6 +116,7 @@
           ['zh-TW', 'zh-TW', '繁體中文'],
           ['zh-CN', 'zh-CN', '中文'],
           ['ja-asr', 'ja', '日本語'],
+          ['ko-asr', 'ko', '한국어'],
           ['fr', 'fr', 'Français'],
         ];
         const media = () => `https://video.twimg.com/e2e/${state.id}`;

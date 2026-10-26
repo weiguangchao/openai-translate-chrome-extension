@@ -160,6 +160,7 @@ const SAMPLES: Record<string, [string, string]> = {
   'zh-CN': ['总有一个世界，等待着我们去探索。', '有些时刻，值得我们放慢脚步。'],
   'zh-TW': ['總有一個世界，等待著我們去探索。', '有些時刻，值得我們放慢腳步。'],
   ja: ['私たちが探検する世界が、いつも待っている。', 'ゆっくり味わいたい瞬間がある。'],
+  ko: ['우리가 탐험할 세상이 기다리고 있어요.', '천천히 음미할 만한 순간들이 있어요.'],
 };
 export function SubtitlePreview({ settings }: { settings: Settings }) {
   const [expanded, setExpanded] = useState(false);
