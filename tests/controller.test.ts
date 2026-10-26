@@ -2,6 +2,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { CaptionController } from '../src/core/controller';
 import type { CaptionSource, Platform } from '../src/core/platform';
 import type { Reply } from '../src/shared/messages';
+import type { TranslateFailure } from '../src/shared/provider-error';
 import { publicSettings } from '../src/shared/settings';
 import { consentedSettings } from './fixtures/settings';
 
@@ -62,6 +63,34 @@ const lines = () =>
       .querySelector('[data-subline-overlay]')!
       .shadowRoot!.querySelectorAll<HTMLElement>('.line'),
   ].map((line) => (line.hidden ? null : line.textContent));
+
+it.each<{ failure: TranslateFailure; text: string }>([
+  { failure: { kind: 'timeout' }, text: 'Request timed out' },
+  { failure: { kind: 'unsupported-language' }, text: 'Unsupported subtitle language' },
+  { failure: { kind: 'http', status: 401, message: 'Invalid key.' }, text: 'Invalid key.' },
+  { failure: { kind: 'http', status: 429, message: 'Rate limited.' }, text: 'Rate limited.' },
+  { failure: { kind: 'http', status: 500, message: 'Provider failed.' }, text: 'Provider failed.' },
+  { failure: { kind: 'error', message: 'Invalid response.' }, text: 'Invalid response.' },
+])(
+  'shows only the error text for $failure without its source or a prefix',
+  async ({ failure, text }) => {
+    sendMessage.mockImplementation(async (message) =>
+      message.type === 'translate' ? { ok: false, failure } : { ok: true, data: null },
+    );
+    source = {
+      kind: 'live',
+      language: 'en',
+      mode: 'model',
+      read: () => ({ text: 'Source caption', layers: [], nativeTrack: false }),
+    };
+    controller = new CaptionController(
+      () => platform,
+      publicSettings({ ...consentedSettings, apiKey: 'key', model: 'model' }),
+    );
+    await vi.advanceTimersByTimeAsync(450);
+    expect(lines()).toEqual([null, text]);
+  },
+);
 
 it('releases a DOM-only consumer when the controller is destroyed', async () => {
   source = {

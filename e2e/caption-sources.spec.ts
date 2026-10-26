@@ -116,6 +116,8 @@ for (const platform of ['youtube', 'hbo', 'x'] as const) {
       await p.page.evaluate(() => window.fixture.select('fr'));
       await expect(p.translated).toHaveText('Unsupported subtitle language');
       await expect(p.translated).toBeVisible();
+      await expect(p.translated).toHaveCSS('color', 'rgb(255, 204, 0)');
+      await expect(p.translated).toHaveCSS('font-size', '20px');
       await expect(p.original).toBeHidden();
       expect(p.posts).toHaveLength(sent);
       expect(p.downloads).toHaveLength(downloaded);
