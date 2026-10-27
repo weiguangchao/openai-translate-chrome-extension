@@ -73,6 +73,19 @@ Write the reply clean as you draft it. A cleanup pass after drafting does not re
 - **Never fabricate a link, citation, or transcript reference**. Link only artifacts you produced or read this session.
 - **Every claim carries its evidence or its label in the same sentence**. Measured, inferred, or guess. A prediction or an unseen cause is a guess. Never hand the human a check you could run.
 
+## Pull requests
+
+- Never make a PR unless the developer explicitly asks you to do so.
+- Conventional commit titles, plain language: `fix(web): new threads no longer spike CPU`.
+- Body: the problem in a sentence or two, then how you fixed it. End with the model and harness that did the work.
+- UI changes need before/after images.
+- Upload PR evidence to GitHub. Never commit PR-only screenshots or other PR-only assets into the repo.
+- When babysitting: call `watch_pull_request` and end your turn. T3 Code wakes you on checks, comments, or conflicts. Do not poll or sleep. Verify each bot finding against the source, fix real ones, dismiss false positives with a written reason. Stay quiet when nothing is new. Stop when the bots are green on the latest commit.
+
+## Additional tips
+
+- Don't invoke the chrome-debug skill on your own unless the user explicitly asks for it.
+
 ## Rules
 
 Each rule names what fails when it is broken. When the developer corrects a mistake, fix it and add its rule here; if the rule is already here and only judgment enforces it, enforce it in the same change.
@@ -109,19 +122,6 @@ Each rule names what fails when it is broken. When the developer corrects a mist
 | The settings page and popup show a label and its control without explanatory secondary text; links are icons or quiet underlined text. | Judgment |
 | The About page's GitHub and X links are borderless, and the author's profile link uses the current X logo. | `src/ui/App.tsx`; `src/ui/styles.css` |
 | When you name a gap you could close, such as failing tests or a check you skipped, close it before you stop. | Judgment |
-
-## Pull requests
-
-- Never make a PR unless the developer explicitly asks you to do so.
-- Conventional commit titles, plain language: `fix(web): new threads no longer spike CPU`.
-- Body: the problem in a sentence or two, then how you fixed it. End with the model and harness that did the work.
-- UI changes need before/after images.
-- Upload PR evidence to GitHub. Never commit PR-only screenshots or other PR-only assets into the repo.
-- When babysitting: call `watch_pull_request` and end your turn. T3 Code wakes you on checks, comments, or conflicts. Do not poll or sleep. Verify each bot finding against the source, fix real ones, dismiss false positives with a written reason. Stay quiet when nothing is new. Stop when the bots are green on the latest commit.
-
-## Additional tips
-
-- Don't invoke the chrome-debug skill on your own unless the user explicitly asks for it.
 
 ## Verifying
 
