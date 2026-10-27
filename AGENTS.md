@@ -8,7 +8,6 @@ Remaining triggers:
 
 - Any prose surface, your reply to the user included → the **unslop** skill. Write the reply per **Writing the reply**.
 - Before commit → the **deslop** skill
-- For testing -> the **test-audit** skill
 
 ## Principles
 
