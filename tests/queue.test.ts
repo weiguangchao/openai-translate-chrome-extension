@@ -47,10 +47,11 @@ const settings = {
   model: 'test-model',
 };
 
-it('retries only an invalid result, keeping its neighbors cached', async () => {
+it('fails an invalid result without retrying and keeps its neighbors cached', async () => {
   const { fetch, requests } = pendingProvider();
   const queue = new TranslationQueue();
-  const pending = queue.prefetch('tab', settings, packedCues(['Before.', 'Middle.', 'After.']));
+  const cues = packedCues(['Before.', 'Middle.', 'After.']);
+  const pending = queue.prefetch('tab', settings, cues);
   requests[0].resolve(
     structuredReply([
       { id: 0, translation: '之前。' },
@@ -58,18 +59,16 @@ it('retries only an invalid result, keeping its neighbors cached', async () => {
       { id: 2, translation: '之后。' },
     ]),
   );
-  await flush();
-  expect(requests.map((request) => request.texts)).toEqual([
-    ['Before.', 'Middle.', 'After.'],
-    ['Middle.'],
-  ]);
+  await expect(pending).resolves.toEqual(['之前。', null, '之后。']);
   await expect(queue.lookup(settings, 'Before.')).resolves.toBe('之前。');
-  requests[1].resolve(providerReply(['Middle.'], () => '中间。'));
-  await expect(pending).resolves.toEqual(['之前。', '中间。', '之后。']);
-  expect(fetch).toHaveBeenCalledTimes(2);
+  await expect(queue.lookup(settings, 'After.')).resolves.toBe('之后。');
+  await expect(queue.prefetch('tab', settings, cues)).resolves.toEqual(['之前。', null, '之后。']);
+  await expect(queue.request('tab', settings, 'Middle.')).rejects.toThrow('invalid response');
+  await vi.advanceTimersByTimeAsync(16000);
+  expect(fetch).toHaveBeenCalledTimes(1);
 });
 
-it('retries a translation that copies its source once, then neither caches nor resends it', async () => {
+it('neither retries nor caches a translation that copies its source', async () => {
   const { fetch, requests } = pendingProvider();
   const queue = new TranslationQueue();
   const pending = queue.prefetch('tab', settings, packedCues(['Before.', 'Same.', 'After.']));
@@ -80,14 +79,7 @@ it('retries a translation that copies its source once, then neither caches nor r
       { id: 2, translation: '之后。' },
     ]),
   );
-  await flush();
-  expect(requests.map((request) => request.texts)).toEqual([
-    ['Before.', 'Same.', 'After.'],
-    ['Same.'],
-  ]);
-  requests[1].resolve(providerReply(['Same.'], (text) => text));
   await expect(pending).resolves.toEqual(['之前。', null, '之后。']);
-  expect(fetch).toHaveBeenCalledTimes(2);
   await expect(queue.lookup(settings, 'Before.')).resolves.toBe('之前。');
   await expect(queue.lookup(settings, 'Same.')).resolves.toBeNull();
   await vi.advanceTimersByTimeAsync(1000);
@@ -95,7 +87,7 @@ it('retries a translation that copies its source once, then neither caches nor r
     name: 'RepeatedSourceError',
   });
   await flush();
-  expect(fetch).toHaveBeenCalledTimes(2);
+  expect(fetch).toHaveBeenCalledTimes(1);
 });
 
 it.each([
@@ -105,7 +97,7 @@ it.each([
   },
   { language: 'zh-CN', message: 'Provider 回复非法信息流，无法翻译' },
 ])(
-  'stops after one corrective retry for an invalid result without caching it ($language)',
+  'rejects an invalid result without retrying or caching it ($language)',
   async ({ language, message }) => {
     vi.resetModules();
     vi.stubGlobal('navigator', { language });
@@ -117,7 +109,7 @@ it.each([
     const queue = new TranslationQueue();
     await expect(queue.request('tab', settings, 'Broken.')).rejects.toThrow(message);
     await vi.advanceTimersByTimeAsync(3000);
-    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(fetch).toHaveBeenCalledTimes(1);
     await expect(queue.lookup(settings, 'Broken.')).resolves.toBeNull();
   },
 );
@@ -393,19 +385,22 @@ it('does not send a cue outside the buffer or a cue that is already translated',
   expect(batches().at(-1)).toEqual(['Cue 16']);
 });
 
-it('retries each cue on its own when the batch reply cannot be matched to the cues', async () => {
+it('fails an unmatched batch once and allows the next caption to translate', async () => {
   const { fetch, requests, batches } = pendingProvider();
   const queue = new TranslationQueue();
-  queue.prefetch('tab', settings, packedCues(['First', 'Second']));
-  const first = queue.request('tab', settings, 'First');
+  const pending = queue.prefetch('tab', settings, packedCues(['First', 'Second']));
+  const first = queue
+    .request('tab', settings, 'First')
+    .catch((error) => failureOf(error, 'Translation failed.'));
   requests[0].resolve(Response.json({ choices: [{ message: { content: '第一句\n第二句' } }] }));
-  await flush();
-  expect(fetch).toHaveBeenCalledTimes(3);
-  expect(batches().slice(1)).toEqual([['First'], ['Second']]);
-  requests[1].resolve(providerReply(['First'], () => '第一句'));
-  await expect(first).resolves.toBe('第一句');
-  await expect(queue.request('tab', settings, 'First')).resolves.toBe('第一句');
-  expect(fetch).toHaveBeenCalledTimes(3);
+  await expect(pending).resolves.toEqual([null, null]);
+  await expect(first).resolves.toMatchObject({ kind: 'error' });
+  await expect(queue.request('tab', settings, 'First')).rejects.toThrow('invalid response');
+  expect(fetch).toHaveBeenCalledTimes(1);
+  const next = queue.request('tab', settings, 'Next');
+  expect(batches()).toEqual([['First', 'Second'], ['Next']]);
+  requests[1].resolve(providerReply(['Next'], () => '下一句'));
+  await expect(next).resolves.toBe('下一句');
 });
 
 it('keeps a batch running while any of its cues is still needed, caches all of its replies, and cancels it once none are', async () => {
@@ -580,7 +575,7 @@ it('caches only the final reply after a truncated draft without retrying', async
   expect(fetch).toHaveBeenCalledTimes(1);
 });
 
-it('retries only the cue that was not committed when the batch reply is short', async () => {
+it('keeps committed translations and fails the missing cue without another request', async () => {
   const { fetch, requests } = pendingProvider();
   const queue = new TranslationQueue();
   const pending = queue.prefetch('tab', settings, packedCues(['First', 'Second']));
@@ -601,15 +596,13 @@ it('retries only the cue that was not committed when the batch reply is short', 
   );
   await flush();
   await expect(first).resolves.toBe('第一句');
-  expect(requestedTexts(fetch.mock.calls[1][1])).toEqual(['Second']);
-  requests[1].resolve(providerReply(['Second'], () => 'Second 译文'));
-  await expect(pending).resolves.toEqual(['第一句', 'Second 译文']);
-  expect(fetch).toHaveBeenCalledTimes(2);
+  await expect(pending).resolves.toEqual(['第一句', null]);
+  await expect(queue.lookup(settings, 'First')).resolves.toBe('第一句');
+  expect(fetch).toHaveBeenCalledTimes(1);
   expect(JSON.parse(fetch.mock.calls[0][1].body as string).stream).toBe(false);
-  expect(JSON.parse(fetch.mock.calls[1][1].body as string).stream).toBe(false);
 });
 
-it('keeps the well-formed results of a reply with malformed JSON and retries only the broken ones', async () => {
+it('keeps well-formed results and fails malformed neighbors without retrying', async () => {
   const { fetch, requests } = pendingProvider();
   const queue = new TranslationQueue();
   const pending = queue.prefetch('tab', settings, packedCues(['Before.', 'Middle.', 'After.']));
@@ -625,16 +618,9 @@ it('keeps the well-formed results of a reply with malformed JSON and retries onl
     }),
   );
   await flush();
-  expect(requests.map((request) => request.texts)).toEqual([
-    ['Before.', 'Middle.', 'After.'],
-    ['Before.'],
-    ['After.'],
-  ]);
+  await expect(pending).resolves.toEqual([null, '中间。', null]);
   await expect(queue.lookup(settings, 'Middle.')).resolves.toBe('中间。');
-  requests[1].resolve(providerReply(['Before.'], () => '之前。'));
-  requests[2].resolve(providerReply(['After.'], () => '之后。'));
-  await expect(pending).resolves.toEqual(['之前。', '中间。', '之后。']);
-  expect(fetch).toHaveBeenCalledTimes(3);
+  expect(fetch).toHaveBeenCalledTimes(1);
 });
 
 it('packs a short list without padding it to four and never mixes tabs', () => {

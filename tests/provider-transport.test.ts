@@ -28,24 +28,24 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-it('budgets corrective retries across concurrent captions', async () => {
+it('keeps invalid replies in the send budget before admitting fresh captions', async () => {
   const sends: number[] = [];
-  const attempts = new Map<string, number>();
+  const invalid = ['A', 'B', 'C'];
   const fetch = vi.fn(async (_url: string, init: RequestInit) => {
     sends.push(Date.now());
     const texts = requestedTexts(init);
-    const key = texts.join('|');
-    const attempt = (attempts.get(key) ?? 0) + 1;
-    attempts.set(key, attempt);
-    return providerReply(texts, () => (attempt === 1 ? '' : `译文 ${texts[0]}`));
+    return providerReply(texts, () => (invalid.includes(texts[0]) ? '' : `译文 ${texts[0]}`));
   });
   vi.stubGlobal('fetch', fetch);
   const queue = new TranslationQueue();
-  const work = ['A', 'B', 'C'].map((text) => queue.request(text, settings, text));
+  await expect(
+    Promise.all(invalid.map((text) => queue.request(text, settings, text).catch(() => null))),
+  ).resolves.toEqual([null, null, null]);
+  const work = ['D', 'E', 'F'].map((text) => queue.request(text, settings, text));
   await vi.advanceTimersByTimeAsync(999);
   expect(sends).toHaveLength(3);
   await vi.advanceTimersByTimeAsync(1);
-  await expect(Promise.all(work)).resolves.toEqual(['译文 A', '译文 B', '译文 C']);
+  await expect(Promise.all(work)).resolves.toEqual(['译文 D', '译文 E', '译文 F']);
   expect(sends).toHaveLength(6);
   for (const at of sends)
     expect(sends.filter((time) => at <= time && time < at + 1000).length).toBeLessThanOrEqual(3);
