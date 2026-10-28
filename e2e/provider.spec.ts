@@ -45,6 +45,68 @@ for (const platform of ['youtube', 'hbo', 'x'] as const) {
     });
   }
 
+  for (const failure of [
+    {
+      name: 'an upstream 500',
+      status: 500,
+      body: JSON.stringify({ error: { message: 'Internal server error' } }),
+      text: 'Provider request failed',
+    },
+    {
+      name: 'an invalid translation',
+      status: 200,
+      body: JSON.stringify({
+        choices: [{ message: { content: '{"results":[{"id":0,"translation":""}]}' } }],
+      }),
+      text: 'Provider returned an invalid response stream. Unable to translate.',
+    },
+  ]) {
+    test(`${platform}: ${failure.name} uses the subtitle error presentation`, async ({}, info) => {
+      await withPlayer(
+        platform,
+        info,
+        async (p) => {
+          await p.play();
+          await expect.poll(() => p.posts.length).toBeGreaterThan(0);
+          const post = p.posts.find((post) => post.inputs.some((input) => input.text === source))!;
+          post.released = true;
+          post.status = failure.status;
+          await post.route.fulfill({
+            status: failure.status,
+            contentType: 'application/json',
+            body: failure.body,
+          });
+          await expect(p.translated).toHaveText(failure.text);
+          await expect(p.translated).toBeVisible();
+          await expect(p.translated).toHaveCSS('color', 'rgb(255, 204, 0)');
+          await expect(p.translated).toHaveCSS('font-size', '20px');
+          await expect(p.translated).toHaveCSS('background-color', 'rgba(0, 0, 0, 0.35)');
+          await expect(p.original).toBeHidden();
+          await p.settings({
+            translation: { size: 32, color: '#FF0000' },
+            backgroundOpacity: 70,
+            subtitleGap: 17,
+          });
+          await expect(p.translated).toHaveText(failure.text);
+          await expect(p.translated).toBeVisible();
+          await expect(p.translated).toHaveCSS('font-size', '32px');
+          await expect(p.translated).toHaveCSS('color', 'rgb(255, 204, 0)');
+          await expect(p.translated).toHaveCSS('background-color', 'rgba(0, 0, 0, 0.7)');
+          await expect(p.translated).toHaveCSS('margin-top', '17px');
+          expect(await p.overlay.locator('.stack').evaluate((stack) => stack.style.bottom)).toBe(
+            '9%',
+          );
+          await expect(p.original).toBeHidden();
+          await info.attach('subtitle-error.png', {
+            body: await p.page.screenshot(),
+            contentType: 'image/png',
+          });
+        },
+        { hold: true },
+      );
+    });
+  }
+
   test(`${platform}: an invalid key shows a safe error and recovers once fixed`, async ({}, info) => {
     await withPlayer(platform, info, async (p) => {
       await p.settings({ apiKey: 'e2e-invalid-key' });
