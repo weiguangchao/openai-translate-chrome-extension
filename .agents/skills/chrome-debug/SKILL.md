@@ -1,6 +1,6 @@
 ---
 name: chrome-debug
-description: Chrome commands for Subline checks in the user's signed-in Default profile. Invoke explicitly.
+description: Chrome commands for Subline. Invoke explicitly.
 disable-model-invocation: true
 ---
 
