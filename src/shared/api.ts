@@ -211,9 +211,10 @@ export async function translateCaptionBatch(
   texts.forEach(checkText);
   if (!texts.length || texts.length > translationBatchLimit)
     throw new Error(t('单次翻译的字幕过多。', 'Too many subtitles in one translation request.'));
+  const outputExample = { results: texts.map((_, id) => ({ id, translation: '...' })) };
   const response = await complete(
     settings,
-    `The input is a JSON array of ordered captions from one passage. Use neighboring captions only as context; never move content between captions. Return only JSON {"results":[...]} with exactly one result per input id, in input order: {"id":0,"text":"..."} becomes {"id":0,"translation":"..."}.`,
+    `The input is a JSON array of ordered captions from one passage. Use neighboring captions only as context; never move content between captions. Return only JSON with exactly one result per input id, in input order. Each result must contain only id and translation; never use text or repeat keys. Use this complete output structure: ${JSON.stringify(outputExample)}.`,
     JSON.stringify(texts.map((text, id) => ({ id, text }))),
     65536,
     signal,
