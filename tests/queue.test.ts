@@ -56,16 +56,16 @@ it('fails an invalid result without retrying and keeps its neighbors cached', as
     structuredReply([
       { id: 0, translation: '之前。' },
       { id: 1, translation: '' },
-      { id: 2, translation: '之后。' },
     ]),
   );
+  requests[1].resolve(structuredReply([{ id: 0, translation: '之后。' }]));
   await expect(pending).resolves.toEqual(['之前。', null, '之后。']);
   await expect(queue.lookup(settings, 'Before.')).resolves.toBe('之前。');
   await expect(queue.lookup(settings, 'After.')).resolves.toBe('之后。');
   await expect(queue.prefetch('tab', settings, cues)).resolves.toEqual(['之前。', null, '之后。']);
   await expect(queue.request('tab', settings, 'Middle.')).rejects.toThrow('invalid response');
   await vi.advanceTimersByTimeAsync(16000);
-  expect(fetch).toHaveBeenCalledTimes(1);
+  expect(fetch).toHaveBeenCalledTimes(2);
 });
 
 it('neither retries nor caches a translation that copies its source', async () => {
@@ -76,9 +76,9 @@ it('neither retries nor caches a translation that copies its source', async () =
     structuredReply([
       { id: 0, translation: '之前。' },
       { id: 1, translation: 'Same.' },
-      { id: 2, translation: '之后。' },
     ]),
   );
+  requests[1].resolve(structuredReply([{ id: 0, translation: '之后。' }]));
   await expect(pending).resolves.toEqual(['之前。', null, '之后。']);
   await expect(queue.lookup(settings, 'Before.')).resolves.toBe('之前。');
   await expect(queue.lookup(settings, 'Same.')).resolves.toBeNull();
@@ -87,7 +87,7 @@ it('neither retries nor caches a translation that copies its source', async () =
     name: 'RepeatedSourceError',
   });
   await flush();
-  expect(fetch).toHaveBeenCalledTimes(1);
+  expect(fetch).toHaveBeenCalledTimes(2);
 });
 
 it.each([
@@ -285,9 +285,9 @@ it('keeps at most two requests in flight and gives the next slot to a visible ca
 it('sends a newly near cue without waiting for the pack already in flight', async () => {
   const { batches, requests } = pendingProvider();
   const queue = new TranslationQueue();
-  queue.prefetch('tab', settings, packedCues(['Cue 1', 'Cue 2', 'Cue 3', 'Cue 4']));
-  queue.prefetch('tab', settings, packedCues(['Cue 2', 'Cue 3', 'Cue 4', 'Cue 5']));
-  expect(batches()).toEqual([['Cue 1', 'Cue 2', 'Cue 3', 'Cue 4'], ['Cue 5']]);
+  queue.prefetch('tab', settings, packedCues(['Cue 1', 'Cue 2']));
+  queue.prefetch('tab', settings, packedCues(['Cue 2', 'Cue 3']));
+  expect(batches()).toEqual([['Cue 1', 'Cue 2'], ['Cue 3']]);
   expect(requests[0].signal.aborted).toBe(false);
 });
 
@@ -610,28 +610,35 @@ it('keeps well-formed results and fails malformed neighbors without retrying', a
   const results = [
     broken({ id: 0, translation: '之前。' }),
     JSON.stringify({ id: 1, translation: '中间。' }),
-    broken({ id: 2, translation: '之后。' }),
   ];
   requests[0].resolve(
     Response.json({
       choices: [{ message: { content: '```json\n{"results":[' + results.join(',') + ']}\n```' } }],
     }),
   );
+  requests[1].resolve(
+    Response.json({
+      choices: [
+        {
+          message: {
+            content: '{"results":[' + broken({ id: 0, translation: '之后。' }) + ']}',
+          },
+        },
+      ],
+    }),
+  );
   await flush();
   await expect(pending).resolves.toEqual([null, '中间。', null]);
   await expect(queue.lookup(settings, 'Middle.')).resolves.toBe('中间。');
-  expect(fetch).toHaveBeenCalledTimes(1);
+  expect(fetch).toHaveBeenCalledTimes(2);
 });
 
-it('packs a short list without padding it to four and never mixes tabs', () => {
+it('packs a short list without padding it to the batch limit and never mixes tabs', () => {
   const { batches } = pendingProvider();
   const queue = new TranslationQueue();
-  queue.prefetch('tab', settings, packedCues(['Cue 1', 'Cue 2']));
-  queue.prefetch('other-tab', settings, packedCues(['Other 1', 'Other 2']));
-  expect(batches()).toEqual([
-    ['Cue 1', 'Cue 2'],
-    ['Other 1', 'Other 2'],
-  ]);
+  queue.prefetch('tab', settings, packedCues(['Cue 1']));
+  queue.prefetch('other-tab', settings, packedCues(['Other 1']));
+  expect(batches()).toEqual([['Cue 1'], ['Other 1']]);
   expect(batches().every((batch) => batch.length < translationBatchLimit)).toBe(true);
 });
 

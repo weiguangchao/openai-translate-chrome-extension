@@ -72,10 +72,10 @@ it.each([
   },
 );
 
-const four = ['One.', 'Two.', 'Three.', 'Four.'];
+const pair = ['One.', 'Two.'];
 it.each([
-  { label: 'translations by position', texts: four, reply: { translations: ['甲乙', '丙', '丁'] } },
-  { label: 'a bare array by position', texts: four, reply: ['甲乙', '丙', '丁'] },
+  { label: 'translations by position', texts: pair, reply: { translations: ['甲', '乙'] } },
+  { label: 'a bare array by position', texts: pair, reply: ['甲', '乙'] },
   { label: 'plain text', texts: ['One.', 'Two.'], reply: '第一句\n第二句' },
   { label: 'the wrong shape', texts: ['One.', 'Two.'], reply: { segments: ['第一句', '第二句'] } },
   {

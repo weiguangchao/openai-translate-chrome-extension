@@ -107,14 +107,14 @@ describe('OpenAI-compatible provider contract', () => {
     'translates batches through chat completions with saved apiFormat=%s and preserves cue order',
     async (apiFormat) => {
       const content =
-        '```json\n{"results":[{"id":2,"translation":"第三句"},{"id":0,"translation":" 第一句 "},{"id":1,"translation":"第二句"}]}\n```';
+        '```json\n{"results":[{"id":1,"translation":"第二句"},{"id":0,"translation":" 第一句 "}]}\n```';
       const fetch = vi.fn().mockResolvedValue(
         Response.json({
           choices: [{ message: { content } }],
         }),
       );
       vi.stubGlobal('fetch', fetch);
-      const texts = ['One.', 'Two "quoted"\nlines.', 'Three.'];
+      const texts = ['One.', 'Two "quoted"\nlines.'];
       const published = vi.fn();
       await expect(
         translateCaptionBatch(
@@ -123,11 +123,10 @@ describe('OpenAI-compatible provider contract', () => {
           undefined,
           published,
         ),
-      ).resolves.toEqual(['第一句', '第二句', '第三句']);
+      ).resolves.toEqual(['第一句', '第二句']);
       expect(published.mock.calls).toEqual([
-        [2, '第三句'],
-        [0, '第一句'],
         [1, '第二句'],
+        [0, '第一句'],
       ]);
       expect(fetch).toHaveBeenCalledTimes(1);
       expect(fetch.mock.calls[0][0]).toBe('https://provider.example/api/v1/chat/completions');

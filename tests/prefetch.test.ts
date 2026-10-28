@@ -251,7 +251,7 @@ it('lets the opening window finish during a scrub and requests only the cues at 
   setCues([...dense, { startTime: 80, endTime: 82, text: 'After seeking.' }]);
   controller = new CaptionController(createHboPlatform, publicSettings(saved));
   await vi.advanceTimersByTimeAsync(0);
-  const opening = [['Cue 1.'], ['Cue 2.', 'Cue 3.', 'Cue 4.', 'Cue 5.']];
+  const opening = [['Cue 1.'], ['Cue 2.', 'Cue 3.']];
   expect(requested).toEqual(opening);
   Object.defineProperty(video, 'seeking', { configurable: true, value: true });
   video.currentTime = 40;
@@ -284,7 +284,7 @@ it.each(['timeout', '500'] as const)(
     setCues(dense);
     controller = new CaptionController(createHboPlatform, publicSettings(saved));
     await vi.advanceTimersByTimeAsync(0);
-    const opening = [['Cue 1.'], ['Cue 2.', 'Cue 3.', 'Cue 4.', 'Cue 5.']];
+    const opening = [['Cue 1.'], ['Cue 2.', 'Cue 3.']];
     expect(requested).toEqual(opening);
     await advance(3);
     expect(requested).toEqual(opening);
@@ -329,10 +329,7 @@ it('keeps requests sent before a seek running, sends the landing at once and cac
   await vi.advanceTimersByTimeAsync(seekSettleMs - 1);
   expect(requested).toHaveLength(started);
   await vi.advanceTimersByTimeAsync(1);
-  expect(requested.slice(started)).toEqual([
-    ['Cue 21.'],
-    ['Cue 22.', 'Cue 23.', 'Cue 24.', 'Cue 25.'],
-  ]);
+  expect(requested.slice(started)).toEqual([['Cue 21.'], ['Cue 22.', 'Cue 23.']]);
   expect(started + 2).toBeGreaterThan(translationSendsPerSecond);
   expect(pending.slice(0, started).some((request) => request.signal.aborted)).toBe(false);
   await finish({ 'Cue 1.': '第一句' });
@@ -555,7 +552,7 @@ it('translates the displayed overlap together and splits a following long cue in
   ];
   controller = new CaptionController(createHboPlatform, publicSettings(saved));
   await vi.advanceTimersByTimeAsync(0);
-  expect(requested).toEqual([[first], [joined, second, ...pieces]]);
+  expect(requested).toEqual([[first], [joined, second]]);
   const delivered = new Set<(typeof pending)[number]>();
   const deliver = async () => {
     for (const request of [...pending]) {

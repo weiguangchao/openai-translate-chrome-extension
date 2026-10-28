@@ -208,7 +208,7 @@ it('answers a prefetch with translations in the order asked, settling cues a lat
     captionLanguage: 'en',
     time: 0,
     rate: 1,
-    cues: [...packedCues(['A', 'B']), { text: 'A', start: 6, end: 6.5 }],
+    cues: packedCues(['A', 'B']),
   });
   await vi.waitFor(() => expect(pending).toHaveLength(1));
   const sliding = send({
@@ -221,7 +221,7 @@ it('answers a prefetch with translations in the order asked, settling cues a lat
   await vi.waitFor(() => expect(pending).toHaveLength(2));
   for (const request of pending)
     request.resolve(providerReply(request.texts, (text) => `${text} 译文`));
-  await expect(opening).resolves.toEqual({ ok: true, data: [null, 'B 译文', null] });
+  await expect(opening).resolves.toEqual({ ok: true, data: [null, 'B 译文'] });
   await expect(sliding).resolves.toEqual({ ok: true, data: ['B 译文', 'C 译文'] });
   await expect(
     send({
@@ -294,11 +294,7 @@ it('packs a prefetch by its time span and rejects a snapshot without usable time
     captionLanguage: 'en',
     time: 0,
     rate: 1,
-    cues: [
-      ...packedCues(['A', 'B']),
-      { text: 'A', start: 6, end: 6.5 },
-      { text: 'C', start: 80, end: 81 },
-    ],
+    cues: [...packedCues(['A', 'B']), { text: 'C', start: 80, end: 81 }],
   });
   await vi.waitFor(() => expect(pending).toEqual([['A', 'B']]));
 });
