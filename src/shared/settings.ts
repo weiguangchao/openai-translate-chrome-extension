@@ -80,9 +80,12 @@ export function normalizeSettings(value: unknown): Settings {
   if (LANGUAGES.some((language) => language.value === input.targetLanguage))
     result.targetLanguage = input.targetLanguage!;
   for (const key of ['original', 'translation'] as const) {
-    if (/^#[\da-f]{6}$/i.test(input[key]?.color ?? '')) result[key].color = input[key]!.color;
-    if (Number.isFinite(input[key]?.size))
-      result[key].size = Math.min(48, Math.max(12, Math.round(input[key]!.size)));
+    const style: unknown = input[key];
+    if (!style || typeof style !== 'object') continue;
+    if ('color' in style && typeof style.color === 'string' && /^#[\da-f]{6}$/i.test(style.color))
+      result[key].color = style.color;
+    if ('size' in style && typeof style.size === 'number' && Number.isFinite(style.size))
+      result[key].size = Math.min(48, Math.max(12, Math.round(style.size)));
   }
   if (Number.isFinite(input.backgroundOpacity))
     result.backgroundOpacity = Math.min(90, Math.max(0, input.backgroundOpacity!));

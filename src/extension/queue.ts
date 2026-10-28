@@ -24,7 +24,6 @@ interface Job {
   consumer: string;
   settings: CaptionTranslationSettings;
   text: string;
-  solo: boolean;
   pack?: string;
   promise: Promise<string>;
   resolve: (value: string) => void;
@@ -294,7 +293,6 @@ export class TranslationQueue {
       consumer,
       settings,
       text,
-      solo: false,
       ...(options?.pack ? { pack: options.pack } : {}),
       promise,
       resolve,
@@ -347,12 +345,9 @@ export class TranslationQueue {
       this.inFlight() < maxInFlightRequests
     ) {
       const first = waiting[0];
-      const batch =
-        first.solo || !first.pack
-          ? [first]
-          : waiting
-              .filter((job) => !job.solo && job.pack === first.pack)
-              .slice(0, translationBatchLimit);
+      const batch = !first.pack
+        ? [first]
+        : waiting.filter((job) => job.pack === first.pack).slice(0, translationBatchLimit);
       for (const job of batch) waiting.splice(waiting.indexOf(job), 1);
       this.run(batch);
     }
@@ -395,22 +390,12 @@ export class TranslationQueue {
       if (result === 'ok' && sentAt !== undefined) this.noteSample(elapsed());
       this.trace({ e: 'done', id, ms: elapsed(), result });
     };
-    const retryOrReject = (failure: Error) => {
+    const reject = (failure: Error) => {
       for (const job of batch) {
         if (this.jobs.get(job.key) !== job) continue;
-        if (job.solo) {
-          this.jobs.delete(job.key);
-          this.failed.set(job.key, failure);
-          job.reject(failure);
-          continue;
-        }
-        Object.assign(job, {
-          controller: undefined,
-          batch: undefined,
-          sent: false,
-          solo: true,
-          pack: undefined,
-        });
+        this.jobs.delete(job.key);
+        this.failed.set(job.key, failure);
+        job.reject(failure);
       }
       this.drain();
     };
@@ -483,7 +468,7 @@ export class TranslationQueue {
         if (controller.signal.aborted) return finish('aborted');
         finish(results ? 'ok' : 'invalid');
         if (!results) {
-          retryOrReject(
+          reject(
             new Error(
               t(
                 'Provider 回复非法信息流，无法翻译',
@@ -506,7 +491,7 @@ export class TranslationQueue {
         if (controller.signal.aborted) return finish('aborted');
         if (error instanceof RepeatedSourceError) {
           finish('invalid');
-          retryOrReject(error);
+          reject(error);
           return;
         }
         const failure =
@@ -516,13 +501,7 @@ export class TranslationQueue {
         if (!timedOut) {
           this.backoff = { until: Date.now() + 15000, error: failure };
         }
-        for (const job of batch) {
-          if (this.jobs.get(job.key) !== job) continue;
-          this.failed.set(job.key, failure);
-          this.jobs.delete(job.key);
-          job.reject(failure);
-        }
-        this.drain();
+        reject(failure);
       },
     );
   }

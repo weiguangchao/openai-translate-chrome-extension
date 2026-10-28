@@ -16,6 +16,29 @@ async function openStorage(previous?: Map<string, unknown>) {
   return { stored, ...(await import('../src/shared/storage')) };
 }
 
+it.each(['original', 'translation'] as const)(
+  'reads malformed %s styles using defaults without losing other settings',
+  async (kind) => {
+    const { stored, loadSettings } = await openStorage();
+    for (const style of [
+      { color: ['#123456'] },
+      { color: { toString: null } },
+      null,
+      { size: '32' },
+    ]) {
+      stored.set(STORAGE_KEY, { ...DEFAULT_SETTINGS, model: 'kept-model', [kind]: style });
+      await expect(loadSettings()).resolves.toEqual({ ...DEFAULT_SETTINGS, model: 'kept-model' });
+    }
+    const style = { color: '#123456', size: 32 };
+    stored.set(STORAGE_KEY, { ...DEFAULT_SETTINGS, model: 'kept-model', [kind]: style });
+    await expect(loadSettings()).resolves.toEqual({
+      ...DEFAULT_SETTINGS,
+      model: 'kept-model',
+      [kind]: style,
+    });
+  },
+);
+
 it('stores the API key encrypted and reads it back in a new extension context', async () => {
   const { stored, saveSettings } = await openStorage();
   await saveSettings(saved);
