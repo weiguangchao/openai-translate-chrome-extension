@@ -8,8 +8,11 @@ The Principles section below grounds every trigger. In your reply, name each pri
 
 Remaining triggers:
 
+- Any code → name the data shape first, and choose its organizing structure per **principle-model-the-domain**.
 - Any prose surface, your reply to the user included → the **unslop** skill. Write the reply per **Writing the reply**.
 - Before commit → the **deslop** skill
+- Broken skill mid-task → fix it in its own PR. Don't block. Don't silently work around it.
+- Write typescript code → the **typescript-best-practices** skill
 
 ## Principles
 
@@ -40,6 +43,8 @@ Read the leaf skill in full for any principle you apply. Each entry names when i
 - **Type System Discipline**. Designing types or a signature in any typed language. Make illegal states unrepresentable, brand primitives, parse external data at boundaries.
 
 - **Make Operations Idempotent**. Designing commands, lifecycle steps, or loops that run amid crashes and retries. Converge to the same end state.
+
+- **Migrate Callers Then Delete Legacy APIs**. Introducing a new internal API while old callers exist. Migrate and delete in one wave.
 
 - **Separate Before Serializing Shared State**. Concurrent actors might write the same file, branch, key, or object. Eliminate the sharing first.
 
@@ -82,10 +87,6 @@ Write the reply clean as you draft it. A cleanup pass after drafting does not re
 - Upload PR evidence to GitHub. Never commit PR-only screenshots or other PR-only assets into the repo.
 - When babysitting: call `watch_pull_request` and end your turn. T3 Code wakes you on checks, comments, or conflicts. Do not poll or sleep. Verify each bot finding against the source, fix real ones, dismiss false positives with a written reason. Stay quiet when nothing is new. Stop when the bots are green on the latest commit.
 
-## Additional tips
-
-- Don't invoke the chrome-debug skill on your own unless the user explicitly asks for it.
-
 ## Rules
 
 Each rule names what fails when it is broken. When the developer corrects a mistake, fix it and add its rule here; if the rule is already here and only judgment enforces it, enforce it in the same change.
@@ -123,9 +124,9 @@ Each rule names what fails when it is broken. When the developer corrects a mist
 | The About page's GitHub and X links are borderless, and the author's profile link uses the current X logo. | `src/ui/App.tsx`; `src/ui/styles.css` |
 | When you name a gap you could close, such as failing tests or a check you skipped, close it before you stop. | Judgment |
 
-## Verifying
+## Real browser verifying
 
-When use the chrome-debug skill for a real-browser check, report the metrics below for each build on YouTube, HBO Max and X at 1x, 1.25x, 1.5x and 2x. Each run reloads Subline so no translation is cached, opens the video, sets the rate and traces 45 s with `"since": "open"`. It then seeks once into a segment with no cached translations, away from where the opening trace played, traces 45 s with `"since": "seek"` for the landing trace, then keeps playing and traces 180 s; durations are video seconds. On YouTube, the first `media` step's `time` starts the video where someone is speaking; YouTube ignores `&t=`.
+Don't invoke the chrome-debug skill on your own unless the user explicitly asks for it. When use the chrome-debug skill for a real-browser check, report the metrics below for each build on YouTube, HBO Max and X at 1x, 1.25x, 1.5x and 2x. Each run reloads Subline so no translation is cached, opens the video, sets the rate and traces 45 s with `"since": "open"`. It then seeks once into a segment with no cached translations, away from where the opening trace played, traces 45 s with `"since": "seek"` for the landing trace, then keeps playing and traces 180 s; durations are video seconds. On YouTube, the first `media` step's `time` starts the video where someone is speaking; YouTube ignores `&t=`.
 
 A run counts only if its traces report the tested `playbackRate` and none is marked `throttled` (keep Chrome in front). The landing trace fails by itself when the video leaves the seek target.
 
