@@ -424,6 +424,62 @@ it('finishes in-flight prefetch while paused and does not send more until playba
   expect(pending.at(-1)?.signal.aborted).toBe(false);
 });
 
+it.each(['dropped', 'reply-lost', 'empty', 'failure'] as const)(
+  'recovers pause and resume after a control message is %s',
+  async (fault) => {
+    setCues(
+      Array.from({ length: 25 }, (_, index) => ({
+        startTime: 2 + index * 2,
+        endTime: 4 + index * 2,
+        text: `Cue ${index + 1}.`,
+      })),
+    );
+    controller = new CaptionController(createHboPlatform, publicSettings(saved));
+    await advance(2);
+    const openingCount = requested.length;
+    const sendMessage = chrome.runtime.sendMessage;
+    let failType = 'prefetch-pause';
+    const faultySend = async (message: { type: string }) => {
+      if (message.type !== failType) return sendMessage(message);
+      failType = '';
+      if (fault === 'dropped') throw new Error('Receiving end does not exist.');
+      await sendMessage(message);
+      if (fault === 'reply-lost') throw new Error('Message port closed before a response.');
+      return fault === 'empty'
+        ? undefined
+        : { ok: false, failure: { kind: 'error', message: 'Control failed.' } };
+    };
+    vi.stubGlobal('chrome', {
+      ...chrome,
+      runtime: { ...chrome.runtime, sendMessage: faultySend },
+    });
+    const setPaused = async (paused: boolean) => {
+      Object.defineProperty(video, 'paused', { value: paused });
+      video.dispatchEvent(new Event(paused ? 'pause' : 'play'));
+      await vi.advanceTimersByTimeAsync(150);
+    };
+    await setPaused(true);
+    expect(messages.filter((type) => type === 'prefetch-pause')).toHaveLength(
+      fault === 'dropped' ? 1 : 2,
+    );
+    await finish({ 'Cue 1.': '第一句' });
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(requested).toHaveLength(openingCount);
+    video.currentTime = 12;
+    video.dispatchEvent(new Event('timeupdate'));
+    await vi.advanceTimersByTimeAsync(150);
+    failType = 'prefetch-resume';
+    await setPaused(false);
+    expect(messages.filter((type) => type === 'prefetch-resume')).toHaveLength(
+      fault === 'dropped' ? 1 : 2,
+    );
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(requested.length).toBeGreaterThan(openingCount);
+    await finish({ 'Cue 6.': '第六句' });
+    expect(translated()?.textContent).toBe('第六句');
+  },
+);
+
 it('invalidates the old translation when the same video element loads a different source', async () => {
   controller = new CaptionController(createHboPlatform, publicSettings(saved));
   await advance(2);

@@ -65,7 +65,11 @@ export class CaptionTranslator {
   private windowKey = '';
   private holdKey = '';
   private active = false;
-  private playbackHeld = false;
+  private playback: { desired: boolean; confirmed: boolean | undefined; sending: boolean } = {
+    desired: false,
+    confirmed: false,
+    sending: false,
+  };
 
   constructor(
     private connection: ExtensionConnection,
@@ -101,7 +105,7 @@ export class CaptionTranslator {
 
   reset(): void {
     this.caption = null;
-    this.playbackHeld = false;
+    this.playback = { desired: false, confirmed: false, sending: false };
     this.windowKey = '';
     this.holdKey = '';
     this.active = false;
@@ -135,16 +139,23 @@ export class CaptionTranslator {
   }
 
   notePlayback(paused: boolean): void {
-    if (paused) {
-      if (this.playbackHeld || !this.active) return;
-      this.playbackHeld = true;
-    } else {
-      if (!this.playbackHeld) return;
-      this.playbackHeld = false;
-    }
+    if (paused && !this.active) return;
+    const playback = this.playback;
+    playback.desired = paused;
+    if (playback.sending || playback.confirmed === paused) return;
+    playback.sending = true;
+    playback.confirmed = undefined;
     void this.connection
       .sendMessage({ type: paused ? 'prefetch-pause' : 'prefetch-resume' })
-      .catch(() => {});
+      .then((response) => {
+        if (response?.ok) playback.confirmed = paused;
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (this.playback !== playback) return;
+        playback.sending = false;
+        if (playback.desired !== paused) this.notePlayback(playback.desired);
+      });
   }
 
   plan(time: number, rate: number, cues: readonly PlaybackCue[], captionLanguage: Language): void {

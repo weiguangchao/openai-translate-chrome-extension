@@ -406,3 +406,43 @@ it('finishes an in-flight translation while paused and does not start another un
     { type: 'prefetch-pause' },
   ]);
 }, 15_000);
+
+it('serializes playback controls and synchronizes the latest intent after a delayed acknowledgement', async () => {
+  const video = document.querySelector('video')!;
+  const controls: string[] = [];
+  const replies: ((value: unknown) => void)[] = [];
+  const sendMessage = vi.fn((message: { type: string }) => {
+    if (message.type === 'translate') return Promise.resolve({ ok: true, data: '第一句译文' });
+    if (message.type !== 'prefetch-pause' && message.type !== 'prefetch-resume')
+      return Promise.resolve({ ok: true });
+    controls.push(message.type);
+    return new Promise((resolve) => replies.push(resolve));
+  });
+  vi.stubGlobal('chrome', { runtime: { id: 'extension-id', sendMessage } });
+  controller = new CaptionController(createHboPlatform, settings());
+  await vi.advanceTimersByTimeAsync(450);
+  const setPaused = async (paused: boolean) => {
+    Object.defineProperty(video, 'paused', { value: paused });
+    video.dispatchEvent(new Event(paused ? 'pause' : 'play'));
+    await vi.advanceTimersByTimeAsync(150);
+  };
+  await setPaused(true);
+  await setPaused(false);
+  await setPaused(true);
+  await setPaused(false);
+  expect(controls).toEqual(['prefetch-pause']);
+  replies[0]({ ok: true });
+  await vi.advanceTimersByTimeAsync(0);
+  expect(controls).toEqual(['prefetch-pause', 'prefetch-resume']);
+  await setPaused(true);
+  expect(controls).toHaveLength(2);
+  replies[1]({ ok: true });
+  await vi.advanceTimersByTimeAsync(0);
+  expect(controls).toEqual(['prefetch-pause', 'prefetch-resume', 'prefetch-pause']);
+  await setPaused(false);
+  controller.destroy();
+  replies[2]({ ok: true });
+  await vi.advanceTimersByTimeAsync(150);
+  expect(controls).toHaveLength(3);
+  expect(vi.getTimerCount()).toBe(0);
+});
