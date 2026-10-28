@@ -70,11 +70,12 @@ it('leaves a cue that is about to leave the screen to the visible caption reques
 });
 
 it('waits for a pack at the end of the snapshot to fill unless its first cue nears the latency tail', () => {
-  const tail = cues(2, 2, 20);
+  const tail = cues(1, 2, 20);
   expect(planPlayback({ time: 0, rate: 1, cues: tail })).toEqual([]);
-  expect(texts(planPlayback({ time: 5, rate: 1, cues: tail }))).toEqual([['Cue 1', 'Cue 2']]);
+  expect(texts(planPlayback({ time: 5, rate: 1, cues: tail }))).toEqual([['Cue 1']]);
   expect(texts(planPlayback({ time: 0, rate: 1, cues: cues(4, 2, 20) }))).toEqual([
-    ['Cue 1', 'Cue 2', 'Cue 3', 'Cue 4'],
+    ['Cue 1', 'Cue 2'],
+    ['Cue 3', 'Cue 4'],
   ]);
 });
 
@@ -116,9 +117,11 @@ it('caps each request by the batch limit and pack span, and the plan by the sent
     ],
   });
   expect(texts(spoken)).toEqual([
-    ['Cue 1', 'Cue 2', 'Cue 3'],
+    ['Cue 1', 'Cue 2'],
+    ['Cue 3'],
     ['Long'],
-    ['After Cue 1', 'After Cue 2', 'After Cue 3', 'After Cue 4'],
+    ['After Cue 1', 'After Cue 2'],
+    ['After Cue 3', 'After Cue 4'],
   ]);
 });
 
