@@ -42,8 +42,10 @@ class Headless(unittest.TestCase):
                 if record["state"] == "ready":
                     break
             time.sleep(0.1)
-        self.assertEqual(record.get("state"), "ready",
-                         (self.root / "launcher.log").read_text())
+        diagnostics = (self.root / "launcher.log").read_text()
+        if (self.output / "chromium.log").exists():
+            diagnostics += (self.output / "chromium.log").read_text()
+        self.assertEqual(record.get("state"), "ready", diagnostics)
         self.assertGreater(record["port"], 0)
         env = {**os.environ, **record["chrome_debug_env"], "CHROME_DEBUG_SESSION": SESSION}
 
