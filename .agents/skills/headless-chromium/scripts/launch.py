@@ -68,8 +68,8 @@ def developer_mode(port, path):
             chrome.close()
 
 
-def interrupted(*_):
-    raise KeyboardInterrupt
+def interrupted(signum, _frame):
+    raise KeyboardInterrupt(signal.Signals(signum).name)
 
 
 def main():
@@ -148,23 +148,32 @@ def main():
         if process.wait() != 0:
             raise RuntimeError("Chromium exited unexpectedly. Inspect chromium.log.")
         record["state"] = "stopped"
-    except KeyboardInterrupt:
-        record["state"] = "stopped"
+    except KeyboardInterrupt as error:
+        record.update(state="stopped", received_signal=str(error) or None)
     except (Exception, SystemExit) as error:
         record.update(state="failed", error=str(error))
         print(str(error), file=sys.stderr)
     finally:
-        if process is not None and process.poll() is None:
-            process.terminate()
+        if process is not None:
+            try:
+                os.killpg(process.pid, signal.SIGTERM)
+            except ProcessLookupError:
+                pass
             try:
                 process.wait(timeout=10)
             except subprocess.TimeoutExpired:
-                process.kill()
+                os.killpg(process.pid, signal.SIGKILL)
                 process.wait()
-        shutil.rmtree(profile)
-        (output / "endpoint").unlink(missing_ok=True)
-        record["profile_removed"] = not profile.exists()
-        save()
+            record["browser_exit_code"] = process.returncode
+            record["termination_scope"] = "owned_process_group"
+        try:
+            shutil.rmtree(profile)
+        except OSError as error:
+            record.update(state="failed", cleanup_error=str(error))
+        finally:
+            (output / "endpoint").unlink(missing_ok=True)
+            record["profile_removed"] = not profile.exists()
+            save()
     return 1 if record["state"] == "failed" else 0
 
 
