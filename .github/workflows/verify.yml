@@ -27,6 +27,16 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium
+      - name: Allow the installed Chromium to create sandbox namespaces
+        run: |
+          subline_chromium="$(node --input-type=module -e 'import { chromium } from "playwright"; console.log(chromium.executablePath())')"
+          sudo tee /etc/apparmor.d/subline-chromium > /dev/null <<EOF
+          abi <abi/4.0>,
+          profile subline-chromium "$subline_chromium" flags=(unconfined) {
+            userns,
+          }
+          EOF
+          sudo apparmor_parser -r /etc/apparmor.d/subline-chromium
       - run: npm run verify
       - name: Upload browser results
         if: ${{ always() }}
