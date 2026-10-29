@@ -11,7 +11,7 @@
     "build:icons": "node scripts/build-icons.mjs",
     "test": "vitest run",
     "test:discovery": "node scripts/check-test-discovery.mjs",
-    "test:chrome-debug": "cd tests/chrome-debug && python3 -m unittest test_contract test_measure test_rules test_worker_trace",
+    "test:chrome-debug": "cd tests/chrome-debug && python3 -m unittest test_contract test_measure test_rules test_worker_trace test_headless",
     "test:e2e": "playwright test",
     "verify": "npm run check && npm run test:discovery && npm test && npm run test:chrome-debug && npm run build:store && npm run test:e2e",
     "lint": "eslint . --max-warnings 0",

@@ -1,10 +1,11 @@
 ---
 name: chrome-debug
-description: Chrome commands for Subline. Invoke explicitly.
-disable-model-invocation: true
+description: Debug Subline in Chromium and collect playback traces for requested real-browser checks. Use after headless-chromium prepares the browser, or with an existing browser requested by the user.
 ---
 
 # Chrome debug
+
+For a requested real-browser check, default to [headless-chromium](../headless-chromium/SKILL.md) for browser launch and initialization. That skill closes its bootstrap connection before this session starts. Use this skill for page operations and traces after handoff.
 
 Run from the repository root:
 
@@ -39,11 +40,11 @@ For repeatable measurements, build comparisons and resuming interrupted runs, re
 
 Report Provider duration p50 and p90 from the 180 s trace's `batches.p50` and `batches.p90`, with the sample count `batches.measured` and outcome counts `batches.results`. These are nearest-rank percentiles of wall seconds from `sent` to `done` for successful requests completed in that trace. A request sent earlier contributes its full duration if it completes in the window. Queue time and failed, aborted or pending requests do not enter the percentiles. No samples produces `null`.
 
-Chrome must already be open with remote debugging enabled at `chrome://inspect/#remote-debugging`. `start` tries to accept Chrome's Allow dialog; if it remains open, ask the user to click Allow once. Before checking a build, run `npm run build` in the repository that owns Chrome's loaded folder, then `start` and `reload`; rebuild and reload after source changes. `reload` unloads Subline from existing site tabs until they are refreshed.
+Chrome must already be running. For the default headless workflow, use the endpoint and holder environment variables recorded by headless-chromium. When the user requests an existing browser, enable remote debugging at `chrome://inspect/#remote-debugging`. `start` tries to accept Chrome's Allow dialog; if it remains open, ask the user to click Allow once. Before checking a build, run `npm run build` in the repository that owns Chrome's loaded folder, then `start` and `reload`; rebuild and reload after source changes. `reload` unloads Subline from existing site tabs until they are refreshed.
 
 ## Constraints
 
-- Reach this Chrome only through `live.py`. Do not launch or quit it, read `DevToolsActivePort`, or open another DevTools connection.
+- While this session is active, reach this Chrome only through `live.py`. Do not launch or quit it, read `DevToolsActivePort`, or open another DevTools connection. Browser launch belongs to headless-chromium before `start`. Launcher cleanup follows `stop`.
 - Operate only tabs this session opened. Close them and stop the holder with its session ID when the task ends.
 - Media stays muted from navigation until the tab closes; unmute attempts are ignored.
 - `focus` takes focus from the app the user is working in. Tell the user before using it.
