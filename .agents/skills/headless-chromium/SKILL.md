@@ -11,6 +11,12 @@ Use this skill to prepare the browser for a requested real-browser check. Use [c
 
 Run from the repository root. Build the requested extension first with `npm run build`. Use a full Chromium or Chrome for Testing binary that supports unpacked extensions. The Playwright browser path can be obtained without launching it.
 
+On Linux, Chromium must be allowed to create its sandbox namespaces before this launch can succeed. Reading the browser's version does not test sandbox startup. Arrange the host's approved sandbox configuration for the resolved `--browser` executable.
+
+The Ubuntu 24.04 CI runner exited with `No usable sandbox!` because AppArmor restricted unprivileged user namespaces. The [verify workflow](../../../.github/workflows/verify.yml) installs an executable-specific `userns` rule before testing. When this restriction applies on another Ubuntu host, use that rule pattern with the actual resolved browser path. A rule for a different Chromium installation does not cover this executable. Read Chromium's [AppArmor guidance](https://chromium.googlesource.com/chromium/src/+/main/docs/security/apparmor-userns-restrictions.md) for host-specific details. Do not add `--no-sandbox` or disable AppArmor restrictions system-wide.
+
+If the launcher fails before the debugging endpoint opens, inspect its output directory's `chromium.log` and `session.json` first. A logged `No usable sandbox!` is a browser startup failure, before page navigation or Provider requests. Preserve that failed attempt. Record any task-created AppArmor rule and its executable path. Do not overwrite or remove an existing host rule. Remove a temporary task-owned rule only after this task's browser has stopped.
+
 ```bash
 node --input-type=module -e 'import { chromium } from "playwright"; console.log(chromium.executablePath())'
 python3 .agents/skills/headless-chromium/scripts/launch.py \
@@ -22,8 +28,6 @@ python3 .agents/skills/headless-chromium/scripts/launch.py \
 Choose a new task-owned output directory for each launch. Keep the launcher running in a tool session. Wait for `session.json` to report `state` as `ready`. The launcher records its PID, browser PID, version, flags, User-Agent, isolated profile, extension path and build fingerprint. It creates the endpoint file consumed by chrome-debug. It does not modify the extension or configure a Provider.
 
 The launcher chooses an explicit nonzero debugging port, uses `--headless=new` and a normal Chrome User-Agent derived from the browser's major version. It enables extension developer mode through a short bootstrap connection to `chrome://extensions`, then closes that connection before declaring readiness. Its default window size is 1280 by 900. Use `--window-size WIDTH,HEIGHT` when another viewport is needed. Check actual page geometry and screenshots after launch.
-
-Linux must allow Chromium to create its sandbox namespaces. The Ubuntu 24.04 CI runner exited with No usable sandbox because AppArmor restricted unprivileged user namespaces. The [verify workflow](../../../.github/workflows/verify.yml) installs an AppArmor rule for the exact Playwright Chromium executable before testing. For another Linux host, arrange the host's approved sandbox configuration before launch. Read Chromium's [AppArmor guidance](https://chromium.googlesource.com/chromium/src/+/main/docs/security/apparmor-userns-restrictions.md) when this error occurs. Do not add `--no-sandbox` or disable AppArmor restrictions system-wide to make real-site checks pass.
 
 Do not substitute `tests/chrome-debug/support.py` as the real-site launcher. Its port-zero fixture default caused YouTube seek failures in the Chrome for Testing 153.0.8010.12 controls on 2026-10-28. Port zero exposed `navigator.webdriver=true`; an explicit nonzero port exposed `navigator.webdriver=false` and the seek succeeded in headed and headless controls. Those observations do not establish the server's detection rule. Do not inject navigator overrides to conceal a failed setup.
 

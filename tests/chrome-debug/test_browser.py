@@ -82,6 +82,17 @@ class Media(BrowserCase):
         self.assertTrue([e for e in events if e["type"] == "unmute"], events)
         self.assertTrue(all(e["muted"] for e in events), events)
 
+    def test_play_resumes_after_a_paused_trace_reports_a_stall(self):
+        tab = self.open("long-pause", trace=True)
+        self.result(self.do(tab, action="media", play=True))
+        self.result(self.do(tab, action="wait", seconds=1))
+        paused = self.result(self.do(tab, action="media", pause=True))["video"]["time"]
+        trace = self.result(self.do(tab, action="trace", seconds=5), ok=False)
+        self.assertIn("paused", trace["value"]["fail"])
+        resumed = self.result(self.do(tab, action="media", play=True))["video"]
+        self.assertFalse(resumed["paused"])
+        self.assertGreater(resumed["time"], paused)
+
     def test_frozen_video_fails_with_the_reason(self):
         """00834c8: a playable video that never advanced used the whole budget."""
         tab = self.open("stuck", stuck=1)
@@ -91,6 +102,22 @@ class Media(BrowserCase):
 
 
 class Steps(BrowserCase):
+
+    def test_click_delivers_trusted_pointer_input(self):
+        tab = self.open("trusted-click")
+        self.result(self.do(tab, action="evaluate", expression="""(() => {
+          const button = document.createElement('button');
+          button.id = 'trusted-click';
+          button.textContent = 'Continue';
+          button.style.cssText = 'position:fixed;left:50px;top:50px;width:100px;height:50px;z-index:9999';
+          button.addEventListener('click', event => button.dataset.trusted = String(event.isTrusted));
+          document.body.append(button);
+          return true;
+        })()"""))
+        self.result(self.do(tab, action="click", selector="#trusted-click"))
+        value = self.result(self.do(tab, action="evaluate", expression=
+            "document.querySelector('#trusted-click').dataset.trusted || false"))["value"]
+        self.assertEqual(value, "true")
 
     def test_a_closed_tab_ends_the_step_at_once(self):
         """c3b792e: a closed tab used to retry until the budget ran out (414 s)."""

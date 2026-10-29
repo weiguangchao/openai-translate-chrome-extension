@@ -897,8 +897,10 @@ class Tab:
                 self.seek_mark = (stamp, value["time"])
             return value
         if play or self.keep_playing:
+            self.stall_since = None
             self.expect_motion = True
         if pause:
+            self.stall_since = None
             self.expect_motion = False
         self.watch = (
             self.watch_probe(selector) if self.expect_motion or self.skip_ads or self.rate is not None else None
@@ -962,11 +964,22 @@ class Tab:
         expression = f"""(() => {{
           const node = document.querySelector({json.dumps(step["selector"])});
           if (!node) return null;
-          node.click();
-          return {{tag: node.tagName.toLowerCase(), text: (node.textContent || '').trim().slice(0, 60)}};
+          node.scrollIntoView({{block: 'center', inline: 'center'}});
+          const rect = node.getBoundingClientRect();
+          if (!rect.width || !rect.height) return null;
+          return {{tag: node.tagName.toLowerCase(), text: (node.textContent || '').trim().slice(0, 60),
+                   x: rect.x + rect.width / 2, y: rect.y + rect.height / 2}};
         }})()"""
         ok, value = self.until(lambda: self.sample(expression), lambda value: value is not None)
-        return {"ok": ok, "clicked": value}
+        if not ok:
+            return {"ok": False, "clicked": None}
+        point = {"x": value["x"], "y": value["y"]}
+        self.call("Input.dispatchMouseEvent", {"type": "mouseMoved", **point})
+        for event in ("mousePressed", "mouseReleased"):
+            self.call("Input.dispatchMouseEvent", {
+                "type": event, **point, "button": "left", "clickCount": 1,
+            })
+        return {"ok": True, "clicked": {key: value[key] for key in ("tag", "text")}}
 
     def do_overlay(self, step):
         if not step.get("wait"):
