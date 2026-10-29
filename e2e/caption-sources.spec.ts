@@ -85,9 +85,9 @@ for (const platform of ['youtube', 'hbo', 'x'] as const) {
       await expect(p.translated).toBeHidden();
       await p.page.evaluate(() => window.fixture.select('zh-TW'));
       await p.pair(traditionalSource, traditionalTranslation);
-      for (const [language, original, translated, name] of [
-        ['ja', japaneseSource, japaneseTranslation, 'Japanese'],
-        ['ko', koreanSource, koreanTranslation, 'Korean'],
+      for (const [language, original, translated] of [
+        ['ja', japaneseSource, japaneseTranslation],
+        ['ko', koreanSource, koreanTranslation],
       ]) {
         await p.page.evaluate((language) => window.fixture.select(language, 'asr'), language);
         await p.pair(original, translated);
@@ -100,7 +100,7 @@ for (const platform of ['youtube', 'hbo', 'x'] as const) {
             expect.objectContaining({
               role: 'system',
               content: expect.stringMatching(
-                `^Translate the given ${name} into Simplified Chinese[.]`,
+                '^You are a professional Simplified Chinese native translator[.]',
               ),
             }),
           ]),

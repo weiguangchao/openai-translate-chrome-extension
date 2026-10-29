@@ -146,6 +146,7 @@ A run counts only if its traces report the tested `playbackRate` and none is mar
 
 ### Evidence and cleanup
 
+- For authorized MiMo measurements, read the current worktree's Git-ignored `.env` fields MIMO_BASE_URL, MIMO_MODEL and MIMO_API_KEY before asking for configuration. Keep this user-requested persistent file at mode `0600`, fill the real settings page from it, and retain it during task cleanup. Never copy its key into evidence or a build.
 - Preserve failed attempts and raw traces. Check saved runs with `.agents/skills/chrome-debug/scripts/verify.py`. Report collection completeness, timing validity, visible subtitle behavior and performance thresholds separately. Report wait time as unavailable when no caption becomes ready in its window. Report Provider duration as unavailable when its successful sample count is zero. The loading share excludes empty and error states. A value of zero does not mean all captions succeeded. Do not increase timeouts or weaken assertions to obtain a pass.
 - Close only this task's tabs and stop its `live.py` holder. Stop any browser launcher owned by this task after the holder has stopped, and remove its temporary profile and secret-bearing setup files. Do not close the user's browser. Retain the evidence needed to reproduce the finding. Sanitize diagnostic network logs before sharing because they can contain cookies and signed media URLs.
 

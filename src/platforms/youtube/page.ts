@@ -7,6 +7,7 @@ interface Track {
   baseUrl?: string;
   languageCode?: string;
   vssId?: string;
+  vss_id?: string;
   kind?: string;
 }
 interface YoutubePlayer extends HTMLElement {
@@ -105,8 +106,9 @@ function select(videoId: string): CaptionResource | undefined {
   )
     return;
   const selected = player.getOption?.('captions', 'track');
+  const selectedId = selected?.vssId ?? selected?.vss_id;
   const active =
-    tracks.find((track) => selected?.vssId && track.vssId === selected.vssId) ??
+    tracks.find((track) => selectedId && track.vssId === selectedId) ??
     tracks.find(
       (track) =>
         Boolean(selected?.languageCode) &&
