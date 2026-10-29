@@ -12,7 +12,7 @@ Remaining triggers:
 - Any prose surface, your reply to the user included → the **unslop** skill. Write the reply per **Writing the reply**.
 - Before commit → the **deslop** skill
 - Broken skill mid-task → fix it in its own PR. Don't block. Don't silently work around it.
-- Write typescript code → the **typescript-best-practices** skill
+- When reading or editing any `.ts` or `.tsx` file → the **typescript-best-practices** skill
 
 ## Principles
 
