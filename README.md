@@ -64,5 +64,3 @@ npm run verify
 ```
 
 `npm test` 运行单元测试。完整检查前需安装 Playwright 的 Chromium。`npm run verify` 运行 lint、类型检查、测试、上架版构建和浏览器回归。`npm run build:store` 可单独构建上架版，输出目录同为 `dist/`。
-
-[prerelease.yml](.github/workflows/prerelease.yml) 每天北京时间 00:00 检查 `main` 在刚结束的自然日内是否有提交。有提交时运行 `npm run verify`，把检查时的 `main` 代码打包为 `subline-prerelease.zip`，更新固定的 `prerelease` 标签和同一个 GitHub 预发布。没有提交时跳过构建和发布。预发布不上传 Chrome Web Store。GitHub 定时任务可能延迟执行。
