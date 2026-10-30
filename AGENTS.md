@@ -4,7 +4,9 @@ Subline is a Chrome Manifest V3 extension that shows bilingual subtitles on YouT
 
 ## Non-negotiables
 
-In your reply, name each principle that shaped a decision and the specific choice it changed. Cite only principles whose leaf SKILL.md you read this session.
+The Principles section below grounds every trigger. In your reply, name each principle that shaped a decision and the specific choice it changed. Cite only principles whose leaf SKILL.md you read this session.
+
+Remaining triggers:
 
 - Any prose surface, your reply to the user included → the **unslop** skill.
 - Before commit → the **deslop** skill.

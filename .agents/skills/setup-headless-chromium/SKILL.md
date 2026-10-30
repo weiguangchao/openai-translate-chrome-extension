@@ -22,9 +22,11 @@ On Linux, check sandbox setup in [startup diagnostics](references/startup.md). I
 
 ## Configure translation when needed
 
-Use authorized Provider settings through the real settings page. Grant origin permission, obtain caption-sharing consent and pass the connection test. Keep keys in private files or a secret tool, outside arguments, source, manifests and evidence.
+Use authorized Provider settings through the real settings page and obtain caption-sharing consent. Keep keys in private files or a secret tool, outside arguments, source, manifests and evidence.
 
-Complete any settings bootstrap connection before handoff, then close it. Do not enable the page's Runtime domain or evaluate custom code in extension contexts. If host permission approval cannot finish headlessly, preserve the failure and report setup as blocked; do not bypass consent or change the production manifest.
+Saving can wait for a browser-native origin-permission prompt, even in headless Chromium on macOS. Page DOM and screenshots miss it. Inspect native UI, approve only this task's authorized Provider origin, then confirm saving and the connection test succeed.
+
+Complete any settings bootstrap connection before handoff, then close it. Do not enable the page's Runtime domain or evaluate custom code in extension contexts. If native approval is unavailable or still fails, preserve the failure and report setup as blocked; do not bypass consent or change the production manifest.
 
 ## Hand off
 
