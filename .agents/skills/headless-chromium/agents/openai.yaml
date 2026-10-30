@@ -1,3 +1,0 @@
-interface:
-  display_name: "Headless Chromium"
-  short_description: "Launch isolated Chromium for Subline browser checks."
