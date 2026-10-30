@@ -1,67 +1,42 @@
 ---
 name: setup-headless-chromium
-description: Launch an isolated headless Chromium with Subline installed, then hand browser debugging and playback traces to debug-chromium. Use when the user requests real-browser verification in this repository.
+description: Prepare isolated headless Chromium with Subline for a requested browser check, then hand it to debug-chromium.
 ---
 
-# Setup headless Chromium
-
-Use this skill to prepare the browser for a requested real-browser check. Use [debug-chromium](../debug-chromium/SKILL.md) for subsequent page operations and traces. For playback measurements, follow [verify-chromium-performance](../verify-chromium-performance/SKILL.md). A request to edit code or documentation alone does not call for a real-site measurement.
+# Set up headless Chromium
 
 ## Launch
 
-Run from the repository root. Build the requested extension first with `npm run build`. Use a full Chromium or Chrome for Testing binary that supports unpacked extensions. The Playwright browser path can be obtained without launching it.
-
-On Linux, Chromium must be allowed to create its sandbox namespaces before this launch can succeed. Reading the browser's version does not test sandbox startup. Arrange the host's approved sandbox configuration for the resolved `--browser` executable.
-
-The Ubuntu 24.04 CI runner exited with `No usable sandbox!` because AppArmor restricted unprivileged user namespaces. The [verify workflow](../../../.github/workflows/verify.yml) installs an executable-specific `userns` rule before testing. When this restriction applies on another Ubuntu host, use that rule pattern with the actual resolved browser path. A rule for a different Chromium installation does not cover this executable. Read Chromium's [AppArmor guidance](https://chromium.googlesource.com/chromium/src/+/main/docs/security/apparmor-userns-restrictions.md) for host-specific details. Do not add `--no-sandbox` or disable AppArmor restrictions system-wide.
-
-If the launcher fails before the debugging endpoint opens, inspect its output directory's `chromium.log` and `session.json` first. A logged `No usable sandbox!` is a browser startup failure, before page navigation or Provider requests. Preserve that failed attempt. Record any task-created AppArmor rule and its executable path. Do not overwrite or remove an existing host rule. Remove a temporary task-owned rule only after this task's browser has stopped.
+From the repository root, build with `npm run build` and choose a full Chromium or Chrome for Testing binary that loads unpacked extensions:
 
 ```bash
 node --input-type=module -e 'import { chromium } from "playwright"; console.log(chromium.executablePath())'
-python3 .agents/skills/setup-headless-chromium/scripts/launch.py \
-  --browser "/absolute/path/to/Chromium" \
-  --extension "$PWD/dist" \
-  --output "$PWD/.artifacts/headless-check"
+python3 .agents/skills/setup-headless-chromium/scripts/launch.py --browser "/absolute/path/to/Chromium" --extension "$PWD/dist" --output "$PWD/.artifacts/headless-check"
 ```
 
-Choose a new task-owned output directory for each launch. Keep the launcher running in a tool session. Wait for `session.json` to report `state` as `ready`. The launcher records its PID, browser PID, version, flags, User-Agent, isolated profile, extension path and build fingerprint. It creates the endpoint file consumed by debug-chromium. It does not modify the extension or configure a Provider.
+Use a new task-owned output directory and keep the launcher running in a tool session. Wait for `session.json` to report `state: "ready"`. It records process IDs, the isolated profile, browser configuration and build fingerprint. Ready means the endpoint and extension developer mode are available.
 
-The launcher chooses an explicit nonzero debugging port, uses `--headless=new` and a normal Chrome User-Agent derived from the browser's major version. It enables extension developer mode through a short bootstrap connection to `chrome://extensions`, then closes that connection before declaring readiness. Its default window size is 1280 by 900. Use `--window-size WIDTH,HEIGHT` when another viewport is needed. Check actual page geometry and screenshots after launch.
+The launcher uses a nonzero debugging port, a normal Chrome User-Agent and a 1280 by 900 window. Use `--window-size WIDTH,HEIGHT` when needed; verify actual geometry and screenshots after handoff. Use this launcher for real sites, rather than the test harness.
 
-Do not substitute `tests/debug-chromium/support.py` as the real-site launcher. Its port-zero fixture default caused YouTube seek failures in the Chrome for Testing 153.0.8010.12 controls on 2026-10-28. Port zero exposed `navigator.webdriver=true`; an explicit nonzero port exposed `navigator.webdriver=false` and the seek succeeded in headed and headless controls. Those observations do not establish the server's detection rule. Do not inject navigator overrides to conceal a failed setup.
+On Linux, check sandbox setup in [startup diagnostics](references/startup.md). If launch fails, inspect `chromium.log` and `session.json` there before changing the setup.
 
-In the same controls, X returned HTTP 403 with the default HeadlessChrome User-Agent and HTTP 200 with a normal Chrome User-Agent. Record actual navigation status when diagnosing another failure. Local fixture success does not prove real-site playback or captions.
+## Configure translation when needed
 
-## Configure the Provider when needed
+Use authorized Provider settings through the real settings page. Grant origin permission, obtain caption-sharing consent and pass the connection test. Keep keys in private files or a secret tool, outside arguments, source, manifests and evidence.
 
-Before measuring translation, save through the real extension settings page. Grant the Provider origin permission, obtain caption-sharing consent and pass the extension's connection test. Use the task's authorized Provider settings. Deliver secrets through a private file or secret tool. Never embed an API key in launch arguments, source files, a manifest or evidence.
+Complete any settings bootstrap connection before handoff, then close it. Do not enable the page's Runtime domain or evaluate custom code in extension contexts. If host permission approval cannot finish headlessly, preserve the failure and report setup as blocked; do not bypass consent or change the production manifest.
 
-Settings bootstrap may use its own UI automation connection before debug-chromium starts. Close that connection before handing off the browser. Do not enable the page's Runtime domain. Do not evaluate custom code in extension contexts. Use the real settings controls for Provider configuration.
+## Hand off
 
-In the headless investigation, Save stalled at optional host permission approval. Do not treat that as a Provider timeout or keep extending the wait. If approval cannot complete in headless mode, retain the failure and report the initialization as blocked. A separate diagnostic copy may preauthorize the requested Provider origin in its manifest to isolate the permission step. Compare its files, record its fingerprint and label its results separately. That copy does not validate the original build's authorization flow. Do not modify the production manifest to claim a pass.
-
-## Hand off to debug-chromium
-
-Read [debug-chromium](../debug-chromium/SKILL.md) before connecting. Set the two environment variables from this launch's `session.json` in every command environment. For the example output directory above, use the following values.
+Export the values from this launch's `session.json` in every later command environment:
 
 ```bash
 export DEBUG_CHROMIUM_PORT_FILE="$PWD/.artifacts/headless-check/endpoint"
 export DEBUG_CHROMIUM_STATE="$PWD/.artifacts/headless-check/holder.json"
-python3 .agents/skills/debug-chromium/scripts/live.py start
 ```
 
-Keep the session ID returned by `start`. Pass it to later commands.
+Continue with [debug-chromium](../debug-chromium/SKILL.md) to start the holder and verify the extension with `reload`. The launcher's bootstrap connection is closed before ready; the launcher makes no debugging calls after handoff.
 
-```bash
-python3 .agents/skills/debug-chromium/scripts/live.py reload --path "$PWD/dist" --session SESSION
-python3 .agents/skills/debug-chromium/scripts/live.py open "https://www.youtube.com/watch?v=VIDEO_ID" --trace --session SESSION
-```
+## Clean up
 
-Readiness means the endpoint and developer mode are ready. Confirm the extension loaded with `reload` before opening the requested videos. From `start` until `stop`, only `live.py` may connect to this browser. Do not launch a second Playwright or DevTools connection, read `DevToolsActivePort`, or enable the page's Runtime domain. Do not evaluate custom code or enable Network in extension contexts. The launcher stays idle and makes no further debugging calls after handoff.
-
-For playback measurements, read [measurement.md](../debug-chromium/references/measurement.md). Omit its example's `--focus` flag and do not use `focus` steps for a headless run. They activate the user's Google Chrome through AppleScript. Keep the loaded build path and fingerprint with the evidence. Observe the page readiness, screenshot, timing validity and failure preservation rules in [verify-chromium-performance](../verify-chromium-performance/SKILL.md).
-
-## Stop
-
-Close this task's tabs and stop its holder with `live.py` and the session ID. Then send SIGTERM to the `launcher_pid` recorded in this task's `session.json`. The launcher terminates its own Chromium, removes its temporary profile and endpoint file, and records the final state. Do not terminate the user's browser or another task's launcher. Remove any secret-bearing bootstrap files. Keep session metadata and only the logs and evidence needed for the task. Sanitize network logs before sharing them.
+After debug-chromium closes its tabs and stops its holder, send SIGTERM to this launch's recorded `launcher_pid`. The launcher stops its Chromium and removes the temporary profile and endpoint. Remove secret-bearing bootstrap files, retain session metadata and needed diagnostics, and sanitize network logs before sharing. Leave the user's browser and other tasks' launchers alone.

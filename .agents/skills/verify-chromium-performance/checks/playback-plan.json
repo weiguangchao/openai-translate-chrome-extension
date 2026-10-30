@@ -10,11 +10,7 @@
       "url": "https://www.youtube.com/watch?v=arj7oStGLkU",
       "rate": 1,
       "start": 60,
-      "seek": [
-        300,
-        600,
-        900
-      ],
+      "seek": [300, 600, 900],
       "media": {
         "keep_playing": true,
         "skip_ads": true
@@ -25,11 +21,7 @@
       "url": "https://www.youtube.com/watch?v=c0KYU2j0TM4",
       "rate": 1.25,
       "start": 60,
-      "seek": [
-        600,
-        300,
-        900
-      ],
+      "seek": [600, 300, 900],
       "media": {
         "keep_playing": true,
         "skip_ads": true
@@ -40,11 +32,7 @@
       "url": "https://www.youtube.com/watch?v=D9Ihs241zeg",
       "rate": 1.5,
       "start": 60,
-      "seek": [
-        600,
-        300,
-        900
-      ],
+      "seek": [600, 300, 900],
       "media": {
         "keep_playing": true,
         "skip_ads": true
@@ -55,11 +43,7 @@
       "url": "https://www.youtube.com/watch?v=qp0HIF3SfI4",
       "rate": 2,
       "start": 60,
-      "seek": [
-        600,
-        300,
-        900
-      ],
+      "seek": [600, 300, 900],
       "media": {
         "keep_playing": true,
         "skip_ads": true
@@ -69,12 +53,7 @@
       "name": "hbo-1",
       "url": "https://play.hbomax.com/video/watch/44805ae8-7771-4238-ad89-2c629a30db4d",
       "rate": 1,
-      "seek": [
-        120,
-        720,
-        1020,
-        420
-      ],
+      "seek": [120, 720, 1020, 420],
       "media": {
         "keep_playing": true
       }
@@ -83,12 +62,7 @@
       "name": "hbo-1p25",
       "url": "https://play.hbomax.com/video/watch/44805ae8-7771-4238-ad89-2c629a30db4d",
       "rate": 1.25,
-      "seek": [
-        720,
-        120,
-        1020,
-        420
-      ],
+      "seek": [720, 120, 1020, 420],
       "media": {
         "keep_playing": true
       }
@@ -97,12 +71,7 @@
       "name": "hbo-1p5",
       "url": "https://play.hbomax.com/video/watch/44805ae8-7771-4238-ad89-2c629a30db4d",
       "rate": 1.5,
-      "seek": [
-        720,
-        120,
-        1020,
-        420
-      ],
+      "seek": [720, 120, 1020, 420],
       "media": {
         "keep_playing": true
       }
@@ -111,12 +80,7 @@
       "name": "hbo-2",
       "url": "https://play.hbomax.com/video/watch/44805ae8-7771-4238-ad89-2c629a30db4d",
       "rate": 2,
-      "seek": [
-        120,
-        720,
-        1020,
-        420
-      ],
+      "seek": [120, 720, 1020, 420],
       "media": {
         "keep_playing": true
       }
@@ -125,12 +89,7 @@
       "name": "x-1",
       "url": "https://x.com/theo/status/2107935187825008691",
       "rate": 1,
-      "seek": [
-        300,
-        600,
-        900,
-        1200
-      ],
+      "seek": [300, 600, 900, 1200],
       "media": {
         "keep_playing": true
       }
@@ -139,12 +98,7 @@
       "name": "x-1p25",
       "url": "https://x.com/theo/status/2107935187825008691",
       "rate": 1.25,
-      "seek": [
-        600,
-        300,
-        900,
-        1200
-      ],
+      "seek": [600, 300, 900, 1200],
       "media": {
         "keep_playing": true
       }
@@ -153,12 +107,7 @@
       "name": "x-1p5",
       "url": "https://x.com/theo/status/2107935187825008691",
       "rate": 1.5,
-      "seek": [
-        900,
-        300,
-        600,
-        1200
-      ],
+      "seek": [900, 300, 600, 1200],
       "media": {
         "keep_playing": true
       }
@@ -167,12 +116,7 @@
       "name": "x-2",
       "url": "https://x.com/theo/status/2107935187825008691",
       "rate": 2,
-      "seek": [
-        1200,
-        300,
-        600,
-        900
-      ],
+      "seek": [1200, 300, 600, 900],
       "media": {
         "keep_playing": true
       }

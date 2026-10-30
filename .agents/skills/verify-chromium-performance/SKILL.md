@@ -1,30 +1,39 @@
 ---
 name: verify-chromium-performance
-description: Verify Subline subtitle performance in Chromium when the user requests real-browser playback measurements or build comparisons. Covers readiness, trace timing, metrics, evidence and cleanup. Do not use for unrelated code or documentation edits.
+description: Measure Subline subtitle performance or compare builds in Chromium when the user requests it. Defines playback runs, metrics and evidence requirements.
 ---
 
 # Verify Chromium performance
 
-For a user-requested real-browser check, default to the [setup-headless-chromium skill](../setup-headless-chromium/SKILL.md) to launch and initialize an isolated headless browser. Then use the [debug-chromium skill](../debug-chromium/SKILL.md) for page operations, debugging and trace collection. Use an existing or headed browser when the user requests one. Do not start real-browser checks for unrelated code or documentation work.
+## Prepare
 
-Collect and report the metrics below for each build on YouTube and X by default. Include HBO Max only when the user explicitly requests HBO. Test each included platform at 1x, 1.25x, 1.5x and 2x. Each run reloads Subline so no translation is cached, opens the video, sets the rate and traces 45 s with `"since": "open"`. It then seeks once into a segment with no cached translations, away from where the opening trace played, traces 45 s with `"since": "seek"` for the landing trace, then keeps playing and traces 180 s; durations are video seconds. On YouTube, the first `media` step's `time` starts the video where someone is speaking; YouTube ignores `&t=`.
+Use [setup-headless-chromium](../setup-headless-chromium/SKILL.md) to launch, then [debug-chromium](../debug-chromium/SKILL.md) to operate the browser. Use an existing or headed browser when the user requests one. Code or documentation edits alone do not require real-site measurements.
 
-A run counts only if its traces report the tested `playbackRate` and none is marked `throttled` (keep Chrome in front). The landing trace fails by itself when the video leaves the seek target.
+Test YouTube and X at 1x, 1.25x, 1.5x and 2x for each build. Include HBO Max only when explicitly requested. Before tracing, read the selected platform's [page checks](references/page-readiness.md).
 
-- Wait after opening: the seconds a viewer waits after opening the video until the first subtitle on screen shows its translation, from the opening trace: `(firstReadyAt - firstCaptionAt) / playbackRate`.
-- Wait after seeking: the seconds a viewer waits after the seek until the first subtitle on screen shows its translation, from the landing trace: `(firstReadyAt - firstCaptionAt) / playbackRate`.
-- Loading while playing: the share of subtitle time that shows the loading placeholder instead of a translation, from the 180 s trace: `states.loading / (states.loading + states.ready)`.
-- Provider duration p90. Report the 90th percentile of wall seconds from `sent` to `done` for successful Provider requests completed during the 180 s trace, from `batches.p90`. Exclude queue time, failed, aborted and pending requests. Include the full duration when a request was sent before this trace but completed within it. Use nearest rank and do not divide by playback rate. Report the sample count from `batches.measured` and the outcome counts from `batches.results`. No samples means unavailable, not zero.
+For authorized MiMo runs, read `MIMO_BASE_URL`, `MIMO_MODEL` and `MIMO_API_KEY` from the worktree's ignored `.env` before asking for configuration. Keep it at mode `0600`, configure through the real settings page and retain the file during cleanup. Never copy its key into a build or evidence.
 
-### Page readiness and visible subtitles
+## Collect each run
 
-- On YouTube, wait for pre-roll ads to finish and confirm the selected caption track is enabled before seeking into spoken content. A fresh profile may have CC off. If the player fails after seeking, inspect its error and media response before changing the seek method or timeout. The investigation observed HTTP 200 media responses carrying STREAM_PROTECTION_STATUS rejection and player errors ump.spsrejectfailure and HTML5_SPS_UMP_STATUS_REJECTED. HTTP 200 alone does not establish playable media.
-- On X, confirm the main video, selected subtitle language, track mode, loaded cues and active cues. Inspect the actual caption source before assuming prefetch works. The investigated page exposed a React controller instead of the adapter's expected `playerApi.video.hlsJs`. Subline used live native cues without a full timeline. The traces suggest many successful Provider replies arrived after their caption had changed. A source mode named model or successful requests alone do not prove timeline prefetch or timely subtitles.
-- Check screenshots as well as `overlay` results. Choose a viewport that fits the subtitle area. DOM visibility and viewport intersection do not detect another element covering a subtitle. In the investigated 756 by 413 viewport, X's fixed See all the replies and Continue to X login panel covered the translation while the DOM check reported it visible. Scroll the subtitle region clear of page panels and inspect both lines. Do not remove page elements with injected CSS to manufacture a passing screenshot. Record viewport and scroll position with the evidence.
-- A paused frame can confirm real translation and rendering. Label it as a separate diagnostic. It does not prove continuous playback quality and must not replace the opening, landing or playing traces. X displayed both lines after scrolling and pausing even when continuous playback showed almost entirely loading.
+1. Reload Subline to clear translations. Open the video, set the rate and trace 45 video seconds with `since: "open"`. On YouTube, use the first `media` step's `time` to reach spoken content; URL `&t=` does not set it reliably.
+2. Seek once to uncached captions outside the opening trace and its prefetched ranges. Trace 45 video seconds with `since: "seek"`.
+3. Continue playing and trace 180 video seconds.
 
-### Evidence and cleanup
+Keep headed Chrome in front; do not use `focus` in headless runs. Traces must report the tested rate, stay unthrottled and cover their requested duration. Reject sparse or truncated evidence and unexpected rate changes. A landing trace fails if playback leaves the seek target. `ok` alone does not establish valid timing.
 
-- For authorized MiMo measurements, read the current worktree's Git-ignored `.env` fields MIMO_BASE_URL, MIMO_MODEL and MIMO_API_KEY before asking for configuration. Keep this user-requested persistent file at mode `0600`, fill the real settings page from it, and retain it during task cleanup. Never copy its key into evidence or a build.
-- Preserve failed attempts and raw traces. Check saved runs with `.agents/skills/debug-chromium/scripts/verify.py`. Report collection completeness, timing validity, visible subtitle behavior and performance thresholds separately. Report wait time as unavailable when no caption becomes ready in its window. Report Provider duration as unavailable when its successful sample count is zero. The loading share excludes empty and error states. A value of zero does not mean all captions succeeded. Do not increase timeouts or weaken assertions to obtain a pass.
-- Close only this task's tabs and stop its `live.py` holder. Stop any browser launcher owned by this task after the holder has stopped, and remove its temporary profile and secret-bearing setup files. Do not close the user's browser. Retain the evidence needed to reproduce the finding. Sanitize diagnostic network logs before sharing because they can contain cookies and signed media URLs.
+For automated plans, build comparisons, saved-run checks or interrupted runs, read [measurement.md](references/measurement.md).
+
+## Report
+
+| Metric                | Calculation                                                                             |
+| --------------------- | --------------------------------------------------------------------------------------- |
+| Wait after opening    | Opening `(firstReadyAt - firstCaptionAt) / playbackRate`, in viewer seconds.            |
+| Wait after seeking    | Landing `(firstReadyAt - firstCaptionAt) / playbackRate`, in viewer seconds.            |
+| Loading while playing | Playing `states.loading / (states.loading + states.ready)`.                             |
+| Provider duration     | Playing `batches.p50` and `batches.p90`, with `batches.measured` and `batches.results`. |
+
+Provider percentiles use nearest rank and full wall seconds from sent to done for successful requests completed in the playing window, including requests sent earlier. Exclude queue time, failed, aborted and pending requests. Do not divide by playback rate.
+
+Report unavailable wait times when no caption becomes ready, and unavailable Provider durations when successful samples are zero. Loading share excludes empty and error states; zero does not establish that every caption succeeded.
+
+Report collection completeness, timing validity, visible subtitle behavior and configured performance thresholds separately. Preserve failed attempts and raw traces. Do not increase timeouts or weaken assertions for a pass. Follow the debugging and setup skills' cleanup order, and sanitize diagnostic network logs before sharing.
