@@ -1,10 +1,12 @@
-import { selectedTrack } from '../../core/native';
+import { NativeTimeline, selectedTrack } from '../../core/native';
 import { BridgeTimeline } from '../../core/bridge/client';
+import { languageTrack } from '../../core/languages';
 import type { Platform, PlatformFactory } from '../../core/platform';
 import { activeXVideo, findXPlayer, readXCaption, xVideoId } from './player';
 
 export const createXPlatform: PlatformFactory = (changed): Platform => {
   const bridge = new BridgeTimeline('x', changed);
+  const native = new NativeTimeline();
   return {
     id: 'x',
     style: '',
@@ -17,7 +19,16 @@ export const createXPlatform: PlatformFactory = (changed): Platform => {
       return container && button ? { container, button } : null;
     },
     source(video) {
-      const state = bridge.read(xVideoId());
+      const bridged = bridge.read(xVideoId());
+      const local = native.read(video);
+      const useNativeTrack =
+        !bridged ||
+        bridged.language === null ||
+        Boolean(languageTrack([local], (state) => state.language ?? '', bridged.language));
+      const state =
+        !bridged || bridged.source !== null || bridged.mode !== 'model' || !useNativeTrack
+          ? bridged
+          : local;
       const language = state?.language ?? selectedTrack(video)?.language ?? null;
       if (state?.source)
         return {
@@ -34,7 +45,7 @@ export const createXPlatform: PlatformFactory = (changed): Platform => {
           mode: state.mode,
           id: state.sourceId,
           language,
-          read: () => readXCaption(video, state.language),
+          read: () => readXCaption(video, state === bridged ? state.language : null),
         };
       return {
         kind: 'waiting',
@@ -43,7 +54,13 @@ export const createXPlatform: PlatformFactory = (changed): Platform => {
         language: state?.language ?? null,
       };
     },
-    reset: () => bridge.reset(),
-    destroy: () => bridge.destroy(),
+    reset() {
+      bridge.reset();
+      native.reset();
+    },
+    destroy() {
+      bridge.destroy();
+      native.reset();
+    },
   };
 };
