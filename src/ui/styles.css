@@ -761,8 +761,12 @@ button:hover:not(:disabled) {
 .sample-subtitles {
   position: absolute;
   bottom: 43px;
-  left: 3%;
-  right: 3%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: 94%;
+  padding: 0 6px;
+  border-radius: 3px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -773,8 +777,7 @@ button:hover:not(:disabled) {
 .sample-subtitles > div {
   max-width: 100%;
   width: fit-content;
-  padding: 1px 6px;
-  border-radius: 3px;
+  padding: 1px 0;
   white-space: pre-line;
   text-shadow: 0 1px 2px #0008;
   overflow-wrap: anywhere;

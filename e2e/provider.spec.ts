@@ -80,7 +80,10 @@ for (const platform of ['youtube', 'hbo', 'x'] as const) {
           await expect(p.translated).toBeVisible();
           await expect(p.translated).toHaveCSS('color', 'rgb(255, 204, 0)');
           await expect(p.translated).toHaveCSS('font-size', '20px');
-          await expect(p.translated).toHaveCSS('background-color', 'rgba(0, 0, 0, 0.35)');
+          await expect(p.overlay.locator('.stack')).toHaveCSS(
+            'background-color',
+            'rgba(0, 0, 0, 0.45)',
+          );
           await expect(p.original).toBeHidden();
           await p.settings({
             translation: { size: 32, color: '#FF0000' },
@@ -91,8 +94,11 @@ for (const platform of ['youtube', 'hbo', 'x'] as const) {
           await expect(p.translated).toBeVisible();
           await expect(p.translated).toHaveCSS('font-size', '32px');
           await expect(p.translated).toHaveCSS('color', 'rgb(255, 204, 0)');
-          await expect(p.translated).toHaveCSS('background-color', 'rgba(0, 0, 0, 0.7)');
-          await expect(p.translated).toHaveCSS('margin-top', '17px');
+          await expect(p.overlay.locator('.stack')).toHaveCSS(
+            'background-color',
+            'rgba(0, 0, 0, 0.7)',
+          );
+          await expect(p.overlay.locator('.stack')).toHaveCSS('gap', '17px');
           expect(await p.overlay.locator('.stack').evaluate((stack) => stack.style.bottom)).toBe(
             '9%',
           );
@@ -114,7 +120,10 @@ for (const platform of ['youtube', 'hbo', 'x'] as const) {
       await expect(p.translated).toHaveText('The API Key is invalid or expired.');
       await expect(p.translated).toHaveCSS('color', 'rgb(255, 204, 0)');
       await expect(p.translated).toHaveCSS('font-size', '20px');
-      await expect(p.translated).toHaveCSS('background-color', 'rgba(0, 0, 0, 0.35)');
+      await expect(p.overlay.locator('.stack')).toHaveCSS(
+        'background-color',
+        'rgba(0, 0, 0, 0.45)',
+      );
       await expect(p.original).toBeHidden();
       expect(p.posts.map((post) => post.status)).toContain(401);
       expect(p.posts.every((post) => post.status === 401)).toBe(true);
