@@ -8,7 +8,6 @@ In your reply, name each principle that shaped a decision and the specific choic
 
 - Any prose surface, your reply to the user included → the **unslop** skill.
 - Before commit → the **deslop** skill.
-- Broken skill mid-task → fix it in its own PR. Don't block. Don't silently work around it.
 - When meeting any `.ts` or `.tsx` file → the **typescript-best-practices** skill.
 
 ## Principles
