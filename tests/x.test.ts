@@ -410,6 +410,77 @@ it.each([
   },
 );
 
+it('prefetches loaded native X captions before they appear and after seeking without an HLS controller', async () => {
+  const { video } = addPlayer('a', { top: 0, bottom: 360 }, false);
+  Reflect.deleteProperty(video.parentElement!, '__reactFiber$test');
+  Object.defineProperty(video, 'textTracks', {
+    value: [
+      {
+        kind: 'subtitles',
+        language: 'en',
+        mode: 'showing',
+        activeCues: [],
+        cues: [
+          { startTime: 3, endTime: 5, text: 'Native opening.' },
+          { startTime: 6, endTime: 8, text: 'Native upcoming.' },
+          { startTime: 80, endTime: 83, text: 'Native landing.' },
+          { startTime: 84, endTime: 87, text: 'Native after landing.' },
+        ],
+      },
+    ],
+  });
+  controller = new CaptionController(createXPlatform, publicSettings(settings));
+  await vi.advanceTimersByTimeAsync(0);
+  expect(requested.flatMap((request) => request.texts)).toContain('Native upcoming.');
+  expect(requested.flatMap((request) => request.texts)).not.toContain('Native landing.');
+  await playTo(video, 3);
+  expect(lines()?.[0].textContent).toBe('Native opening.');
+  expect(lines()?.[1].textContent).toBe('译文 Native opening.');
+  video.currentTime = 80;
+  video.dispatchEvent(new Event('seeked'));
+  await playTo(video, 81);
+  await vi.advanceTimersByTimeAsync(3000);
+  expect(requested.flatMap((request) => request.texts)).toContain('Native after landing.');
+  expect(lines()?.[0].textContent).toBe('Native landing.');
+  expect(lines()?.[1].textContent).toBe('译文 Native landing.');
+  expect(downloads(/\.m3u8|\.vtt/)).toEqual([]);
+});
+
+it('follows native X track changes and stops prefetch when captions are disabled', async () => {
+  const { video } = addPlayer('a', { top: 0, bottom: 360 }, false);
+  Reflect.deleteProperty(video.parentElement!, '__reactFiber$test');
+  const english = {
+    kind: 'subtitles',
+    language: 'en',
+    mode: 'showing',
+    activeCues: [],
+    cues: [{ startTime: 3, endTime: 9, text: 'English caption.' }],
+  };
+  const japanese = {
+    kind: 'subtitles',
+    language: 'ja',
+    mode: 'disabled',
+    activeCues: [],
+    cues: [{ startTime: 3, endTime: 9, text: '日本語の字幕。' }],
+  };
+  Object.defineProperty(video, 'textTracks', { value: [english, japanese] });
+  controller = new CaptionController(createXPlatform, publicSettings(settings));
+  await playTo(video, 3);
+  expect(lines()?.[1].textContent).toBe('译文 English caption.');
+  english.mode = 'disabled';
+  japanese.mode = 'showing';
+  await vi.advanceTimersByTimeAsync(4000);
+  expect(lines()?.[0].textContent).toBe('日本語の字幕。');
+  expect(lines()?.[1].textContent).toBe('译文 日本語の字幕。');
+  japanese.mode = 'disabled';
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(lines()?.[0].hidden).toBe(true);
+  expect(lines()?.[1].hidden).toBe(true);
+  const count = requested.length;
+  await playTo(video, 20);
+  expect(requested).toHaveLength(count);
+});
+
 it('accepts only X video CDN URLs and finished subtitle playlists', () => {
   expect(xMediaUrl('/subtitles/a.vtt', `${media}/pl/s0/a.m3u8`)).toBe(
     'https://video.twimg.com/subtitles/a.vtt',

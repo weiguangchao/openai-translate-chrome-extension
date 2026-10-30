@@ -30,9 +30,9 @@ For automated plans, build comparisons, saved-run checks or interrupted runs, re
 | Wait after opening    | Opening `(firstReadyAt - firstCaptionAt) / playbackRate`, in viewer seconds.            |
 | Wait after seeking    | Landing `(firstReadyAt - firstCaptionAt) / playbackRate`, in viewer seconds.            |
 | Loading while playing | Playing `states.loading / (states.loading + states.ready)`.                             |
-| Provider duration     | Playing `batches.p50` and `batches.p90`, with `batches.measured` and `batches.results`. |
+| Provider duration     | Playing `batches.p90`, with `batches.measured` and `batches.results`. |
 
-Provider percentiles use nearest rank and full wall seconds from sent to done for successful requests completed in the playing window, including requests sent earlier. Exclude queue time, failed, aborted and pending requests. Do not divide by playback rate.
+Provider p90 uses nearest rank and full wall seconds from sent to done for successful requests completed in the playing window, including requests sent earlier. Exclude queue time, failed, aborted and pending requests. Do not divide by playback rate.
 
 Report unavailable wait times when no caption becomes ready, and unavailable Provider durations when successful samples are zero. Loading share excludes empty and error states; zero does not establish that every caption succeeded.
 
