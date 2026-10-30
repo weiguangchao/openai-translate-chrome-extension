@@ -48,7 +48,7 @@ function write(node: HTMLDivElement | null, text: string, status: Status): void 
 }
 
 const OVERLAY_STYLE =
-  ':host{all:initial}.stack{position:absolute;left:4%;width:92%;text-align:center;font-family:Arial,"PingFang SC",sans-serif;line-height:1.4;pointer-events:none}.line{width:fit-content;max-width:100%;margin-inline:auto;padding:1px 8px;border-radius:3px;white-space:normal;overflow-wrap:anywhere;text-shadow:0 1px 3px #000;box-sizing:border-box}.error{color:#ffcc00!important}';
+  ':host{all:initial}.stack{position:absolute;left:50%;transform:translateX(-50%);width:max-content;max-width:92%;display:flex;flex-direction:column;align-items:center;padding:0 8px;border-radius:3px;box-sizing:border-box;text-align:center;font-family:Arial,"PingFang SC",sans-serif;line-height:1.4;pointer-events:none}.stack:not(:has(>.line:not([hidden]))){display:none}.line{max-width:100%;padding:1px 0;white-space:normal;overflow-wrap:anywhere;text-shadow:0 1px 3px #000;box-sizing:border-box}.error{color:#ffcc00!important}';
 
 export class SubtitleOverlay {
   private player: HTMLElement | null = null;
@@ -86,9 +86,9 @@ export class SubtitleOverlay {
       node.setAttribute('dir', 'auto');
       node.hidden = true;
     }
-    this.updateStyle(settings);
     stack.append(this.original, this.translation);
     shadow.append(css, stack);
+    this.updateStyle(settings);
     player.append(this.host);
   }
 
@@ -100,9 +100,12 @@ export class SubtitleOverlay {
       if (!node) continue;
       node.style.color = style.color;
       node.style.fontSize = `${style.size}px`;
-      node.style.backgroundColor = `rgba(0,0,0,${settings.backgroundOpacity / 100})`;
     }
-    if (this.translation) this.translation.style.marginTop = `${settings.subtitleGap}px`;
+    const stack = this.host?.shadowRoot?.querySelector<HTMLElement>('.stack');
+    if (stack) {
+      stack.style.backgroundColor = `rgba(0,0,0,${settings.backgroundOpacity / 100})`;
+      stack.style.gap = `${settings.subtitleGap}px`;
+    }
   }
 
   unmount(): void {

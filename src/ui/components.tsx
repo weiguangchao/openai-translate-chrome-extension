@@ -169,7 +169,6 @@ export function SubtitlePreview({ settings }: { settings: Settings }) {
   const style = (kind: 'original' | 'translation'): CSSProperties => ({
     color: settings[kind].color,
     fontSize: settings[kind].size,
-    backgroundColor: `rgba(0,0,0,${settings.backgroundOpacity / 100})`,
   });
   const scene = (large: boolean) => (
     <div className={`preview-scene ${large ? 'large' : ''}`}>
@@ -195,7 +194,10 @@ export function SubtitlePreview({ settings }: { settings: Settings }) {
       </div>
       <div
         className="sample-subtitles"
-        style={{ gap: settings.subtitleGap }}
+        style={{
+          gap: settings.subtitleGap,
+          backgroundColor: `rgba(0,0,0,${settings.backgroundOpacity / 100})`,
+        }}
         aria-label={t('字幕样式预览', 'Subtitle style preview')}
       >
         <div style={style('original')} dir="auto">
