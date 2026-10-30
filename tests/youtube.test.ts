@@ -358,7 +358,7 @@ it('translates authored English sentences even when authored, automatic and brow
     baseUrl: `https://www.youtube.com/api/timedtext?v=video-1&lang=${track.languageCode}&track=${track.vssId}`,
   }));
   Object.assign(player, {
-    getOption: () => ({ languageCode: 'en', vssId: '.en' }),
+    getOption: () => ({ languageCode: 'en', vss_id: '.en', kind: '' }),
     getPlayerResponse: () => ({
       videoDetails: { videoId: 'video-1' },
       captions: {
