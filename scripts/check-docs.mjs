@@ -2,6 +2,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 
 const agents = readFileSync('AGENTS.md', 'utf8');
+const documents = [agents, readFileSync('docs/internals/rules.md', 'utf8')].join('\n');
 const problems = [];
 
 const headings = new Set(
@@ -28,7 +29,7 @@ const code = ['src', 'scripts', 'tests', 'e2e', '.github']
   .map((file) => readFileSync(file, 'utf8'))
   .join('\n');
 
-for (const [, token] of agents.matchAll(/`([^`]+)`/g)) {
+for (const [, token] of documents.matchAll(/`([^`]+)`/g)) {
   if (/^(src|tests|e2e|scripts|docs|public|\.github|\.agents)\/[\w./-]+$/.test(token)) {
     if (!existsSync(token)) problems.push(`\`${token}\` does not exist`);
   } else if (/^local\/[\w-]+$/.test(token)) {
@@ -48,4 +49,6 @@ if (problems.length) {
   for (const problem of problems) console.error(problem);
   process.exit(1);
 }
-console.log('AGENTS.md check passed: references resolve and the glossary names its constants.');
+console.log(
+  'Documentation check passed: project references resolve and the glossary names its constants.',
+);

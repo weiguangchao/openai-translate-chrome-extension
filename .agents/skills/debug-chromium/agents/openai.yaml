@@ -1,0 +1,5 @@
+interface:
+  display_name: 'Debug Chromium'
+  short_description: 'Inspect pages and traces through one Chromium session.'
+policy:
+  allow_implicit_invocation: true
