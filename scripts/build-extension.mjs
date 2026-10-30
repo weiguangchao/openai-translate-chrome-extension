@@ -2,7 +2,13 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { build } from 'esbuild';
 import { renderIcons, toAlphaSvg } from './build-icons.mjs';
 
-const ALPHA_NAME = 'Subline · Alpha';
+const builtAt = new Date();
+const buildDate = [
+  builtAt.getFullYear(),
+  String(builtAt.getMonth() + 1).padStart(2, '0'),
+  String(builtAt.getDate()).padStart(2, '0'),
+].join('');
+const LOCAL_NAME = `Subline · ${buildDate}`;
 const alpha = process.argv.includes('--alpha');
 
 await build({
@@ -33,11 +39,11 @@ for (const [entry, output] of [
 
 if (alpha) {
   const manifest = JSON.parse(await readFile('dist/manifest.json', 'utf8'));
-  manifest.name = ALPHA_NAME;
-  manifest.action.default_title = ALPHA_NAME;
+  manifest.name = LOCAL_NAME;
+  manifest.action.default_title = LOCAL_NAME;
   await writeFile('dist/manifest.json', `${JSON.stringify(manifest, null, 2)}\n`);
   await writeFile('dist/logo.svg', toAlphaSvg(await readFile('public/logo.svg', 'utf8')));
   await renderIcons('dist', toAlphaSvg);
 }
 
-console.log(`Chrome extension (${alpha ? ALPHA_NAME : 'store'}) built in dist/`);
+console.log(`Chrome extension (${alpha ? LOCAL_NAME : 'store'}) built in dist/`);

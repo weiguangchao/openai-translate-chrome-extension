@@ -27,7 +27,7 @@ Subline 是一个 Chrome 扩展，在 YouTube、HBO Max 和 X 的播放器中显
 
 2. 在 Chrome 地址栏打开 `chrome://extensions`，开启「开发者模式」。
 3. 点击「加载已解压的扩展程序」，选择项目中的 `dist/` 文件夹。
-4. 确认扩展列表中出现 `Subline · Alpha`，然后刷新已经打开的视频页面。
+4. 确认扩展列表中出现 `Subline · YYYYMMDD`，日期为打包机器的本地日期，例如 `Subline · 20260505`，然后刷新已经打开的视频页面。
 
 ## 使用
 
