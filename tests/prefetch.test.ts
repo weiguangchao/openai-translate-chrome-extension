@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { CaptionController } from '../src/core/controller';
 import type { TimedCue } from '../src/core/cues';
-import { maxInFlightRequests, seekSettleMs, translationSendsPerSecond } from '../src/shared/tuning';
+import { seekSettleMs, translationSendsPerSecond } from '../src/shared/tuning';
 import { createHboPlatform } from '../src/platforms/hbo/platform';
 import { NativeTimeline } from '../src/core/native';
 import { publicSettings } from '../src/shared/settings';
@@ -287,7 +287,7 @@ it.each(['timeout', '500'] as const)(
     const opening = [['Cue 1.'], ['Cue 2.', 'Cue 3.']];
     expect(requested).toEqual(opening);
     await advance(3);
-    expect(requested).toEqual(opening);
+    expect(requested.length).toBeGreaterThan(opening.length);
     expect(translated()?.textContent).toBe('Translating');
     const request = pending.find((request) => request.texts.includes('Cue 1.'))!;
     const message = failure === 'timeout' ? 'Request timed out' : 'Provider request failed';
@@ -301,10 +301,8 @@ it.each(['timeout', '500'] as const)(
     expect(translation?.textContent).toBe(message);
     expect(translation?.hidden).toBe(false);
     expect(original()?.hidden).toBe(true);
-    const sent = requested.length;
     await vi.advanceTimersByTimeAsync(20000);
     expect(requested.filter((request) => request.includes('Cue 1.'))).toHaveLength(1);
-    if (failure === 'timeout') expect(requested).toHaveLength(sent);
     expect(translated()?.textContent).toBe(message);
     await advance(12);
     await finish({ 'Cue 6.': '第六句' });
@@ -323,7 +321,7 @@ it('keeps requests sent before a seek running, sends the landing at once and cac
   controller = new CaptionController(createHboPlatform, publicSettings(saved));
   await vi.advanceTimersByTimeAsync(0);
   const started = requested.length;
-  expect(started).toBe(maxInFlightRequests);
+  expect(started).toBe(translationSendsPerSecond);
   video.currentTime = 42;
   video.dispatchEvent(new Event('timeupdate'));
   await vi.advanceTimersByTimeAsync(seekSettleMs - 1);
@@ -376,7 +374,7 @@ it('keeps an untranslated short source hidden and waits out a seek before reques
   await vi.advanceTimersByTimeAsync(0);
   expect(requested).toHaveLength(sent);
   await vi.advanceTimersByTimeAsync(400);
-  expect(requested.slice(sent)).toEqual([['After.'], ['Seek tail.']]);
+  expect(requested.slice(sent)).toEqual([['After.']]);
   expect(original()?.hidden).toBe(true);
   expect(translated()?.hidden).toBe(false);
   expect(translated()?.textContent).toBe('Translating');
@@ -398,7 +396,7 @@ it('finishes in-flight prefetch while paused and does not send more until playba
   await advance(2);
   const openingCount = requested.length;
   expect(openingCount).toBeGreaterThan(0);
-  expect(openingCount).toBeLessThanOrEqual(maxInFlightRequests);
+  expect(openingCount).toBeGreaterThan(translationSendsPerSecond);
   await setPaused(true);
   expect(pending.every((request) => !request.signal.aborted)).toBe(true);
   await vi.advanceTimersByTimeAsync(60000);

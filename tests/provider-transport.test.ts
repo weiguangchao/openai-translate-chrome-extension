@@ -30,7 +30,7 @@ afterEach(() => {
 
 it('keeps invalid replies in the send budget before admitting fresh captions', async () => {
   const sends: number[] = [];
-  const invalid = ['A', 'B', 'C'];
+  const invalid = ['A', 'B'];
   const fetch = vi.fn(async (_url: string, init: RequestInit) => {
     sends.push(Date.now());
     const texts = requestedTexts(init);
@@ -40,15 +40,15 @@ it('keeps invalid replies in the send budget before admitting fresh captions', a
   const queue = new TranslationQueue();
   await expect(
     Promise.all(invalid.map((text) => queue.request(text, settings, text).catch(() => null))),
-  ).resolves.toEqual([null, null, null]);
-  const work = ['D', 'E', 'F'].map((text) => queue.request(text, settings, text));
+  ).resolves.toEqual([null, null]);
+  const work = ['C', 'D'].map((text) => queue.request(text, settings, text));
   await vi.advanceTimersByTimeAsync(999);
-  expect(sends).toHaveLength(3);
+  expect(sends).toHaveLength(2);
   await vi.advanceTimersByTimeAsync(1);
-  await expect(Promise.all(work)).resolves.toEqual(['译文 D', '译文 E', '译文 F']);
-  expect(sends).toHaveLength(6);
+  await expect(Promise.all(work)).resolves.toEqual(['译文 C', '译文 D']);
+  expect(sends).toHaveLength(4);
   for (const at of sends)
-    expect(sends.filter((time) => at <= time && time < at + 1000).length).toBeLessThanOrEqual(3);
+    expect(sends.filter((time) => at <= time && time < at + 1000).length).toBeLessThanOrEqual(2);
 });
 
 it('shares the POST budget with connection checks while GET models remain available', async () => {
@@ -59,14 +59,14 @@ it('shares the POST budget with connection checks while GET models remain availa
   );
   vi.stubGlobal('fetch', fetch);
   const queue = new TranslationQueue();
-  const work = ['A', 'B', 'C'].map((text) => queue.request(text, settings, text));
+  const work = ['A', 'B'].map((text) => queue.request(text, settings, text));
   const check = api.translate(settings, 'connection check');
   await expect(api.fetchModels(settings)).resolves.toEqual(['model']);
-  expect(fetch.mock.calls.filter(([, init]) => init.method === 'POST')).toHaveLength(3);
+  expect(fetch.mock.calls.filter(([, init]) => init.method === 'POST')).toHaveLength(2);
   await vi.advanceTimersByTimeAsync(1000);
-  await expect(Promise.all(work)).resolves.toEqual(['完成', '完成', '完成']);
+  await expect(Promise.all(work)).resolves.toEqual(['完成', '完成']);
   await expect(check).resolves.toContain('完成');
-  expect(fetch).toHaveBeenCalledTimes(5);
+  expect(fetch).toHaveBeenCalledTimes(4);
 });
 
 it('cancels a waiting send without fetching or consuming another consumer’s work', async () => {
@@ -75,7 +75,7 @@ it('cancels a waiting send without fetching or consuming another consumer’s wo
   );
   vi.stubGlobal('fetch', fetch);
   const queue = new TranslationQueue();
-  await Promise.all(['A', 'B', 'C'].map((text) => queue.request(text, settings, text)));
+  await Promise.all(['A', 'B'].map((text) => queue.request(text, settings, text)));
   const dropped = queue.request('drop', settings, 'D').catch((error: Error) => error.message);
   const shared = queue.request('one', settings, 'Shared').catch((error: Error) => error.message);
   const retained = queue.request('two', settings, 'Shared');
@@ -88,7 +88,6 @@ it('cancels a waiting send without fetching or consuming another consumer’s wo
   expect(fetch.mock.calls.map(([, init]) => requestedTexts(init))).toEqual([
     ['A'],
     ['B'],
-    ['C'],
     ['Shared'],
   ]);
 });
@@ -116,20 +115,20 @@ it('starts each provider deadline only when its HTTP request is sent', async () 
   const work = ['A', 'B', 'C', 'D'].map((text) =>
     api.translateCaptionBatch(settings, [text]).catch((error: Error) => error.message),
   );
-  expect(sends.map(({ text }) => text)).toEqual(['A', 'B', 'C']);
+  expect(sends.map(({ text }) => text)).toEqual(['A', 'B']);
   await vi.advanceTimersByTimeAsync(providerSendWindowMs - 1);
   expect(sends).toHaveLength(translationSendsPerSecond);
   await vi.advanceTimersByTimeAsync(1);
   expect(sends.map(({ text, at }) => [text, at - started])).toEqual([
     ['A', 0],
     ['B', 0],
-    ['C', 0],
+    ['C', providerSendWindowMs],
     ['D', providerSendWindowMs],
   ]);
   await vi.advanceTimersByTimeAsync(providerTimeoutMs - providerSendWindowMs);
-  expect(sends.map(({ signal }) => signal.aborted)).toEqual([true, true, true, false]);
-  await expect(Promise.all(work.slice(0, 3))).resolves.toEqual(
-    Array(3).fill('The request timed out. Check your network or choose a faster model.'),
+  expect(sends.map(({ signal }) => signal.aborted)).toEqual([true, true, false, false]);
+  await expect(Promise.all(work.slice(0, 2))).resolves.toEqual(
+    Array(2).fill('The request timed out. Check your network or choose a faster model.'),
   );
   await vi.advanceTimersByTimeAsync(providerSendWindowMs - 1);
   expect(sends[3].signal.aborted).toBe(false);
@@ -151,7 +150,7 @@ it('prioritizes the visible caption when the next send window opens', async () =
     }),
   );
   const queue = new TranslationQueue();
-  await Promise.all(['A', 'B', 'C'].map((text) => queue.request(text, settings, text)));
+  await Promise.all(['A', 'B'].map((text) => queue.request(text, settings, text)));
   const prefetch = queue.prefetch(
     'window',
     settings,
@@ -159,7 +158,7 @@ it('prioritizes the visible caption when the next send window opens', async () =
   );
   const current = queue.request('current', settings, 'Visible');
   await vi.advanceTimersByTimeAsync(1000);
-  expect(sent.slice(3)).toEqual(['Visible', 'Future 0']);
+  expect(sent.slice(2)).toEqual(['Visible', 'Future 0']);
   await expect(current).resolves.toBe('完成');
   await expect(prefetch).resolves.toEqual(['完成', null]);
 });
@@ -175,13 +174,13 @@ it('replaces unsent work when a consumer moves to a disjoint window', async () =
     }),
   );
   const queue = new TranslationQueue();
-  await Promise.all(['A', 'B', 'C'].map((text) => queue.request(text, settings, text)));
+  await Promise.all(['A', 'B'].map((text) => queue.request(text, settings, text)));
   const old = queue.prefetch('window', settings, prefetchItems(['Obsolete']));
   const next = queue.prefetch('window', settings, prefetchItems(['Needed']));
   await vi.advanceTimersByTimeAsync(1000);
   await expect(old).resolves.toEqual([null]);
   await expect(next).resolves.toEqual(['完成']);
-  expect(sent).toEqual(['A', 'B', 'C', 'Needed']);
+  expect(sent).toEqual(['A', 'B', 'Needed']);
 });
 
 it('keeps the shared send budget across queue resets and configuration changes', async () => {
@@ -190,14 +189,14 @@ it('keeps the shared send budget across queue resets and configuration changes',
   );
   vi.stubGlobal('fetch', fetch);
   const queue = new TranslationQueue();
-  await Promise.all(['A', 'B', 'C'].map((text) => queue.request(text, settings, text)));
+  await Promise.all(['A', 'B'].map((text) => queue.request(text, settings, text)));
   queue.reset();
   const changed = queue.request('next', { ...settings, model: 'new-model' }, 'D');
   await vi.advanceTimersByTimeAsync(999);
-  expect(fetch).toHaveBeenCalledTimes(3);
+  expect(fetch).toHaveBeenCalledTimes(2);
   await vi.advanceTimersByTimeAsync(1);
   await expect(changed).resolves.toBe('完成');
-  expect(fetch).toHaveBeenCalledTimes(4);
+  expect(fetch).toHaveBeenCalledTimes(3);
 });
 
 it('releases all disabled consumers before waking any pending provider sends', async () => {
@@ -206,7 +205,7 @@ it('releases all disabled consumers before waking any pending provider sends', a
   );
   vi.stubGlobal('fetch', fetch);
   const queue = new TranslationQueue();
-  await Promise.all(['A', 'B', 'C'].map((text) => queue.request(text, settings, text)));
+  await Promise.all(['A', 'B'].map((text) => queue.request(text, settings, text)));
   const waiting = ['one', 'two'].map((consumer) =>
     queue.request(consumer, settings, consumer).catch((error: Error) => error.message),
   );
@@ -216,7 +215,7 @@ it('releases all disabled consumers before waking any pending provider sends', a
     'Subtitles have changed.',
     'Subtitles have changed.',
   ]);
-  expect(fetch).toHaveBeenCalledTimes(3);
+  expect(fetch).toHaveBeenCalledTimes(2);
 });
 
 it('keeps a rate slot for every POST that was sent, even when it is aborted later', async () => {

@@ -236,7 +236,11 @@ it('prefetches the opening batches from the selected HLS subtitle playlist befor
   const opening = [['Cue 1'], ['Cue 2', 'Cue 3']];
   expect(requested.map((request) => request.texts)).toEqual(opening);
   await vi.advanceTimersByTimeAsync(providerSendWindowMs);
-  expect(requested.map((request) => request.texts)).toEqual(opening);
+  expect(requested.map((request) => request.texts)).toEqual([
+    ...opening,
+    ['Cue 4', 'Cue 5'],
+    ['Cue 6', 'Cue 7'],
+  ]);
   expect(player.querySelectorAll('[data-subline-overlay]')).toHaveLength(1);
   await playTo(video, 3);
   expect(lines()?.[0].textContent).toBe('Cue 1');
