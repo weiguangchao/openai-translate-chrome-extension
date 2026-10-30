@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { maxInFlightRequests } from '../src/shared/tuning';
+import { translationSendsPerSecond } from '../src/shared/tuning';
 import { longCaption, longCaptionParts, longTranslations } from '../tests/fixtures/long-caption';
 import {
   denseCue,
@@ -138,7 +138,7 @@ test('youtube: 1.5x playback sends the imminent caption alone and stays silent t
         video.playbackRate = 1.5;
       });
       await p.play();
-      await expect.poll(() => p.posts.length).toBe(maxInFlightRequests);
+      await expect.poll(() => p.posts.length).toBe(translationSendsPerSecond);
       expect(p.posts.map((post) => post.inputs.map((input) => input.text))).toEqual([
         [denseCue(0).text],
         [denseCue(1).text, denseCue(2).text],
@@ -147,7 +147,7 @@ test('youtube: 1.5x playback sends the imminent caption alone and stays silent t
       await p.release(0);
       await p.pair(denseCue(0).text, denseCue(0).translation);
       await p.page.screenshot({ path: info.outputPath('opening.png') });
-      await expect.poll(() => p.posts.length).toBe(maxInFlightRequests + 1);
+      await expect.poll(() => p.posts.length).toBe(translationSendsPerSecond * 2);
       const before = p.posts.length;
       await p.page.locator('video').evaluate(async (video: HTMLVideoElement) => {
         for (const time of [28.8, 44.8, 60.8]) {
@@ -156,7 +156,7 @@ test('youtube: 1.5x playback sends the imminent caption alone and stays silent t
         }
       });
       expect(p.posts).toHaveLength(before);
-      await expect.poll(() => p.posts.length).toBe(before + maxInFlightRequests);
+      await expect.poll(() => p.posts.length).toBe(before + translationSendsPerSecond);
       expect(p.posts.slice(before).map((post) => post.inputs.map((input) => input.text))).toEqual([
         [denseCue(15).text],
         [denseCue(16).text, denseCue(17).text],
@@ -166,11 +166,7 @@ test('youtube: 1.5x playback sends the imminent caption alone and stays silent t
       await p.page.screenshot({ path: info.outputPath('landing.png') });
       const batches = p.trace.filter((event) => event.e === 'batch');
       expect(batches.length).toBeGreaterThan(0);
-      expect(
-        batches.every(
-          (event) => event.playbackRate === 1.5 && Number(event.inFlight) <= maxInFlightRequests,
-        ),
-      ).toBe(true);
+      expect(batches.every((event) => event.playbackRate === 1.5)).toBe(true);
       expect(batches[0]).toMatchObject({ size: 1, atRisk: true, blocked: false });
     },
     { dense: true, hold: true, recordVideo: true },

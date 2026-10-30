@@ -1,6 +1,6 @@
 import { t } from '../shared/i18n';
 import { translateCaptionBatch } from '../shared/api';
-import { latencySampleLimit, maxInFlightRequests, translationBatchLimit } from '../shared/tuning';
+import { latencySampleLimit, translationBatchLimit } from '../shared/tuning';
 import {
   planPlayback,
   slackSeconds,
@@ -339,11 +339,7 @@ export class TranslationQueue {
       return job && !job.controller ? [job] : [];
     });
     const now = Date.now();
-    while (
-      waiting.length &&
-      now >= (this.backoff?.until ?? 0) &&
-      this.inFlight() < maxInFlightRequests
-    ) {
+    while (waiting.length && now >= (this.backoff?.until ?? 0)) {
       const first = waiting[0];
       const batch = !first.pack
         ? [first]

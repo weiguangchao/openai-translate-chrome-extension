@@ -250,8 +250,12 @@ it.each([mediaUrl, edgeMediaUrl])(
     expect(requested.map((request) => request.texts)).toEqual(openingRequests);
     expect(requested.every((request) => request.at === 0)).toBe(true);
     await vi.advanceTimersByTimeAsync(providerSendWindowMs);
-    expect(requested.map((request) => request.texts)).toEqual(openingRequests);
-    expect(requested.every((request) => request.at === 0)).toBe(true);
+    expect(requested.map((request) => request.texts)).toEqual([
+      ...openingRequests,
+      ['Cue 4', 'Cue 5'],
+      ['Cue 6', 'Cue 7'],
+    ]);
+    expect(requested.slice(2).every((request) => request.at === 0)).toBe(true);
     await playTo(3);
     expect(lines()?.[0].textContent).toBe('Cue 1');
     expect(lines()?.[1].textContent).toBe('译文 Cue 1');
@@ -283,7 +287,11 @@ it('displays a finished HBO segment while the other prefetched segment is still 
   await vi.advanceTimersByTimeAsync(0);
   expect(batches.map(({ texts }) => texts)).toEqual(openingRequests);
   await vi.advanceTimersByTimeAsync(providerSendWindowMs);
-  expect(batches.map(({ texts }) => texts)).toEqual(openingRequests);
+  expect(batches.map(({ texts }) => texts)).toEqual([
+    ...openingRequests,
+    ['Cue 4', 'Cue 5'],
+    ['Cue 6', 'Cue 7'],
+  ]);
   await playTo(3);
   await vi.advanceTimersByTimeAsync(300);
   expect(lines()?.[1].textContent).toBe('Translating');
