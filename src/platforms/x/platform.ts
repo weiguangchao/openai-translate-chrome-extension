@@ -26,7 +26,7 @@ export const createXPlatform: PlatformFactory = (changed): Platform => {
         bridged.language === null ||
         Boolean(languageTrack([local], (state) => state.language ?? '', bridged.language));
       const state =
-        bridged && (bridged.source !== null || bridged.mode !== 'model' || !useNativeTrack)
+        !bridged || bridged.source !== null || bridged.mode !== 'model' || !useNativeTrack
           ? bridged
           : local;
       const language = state?.language ?? selectedTrack(video)?.language ?? null;

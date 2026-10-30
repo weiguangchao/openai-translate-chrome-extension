@@ -265,6 +265,42 @@ it('stops prefetch and clears the overlay when X captions are turned off', async
   expect(lines()?.[1].textContent).toBe('译文 Cue 11');
 });
 
+it.each([-1, 0])(
+  'honors the initial HLS selection %s before prefetching a conflicting native track',
+  async (selection) => {
+    const { video, hls } = addPlayer('a', { top: 0, bottom: 360 }, false, [track('a', 'zh-Hans')]);
+    hls.subtitleTrack = selection;
+    Object.defineProperty(video, 'textTracks', {
+      value: [
+        {
+          kind: 'subtitles',
+          language: 'en',
+          mode: 'showing',
+          activeCues: [],
+          cues: [{ startTime: 3, endTime: 5, text: 'Unselected native caption.' }],
+        },
+      ],
+    });
+    controller = new CaptionController(
+      createXPlatform,
+      publicSettings({ ...settings, targetLanguage: 'ja' }),
+    );
+    await playTo(video, 3);
+    expect(requested.flatMap((request) => request.texts)).not.toContain(
+      'Unselected native caption.',
+    );
+    if (selection === -1) {
+      expect(requested).toEqual([]);
+      expect(lines()?.[0].hidden).toBe(true);
+      expect(lines()?.[1].hidden).toBe(true);
+    } else {
+      expect(requested.flatMap((request) => request.texts)).toContain('字幕 1');
+      expect(lines()?.[0].textContent).toBe('字幕 1');
+      expect(lines()?.[1].textContent).toBe('译文 字幕 1');
+    }
+  },
+);
+
 it('downloads the selected X subtitle track and follows language changes', async () => {
   const { video, hls } = addPlayer('a', { top: 0, bottom: 360 }, false, [
     track('a', 'zh-Hans'),
