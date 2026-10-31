@@ -142,6 +142,7 @@ test('youtube: 1.5x playback sends the imminent caption alone and stays silent t
       expect(p.posts.map((post) => post.inputs.map((input) => input.text))).toEqual([
         [denseCue(0).text],
         [denseCue(1).text, denseCue(2).text],
+        [denseCue(3).text, denseCue(4).text],
       ]);
       await expect(p.translated).toHaveText('Translating');
       await p.release(0);
@@ -156,7 +157,7 @@ test('youtube: 1.5x playback sends the imminent caption alone and stays silent t
         }
       });
       expect(p.posts).toHaveLength(before);
-      await expect.poll(() => p.posts.length).toBe(before + translationSendsPerSecond);
+      await expect.poll(() => p.posts.length).toBe(before + 2);
       expect(p.posts.slice(before).map((post) => post.inputs.map((input) => input.text))).toEqual([
         [denseCue(15).text],
         [denseCue(16).text, denseCue(17).text],

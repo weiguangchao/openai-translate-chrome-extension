@@ -118,24 +118,26 @@ it('shares pending work within the send budget and serves a completed cue from t
   const queue = new TranslationQueue();
   const first = queue.request('tab-1', settings, 'First');
   const second = queue.request('tab-2', settings, 'Second');
+  const third = queue.request('tab-extra', settings, 'Third');
   const current = queue.request('tab-1', settings, 'Current');
   const shared = queue.request('tab-3', settings, 'Current');
-  expect(batches()).toEqual([['First'], ['Second']]);
-  expect(requests.map((request) => request.signal.aborted)).toEqual([false, false]);
+  expect(batches()).toEqual([['First'], ['Second'], ['Third']]);
+  expect(requests.map((request) => request.signal.aborted)).toEqual([false, false, false]);
   for (const request of requests)
     request.resolve(providerReply(request.texts, (text) => `${text} 译文`));
   await vi.advanceTimersByTimeAsync(1000);
-  expect(batches()).toEqual([['First'], ['Second'], ['Current']]);
-  requests[2].resolve(providerReply(['Current'], () => 'Current 译文'));
-  await expect(Promise.all([first, second, current, shared])).resolves.toEqual([
+  expect(batches()).toEqual([['First'], ['Second'], ['Third'], ['Current']]);
+  requests[3].resolve(providerReply(['Current'], () => 'Current 译文'));
+  await expect(Promise.all([first, second, third, current, shared])).resolves.toEqual([
     'First 译文',
     'Second 译文',
+    'Third 译文',
     'Current 译文',
     'Current 译文',
   ]);
   await expect(queue.request('tab-4', settings, 'Current')).resolves.toBe('Current 译文');
   await vi.advanceTimersByTimeAsync(1000);
-  expect(fetch).toHaveBeenCalledTimes(3);
+  expect(fetch).toHaveBeenCalledTimes(4);
 });
 
 it('translates the next caption after a timeout without pausing or retrying that batch', async () => {
@@ -265,25 +267,25 @@ it('answers a prefetch in order, nulls a cue the next plan drops, and reuses the
 it('keeps sending with earlier requests pending and prioritizes a visible caption', async () => {
   const { batches, requests } = pendingProvider();
   const queue = new TranslationQueue();
-  const cues = prefetchItems(Array.from({ length: 8 }, (_, index) => `Cue ${index + 1}`));
+  const cues = prefetchItems(Array.from({ length: 12 }, (_, index) => `Cue ${index + 1}`));
   const planned = planPlayback({ time: 0, rate: 1.5, cues }).map((request) =>
     request.cues.map((cue) => cue.text),
   );
   queue.prefetch('tab', settings, cues, 0, 1.5);
-  expect(planned.length).toBeGreaterThan(2);
-  expect(batches()).toEqual(planned.slice(0, 2));
+  expect(planned.length).toBeGreaterThan(translationSendsPerSecond);
+  expect(batches()).toEqual(planned.slice(0, translationSendsPerSecond));
   const visible = queue.request('tab', settings, 'Visible now');
-  expect(batches()).toEqual(planned.slice(0, 2));
+  expect(batches()).toEqual(planned.slice(0, translationSendsPerSecond));
   expect(requests[0].signal.aborted).toBe(false);
   await vi.advanceTimersByTimeAsync(999);
-  expect(batches()).toEqual(planned.slice(0, 2));
+  expect(batches()).toEqual(planned.slice(0, translationSendsPerSecond));
   await vi.advanceTimersByTimeAsync(1);
-  expect(batches()[2]).toEqual(['Visible now']);
-  expect(batches()).toHaveLength(4);
+  expect(batches()[translationSendsPerSecond]).toEqual(['Visible now']);
+  expect(batches()).toHaveLength(translationSendsPerSecond * 2);
   expect(requests.every((request) => !request.signal.aborted)).toBe(true);
-  requests[2].resolve(providerReply(['Visible now'], () => '可见'));
+  requests[translationSendsPerSecond].resolve(providerReply(['Visible now'], () => '可见'));
   await expect(visible).resolves.toBe('可见');
-  expect(batches()[3]).toEqual(planned[2]);
+  expect(batches()[translationSendsPerSecond + 1]).toEqual(planned[translationSendsPerSecond]);
 });
 
 it('sends a newly near cue without waiting for the pack already in flight', async () => {
@@ -298,11 +300,11 @@ it('sends a newly near cue without waiting for the pack already in flight', asyn
 it('lets packs sent before a seek finish into the cache without holding back the landing', async () => {
   const { batches, requests, reply } = pendingProvider();
   const queue = new TranslationQueue();
-  queue.prefetch('tab', settings, prefetchItems(['Now', 'Soon', 'Later']));
-  expect(batches()).toEqual([['Now'], ['Soon', 'Later']]);
+  queue.prefetch('tab', settings, prefetchItems(['Now', 'Soon', 'Later', 'After', 'Last']));
+  expect(batches()).toEqual([['Now'], ['Soon', 'Later'], ['After', 'Last']]);
   expect(batches()).toHaveLength(translationSendsPerSecond);
   queue.hold('tab', 50);
-  expect(batches()).toHaveLength(2);
+  expect(batches()).toHaveLength(3);
   queue.prefetch('tab', settings, prefetchItems(['Landed'], 50), 50);
   expect(batches().at(-1)).toEqual(['Landed']);
   expect(requests.some((request) => request.signal.aborted)).toBe(false);
@@ -314,14 +316,15 @@ it('lets packs sent before a seek finish into the cache without holding back the
 it('drops an unsent pack at the seek position until a settled snapshot arrives', async () => {
   const { batches } = pendingProvider();
   const queue = new TranslationQueue();
+  queue.request('other', settings, 'Other');
   const cues = prefetchItems(['Now', 'Soon', 'Landing', 'After']);
   queue.prefetch('tab', settings, cues, 0, 1.5);
-  expect(batches()).toEqual([['Now'], ['Soon', 'Landing']]);
+  expect(batches()).toEqual([['Other'], ['Now'], ['Soon', 'Landing']]);
   queue.hold('tab', 8.6);
   await vi.advanceTimersByTimeAsync(1000);
-  expect(batches()).toHaveLength(2);
+  expect(batches()).toHaveLength(3);
   queue.prefetch('tab', settings, cues, 8.6, 1.5);
-  expect(batches().slice(2)).toEqual([['After']]);
+  expect(batches().slice(3)).toEqual([['After']]);
 });
 
 it('resumes a DOM-only caption after holding a seek without requiring a timeline snapshot', () => {
@@ -441,27 +444,32 @@ it('finishes sent requests while paused and does not send the rest until playbac
   );
   queue.prefetch('tab', settings, cues, 0, 1.5);
   const visible = queue.request('tab', settings, cues[0].text);
-  expect(batches().slice(0, 2)).toEqual(planned.slice(0, 2));
+  expect(batches().slice(0, translationSendsPerSecond)).toEqual(
+    planned.slice(0, translationSendsPerSecond),
+  );
   queue.pause('tab');
   await vi.advanceTimersByTimeAsync(5000);
-  expect(fetch).toHaveBeenCalledTimes(2);
-  expect(requests.slice(0, 2).every((request) => !request.signal.aborted)).toBe(true);
+  expect(fetch).toHaveBeenCalledTimes(translationSendsPerSecond);
+  expect(
+    requests.slice(0, translationSendsPerSecond).every((request) => !request.signal.aborted),
+  ).toBe(true);
   reply(0);
   await expect(visible).resolves.toBe('Cue 1 译文');
-  expect(fetch).toHaveBeenCalledTimes(2);
+  expect(fetch).toHaveBeenCalledTimes(translationSendsPerSecond);
   queue.resume('tab');
-  expect(batches()[2]).toEqual(planned[2]);
+  expect(batches()[translationSendsPerSecond]).toEqual(planned[translationSendsPerSecond]);
 });
 
-it('keeps completed requests in the two-per-second send budget', async () => {
+it('keeps completed requests in the three-per-second send budget', async () => {
   const { batches, reply } = pendingProvider();
   const queue = new TranslationQueue();
   for (const text of ['A', 'B', 'C', 'D']) queue.request(text, settings, text);
-  expect(batches()).toEqual([['A'], ['B']]);
+  expect(batches()).toEqual([['A'], ['B'], ['C']]);
   reply(0);
   reply(1);
+  reply(2);
   await vi.advanceTimersByTimeAsync(999);
-  expect(batches()).toEqual([['A'], ['B']]);
+  expect(batches()).toEqual([['A'], ['B'], ['C']]);
   await vi.advanceTimersByTimeAsync(1);
   expect(batches()).toEqual([['A'], ['B'], ['C'], ['D']]);
 });
@@ -470,14 +478,14 @@ it('keeps queued packs parked through a provider backoff', async () => {
   const fetch = vi.fn().mockResolvedValue(new Response('', { status: 429 }));
   vi.stubGlobal('fetch', fetch);
   const queue = new TranslationQueue();
-  const cues = prefetchItems(Array.from({ length: 8 }, (_, index) => `Cue ${index + 1}`));
+  const cues = prefetchItems(Array.from({ length: 12 }, (_, index) => `Cue ${index + 1}`));
   queue.prefetch('tab', settings, cues, 0, 1.5);
   await flush();
-  expect(fetch).toHaveBeenCalledTimes(2);
+  expect(fetch).toHaveBeenCalledTimes(translationSendsPerSecond);
   await vi.advanceTimersByTimeAsync(14000);
-  expect(fetch).toHaveBeenCalledTimes(2);
+  expect(fetch).toHaveBeenCalledTimes(translationSendsPerSecond);
   await vi.advanceTimersByTimeAsync(1000);
-  expect(fetch).toHaveBeenCalledTimes(2 + translationSendsPerSecond);
+  expect(fetch).toHaveBeenCalledTimes(translationSendsPerSecond * 2);
 });
 
 it('does not send a pack that leaves the plan before a slot opens', async () => {
@@ -490,12 +498,12 @@ it('does not send a pack that leaves the plan before a slot opens', async () => 
   queue.prefetch('tab', settings, cues, 0, 1.5);
   queue.prefetch('tab', settings, prefetchItems(planned[0]));
   await vi.advanceTimersByTimeAsync(1000);
-  expect(fetch).toHaveBeenCalledTimes(2);
-  expect(batches()).toEqual(planned.slice(0, 2));
+  expect(fetch).toHaveBeenCalledTimes(translationSendsPerSecond);
+  expect(batches()).toEqual(planned.slice(0, translationSendsPerSecond));
   reply(0);
   await flush();
-  expect(fetch).toHaveBeenCalledTimes(2);
-  expect(batches()).toEqual(planned.slice(0, 2));
+  expect(fetch).toHaveBeenCalledTimes(translationSendsPerSecond);
+  expect(batches()).toEqual(planned.slice(0, translationSendsPerSecond));
 });
 
 it('cancels an in-flight batch when playback leaves and does not retry it', async () => {
@@ -733,21 +741,21 @@ it('traces each batch by tab without its keys, texts or error messages, excludin
   events.length = 0;
   const delayed = pendingProvider();
   await vi.advanceTimersByTimeAsync(1000);
-  for (const text of ['A', 'B']) {
+  for (const text of ['A', 'B', 'C']) {
     const done = queue.request(text, settings, text);
     delayed.reply(delayed.requests.length - 1);
     await done;
   }
   const created = Date.now();
   const measured = queue.request('measured', settings, 'Delayed');
-  expect(delayed.batches()).toEqual([['A'], ['B']]);
+  expect(delayed.batches()).toEqual([['A'], ['B'], ['C']]);
   await vi.advanceTimersByTimeAsync(providerSendWindowMs);
-  expect(delayed.batches()).toEqual([['A'], ['B'], ['Delayed']]);
+  expect(delayed.batches()).toEqual([['A'], ['B'], ['C'], ['Delayed']]);
   const measuredBatch = events.find((event) => event.e === 'batch' && event.tab === 'measured')!;
   expect(events).toContainEqual({ e: 'sent', id: measuredBatch.id });
   expect(Date.now() - created).toBe(providerSendWindowMs);
   await vi.advanceTimersByTimeAsync(250);
-  delayed.reply(2);
+  delayed.reply(3);
   await expect(measured).resolves.toBe('Delayed 译文');
   await flush();
   expect(events.filter((event) => event.id === measuredBatch.id && event.e === 'done')).toEqual([
@@ -786,10 +794,10 @@ it('keeps sent packs through snapshot refreshes and cancels one only after its c
   const queue = new TranslationQueue();
   const list = Array.from({ length: 8 }, (_, index) => `Cue ${index + 1}`);
   queue.prefetch('tab', settings, prefetchItems(list));
-  expect(batches()).toEqual([['Cue 1'], ['Cue 2', 'Cue 3']]);
+  expect(batches()).toEqual([['Cue 1'], ['Cue 2', 'Cue 3'], ['Cue 4', 'Cue 5']]);
   queue.prefetch('tab', settings, prefetchItems(list), 1);
-  expect(requests.map((request) => request.signal.aborted)).toEqual([false, false]);
-  expect(batches()).toHaveLength(2);
+  expect(requests.map((request) => request.signal.aborted)).toEqual([false, false, false]);
+  expect(batches()).toHaveLength(3);
   queue.prefetch('tab', settings, prefetchItems(list.slice(1), 4), 5);
   expect(requests[0].signal.aborted).toBe(true);
   expect(requests[1].signal.aborted).toBe(false);
