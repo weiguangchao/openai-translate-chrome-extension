@@ -76,6 +76,9 @@ export const traditionalChinese = cjk({
 
 export const japanese = cjk({
   locale: 'ja',
-  connectives: [],
-  particles: '',
+  connectives:
+    'けど けれど けれども しかし でも それでも だが だけど だから なので そして それから それで それに すると つまり ただし なぜなら また さらに あるいは または もし たとえ では じゃあ さて のに なのに'.split(
+      ' ',
+    ),
+  particles: 'はがをにへとでもやかねよなぞわ',
 });
