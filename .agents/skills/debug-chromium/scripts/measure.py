@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run a playback plan through live.py, retaining evidence and resumable results."""
+"""Run resumable playback measurements through live.py."""
 import argparse
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -35,39 +35,39 @@ def now():
 def load_plan(path):
     plan = json.loads(path.read_text())
     if not isinstance(plan, dict) or set(plan) - {'cases', 'durations', 'thresholds'}:
-        raise ValueError('plan takes cases, durations and optional thresholds')
+        raise ValueError('plan fields: cases, durations, optional thresholds')
     durations = plan.get('durations', dict(zip(PHASES, (45, 45, 180))))
     if set(durations) != set(PHASES) or any(not number(n) or not 1 <= n <= 600 for n in durations.values()):
-        raise ValueError('durations must set opening, landing and playing to 1-600 video seconds')
+        raise ValueError('opening/landing/playing durations must be 1-600 video seconds')
     cases = plan.get('cases')
     if not isinstance(cases, list) or not cases:
-        raise ValueError('cases must be a nonempty list')
+        raise ValueError('cases must be nonempty')
     names = set()
     for case in cases:
         if not isinstance(case, dict) or set(case) - {'name', 'url', 'rate', 'start', 'seek', 'media'}:
-            raise ValueError('each case takes name, url, rate, seek and optional start, media')
+            raise ValueError('case fields: name, url, rate, seek; optional start, media')
         name = case.get('name', '')
         if not isinstance(name, str) or not re.fullmatch(r'[a-zA-Z0-9_-]+', name) or name in names:
-            raise ValueError('case names must be unique file-safe names')
+            raise ValueError('case names must be unique/file-safe')
         names.add(name)
         if not isinstance(case.get('url'), str) or not case['url'].startswith(('http://', 'https://')):
             raise ValueError(f'{name}: url must be http or https')
         if not number(case.get('rate')) or not 0.25 <= case['rate'] <= 4:
             raise ValueError(f'{name}: rate must be 0.25-4')
         if max(durations.values()) / case['rate'] + 120 > 900:
-            raise ValueError(f'{name}: trace needs more than live.py\'s 900 second budget')
+            raise ValueError(f'{name}: trace exceeds 900 wall seconds')
         seeks = case.get('seek')
         if not isinstance(seeks, list) or not seeks or any(not number(n) or n < 0 for n in seeks):
-            raise ValueError(f'{name}: seek must list candidate video positions')
+            raise ValueError(f'{name}: seek needs candidate video positions')
         if 'start' in case and (not number(case['start']) or case['start'] < 0):
-            raise ValueError(f'{name}: start must be a video position')
+            raise ValueError(f'{name}: start needs a video position')
         media = case.get('media', {})
         if not isinstance(media, dict) or set(media) - {'skip_ads', 'keep_playing'} or any(type(v) is not bool for v in media.values()):
-            raise ValueError(f'{name}: media takes boolean skip_ads and keep_playing')
+            raise ValueError(f'{name}: media accepts boolean skip_ads/keep_playing')
     thresholds = plan.get('thresholds', {})
     allowed = {'waitAfterOpening', 'waitAfterSeeking', 'loadingAfterSeeking', 'loadingWhilePlaying', 'providerP50', 'providerP90'}
     if not isinstance(thresholds, dict) or set(thresholds) - allowed or any(not number(n) or n < 0 for n in thresholds.values()):
-        raise ValueError('thresholds must map metric names to nonnegative maxima')
+        raise ValueError('thresholds need nonnegative metric maxima')
     return {**plan, 'durations': durations, 'thresholds': thresholds}
 
 
@@ -91,7 +91,7 @@ def choose_seek(candidates, opening, duration, needed):
             continue
         if all(target + needed < start - 10 or target > end + 10 for start, end in intervals):
             return target
-    raise ValueError('no candidate seek avoids the opening and its requested captions; adjust the plan')
+    raise ValueError('no candidate avoids opening/prefetched captions; adjust seeks')
 
 
 class CommandError(RuntimeError):
@@ -142,7 +142,7 @@ def output_lock(folder):
         try:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
-            raise ValueError('another runner is writing this output directory')
+            raise ValueError('another runner owns this output')
         yield
 
 
@@ -153,21 +153,21 @@ def prepare(output, plan, builds, loaded, resume):
     manifest = output / 'manifest.json'
     if manifest.exists():
         if not resume:
-            raise ValueError('output already exists; use --resume or a new directory')
+            raise ValueError('output exists; use --resume or new output')
         previous = json.loads(manifest.read_text())
         if previous['identity'] != identity:
-            raise ValueError('plan, builds, loaded path or tools changed; use a new output directory')
+            raise ValueError('plan/builds/loaded/tools changed; use new output')
         if live.fingerprint(output / 'original-build') != previous['originalFingerprint'] or any(
                 live.fingerprint(output / 'builds' / build['name']) != build['fingerprint'] for build in definitions):
-            raise ValueError('a saved build changed; cannot resume or restore it')
+            raise ValueError('saved build changed; resume/restoration blocked')
         return previous
     if resume:
-        raise ValueError('cannot resume without manifest.json')
+        raise ValueError('resume needs manifest.json')
     if any(output.iterdir()) and set(p.name for p in output.iterdir()) != {'.lock'}:
-        raise ValueError('new output directory must be empty')
+        raise ValueError('new output must be empty')
     name = live.extension_name(loaded)
     if not name or any(live.extension_name(path) != name for _, path in builds):
-        raise ValueError('loaded folder and all builds must have the same extension manifest name')
+        raise ValueError('loaded/build manifest names must match')
     backup = output / 'original-build'
     shutil.copytree(loaded, backup)
     for build, path in builds:
@@ -187,7 +187,7 @@ def restore(commands, output, loaded, manifest):
         managed = {build['fingerprint'] for build in manifest['identity']['builds']}
         managed.add(manifest['originalFingerprint'])
         if live.fingerprint(loaded) not in managed:
-            raise ValueError('loaded files changed outside this runner; original-build was preserved for recovery')
+            raise ValueError('external loaded-file changes; recover from original-build')
         live.sync(output / 'original-build', loaded)
         commands.call('reload', '--path', str(loaded))
         result['reloadVerified'] = True
@@ -215,7 +215,7 @@ def collect(case, build, plan, folder, commands, loaded, source, focus):
         print(f"{case['name']} / {build['name']}: reload and open", flush=True)
         response = commands.call('reload', '--path', str(loaded), '--from', str(source))
         if f"build {build['fingerprint']}" not in response:
-            raise CommandError('reload did not confirm the expected build fingerprint')
+            raise CommandError('reload fingerprint mismatch')
         run['reloadVerified'] = True
         tab = commands.call('open', case['url'], '--trace', '--timeout', 90)['tab']
         if focus:
@@ -276,17 +276,17 @@ def execute(args):
     loaded, output = args.loaded.resolve(), args.output.resolve()
     if any(output == path or output in path.parents or path in output.parents
            for path in [loaded] + [path for _, path in builds]):
-        raise ValueError('output must be separate from the loaded folder and build sources')
+        raise ValueError('output must not overlap loaded/build folders')
     state = live.load_state()
     if not state:
         raise ValueError('start a holder with live.py first')
     os.environ['DEBUG_CHROMIUM_SESSION'] = args.session
     live.require_owner(state)
     if not live.alive(state):
-        raise ValueError('holder is disconnected; reconnect with live.py using this task\'s session, then resume')
+        raise ValueError('holder disconnected; reconnect with live.py/this session, then resume')
     status = next(live.request('Session.status'))
     if status.get('active'):
-        raise ValueError('holder is still executing a command; wait for it to finish before resuming')
+        raise ValueError('holder busy; resume after its command ends')
     with output_lock(output):
         manifest = prepare(output, plan, builds, loaded, args.resume)
         summary_path = output / 'summary.json'
@@ -294,7 +294,7 @@ def execute(args):
         summary['runs'] = recover_runs(output)
         cleanup = Commands(output / 'cleanup', args.session)
         if args.focus:
-            print('Focus enabled: each trace brings Chrome to the front.', flush=True)
+            print('Focus: Chrome activates before traces.', flush=True)
         try:
             for index, case in enumerate(plan['cases']):
                 ordered = manifest['identity']['builds'][::1 if index % 2 == 0 else -1]
@@ -324,9 +324,9 @@ def execute(args):
                             break
                         state = live.load_state()
                         if not state or not live.alive(state):
-                            raise CommandError('holder disconnected; reconnect and resume this output directory')
+                            raise CommandError('holder disconnected; reconnect/resume this output')
                     else:
-                        raise CommandError('run remained invalid; inspect its evidence before resuming')
+                        raise CommandError('invalid run; inspect evidence before resume')
         finally:
             summary['restoration'] = restore(cleanup, output, loaded, manifest)
             write_json(summary_path, summary)
@@ -337,12 +337,12 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('plan', type=Path)
     parser.add_argument('--build', action='append', required=True, metavar='NAME=PATH')
-    parser.add_argument('--loaded', type=Path, required=True, help='folder Chrome already loaded')
+    parser.add_argument('--loaded', type=Path, required=True, help='loaded extension folder')
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--session', required=True, help='this task\'s live.py session')
     parser.add_argument('--resume', action='store_true')
-    parser.add_argument('--focus', action='store_true', help='bring Chrome forward before each trace')
-    parser.add_argument('--attempts', type=int, choices=(1, 2, 3), default=1, help='attempts per unfinished case in this invocation')
+    parser.add_argument('--focus', action='store_true', help='activate Chrome before traces')
+    parser.add_argument('--attempts', type=int, choices=(1, 2, 3), default=1, help='attempts per unfinished case')
     args = parser.parse_args()
     def interrupt(_number, _frame):
         raise KeyboardInterrupt
@@ -353,7 +353,7 @@ def main():
         print(str(error), file=sys.stderr)
         return 1
     except KeyboardInterrupt:
-        print('Interrupted; saved completed runs. Use --resume after reconnecting if needed.', file=sys.stderr)
+        print('Interrupted; completed runs saved. Reconnect if needed; --resume.', file=sys.stderr)
         return 130
 
 

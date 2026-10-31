@@ -1,44 +1,24 @@
 ---
 name: setup-headless-chromium
-description: Prepare isolated headless Chromium with Subline for a requested browser check, then hand it to debug-chromium.
+description: Launch isolated headless Chromium with Subline for browser checks.
 ---
 
-# Set up headless Chromium
+# Headless setup
 
-## Launch
-
-From the repository root, build with `npm run build` and choose a full Chromium or Chrome for Testing binary that loads unpacked extensions:
+From the repo root, use full Chromium/Chrome for Testing supporting unpacked extensions:
 
 ```bash
+npm run build
 node --input-type=module -e 'import { chromium } from "playwright"; console.log(chromium.executablePath())'
-python3 .agents/skills/setup-headless-chromium/scripts/launch.py --browser "/absolute/path/to/Chromium" --extension "$PWD/dist" --output "$PWD/.artifacts/headless-check"
+python3 .agents/skills/setup-headless-chromium/scripts/launch.py --browser "/path/to/Chromium" --extension "$PWD/dist" --output "$PWD/.artifacts/headless-check"
 ```
 
-Use a new task-owned output directory and keep the launcher running in a tool session. Wait for `session.json` to report `state: "ready"`. It records process IDs, the isolated profile, browser configuration and build fingerprint. Ready means the endpoint and extension developer mode are available.
+Keep launcher running in a tool session/new task-owned directory. `session.json` state `ready` confirms endpoint/developer mode; it records PIDs/profile/configuration/fingerprint. Use this launcher for real sites: nonzero port, normal Chrome User-Agent, 1280×900 window. Override `--window-size WIDTH,HEIGHT`; verify geometry/screenshots. For Linux/failures read [diagnostics](references/startup.md), `chromium.log`/`session.json` before changes.
 
-The launcher uses a nonzero debugging port, a normal Chrome User-Agent and a 1280 by 900 window. Use `--window-size WIDTH,HEIGHT` when needed; verify actual geometry and screenshots after handoff. Use this launcher for real sites, rather than the test harness.
+Use authorized Providers through real settings/caption-sharing consent. Keys belong in private files/secret tools, never arguments/source/manifests/evidence. Headless macOS saving may await native origin approval, absent from DOM/screenshots. Inspect native UI, approve only authorized origin, verify saving/connection. Failed/unavailable approval blocks setup; preserve failure, never bypass consent/change production manifest.
 
-On Linux, check sandbox setup in [startup diagnostics](references/startup.md). If launch fails, inspect `chromium.log` and `session.json` there before changing the setup.
+Close bootstrap connections before handoff. Export session `debug_chromium_env`; follow [debug context rules](../debug-chromium/SKILL.md) to start/reload. Launcher bootstrap closes before ready; no later debugging calls.
 
-## Configure translation when needed
+## Cleanup
 
-Use authorized Provider settings through the real settings page and obtain caption-sharing consent. Keep keys in private files or a secret tool, outside arguments, source, manifests and evidence.
-
-Saving can wait for a browser-native origin-permission prompt, even in headless Chromium on macOS. Page DOM and screenshots miss it. Inspect native UI, approve only this task's authorized Provider origin, then confirm saving and the connection test succeed.
-
-Complete any settings bootstrap connection before handoff, then close it. Do not enable the page's Runtime domain or evaluate custom code in extension contexts. If native approval is unavailable or still fails, preserve the failure and report setup as blocked; do not bypass consent or change the production manifest.
-
-## Hand off
-
-Export the values from this launch's `session.json` in every later command environment:
-
-```bash
-export DEBUG_CHROMIUM_PORT_FILE="$PWD/.artifacts/headless-check/endpoint"
-export DEBUG_CHROMIUM_STATE="$PWD/.artifacts/headless-check/holder.json"
-```
-
-Continue with [debug-chromium](../debug-chromium/SKILL.md) to start the holder and verify the extension with `reload`. The launcher's bootstrap connection is closed before ready; the launcher makes no debugging calls after handoff.
-
-## Clean up
-
-After debug-chromium closes its tabs and stops its holder, send SIGTERM to this launch's recorded `launcher_pid`. The launcher stops its Chromium and removes the temporary profile and endpoint. Remove secret-bearing bootstrap files, retain session metadata and needed diagnostics, and sanitize network logs before sharing. Leave the user's browser and other tasks' launchers alone.
+Close task tabs, stop holder, SIGTERM recorded `launcher_pid`: owned Chromium stops, profile/endpoint disappear. Remove secret bootstrap files; retain metadata/needed diagnostics, sanitize shared logs, leave other browsers/launchers alone.
