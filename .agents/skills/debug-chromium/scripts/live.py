@@ -22,109 +22,40 @@ STATE = Path(
 LOG = STATE.with_suffix(".log")
 START_SECONDS = 75
 
-ACTIONS_HELP = """Actions
-  Each step is a JSON object with an action and that action's fields.
-
-  media            Optional time, rate, play, pause, keep_playing, skip_ads, selector
-                   (default video). Seeks to time, sets playbackRate to rate (0.25-4),
-                   and plays or pauses, then waits until the video reports all of
-                   them; a seek also waits for data at the new time, and play waits
-                   for currentTime to advance or the video to end. It seeks once and
-                   seeks again only when the video leaves the stretch it could have
-                   played since then, at most 3 times. With no fields it
-                   only reports the video. The rate goes through YouTube's player
-                   when the page has one, since YouTube resets the video element to
-                   its own rate every second; it is applied again during later steps
-                   and undone when the tab closes. keep_playing resumes the video
-                   whenever it pauses during later steps; pause turns it off.
-                   skip_ads clicks YouTube's Skip button during later steps.
-                   Returns time, paused, ended, ad, rate, ready and visible, plus
-                   seeks, the number of times it moved currentTime, when time is set.
-  wait             seconds, or time with optional selector. Waits that many wall
-                   seconds, or until the video reaches time or ends.
-  evaluate         expression or expression_file; optional save.
-                   Evaluate page JavaScript, await Promises, return JSON.
-                   Truthy values pass; falsy values retry every second.
-                   An object with a fail key ends the step as failed.
-                   Each attempt waits up to 8 seconds, capped by the remaining budget.
-  click            selector. Click the first matching document element.
-  overlay          Optional wait. Reports Subline's overlay: original and translation
-                   lines with hidden, visible, text and error. With wait, waits until both
-                   lines show text and the translation is neither the loading
-                   placeholder nor an error.
-  requests         Optional match, a list of substrings. Lists this tab's request
-                   URLs, or waits until one matches.
-  trace            seconds; optional selector, default video; optional save, since.
-                   Needs a tab that watches Subline (run adds this when a check has
-                   a trace step; open needs --trace). Collects Subline timing events
-                   for seconds of played video, or to the end. since "open" counts
-                   from where the video settled after the tab opened, past any jump
-                   or pre-roll ad. since "seek" counts from the last media step with
-                   time, and fails when the video is not where it could have played
-                   to from there. With since, seconds include the video played
-                   before the step, reported as before. Reports lag, loading,
-                   coverage, states, firstCaptionAt, firstReadyAt and batches; lag
-                   and loading use video time. firstCaptionWall and firstReadyWall
-                   are wall seconds from where the trace counts. counted is the
-                   video time the states cover; a gap counts when its wall time is
-                   under 3 s, whatever the rate. The end line prints from, played,
-                   before, counted, wall, playbackRate, visible, coverage, missed
-                   and lag max; played and wall cover the step alone. clock is
-                   "throttled" when the tab was mostly hidden or played/wall
-                   diverges from playbackRate; "sparse" marks counted under 80% of
-                   played plus before. Clock rates and visibility cover this step
-                   only, sampled before rate enforcement. rates lists wall seconds
-                   at each rate; rateChanges and rateMismatch expose external resets.
-                   complete says whether the requested duration was collected.
-                   save writes stats, sentences, batches, views, this tab's raw
-                   worker events and media observations. Interrupted traces save
-                   partial evidence with interrupted=true. batches excludes requests completed before the
-                   trace's start or since mark. Its p50, p90 and max use successful
-                   requests completed in this window, measured is their count, and
-                   results counts all outcomes, including pending requests. Durations
-                   are wall seconds from sent to done, including the full request
-                   when sent before the window; percentiles use nearest rank.
-  screenshot       path. JPEG for .jpg/.jpeg, otherwise PNG.
-  focus            Brings the tab and Chrome to the front and waits up to 5 s for the
-                   page to become visible. This takes focus from other apps.
-
-  media, wait and trace fail when a video that should be moving stays at the same
-  time for 20 s; the reason says whether it was paused. Buffering waits.
-  save, path and fail_screenshot must be absolute paths.
+ACTIONS_HELP = """JSON action fields
+media: optional time, rate (0.25-4), play, pause, keep_playing, skip_ads, selector
+(default video). Waits for readiness/motion; no fields only reports. Seeks at
+most 3 times if playback leaves reach. YouTube uses its player rate. Later steps
+enforce rate/keep_playing/skip_ads; pause disables keep_playing; close restores rate.
+wait: seconds (wall duration) OR time (video position/end); optional selector.
+evaluate: expression OR expression_file, optional save. Awaits JS/Promises;
+falsy retries each second, fail-key objects fail; attempts have up to 8 s.
+click: selector, trusted pointer click.
+overlay: optional wait for visible source/translation without loading/error.
+requests: optional match substrings; lists URLs or waits for a match.
+trace: seconds (video/end), optional selector/save/since (open/seek).
+Needs open --trace; run enables it. See verify-chromium-performance and its
+measurement reference for marks, stats, raw/partial evidence and validity.
+screenshot: path, JPEG for .jpg/.jpeg, otherwise PNG.
+focus: activates Chrome, takes app focus, waits up to 5 s for visibility.
+media/wait/trace fail after 20 s without playable motion; buffering waits.
+save/path/fail_screenshot must be absolute.
 """
 
-RUN_HELP = """Input
-  Each FILE contains a JSON list of checks:
-    [{"name": "page", "url": "https://example.com", "budget": 30,
-      "steps": [{"action": "evaluate", "expression": "document.title"}]}]
+RUN_HELP = """FILE is a JSON list:
+[{"name":"page","url":"https://example.com","budget":30,
+  "steps":[{"action":"evaluate","expression":"document.title"}]}]
+name selects --only; url is HTTP(S); budget is 1-600 wall seconds including
+navigation. Steps stop on failure; later checks run and tabs always close.
+on_fail evaluates a page expression; fail_screenshot captures before cleanup.
+expression_file is relative to FILE. stdout emits JSON
+and a summary; stderr emits progress. save keeps full values; otherwise 20,000
+chars. Request URLs omit queries. Exit 0: passed; 1: check/holder failed; 2: bad input.
+""" + ACTIONS_HELP
 
-  name             Check id, selected by --only NAME.
-  url              HTTP or HTTPS page to open in a new check tab.
-  budget           Total wall seconds per check, 1-600, including navigation.
-  steps            Non-empty action list, executed in order. A failed step ends
-                   the check.
-  on_fail          Optional page expression, evaluated once before tab cleanup.
-  fail_screenshot  Optional screenshot path, captured before failed-tab cleanup.
-
-""" + ACTIONS_HELP + """
-Reports
-  stdout emits one JSON report per check, then a summary; stderr carries progress.
-  Remaining checks still run after a failed one. Check tabs always close.
-  expression_file resolves from FILE's folder. evaluate with save writes the full
-  value; without it, reports cap at 20,000 chars. Request URLs omit query strings.
-  Exit 0: all steps passed; 1: failed check/holder; 2: invalid input.
-"""
-
-DO_HELP = """STEP is one JSON object, for example
-  '{"action": "media", "time": 150, "rate": 1.5, "play": true}'
-
-""" + ACTIONS_HELP + """
-Reports
-  stdout prints {"ok", "tab", "result"}; stderr carries progress for long steps.
-  expression_file resolves from the current folder. If the tab crashed or closed,
-  the report says so under closed and the tab is gone.
-  Exit 0: the step passed; 1: it failed or the holder did; 2: invalid input.
-"""
+DO_HELP = """STEP is JSON; expression_file is relative to cwd. stdout emits {ok, tab, result}; stderr emits progress.
+Crashed/closed tabs are removed, reported in closed. Exit 0/1/2: pass/fail/bad input.
+""" + ACTIONS_HELP
 
 
 class NotRunning(Exception):
@@ -142,13 +73,11 @@ def session_id():
 def require_owner(state):
     owner = state.get("owner")
     if not owner:
-        raise SessionConflict("This holder has no session owner. Have the task that started it stop it "
-                              "with its original live.py before starting a new session.")
+        raise SessionConflict("Holder has no owner. Its task must stop it with its original live.py.")
     if not session_id():
-        raise SessionConflict("A session id is required. Pass --session ID from this task's start output.")
+        raise SessionConflict("A session id is required. Use --session ID from start.")
     if session_id() != owner:
-        raise SessionConflict("Holder belongs to another session. Wait for that task to stop it; "
-                              "do not adopt its session id.")
+        raise SessionConflict("Holder belongs to another session. Wait for its owner to stop it.")
 
 
 @contextmanager
@@ -158,7 +87,7 @@ def lifecycle_lock():
         try:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
-            raise SessionConflict("Another session is starting or stopping Chromium debugging. Retry later.")
+            raise SessionConflict("Another session is starting/stopping. Retry later.")
         try:
             yield
         finally:
@@ -230,10 +159,10 @@ def start(_args):
     state = load_state()
     if state and alive(state):
         require_owner(state)
-        print(f"Holder already running (pid {state['pid']}). Reusing its Chrome socket.")
+        print(f"Holder already running (pid {state['pid']}). Reusing socket.")
         return 0
     owner = session_id() or secrets.token_hex(16)
-    print(f"Session: {owner}. Pass --session {owner} on this task's commands.", flush=True)
+    print(f"Session: {owner}. Use --session {owner}.", flush=True)
     STATE.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     offset = LOG.stat().st_size if LOG.exists() else 0
     with open(LOG, "ab") as log:
@@ -276,6 +205,11 @@ def display(path):
         return str(path)
 
 
+def not_running():
+    print(f"Holder is not running. Start it with: python3 {display(__file__)} start", file=sys.stderr)
+    return 1
+
+
 def invalid(message):
     print(message, file=sys.stderr)
     raise SystemExit(2)
@@ -313,7 +247,7 @@ def load_checks(files, only):
     if only:
         for check, _ in loaded:
             if not isinstance(check, dict) or not isinstance(check.get("name"), str) or not check["name"]:
-                invalid("Each check must have a non-empty string name before selecting with --only")
+                invalid("--only requires a nonempty string name on each check")
         known = {check["name"] for check, _ in loaded}
         unknown = sorted(set(only) - known)
         if unknown:
@@ -370,12 +304,11 @@ def run(args):
             reports.append(reply)
             print(json.dumps(reply, ensure_ascii=False), flush=True)
     except NotRunning:
-        print(f"Holder is not running. Start it with: python3 {display(__file__)} start", file=sys.stderr)
-        return 1
+        return not_running()
     except (OSError, ValueError) as error:
         print(f"Lost the holder mid-run ({error}).", file=sys.stderr)
     if done is None:
-        print(f"Holder stopped before finishing. Log: {LOG}", file=sys.stderr)
+        print(f"Holder stopped early. Log: {LOG}", file=sys.stderr)
         return 1
     if done.get("error"):
         print(f"Holder rejected the checks: {done['error']}", file=sys.stderr)
@@ -394,10 +327,9 @@ def tab_request(method, params, timeout):
                 continue
             reply = message
     except NotRunning:
-        print(f"Holder is not running. Start it with: python3 {display(__file__)} start", file=sys.stderr)
-        return 1
+        return not_running()
     except (OSError, ValueError) as error:
-        print(f"Lost the holder mid-request ({error}).", file=sys.stderr)
+        print(f"Holder request lost ({error}).", file=sys.stderr)
         return 1
     reply.pop("done", None)
     print(json.dumps(reply, ensure_ascii=False), flush=True)
@@ -452,7 +384,7 @@ def sync(source, folder):
     if not name:
         invalid(f"{source} has no readable manifest.json")
     if extension_name(folder) != name:
-        invalid(f"{folder} does not hold {name}; --from only replaces a folder Chrome loaded it from")
+        invalid(f"{folder} is not loaded {name}; --from requires the loaded folder")
     wanted = {path.relative_to(source) for path in build_files(source)}
     for path in build_files(folder):
         if path.relative_to(folder) not in wanted:
@@ -495,13 +427,12 @@ def reload(args):
     try:
         reply = next(request("Session.reload", {"extension": extension_id(folder)}, timeout=60))
     except NotRunning:
-        print(f"Holder is not running. Start it with: python3 {display(__file__)} start", file=sys.stderr)
-        return 1
+        return not_running()
     if not reply.get("ok"):
-        print(f"Could not reload Subline from {folder}: {reply.get('error')}", file=sys.stderr)
+        print(f"Reload failed from {folder}: {reply.get('error')}", file=sys.stderr)
         return 1
     print(f"Reloaded {reply.get('name')} from {folder}, build {fingerprint(folder)}. "
-          "Refresh open YouTube, HBO and X tabs to use it there.")
+          "Refresh YouTube/HBO/X tabs.")
     return 0
 
 
@@ -545,54 +476,25 @@ def stop(_args):
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Chrome commands through one DevTools socket to the signed-in Default profile.",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-    )
+    parser = argparse.ArgumentParser(description="Use one Chromium DevTools connection.")
     commands = parser.add_subparsers(dest="command", required=True)
-    commands.add_parser("start", help="connect to Chrome once and keep the socket").set_defaults(func=start)
-    runner = commands.add_parser(
-        "run", help="run checks from JSON files", epilog=RUN_HELP,
-        formatter_class=argparse.RawDescriptionHelpFormatter,
+    definitions = (
+        ("start", start, []), ("status", status, []), ("stop", stop, []),
+        ("close", close_tab, [("tab", {})]),
+        ("run", run, [("files", {"nargs": "+"}), ("--only", {"action": "append"})]),
+        ("open", open_tab, [("url", {}), ("--trace", {"action": "store_true"}),
+                            ("--timeout", {"type": float, "default": 60})]),
+        ("do", do_step, [("tab", {}), ("step", {}),
+                         ("--timeout", {"type": float, "default": 60})]),
+        ("reload", reload, [("--path", {}), ("--from", {"dest": "source"})]),
     )
-    runner.add_argument("files", nargs="+", metavar="FILE", help="JSON check files")
-    runner.add_argument("--only", action="append", metavar="NAME", help="run only this check; repeatable")
-    runner.set_defaults(func=run)
-    opener = commands.add_parser(
-        "open", help="open a muted tab and keep it for do steps",
-        description="Open URL in a new muted tab owned by this session. The tab stays open for do "
-        "steps until close, stop, or 15 minutes without a request.",
-    )
-    opener.add_argument("url", metavar="URL")
-    opener.add_argument("--trace", action="store_true",
-                        help="watch Subline's worker from navigation so trace steps work")
-    opener.add_argument("--timeout", type=float, default=60, help="seconds to load the page (default 60)")
-    opener.set_defaults(func=open_tab)
-    doer = commands.add_parser(
-        "do", help="run one step in an open tab", epilog=DO_HELP,
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-    )
-    doer.add_argument("tab", metavar="TAB", help="tab id from open")
-    doer.add_argument("step", metavar="STEP", help="one JSON step")
-    doer.add_argument("--timeout", type=float, default=60, help="wall seconds for the step (default 60)")
-    doer.set_defaults(func=do_step)
-    closer = commands.add_parser("close", help="close an open tab and undo its rate change")
-    closer.add_argument("tab", metavar="TAB")
-    closer.set_defaults(func=close_tab)
-    reloader = commands.add_parser(
-        "reload", help="reload Subline in Chrome",
-        description="Reload Subline from Chrome's loaded folder and print the build fingerprint; "
-        "does not build it. Existing site tabs need a refresh.",
-    )
-    reloader.add_argument("--path", help="folder Chrome loaded Subline from (default: this repository's dist)")
-    reloader.add_argument("--from", dest="source", metavar="DIR",
-                          help="copy this build into the loaded folder first, replacing its files")
-    reloader.set_defaults(func=reload)
-    commands.add_parser("status", help="report holder status").set_defaults(func=status)
-    commands.add_parser("stop", help="close the Chrome socket and exit the holder").set_defaults(func=stop)
-    for command in commands.choices.values():
-        command.add_argument("--session", metavar="ID",
-                             help="this task's session id from start (or DEBUG_CHROMIUM_SESSION)")
+    for name, func, arguments in definitions:
+        command = commands.add_parser(name, epilog={"run": RUN_HELP, "do": DO_HELP}.get(name),
+                                      formatter_class=argparse.RawDescriptionHelpFormatter)
+        command.set_defaults(func=func)
+        for flag, options in arguments:
+            command.add_argument(flag, **options)
+        command.add_argument("--session", help="task's start ID or DEBUG_CHROMIUM_SESSION")
     args = parser.parse_args()
     if args.session is not None:
         os.environ["DEBUG_CHROMIUM_SESSION"] = args.session

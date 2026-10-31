@@ -33,9 +33,9 @@ def endpoint(process, port):
         url = urllib.parse.urlsplit(data.get("webSocketDebuggerUrl", ""))
         if (url.scheme != "ws" or url.hostname not in {"127.0.0.1", "localhost"}
                 or url.port != port or not url.path.startswith("/devtools/browser/")):
-            raise ValueError("Chromium returned an unexpected debugging endpoint")
+            raise ValueError("Unexpected Chromium debugging endpoint")
         return url.path
-    raise RuntimeError("Chromium did not open its debugging endpoint. Inspect chromium.log.")
+    raise RuntimeError("No Chromium endpoint; inspect chromium.log.")
 
 
 def developer_mode(port, path):
@@ -73,29 +73,29 @@ def interrupted(signum, _frame):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Launch isolated Chromium for debug-chromium.")
+    parser = argparse.ArgumentParser(description="Launch isolated Chromium.")
     parser.add_argument("--browser", type=Path, required=True)
     parser.add_argument("--extension", type=Path, required=True)
-    parser.add_argument("--output", type=Path, required=True, help="A new task-owned directory")
+    parser.add_argument("--output", type=Path, required=True, help="New task-owned directory")
     parser.add_argument("--window-size", default="1280,900")
     args = parser.parse_args()
     browser, extension, output = (p.expanduser().resolve() for p in (
         args.browser, args.extension, args.output,
     ))
     if not browser.is_file() or not os.access(browser, os.X_OK):
-        parser.error("--browser must be an executable full Chromium binary")
+        parser.error("--browser needs an executable full Chromium")
     if not (extension / "manifest.json").is_file():
-        parser.error("--extension must contain manifest.json. Build Subline first.")
+        parser.error("--extension needs manifest.json; build first.")
     if not re.fullmatch(r"[1-9]\d*,[1-9]\d*", args.window_size):
-        parser.error("--window-size must be WIDTH,HEIGHT with positive integers")
+        parser.error("--window-size needs positive WIDTH,HEIGHT")
     version = subprocess.run([str(browser), "--version"], check=True,
                              capture_output=True, text=True).stdout.strip()
     match = re.search(r"\b(\d+)\.\d+\.\d+\.\d+\b", version)
     if not match:
-        parser.error("Could not read Chromium's version")
+        parser.error("Cannot read Chromium version")
     platforms = {"Darwin": "Macintosh; Intel Mac OS X 10_15_7", "Linux": "X11; Linux x86_64"}
     if platform.system() not in platforms:
-        parser.error("This launcher supports macOS and Linux")
+        parser.error("Only macOS/Linux are supported")
     ua = (f"Mozilla/5.0 ({platforms[platform.system()]}) AppleWebKit/537.36 "
           f"(KHTML, like Gecko) Chrome/{match[1]}.0.0.0 Safari/537.36")
     output.mkdir(parents=True, mode=0o700, exist_ok=False)
@@ -146,7 +146,7 @@ def main():
         save()
         print(json.dumps(record), flush=True)
         if process.wait() != 0:
-            raise RuntimeError("Chromium exited unexpectedly. Inspect chromium.log.")
+            raise RuntimeError("Chromium exited; inspect chromium.log.")
         record["state"] = "stopped"
     except KeyboardInterrupt as error:
         record.update(state="stopped", received_signal=str(error) or None)

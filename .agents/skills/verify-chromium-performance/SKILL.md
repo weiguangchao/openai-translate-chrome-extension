@@ -1,39 +1,34 @@
 ---
 name: verify-chromium-performance
-description: Measure Subline subtitle performance or compare builds in Chromium when the user requests it. Defines playback runs, metrics and evidence requirements.
+description: Measure or compare Subline playback in Chromium on request.
 ---
 
-# Verify Chromium performance
+# Verify performance
 
-## Prepare
+Use [setup](../setup-headless-chromium/SKILL.md)/[debug](../debug-chromium/SKILL.md), or requested existing/headed browsers. Edits alone need no real-site measurements. Test YouTube/X at 1x, 1.25x, 1.5x, 2x per build; HBO Max only explicitly requested. Read [page checks](references/page-readiness.md).
 
-Use [setup-headless-chromium](../setup-headless-chromium/SKILL.md) to launch, then [debug-chromium](../debug-chromium/SKILL.md) to operate the browser. Use an existing or headed browser when the user requests one. Code or documentation edits alone do not require real-site measurements.
+Authorized MiMo: read `MIMO_BASE_URL`, `MIMO_MODEL`, `MIMO_API_KEY` from ignored worktree `.env` before asking. Keep `0600`; configure in real settings, retain `.env`, exclude keys from builds/evidence.
 
-Test YouTube and X at 1x, 1.25x, 1.5x and 2x for each build. Include HBO Max only when explicitly requested. Before tracing, read the selected platform's [page checks](references/page-readiness.md).
+Each run: reload to clear translations, open/set rate; trace 45 video seconds `since: "open"`, seek once to uncached captions outside opening/prefetch, trace 45 seconds `since: "seek"`, then 180 continuous video seconds. YouTube needs first `media.time` in speech, not unreliable `&t=`. Keep headed Chrome in front; omit headless `focus`. For plans/comparisons/resume/saved checks read [measurement](references/measurement.md).
 
-For authorized MiMo runs, read `MIMO_BASE_URL`, `MIMO_MODEL` and `MIMO_API_KEY` from the worktree's ignored `.env` before asking for configuration. Keep it at mode `0600`, configure through the real settings page and retain the file during cleanup. Never copy its key into a build or evidence.
-
-## Collect each run
-
-1. Reload Subline to clear translations. Open the video, set the rate and trace 45 video seconds with `since: "open"`. On YouTube, use the first `media` step's `time` to reach spoken content; URL `&t=` does not set it reliably.
-2. Seek once to uncached captions outside the opening trace and its prefetched ranges. Trace 45 video seconds with `since: "seek"`.
-3. Continue playing and trace 180 video seconds.
-
-Keep headed Chrome in front; do not use `focus` in headless runs. Traces must report the tested rate, stay unthrottled and cover their requested duration. Reject sparse or truncated evidence and unexpected rate changes. A landing trace fails if playback leaves the seek target. `ok` alone does not establish valid timing.
-
-For automated plans, build comparisons, saved-run checks or interrupted runs, read [measurement.md](references/measurement.md).
+Reject wrong/changing rates, throttled clocks, sparse/truncated/short traces and landing jumps. `ok` alone proves no timing validity. Report completeness/timing/visible behavior/thresholds separately. Preserve failures; never raise timeouts/weaken assertions. Follow debug/setup cleanup; sanitize shared logs.
 
 ## Report
 
-| Metric                | Calculation                                                                             |
-| --------------------- | --------------------------------------------------------------------------------------- |
-| Wait after opening    | Opening `(firstReadyAt - firstCaptionAt) / playbackRate`, in viewer seconds.            |
-| Wait after seeking    | Landing `(firstReadyAt - firstCaptionAt) / playbackRate`, in viewer seconds.            |
-| Loading while playing | Playing `states.loading / (states.loading + states.ready)`.                             |
-| Provider duration     | Playing `batches.p90`, with `batches.measured` and `batches.results`. |
+Per-run waits are `(firstReadyAt-firstCaptionAt)/playbackRate` viewer seconds. Playing loading is `states.loading/(states.loading+states.ready)`, excluding empty/errors; zero does not prove caption success. Report playing `batches.p90`, `measured`, `results`.
 
-Provider p90 uses nearest rank and full wall seconds from sent to done for successful requests completed in the playing window, including requests sent earlier. Exclude queue time, failed, aborted and pending requests. Do not divide by playback rate.
+Provider p90 is nearest-rank full sent-to-done wall time for successes completed during playing, including earlier sends. Exclude queue/failed/aborted/pending requests; never divide durations by rate. Missing ready captions/successes mean unavailable wait/duration.
 
-Report unavailable wait times when no caption becomes ready, and unavailable Provider durations when successful samples are zero. Loading share excludes empty and error states; zero does not establish that every caption succeeded.
+Every results reply, including interim metrics, directly includes this table. Operational updates need none; charts/links only supplement it.
 
-Report collection completeness, timing validity, visible subtitle behavior and configured performance thresholds separately. Preserve failed attempts and raw traces. Do not increase timeouts or weaken assertions for a pass. Follow the debugging and setup skills' cleanup order, and sanitize diagnostic network logs before sharing.
+| 平台 | 有效组数 | 打开等待中位数 s | 跳转等待中位数 s | 播放 loading | Provider p90 s | 成功样本 |
+| --- | --- | --- | --- | --- | --- | --- |
+
+Group by platform/conditions; separate builds/Providers/models/settings. Add relevant comparison columns after platform; sends-per-second only in send-rate comparisons.
+
+- Valid/planned retains full denominator, normally four rates, even interim. Include one completed timing-valid attempt per case, even threshold failures; preserve exclusions.
+- Convert waits before available medians/counts: `2.12 (4/4)`, `不可用 (0/N)`. Missing never means zero.
+- Sum playing loading/rate and ready/rate; loading share is summed loading/their sum. Never average percentages; zero denominator is unavailable.
+- Pool eligible successful durations for p90/sample count; never average p90s. Zero samples means unavailable p90.
+
+Aggregate at full precision; display seconds/percentages to two decimals, integer counts. Retain per-run metrics/Provider outcomes/raw traces; state contributing rates, missing/excluded runs and repetitions per condition.
