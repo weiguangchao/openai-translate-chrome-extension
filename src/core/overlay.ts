@@ -48,7 +48,7 @@ function write(node: HTMLDivElement | null, text: string, status: Status): void 
 }
 
 const OVERLAY_STYLE =
-  ':host{all:initial}.stack{position:absolute;left:50%;transform:translateX(-50%);width:max-content;max-width:92%;display:flex;flex-direction:column;align-items:center;padding:0 8px;border-radius:3px;box-sizing:border-box;text-align:center;font-family:Arial,"PingFang SC",sans-serif;line-height:1.4;pointer-events:none}.stack:not(:has(>.line:not([hidden]))){display:none}.line{max-width:100%;padding:1px 0;white-space:normal;overflow-wrap:anywhere;text-shadow:0 1px 3px #000;box-sizing:border-box}.error{color:#ffcc00!important}';
+  ':host{all:initial}.stack{position:absolute;left:50%;transform:translateX(-50%);width:max-content;max-width:92%;display:flex;flex-direction:column;align-items:center;padding:4px 12px;border-radius:3px;box-sizing:border-box;text-align:center;font-family:Arial,"PingFang SC",sans-serif;line-height:1.4;pointer-events:none}.stack:not(:has(>.line:not([hidden]))){display:none}.line{max-width:100%;padding:1px 0;white-space:normal;overflow-wrap:anywhere;text-shadow:0 1px 3px #000;box-sizing:border-box}.error{color:#ffcc00!important}';
 
 export class SubtitleOverlay {
   private player: HTMLElement | null = null;

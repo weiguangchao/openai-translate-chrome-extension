@@ -17,8 +17,8 @@ for (const platform of ['youtube', 'hbo', 'x'] as const) {
       const translated = (await p.translated.boundingBox())!;
       const box = (await background.boundingBox())!;
       expect(translated.y - original.y - original.height).toBeCloseTo(6);
-      expect(box.width).toBeCloseTo(Math.max(original.width, translated.width) + 16);
-      expect(box.height).toBeCloseTo(original.height + translated.height + 6);
+      expect(box.width).toBeCloseTo(Math.max(original.width, translated.width) + 24);
+      expect(box.height).toBeCloseTo(original.height + translated.height + 14);
       await info.attach('bilingual-background.png', {
         body: await p.page.screenshot(),
         contentType: 'image/png',
@@ -28,7 +28,7 @@ for (const platform of ['youtube', 'hbo', 'x'] as const) {
       await expect(p.translated).toBeVisible();
       await expect
         .poll(async () => (await background.boundingBox())!.height)
-        .toBeCloseTo(translated.height);
+        .toBeCloseTo(translated.height + 8);
       await p.settings({ translationOnly: false });
       await p.pair(source, translation);
       await p.seek(20);
