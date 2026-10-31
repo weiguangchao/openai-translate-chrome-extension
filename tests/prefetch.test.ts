@@ -251,7 +251,7 @@ it('lets the opening window finish during a scrub and requests only the cues at 
   setCues([...dense, { startTime: 80, endTime: 82, text: 'After seeking.' }]);
   controller = new CaptionController(createHboPlatform, publicSettings(saved));
   await vi.advanceTimersByTimeAsync(0);
-  const opening = [['Cue 1.'], ['Cue 2.', 'Cue 3.']];
+  const opening = [['Cue 1.'], ['Cue 2.', 'Cue 3.'], ['Cue 4.', 'Cue 5.']];
   expect(requested).toEqual(opening);
   Object.defineProperty(video, 'seeking', { configurable: true, value: true });
   video.currentTime = 40;
@@ -284,7 +284,7 @@ it.each(['timeout', '500'] as const)(
     setCues(dense);
     controller = new CaptionController(createHboPlatform, publicSettings(saved));
     await vi.advanceTimersByTimeAsync(0);
-    const opening = [['Cue 1.'], ['Cue 2.', 'Cue 3.']];
+    const opening = [['Cue 1.'], ['Cue 2.', 'Cue 3.'], ['Cue 4.', 'Cue 5.']];
     expect(requested).toEqual(opening);
     await advance(3);
     expect(requested.length).toBeGreaterThan(opening.length);
@@ -327,8 +327,12 @@ it('keeps requests sent before a seek running, sends the landing at once and cac
   await vi.advanceTimersByTimeAsync(seekSettleMs - 1);
   expect(requested).toHaveLength(started);
   await vi.advanceTimersByTimeAsync(1);
-  expect(requested.slice(started)).toEqual([['Cue 21.'], ['Cue 22.', 'Cue 23.']]);
-  expect(started + 2).toBeGreaterThan(translationSendsPerSecond);
+  expect(requested.slice(started)).toEqual([
+    ['Cue 21.'],
+    ['Cue 22.', 'Cue 23.'],
+    ['Cue 24.', 'Cue 25.'],
+  ]);
+  expect(requested.length).toBeGreaterThan(translationSendsPerSecond);
   expect(pending.slice(0, started).some((request) => request.signal.aborted)).toBe(false);
   await finish({ 'Cue 1.': '第一句' });
   const sent = requested.length;
@@ -339,13 +343,14 @@ it('keeps requests sent before a seek running, sends the landing at once and cac
   expect(requested.slice(sent).flat()).not.toContain('Cue 1.');
 });
 
-it('keeps an untranslated short source hidden and waits out a seek before requesting the landing cues', async () => {
+it('keeps untranslated short sources hidden and waits out a seek before sending landing requests', async () => {
   const cues = [
     { startTime: 0, endTime: 0.6, text: 'Opening.' },
     { startTime: 0.6, endTime: 4, text: 'Stay.' },
     { startTime: 4, endTime: 6, text: 'Next.' },
-    { startTime: 20, endTime: 20.3, text: 'Seek tail.' },
-    { startTime: 20.3, endTime: 24, text: 'After.' },
+    { startTime: 14, endTime: 16, text: 'Third.' },
+    { startTime: 40, endTime: 40.3, text: 'Seek tail.' },
+    { startTime: 40.3, endTime: 44, text: 'After.' },
   ];
   setCues(cues);
   const original = () =>
@@ -354,7 +359,7 @@ it('keeps an untranslated short source hidden and waits out a seek before reques
       ?.shadowRoot?.querySelectorAll<HTMLElement>('.line')[0];
   controller = new CaptionController(createHboPlatform, publicSettings(saved));
   await vi.advanceTimersByTimeAsync(0);
-  const opening = [['Stay.'], ['Next.']];
+  const opening = [['Stay.'], ['Next.'], ['Third.']];
   expect(requested).toEqual(opening);
   expect(requested.flat()).not.toContain('Opening.');
   expect(requested.flat()).not.toContain('Seek tail.');
@@ -366,7 +371,7 @@ it('keeps an untranslated short source hidden and waits out a seek before reques
   expect(original()?.hidden).toBe(true);
   expect(translated()?.textContent).toBe('Translating');
   Object.defineProperty(video, 'seeking', { configurable: true, value: true });
-  video.currentTime = 20;
+  video.currentTime = 40;
   video.dispatchEvent(new Event('seeking'));
   await vi.advanceTimersByTimeAsync(0);
   Object.defineProperty(video, 'seeking', { value: false });
@@ -374,7 +379,7 @@ it('keeps an untranslated short source hidden and waits out a seek before reques
   await vi.advanceTimersByTimeAsync(0);
   expect(requested).toHaveLength(sent);
   await vi.advanceTimersByTimeAsync(400);
-  expect(requested.slice(sent)).toEqual([['After.']]);
+  expect(requested.slice(sent)).toEqual([['After.'], ['Seek tail.']]);
   expect(original()?.hidden).toBe(true);
   expect(translated()?.hidden).toBe(false);
   expect(translated()?.textContent).toBe('Translating');
@@ -550,7 +555,7 @@ it('translates the displayed overlap together and splits a following long cue in
   ];
   controller = new CaptionController(createHboPlatform, publicSettings(saved));
   await vi.advanceTimersByTimeAsync(0);
-  expect(requested).toEqual([[first], [joined, second]]);
+  expect(requested).toEqual([[first], [joined, second], pieces]);
   const delivered = new Set<(typeof pending)[number]>();
   const deliver = async () => {
     for (const request of [...pending]) {
