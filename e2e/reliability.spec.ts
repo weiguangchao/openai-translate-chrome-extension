@@ -28,7 +28,7 @@ test('malformed stored styles fall back to defaults in the running extension', a
       });
     await p.play();
     await p.pair(source, translation);
-    await expect(p.translated).toHaveCSS('color', 'rgb(184, 229, 207)');
+    await expect(p.translated).toHaveCSS('color', 'rgb(255, 255, 255)');
     await info.attach('valid-subtitles-with-bad-storage.png', {
       body: await p.page.screenshot(),
       contentType: 'image/png',

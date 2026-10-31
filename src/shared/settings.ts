@@ -61,7 +61,7 @@ export const DEFAULT_SETTINGS: Settings = {
   providerConsent: '',
   targetLanguage: 'zh-CN',
   original: { color: '#FFFFFF', size: 24 },
-  translation: { color: '#B8E5CF', size: 20 },
+  translation: { color: '#FFFFFF', size: 20 },
   backgroundOpacity: 45,
   subtitleGap: 6,
   translationOnly: false,
