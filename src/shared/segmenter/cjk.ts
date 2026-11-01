@@ -4,6 +4,8 @@ interface CjkScript {
   readonly locale: 'zh-Hans' | 'zh-Hant' | 'ja';
   readonly connectives: readonly string[];
   readonly particles: string;
+  readonly clauseAfter?: readonly string[];
+  readonly joinClauses?: boolean;
 }
 
 const closers = '”’」』）》】"\')\\]';
@@ -21,7 +23,7 @@ function sentenceEnds(text: string): number[] {
   return [...text.matchAll(sentenceEnd)].map((match) => match.index + match[0].length);
 }
 
-function clauseBreaks(text: string): number[] {
+function punctuationClauseBreaks(text: string): number[] {
   return [
     ...sentenceEnds(text),
     ...[...text.matchAll(clauseEnd)].map((match) => match.index + match[0].length),
@@ -30,6 +32,21 @@ function clauseBreaks(text: string): number[] {
 
 function cjk(script: CjkScript): LanguageSegmenter {
   const words = new Intl.Segmenter(script.locale, { granularity: 'word' });
+  const clauseAfterBreaks = (text: string): number[] => {
+    if (!script.clauseAfter?.length) return [];
+    const ordered = [...script.clauseAfter].sort((a, b) => b.length - a.length);
+    const breaks: number[] = [];
+    for (const { segment, index } of words.segment(text)) {
+      if (!segment.trim()) continue;
+      const match = ordered.find((word) =>
+        word.length === 1 ? segment === word : text.startsWith(word, index),
+      );
+      if (match) breaks.push(index + match.length);
+    }
+    return breaks;
+  };
+  const clauseBreaks = punctuationClauseBreaks;
+  const hardClauseBreaks = clauseAfterBreaks;
   const wordBreaks = (text: string): WordBreak[] => {
     const breaks: WordBreak[] = [];
     let previous = '';
@@ -52,7 +69,12 @@ function cjk(script: CjkScript): LanguageSegmenter {
   };
   return {
     sentenceEnds,
-    captions: (text, cueBreaks) => fitCaptions(text, { clauseBreaks, wordBreaks }, cueBreaks),
+    captions: (text, cueBreaks) =>
+      fitCaptions(
+        text,
+        { clauseBreaks, hardClauseBreaks, wordBreaks, joinClauses: script.joinClauses },
+        cueBreaks,
+      ),
   };
 }
 
@@ -81,4 +103,9 @@ export const japanese = cjk({
       ' ',
     ),
   particles: 'はがをにへとでもやかねよなぞわ',
+  clauseAfter:
+    'けど だけど けれど けれども のに なのに ので なので から ですが ますが でしたが ましたが ませんが ね よ わ さ な ぞ か'.split(
+      ' ',
+    ),
+  joinClauses: false,
 });

@@ -52,9 +52,10 @@ it('keeps a caption within the limit on one line and returns nothing for blank t
 
 it('splits English at clause punctuation first, then between words inside a clause still too wide', () => {
   expect(captions('en', githubCaption)).toEqual([
-    'Myself, Mitchell the creator of Ghostie, and many other people are realizing',
-    'that GitHub might not be the safest place for us to be leaving our code now',
-    "that they're randomly reverting merges and having downtime that is measured in days.",
+    'Myself, Mitchell the creator of Ghostie,',
+    'and many other people are realizing that GitHub might not be the safest place',
+    "for us to be leaving our code now that they're randomly reverting merges",
+    'and having downtime that is measured in days.',
   ]);
   expect(
     captions(
@@ -128,20 +129,26 @@ it.each([
       '以及為什麼它對於你們團隊的日常開發工作來說非常重要而且值得投入時間',
     ],
   ],
-  [
-    'ja',
-    '今日は朝から雨が降っているけれど傘を持ってこなかったので駅まで走って行かなければなりませんでした',
-    [
-      '今日は朝から雨が降っている',
-      'けれど傘を持ってこなかったので駅まで走って行かなければなりませんでした',
-    ],
-  ],
 ])(
   'splits an unpunctuated %s clause between words, before a connective',
   (language, text, expected) => {
     expect(captions(language, text)).toEqual(expected);
   },
 );
+
+it('splits unpunctuated Japanese after clause-final connectives without re-joining', () => {
+  expect(
+    captions(
+      'ja',
+      '今日は朝から雨が降っているけれど傘を持ってこなかったので駅まで走って行かなければなりませんでした',
+    ),
+  ).toEqual([
+    '今日は朝から',
+    '雨が降っているけれど',
+    '傘を持ってこなかったので',
+    '駅まで走って行かなければなりませんでした',
+  ]);
+});
 
 it('never starts a Chinese line with closing punctuation or a particle when another break fits', () => {
   const text =
@@ -189,11 +196,32 @@ it.each(['fr', 'constructor'])(
   },
 );
 
+it('keeps short Japanese clauses apart at clause-final connectives', () => {
+  expect(
+    captions(
+      'ja',
+      '雨だけど晴れなのに風なので今日は傘を持って出かけることにしましたけれど駅まで走って行かなければなりませんでした',
+    ),
+  ).toEqual([
+    '雨だけど',
+    '晴れなのに',
+    '風なので',
+    '今日は傘を持って出かけることにしましたけれど',
+    '駅まで走って行かなければなりませんでした',
+  ]);
+});
+
 it('splits unspaced Japanese into captions within the display limit', () => {
   const text =
     '私たちは明日の朝に東京駅で友達と待ち合わせをして一緒に京都まで電車で旅行する予定ですが天気予報によると午後から雨が降るので傘を忘れないようにしてください';
   const pieces = captions('ja', text);
-  expect(pieces).toHaveLength(2);
+  expect(pieces).toEqual([
+    '私たちは明日の朝に東京駅で友達と待ち合わせを',
+    'して一緒に京都まで電車で旅行する予定ですが',
+    '天気予報によると午後から',
+    '雨が降るので',
+    '傘を忘れないようにしてください',
+  ]);
   expect(pieces.join('')).toBe(text);
   expect(pieces.every((piece) => subtitleDisplayLength(piece) <= captionDisplayLimit)).toBe(true);
 });

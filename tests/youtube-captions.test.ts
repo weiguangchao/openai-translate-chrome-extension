@@ -6,9 +6,10 @@ import { githubCaption, githubCaptionTrack } from './fixtures/github-caption';
 import { captionDisplayLimit } from '../src/shared/tuning';
 
 const githubCaptions = [
-  'Myself, Mitchell the creator of Ghostie, and many other people are realizing',
-  'that GitHub might not be the safest place for us to be leaving our code now',
-  "that they're randomly reverting merges and having downtime that is measured in days.",
+  'Myself, Mitchell the creator of Ghostie,',
+  'and many other people are realizing that GitHub might not be the safest place',
+  "for us to be leaving our code now that they're randomly reverting merges",
+  'and having downtime that is measured in days.',
 ];
 
 it.each(['asr', 'authored'] as const)(
@@ -16,14 +17,15 @@ it.each(['asr', 'authored'] as const)(
   (kind) => {
     const cues = parseYoutubeCaptions(githubCaptionTrack, kind, 'en');
     expect(cues).toEqual([
-      { startTime: 0, endTime: 3, text: githubCaptions[0] },
-      { startTime: 3, endTime: 7, text: githubCaptions[1] },
-      { startTime: 7, endTime: 11, text: githubCaptions[2] },
+      { startTime: 0, endTime: 1.5, text: githubCaptions[0] },
+      { startTime: 1.5, endTime: 5, text: githubCaptions[1] },
+      { startTime: 5, endTime: 8.25, text: githubCaptions[2] },
+      { startTime: 8.25, endTime: 11, text: githubCaptions[3] },
     ]);
     expect([2.9, 3, 10.9, 11].map((time) => captionAt(cues, time))).toEqual([
-      githubCaptions[0],
       githubCaptions[1],
-      githubCaptions[2],
+      githubCaptions[1],
+      githubCaptions[3],
       '',
     ]);
   },
@@ -63,12 +65,15 @@ it('maps normalized whitespace back to the timed source blocks', () => {
     'authored',
     'en',
   );
-  expect(cues[0].text).toBe(githubCaptions[0]);
+  expect(cues[0].text).toBe(
+    'Myself, Mitchell the creator of Ghostie, and many other people are realizing',
+  );
   expect(cues.map((cue) => cue.text).join(' ')).toBe(githubCaption);
   expect(cues.map(({ startTime, endTime }) => [startTime, endTime])).toEqual([
     [0, 4],
     [4, 7],
-    [7, 11],
+    [7, 8.954545454545455],
+    [8.954545454545455, 11],
   ]);
 });
 
@@ -79,10 +84,14 @@ it('estimates caption times within an untimed block without a gap between captio
     'en',
   );
   expect(captions.map((caption) => caption.text)).toEqual(githubCaptions);
-  expect(captions[1].startTime).toBeCloseTo((23.7 * githubCaption.indexOf('that GitHub')) / 237);
-  expect(captions[0].endTime).toBe(captions[1].startTime);
-  expect(captions[1].endTime).toBe(captions[2].startTime);
-  expect(captions[2].endTime).toBe(23.7);
+  expect(captions[0].startTime).toBe(0);
+  expect(captions[0].endTime).toBeCloseTo(4.1, 1);
+  expect(captions[1].startTime).toBeCloseTo(4.1, 1);
+  expect(captions[1].endTime).toBeCloseTo(11.9, 1);
+  expect(captions[2].startTime).toBeCloseTo(11.9, 1);
+  expect(captions[2].endTime).toBeCloseTo(19.2, 1);
+  expect(captions[3].startTime).toBeCloseTo(19.2, 1);
+  expect(captions[3].endTime).toBe(23.7);
 });
 
 it('joins authored fragments across cues and splits multiple sentences within one cue', () => {
@@ -341,10 +350,10 @@ it('cuts a long list into captions at its commas', () => {
     'en',
   );
   expect(cues.map((cue) => cue.text).join(' ')).toBe(text);
-  expect(cues).toHaveLength(9);
+  expect(cues).toHaveLength(11);
   expect(cues.every((cue) => subtitleDisplayLength(cue.text) <= captionDisplayLimit)).toBe(true);
   expect(cues.slice(0, -1).every((cue) => cue.text.endsWith(','))).toBe(true);
-  expect([cues[0].startTime, cues[8].endTime]).toEqual([0, 20]);
+  expect([cues[0].startTime, cues[10].endTime]).toEqual([0, 20]);
 });
 
 it('cuts an unpunctuated transcript within each caption block without dropping words', () => {
