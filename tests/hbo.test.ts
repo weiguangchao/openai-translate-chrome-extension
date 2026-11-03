@@ -231,7 +231,7 @@ const lines = () =>
     .querySelector('[data-subline-overlay]')
     ?.shadowRoot?.querySelectorAll<HTMLElement>('.line');
 
-const openingRequests = [['Cue 1'], ['Cue 2', 'Cue 3'], ['Cue 4', 'Cue 5']];
+const openingRequests = [['Cue 1'], ['Cue 2'], ['Cue 3']];
 
 async function playTo(time: number): Promise<void> {
   while (video.currentTime < time) {
@@ -252,8 +252,9 @@ it.each([mediaUrl, edgeMediaUrl])(
     await vi.advanceTimersByTimeAsync(providerSendWindowMs);
     expect(requested.map((request) => request.texts)).toEqual([
       ...openingRequests,
-      ['Cue 6', 'Cue 7'],
-      ['Cue 8', 'Cue 9'],
+      ['Cue 4'],
+      ['Cue 5'],
+      ['Cue 6'],
     ]);
     expect(requested.slice(3).every((request) => request.at === 0)).toBe(true);
     await playTo(3);
@@ -289,8 +290,9 @@ it('displays a finished HBO segment while the other prefetched segment is still 
   await vi.advanceTimersByTimeAsync(providerSendWindowMs);
   expect(batches.map(({ texts }) => texts)).toEqual([
     ...openingRequests,
-    ['Cue 6', 'Cue 7'],
-    ['Cue 8', 'Cue 9'],
+    ['Cue 4'],
+    ['Cue 5'],
+    ['Cue 6'],
   ]);
   await playTo(3);
   await vi.advanceTimersByTimeAsync(300);

@@ -2,7 +2,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { type Settings } from '../src/shared/settings';
 import { extensionStorage } from './fixtures/extension-storage';
 import { consentedSettings } from './fixtures/settings';
-import { packedCues, providerReply, requestedTexts, structuredReply } from './fixtures/provider';
+import { packedCues, providerReply, requestedTexts, translationReply } from './fixtures/provider';
 
 afterEach(async () => {
   await new Promise((resolve) => setTimeout(resolve, 0));
@@ -210,7 +210,7 @@ it('answers a prefetch with translations in the order asked, settling cues a lat
     rate: 1,
     cues: packedCues(['A', 'B']),
   });
-  await vi.waitFor(() => expect(pending).toHaveLength(1));
+  await vi.waitFor(() => expect(pending).toHaveLength(2));
   const sliding = send({
     type: 'prefetch',
     captionLanguage: 'en',
@@ -218,7 +218,7 @@ it('answers a prefetch with translations in the order asked, settling cues a lat
     rate: 1,
     cues: packedCues(['B', 'C']),
   });
-  await vi.waitFor(() => expect(pending).toHaveLength(2));
+  await vi.waitFor(() => expect(pending).toHaveLength(3));
   for (const request of pending)
     request.resolve(providerReply(request.texts, (text) => `${text} 译文`));
   await expect(opening).resolves.toEqual({ ok: true, data: [null, 'B 译文'] });
@@ -229,14 +229,14 @@ it('answers a prefetch with translations in the order asked, settling cues a lat
       captionLanguage: 'en',
       time: 0,
       rate: 1,
-      cues: packedCues(['A', 'C']),
+      cues: packedCues(['B', 'C']),
     }),
   ).resolves.toEqual({
     ok: true,
-    data: ['A 译文', 'C 译文'],
+    data: ['B 译文', 'C 译文'],
   });
   await expect(send({ type: 'prefetch-pause' })).resolves.toEqual({ ok: true });
-  expect(fetch).toHaveBeenCalledTimes(2);
+  expect(fetch).toHaveBeenCalledTimes(3);
 });
 
 it('starts a new page in the same tab without the pause the previous page left', async () => {
@@ -296,13 +296,11 @@ it('packs a prefetch by its time span and rejects a snapshot without usable time
     rate: 1,
     cues: [...packedCues(['A', 'B']), { text: 'C', start: 80, end: 81 }],
   });
-  await vi.waitFor(() => expect(pending).toEqual([['A', 'B']]));
+  await vi.waitFor(() => expect(pending).toEqual([['A'], ['B']]));
 });
 
 it('shares one translation between duplicate captions across messages', async () => {
-  const fetch = vi
-    .fn()
-    .mockImplementation(async () => structuredReply([{ id: 0, translation: '完整译文' }]));
+  const fetch = vi.fn().mockImplementation(async () => translationReply('完整译文'));
   vi.stubGlobal('fetch', fetch);
   const send = await loadBackground({ ...consentedSettings, apiKey: 'key', model: 'model' });
   await expect(

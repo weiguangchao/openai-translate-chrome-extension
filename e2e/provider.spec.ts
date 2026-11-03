@@ -2,7 +2,6 @@ import { expect, test } from '@playwright/test';
 import {
   apiKey,
   denseCue,
-  draftPrefix,
   nextSource,
   nextTranslation,
   source,
@@ -16,34 +15,22 @@ import {
 import { providerTimeoutMs } from '../src/shared/tuning';
 
 for (const platform of ['youtube', 'hbo', 'x'] as const) {
-  for (const draft of ['complete', 'truncated'] as const) {
-    test(`${platform}: a ${draft} draft before the final JSON never reaches the overlay or cache`, async ({}, info) => {
-      await withPlayer(
-        platform,
-        info,
-        async (p) => {
-          await p.play();
-          await p.pair(source, translation);
-          await preloadNext(p);
-          const openingCount = p.posts.length;
-          await p.pause();
-          await p.seek(35);
-          await p.pair(nextSource, nextTranslation);
-          await p.seek(2);
-          await p.pair(source, translation);
-          expect(p.posts).toHaveLength(openingCount);
-          const frames = await p.frames();
-          expect(frames.filter((f) => f.translation.startsWith(draftPrefix))).toEqual([]);
-          if (draft === 'truncated')
-            await info.attach('final-cached.png', {
-              body: await p.page.screenshot(),
-              contentType: 'image/png',
-            });
-        },
-        { draft },
-      );
+  test(`${platform}: single-caption translations survive replay from the cache`, async ({}, info) => {
+    await withPlayer(platform, info, async (p) => {
+      await p.play();
+      await p.pair(source, translation);
+      await preloadNext(p);
+      const openingCount = p.posts.length;
+      expect(p.posts.every((post) => post.inputs.length === 1)).toBe(true);
+      expect(p.posts.every((post) => !('response_format' in post.body))).toBe(true);
+      await p.pause();
+      await p.seek(35);
+      await p.pair(nextSource, nextTranslation);
+      await p.seek(2);
+      await p.pair(source, translation);
+      expect(p.posts).toHaveLength(openingCount);
     });
-  }
+  });
 
   for (const failure of [
     {
@@ -56,7 +43,7 @@ for (const platform of ['youtube', 'hbo', 'x'] as const) {
       name: 'an invalid translation',
       status: 200,
       body: JSON.stringify({
-        choices: [{ message: { content: '{"results":[{"id":0,"translation":""}]}' } }],
+        choices: [{ message: { content: '' } }],
       }),
       text: 'Provider returned an invalid response stream. Unable to translate.',
     },

@@ -35,7 +35,6 @@ export const koreanTranslation = '今天天气不错。';
 export const thirdSource = 'The ferry leaves at noon.';
 export const thirdTranslation = '渡轮中午出发。';
 export const gardenSource = 'The garden is quiet.';
-export const draftPrefix = '草稿：';
 const translations: Record<string, string> = {
   [source]: translation,
   [translation]: translation,
@@ -87,7 +86,6 @@ interface Options {
   dense?: boolean;
   stallFirst?: boolean;
   hold?: boolean;
-  draft?: 'complete' | 'truncated';
   unavailable?: number;
   holdTimeline?: boolean;
   recordVideo?: boolean;
@@ -274,15 +272,7 @@ export class Player {
       expect(translations[text], `Known Provider input: ${text}`).toBeTruthy();
       return { id, translation: translations[text] };
     });
-    let content = JSON.stringify({ results });
-    if (this.options.draft) {
-      const drafts = post.inputs.map(({ id, text }) => ({
-        id,
-        translation: `${draftPrefix}${text}`,
-      }));
-      const draft = JSON.stringify({ results: drafts });
-      content = `${this.options.draft === 'truncated' ? draft.slice(0, -2) : draft}\nFinal\n${content}`;
-    }
+    const content = results[0].translation;
     await post.route.fulfill({ json: { choices: [{ message: { content } }] } });
   }
   private cues(id: string, language: string, kind: string): Cue[] {
@@ -410,9 +400,8 @@ export class Player {
       worker === `chrome-extension://${this.extensionId}/background.js`
     ) {
       const body = request.postDataJSON();
-      const inputs = JSON.parse(
-        body.messages.find((m: { role: string }) => m.role === 'user').content,
-      );
+      const content = body.messages.find((m: { role: string }) => m.role === 'user').content;
+      const inputs = [{ id: 0, text: content.slice(content.indexOf('\n\n') + 2) }];
       const key = request.headers().authorization?.replace(/^Bearer /, '');
       const post: Post = { inputs, body, worker, route, released: false, status: 200 };
       const unavailable = this.posts.filter((p) => p.status === 503).length;
@@ -568,7 +557,7 @@ export const settledTranslations = async (p: Player) =>
     (t) => t && t !== 'Translating',
   );
 
-const openingInputs = [[{ id: 0, text: source }]];
+const openingInputs = [[{ id: 0, text: source }], [{ id: 0, text: nextSource }]];
 
 export async function expectOpeningPosts(p: Player) {
   await expect.poll(() => p.posts.map((post) => post.inputs)).toEqual(openingInputs);
