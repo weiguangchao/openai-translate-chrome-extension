@@ -28,30 +28,26 @@ function cues(count: number, gap = 4, from = 0) {
 const texts = (requests: ReturnType<typeof planPlayback>) =>
   requests.map((request) => request.cues.map((cue) => cue.text));
 
-it('sends the imminent cue alone and packs the rest by speech until the buffer is covered', () => {
+it('sends every caption separately until the playback buffer is covered', () => {
   const requests = planPlayback({ time: 0, rate: 1, cues: cues(12) });
-  expect(texts(requests)).toEqual([
-    ['Cue 1'],
-    ['Cue 2', 'Cue 3'],
-    ['Cue 4', 'Cue 5'],
-    ['Cue 6', 'Cue 7'],
-    ['Cue 8', 'Cue 9'],
+  expect(texts(requests)).toEqual(Array.from({ length: 8 }, (_, index) => [`Cue ${index + 1}`]));
+  expect(requests.map((request) => request.atRisk)).toEqual([
+    true,
+    false,
+    false,
+    false,
+    false,
+    false,
+    false,
+    false,
   ]);
-  expect(requests.map((request) => request.atRisk)).toEqual([true, false, false, false, false]);
   expect(slackSeconds(28, 0, 1)).toBeLessThan(planBufferSeconds);
-  expect(slackSeconds(36, 0, 1)).toBeGreaterThanOrEqual(planBufferSeconds);
+  expect(slackSeconds(32, 0, 1)).toBeGreaterThanOrEqual(planBufferSeconds);
 });
 
 it('reaches further into the video at 1.5x because the buffer is measured in wall time', () => {
   const requests = planPlayback({ time: 0, rate: 1.5, cues: cues(12) });
-  expect(texts(requests)).toEqual([
-    ['Cue 1'],
-    ['Cue 2', 'Cue 3'],
-    ['Cue 4', 'Cue 5'],
-    ['Cue 6', 'Cue 7'],
-    ['Cue 8', 'Cue 9'],
-    ['Cue 10', 'Cue 11'],
-  ]);
+  expect(texts(requests)).toEqual(Array.from({ length: 12 }, (_, index) => [`Cue ${index + 1}`]));
   expect(requests[1].atRisk).toBe(true);
 });
 
@@ -69,14 +65,8 @@ it('leaves a cue that is about to leave the screen to the visible caption reques
   expect(texts(requests)).toEqual([['Next'], ['Later']]);
 });
 
-it('waits for a pack at the end of the snapshot to fill unless its first cue nears the latency tail', () => {
-  const tail = cues(1, 2, 20);
-  expect(planPlayback({ time: 0, rate: 1, cues: tail })).toEqual([]);
-  expect(texts(planPlayback({ time: 5, rate: 1, cues: tail }))).toEqual([['Cue 1']]);
-  expect(texts(planPlayback({ time: 0, rate: 1, cues: cues(4, 2, 20) }))).toEqual([
-    ['Cue 1', 'Cue 2'],
-    ['Cue 3', 'Cue 4'],
-  ]);
+it('sends a caption at the end of a snapshot without waiting for more captions', () => {
+  expect(texts(planPlayback({ time: 0, rate: 1, cues: cues(1, 2, 20) }))).toEqual([['Cue 1']]);
 });
 
 it('stretches the buffer to three times the slow tail of recent replies', () => {
@@ -85,10 +75,7 @@ it('stretches the buffer to three times the slow tail of recent replies', () => 
   expect(slowLatency(samples)).toBe(15000);
   const requests = planPlayback({ time: 0, rate: 1, cues: cues(20), samples });
   expect(requests.at(-1)?.cues[0].start).toBe(44);
-  expect(texts(planPlayback({ time: 0, rate: 1, cues: cues(20) })).at(-1)).toEqual([
-    'Cue 8',
-    'Cue 9',
-  ]);
+  expect(texts(planPlayback({ time: 0, rate: 1, cues: cues(20) })).at(-1)).toEqual(['Cue 8']);
 });
 
 it('takes the median of the latest replies and the 90th percentile of all kept ones', () => {
@@ -103,7 +90,7 @@ it('takes the median of the latest replies and the 90th percentile of all kept o
   expect(slowLatency([500])).toBe(latencyMinMs);
 });
 
-it('caps each request by the batch limit and pack span, and the plan by the sentence cap', () => {
+it('sends single captions and caps the plan by the sentence cap', () => {
   const dense = planPlayback({ time: 0, rate: 1, cues: cues(planSentenceCap * 3, 0.1, 5) });
   expect(dense.flatMap((request) => request.cues)).toHaveLength(planSentenceCap);
   expect(dense.every((request) => request.cues.length === translationBatchLimit)).toBe(true);
@@ -117,15 +104,18 @@ it('caps each request by the batch limit and pack span, and the plan by the sent
     ],
   });
   expect(texts(spoken)).toEqual([
-    ['Cue 1', 'Cue 2'],
+    ['Cue 1'],
+    ['Cue 2'],
     ['Cue 3'],
     ['Long'],
-    ['After Cue 1', 'After Cue 2'],
-    ['After Cue 3', 'After Cue 4'],
+    ['After Cue 1'],
+    ['After Cue 2'],
+    ['After Cue 3'],
+    ['After Cue 4'],
   ]);
 });
 
-it('does not pack sentences across a long silence', () => {
+it('sends captions on either side of a long silence separately', () => {
   const requests = planPlayback({
     time: 0,
     rate: 1,
@@ -135,5 +125,5 @@ it('does not pack sentences across a long silence', () => {
       { text: 'After the pause', start: 20, end: 21 },
     ],
   });
-  expect(texts(requests)).toEqual([['Before', 'Still before']]);
+  expect(texts(requests)).toEqual([['Before'], ['Still before'], ['After the pause']]);
 });

@@ -46,7 +46,7 @@ test('an empty translation fails once without a corrective Provider POST', async
       const post = p.posts.find((post) => post.inputs.some((input) => input.text === source))!;
       post.released = true;
       await post.route.fulfill({
-        json: { choices: [{ message: { content: '{"results":[{"id":0,"translation":""}]}' } }] },
+        json: { choices: [{ message: { content: '' } }] },
       });
       await expect(p.translated).toHaveText(
         'Provider returned an invalid response stream. Unable to translate.',

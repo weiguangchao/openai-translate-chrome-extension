@@ -18,9 +18,7 @@ export function requestedTexts(init: RequestInit): string[] {
   const { messages } = JSON.parse(init.body as string) as {
     messages: { role: string; content: string }[];
   };
-  if (messages[0].content.includes('{"results":'))
-    return (JSON.parse(messages[1].content) as { text: string }[]).map((item) => item.text);
-  return [messages[1].content];
+  return [messages[1].content.slice(messages[1].content.indexOf('\n\n') + 2)];
 }
 
 export function providerReply(texts: string[], translate: (text: string) => string): Response {
@@ -28,15 +26,13 @@ export function providerReply(texts: string[], translate: (text: string) => stri
     choices: [
       {
         message: {
-          content: JSON.stringify({
-            results: texts.map((text, id) => ({ id, translation: translate(text) })),
-          }),
+          content: translate(texts[0]),
         },
       },
     ],
   });
 }
 
-export function structuredReply(results: unknown[]): Response {
-  return Response.json({ choices: [{ message: { content: JSON.stringify({ results }) } }] });
+export function translationReply(content: string): Response {
+  return Response.json({ choices: [{ message: { content } }] });
 }
