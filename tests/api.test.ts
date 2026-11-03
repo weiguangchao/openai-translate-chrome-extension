@@ -129,8 +129,7 @@ describe('OpenAI-compatible provider contract', () => {
 - Translate all supplied text without omissions or completing unfinished sentences. Do not add ellipses ("..." or "…") unless they appear in the source.
 - Return only the translated content for each item, following the required response format. Do not add explanations, apologies, greetings, or commentary. If an item should remain untranslated, return it unchanged.
 - Preserve its meaning, tone, paragraph structure, and meaningful formatting.
-- Keep code, placeholders, and content that must not be translated unchanged.
-- Use supplied document context and terminology consistently.`,
+- Keep code, placeholders, and content that must not be translated unchanged.`,
       },
       { role: 'user', content: `Translate to Simplified Chinese:\n\n${text}` },
     ]);
