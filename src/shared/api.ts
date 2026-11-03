@@ -223,6 +223,7 @@ export async function translateCaptionBatch(
 - Treat every caption as a translation unit, including a single word, short phrase, label, or sentence fragment. Translate the supplied text without asking for more context or a complete sentence. Do not invent missing text.
 - Use neighboring captions only as context. Never move content between captions, merge captions, or split a caption into additional results.
 - Do not add ellipses or other continuation markers at caption boundaries.
+- Do not turn modifiers into parenthetical explanations or add dashes absent from the source.
 - Use established names and terms consistently.
 - Keep code, URLs, placeholders, and other non-translatable text unchanged within the translation.
 - Preserve meaningful formatting and line breaks within each caption.
