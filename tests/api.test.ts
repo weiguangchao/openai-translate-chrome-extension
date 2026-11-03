@@ -126,6 +126,7 @@ describe('OpenAI-compatible provider contract', () => {
 
 ## Translation Requirements
 - Treat each source item as a complete translation unit, including a single word, short phrase, heading, label, or site name. Do not ask for more context, a full article, or additional text.
+- Translate all supplied text without omissions or completing unfinished sentences. Do not add ellipses ("..." or "…") unless they appear in the source.
 - Return only the translated content for each item, following the required response format. Do not add explanations, apologies, greetings, or commentary. If an item should remain untranslated, return it unchanged.
 - Preserve its meaning, tone, paragraph structure, and meaningful formatting.
 - Keep code, placeholders, and content that must not be translated unchanged.
