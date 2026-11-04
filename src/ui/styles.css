@@ -872,22 +872,6 @@ button:hover:not(:disabled) {
   background: #faf9ff;
   color: #6554d9;
 }
-.about-feedback {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 14px;
-}
-.about-feedback-link {
-  color: #9aa0b2;
-  font-size: 12px;
-  font-weight: 400;
-  text-decoration: underline;
-  text-underline-offset: 3px;
-  text-decoration-thickness: 1px;
-}
-.about-feedback-link:hover {
-  color: #71758a;
-}
 .alert-layer {
   position: fixed;
   top: 20px;

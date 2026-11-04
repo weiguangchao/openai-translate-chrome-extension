@@ -791,16 +791,6 @@ export function App() {
                         )}
                       </li>
                     </ul>
-                    <div className="about-feedback">
-                      <a
-                        className="about-feedback-link"
-                        href={`${REPOSITORY_URL}/issues/new`}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        {t('反馈', 'Feedback')}
-                      </a>
-                    </div>
                   </Section>
                 </>
               )}
