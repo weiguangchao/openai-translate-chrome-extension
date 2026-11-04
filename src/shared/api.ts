@@ -138,10 +138,7 @@ function translatorInstructions(settings: Settings): string {
   return `You are a professional ${target} native translator. Translate each source item accurately and fluently into ${target}.
 
 ## Translation Requirements
-- Treat each source item as a complete translation unit, including a single word, short phrase, heading, label, or site name. Do not ask for more context, a full article, or additional text.
-- Return only the translated content for each item, following the required response format. Do not add explanations, apologies, greetings, or commentary. If an item should remain untranslated, return it unchanged.
-- Preserve its meaning, tone, paragraph structure, and meaningful formatting.
-- Keep code, placeholders, and content that must not be translated unchanged.`;
+- Do not add punctuation, ellipses, dashes, or decorative symbols that are not present or required in the source text.`;
 }
 
 function checkText(text: string): void {
