@@ -347,7 +347,7 @@ it('retries a paused cache lookup invalidated by a later seek event', async () =
   await vi.advanceTimersByTimeAsync(0);
   expect(lines()).toEqual([null, null]);
   replies[1]({ ok: true, data: '缓存译文' });
-  await vi.advanceTimersByTimeAsync(450);
+  await vi.advanceTimersByTimeAsync(0);
   expect(lines()).toEqual(['Cached source.', '缓存译文']);
   expect(sendMessage.mock.calls.filter(([m]) => m.type === 'translate').map(([m]) => m)).toEqual([
     { type: 'translate', captionLanguage: 'en', text: 'Cached source.', cacheOnly: true },

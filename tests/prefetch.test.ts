@@ -263,9 +263,7 @@ it('lets the opening window finish during a scrub and requests only the cues at 
   video.currentTime = 80;
   Object.defineProperty(video, 'seeking', { value: false });
   video.dispatchEvent(new Event('seeked'));
-  await vi.advanceTimersByTimeAsync(200);
-  expect(requested).toEqual(opening);
-  await vi.advanceTimersByTimeAsync(600);
+  await vi.advanceTimersByTimeAsync(0);
   expect(requested.slice(opening.length)).toEqual([['After seeking.']]);
   await finish({ 'After seeking.': '跳转后的字幕' });
   expect(translated()?.textContent).toBe('跳转后的字幕');
@@ -339,7 +337,7 @@ it('keeps requests sent before a seek running, sends the landing at once and cac
   expect(requested.slice(sent).flat()).not.toContain('Cue 1.');
 });
 
-it('keeps untranslated short sources hidden and waits out a seek before sending landing requests', async () => {
+it('keeps untranslated short sources hidden and sends the short landing before upcoming captions', async () => {
   const cues = [
     { startTime: 0, endTime: 0.6, text: 'Opening.' },
     { startTime: 0.6, endTime: 4, text: 'Stay.' },
@@ -373,12 +371,12 @@ it('keeps untranslated short sources hidden and waits out a seek before sending 
   Object.defineProperty(video, 'seeking', { value: false });
   video.dispatchEvent(new Event('seeked'));
   await vi.advanceTimersByTimeAsync(0);
-  expect(requested).toHaveLength(sent);
-  await vi.advanceTimersByTimeAsync(400);
-  expect(requested.slice(sent)).toEqual([['After.'], ['Seek tail.']]);
+  expect(requested.slice(sent)).toEqual([['Seek tail.'], ['After.']]);
   expect(original()?.hidden).toBe(true);
+  await finish({ 'Seek tail.': '落点译文' });
+  expect(original()?.textContent).toBe('Seek tail.');
   expect(translated()?.hidden).toBe(false);
-  expect(translated()?.textContent).toBe('Translating');
+  expect(translated()?.textContent).toBe('落点译文');
 });
 
 it('finishes in-flight prefetch while paused and does not send more until playback resumes', async () => {
@@ -591,3 +589,42 @@ it('reuses the cues read from a track until the track changes', () => {
   expect(read()).not.toBe(first);
   expect(read()?.map((cue) => cue.text)).toEqual(['Changed']);
 });
+
+it.each([false, true])(
+  'prioritizes the confirmed short landing, occupied transport=%s',
+  async (occupied) => {
+    setCues([
+      { startTime: 40, endTime: 40.3, text: 'Landing.' },
+      { startTime: 40.3, endTime: 44, text: 'Upcoming.' },
+    ]);
+    controller = new CaptionController(createHboPlatform, publicSettings(saved));
+    await vi.advanceTimersByTimeAsync(0);
+    Object.defineProperty(video, 'seeking', { configurable: true, value: true });
+    video.currentTime = 35;
+    video.dispatchEvent(new Event('seeking'));
+    if (occupied) {
+      const { translateCaptionBatch } = await import('../src/shared/api');
+      for (let index = 0; index < translationSendsPerSecond; index++)
+        void translateCaptionBatch({ ...saved, captionLanguage: 'en' }, [`Other tab ${index}.`]);
+      await vi.advanceTimersByTimeAsync(0);
+    }
+    const before = requested.length;
+    for (const time of [36, 37, 38]) {
+      video.currentTime = time;
+      video.dispatchEvent(new Event('timeupdate'));
+      await vi.advanceTimersByTimeAsync(150);
+      expect(requested).toHaveLength(before);
+    }
+    video.currentTime = 40;
+    Object.defineProperty(video, 'seeking', { value: false });
+    video.dispatchEvent(new Event('seeked'));
+    await vi.advanceTimersByTimeAsync(0);
+    if (occupied) {
+      expect(requested).toHaveLength(before);
+      await vi.advanceTimersByTimeAsync(550);
+    }
+    expect(requested.slice(before)).toEqual([['Landing.'], ['Upcoming.']]);
+    await finish({ 'Landing.': '落点译文' });
+    expect(translated()?.textContent).toBe('落点译文');
+  },
+);
