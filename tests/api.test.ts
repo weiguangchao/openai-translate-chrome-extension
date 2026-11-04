@@ -125,6 +125,7 @@ describe('OpenAI-compatible provider contract', () => {
         content: `You are a professional Simplified Chinese native translator. Translate each source item accurately and fluently into Simplified Chinese.
 
 ## Translation Requirements
+- Return only the translated content for each item, following the required response format. Do not add explanations, apologies, greetings, or commentary. If an item should remain untranslated, return it unchanged.
 - Do not add punctuation, ellipses, dashes, or decorative symbols that are not present or required in the source text.`,
       },
       { role: 'user', content: `Translate to Simplified Chinese:\n\n${text}` },
