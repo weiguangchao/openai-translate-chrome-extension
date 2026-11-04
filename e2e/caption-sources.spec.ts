@@ -34,8 +34,17 @@ for (const platform of ['youtube', 'hbo', 'x'] as const) {
       ).toEqual([]);
       expect(p.downloads).toHaveLength(platform === 'youtube' ? 1 : 2);
       await expectOpeningPosts(p);
-      for (const post of p.posts)
+      for (const [index, post] of p.posts.entries()) {
         expect(post.body).toMatchObject({ model: 'e2e-fixed-model', stream: false });
+        expect(post.body).not.toHaveProperty('response_format');
+        expect(post.body.messages).toEqual([
+          { role: 'system', content: expect.any(String) },
+          {
+            role: 'user',
+            content: `Translate to Simplified Chinese:\n\n${[source, nextSource][index]}`,
+          },
+        ]);
+      }
     });
   });
 

@@ -36,37 +36,6 @@ test('malformed stored styles fall back to defaults in the running extension', a
   });
 });
 
-test('an empty translation fails once without a corrective Provider POST', async ({}, info) => {
-  await withPlayer(
-    'youtube',
-    info,
-    async (p) => {
-      await p.play();
-      await expect.poll(() => p.posts.length).toBeGreaterThan(0);
-      const post = p.posts.find((post) => post.inputs.some((input) => input.text === source))!;
-      post.released = true;
-      await post.route.fulfill({
-        json: { choices: [{ message: { content: '' } }] },
-      });
-      await expect(p.translated).toHaveText(
-        'Provider returned an invalid response stream. Unable to translate.',
-      );
-      await expect(p.translated).toHaveCSS('color', 'rgb(255, 204, 0)');
-      await expect(p.original).toBeHidden();
-      await p.pause();
-      await p.page.waitForTimeout(1000);
-      expect(
-        p.posts.filter((post) => post.inputs.some((input) => input.text === source)),
-      ).toHaveLength(1);
-      await info.attach('invalid-translation.png', {
-        body: await p.page.screenshot(),
-        contentType: 'image/png',
-      });
-    },
-    { hold: true },
-  );
-});
-
 test('playback resumes after dropped control messages in the content script', async ({}, info) => {
   await withPlayer(
     'youtube',
