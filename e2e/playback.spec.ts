@@ -130,7 +130,7 @@ for (const platform of ['youtube', 'hbo', 'x'] as const) {
   });
 }
 
-test('youtube: 1.5x playback sends the imminent caption alone and stays silent through continuous scrubbing', async ({}, info) => {
+test('youtube: 1.5x playback sends the landing caption first after each completed seek', async ({}, info) => {
   await withPlayer(
     'youtube',
     info,
@@ -150,20 +150,19 @@ test('youtube: 1.5x playback sends the imminent caption alone and stays silent t
       await p.pair(denseCue(0).text, denseCue(0).translation);
       await p.page.screenshot({ path: info.outputPath('opening.png') });
       await expect.poll(() => p.posts.length).toBe(translationSendsPerSecond * 2);
-      const before = p.posts.length;
-      await p.page.locator('video').evaluate(async (video: HTMLVideoElement) => {
-        for (const time of [28.8, 44.8, 60.8]) {
-          video.currentTime = time;
-          await new Promise((resolve) => setTimeout(resolve, 100));
-        }
-      });
-      expect(p.posts).toHaveLength(before);
-      await expect.poll(() => p.posts.length).toBe(before + 2);
-      expect(p.posts.slice(before).map((post) => post.inputs.map((input) => input.text))).toEqual([
-        [denseCue(15).text],
-        [denseCue(16).text],
-      ]);
-      await p.release(before);
+      let landingPost = -1;
+      for (const [time, index] of [
+        [28.8, 7],
+        [44.8, 11],
+        [60.8, 15],
+      ]) {
+        const before = p.posts.length;
+        await p.seek(time);
+        await expect.poll(() => p.posts.length).toBeGreaterThan(before);
+        expect(p.posts[before].inputs).toEqual([{ id: 0, text: denseCue(index).text }]);
+        landingPost = before;
+      }
+      await p.release(landingPost);
       await p.pair(denseCue(15).text, denseCue(15).translation);
       await p.page.screenshot({ path: info.outputPath('landing.png') });
       const batches = p.trace.filter((event) => event.e === 'batch');

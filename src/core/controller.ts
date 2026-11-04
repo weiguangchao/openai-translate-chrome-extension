@@ -67,8 +67,13 @@ export class CaptionController {
   private nativeTrack: TextTrack | undefined;
   private destroyed = false;
   private onMediaChange = (event: Event) => {
-    if (event.type === 'seeking' || event.type === 'seeked') this.gate.hold();
-    this.tick();
+    if (event.type === 'seeking') this.gate.hold();
+    const completedSeek = event.type === 'seeked';
+    if (completedSeek) {
+      this.translator.cancel();
+      this.gate.complete(this.video?.currentTime ?? 0);
+    }
+    this.tick(completedSeek);
   };
 
   constructor(
@@ -156,14 +161,14 @@ export class CaptionController {
     return this.translator.hasTranslation(caption.text);
   }
 
-  private tick(): void {
+  private tick(completedSeek = false): void {
     this.shown = null;
-    this.advance();
+    this.advance(completedSeek);
     if (!this.destroyed && this.video)
       this.trace.note(this.video, this.shown, this.translator.state);
   }
 
-  private advance(): void {
+  private advance(completedSeek: boolean): void {
     if (this.destroyed) return;
     if (!this.connection.active) {
       this.destroy();
@@ -230,6 +235,13 @@ export class CaptionController {
       }
       return;
     }
+    const frame = {
+      text: caption.text,
+      captionLanguage: language,
+      cacheOnly: video.paused || this.gate.settling,
+      debounce: captions ? 0 : 300,
+    };
+    if (completedSeek && caption.text && usesModel) this.translator.show(frame);
     if (usesModel && !video.paused && !this.gate.settling && captions)
       this.translator.plan(time, video.playbackRate || 1, playbackCues(captions, time), language);
     const cueIndex =
@@ -250,11 +262,6 @@ export class CaptionController {
         segment: cue.segment,
       }),
     };
-    this.translator.show({
-      text: caption.text,
-      captionLanguage: language,
-      cacheOnly: video.paused || this.gate.settling,
-      debounce: captions ? 0 : 300,
-    });
+    if (!completedSeek) this.translator.show(frame);
   }
 }

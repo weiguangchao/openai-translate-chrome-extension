@@ -34,6 +34,12 @@ export class PlaybackGate {
     this.seekTimer = setTimeout(() => this.release(), seekSettleMs);
   }
 
+  complete(time: number): void {
+    this.observedTime = time;
+    this.settlesAt = 0;
+    this.clearTimers();
+  }
+
   reset(): void {
     this.observedTime = Number.NaN;
     this.settlesAt = 0;
