@@ -1,15 +1,12 @@
 import { expect, it } from 'vitest';
 import { parseYoutubeCaptions } from '../src/platforms/youtube/captions';
-import { subtitleDisplayLength } from '../src/shared/segmenter';
 import { captionAt, playbackCues, timedCaptions } from '../src/core/timeline';
 import { githubCaption, githubCaptionTrack } from './fixtures/github-caption';
-import { captionDisplayLimit } from '../src/shared/tuning';
 
 const githubCaptions = [
   'Myself, Mitchell the creator of Ghostie,',
-  'and many other people are realizing that GitHub might not be the safest place',
-  "for us to be leaving our code now that they're randomly reverting merges",
-  'and having downtime that is measured in days.',
+  'and many other people are realizing that GitHub might not be the safest place for us to be leaving our code',
+  "now that they're randomly reverting merges and having downtime that is measured in days.",
 ];
 
 it.each(['asr', 'authored'] as const)(
@@ -18,14 +15,13 @@ it.each(['asr', 'authored'] as const)(
     const cues = parseYoutubeCaptions(githubCaptionTrack, kind, 'en');
     expect(cues).toEqual([
       { startTime: 0, endTime: 1.5, text: githubCaptions[0] },
-      { startTime: 1.5, endTime: 5, text: githubCaptions[1] },
-      { startTime: 5, endTime: 8.25, text: githubCaptions[2] },
-      { startTime: 8.25, endTime: 11, text: githubCaptions[3] },
+      { startTime: 1.5, endTime: 6.75, text: githubCaptions[1] },
+      { startTime: 6.75, endTime: 11, text: githubCaptions[2] },
     ]);
     expect([2.9, 3, 10.9, 11].map((time) => captionAt(cues, time))).toEqual([
       githubCaptions[1],
       githubCaptions[1],
-      githubCaptions[3],
+      githubCaptions[2],
       '',
     ]);
   },
@@ -65,15 +61,18 @@ it('maps normalized whitespace back to the timed source blocks', () => {
     'authored',
     'en',
   );
-  expect(cues[0].text).toBe(
-    'Myself, Mitchell the creator of Ghostie, and many other people are realizing',
-  );
+  expect(cues.map((cue) => cue.text)).toEqual([
+    githubCaptions[0],
+    'and many other people are realizing',
+    'that GitHub might not be the safest place for us to be leaving our code',
+    githubCaptions[2],
+  ]);
   expect(cues.map((cue) => cue.text).join(' ')).toBe(githubCaption);
   expect(cues.map(({ startTime, endTime }) => [startTime, endTime])).toEqual([
-    [0, 4],
+    [0, (4 * 41) / 76],
+    [(4 * 41) / 76, 4],
     [4, 7],
-    [7, 8.954545454545455],
-    [8.954545454545455, 11],
+    [7, 11],
   ]);
 });
 
@@ -87,11 +86,9 @@ it('estimates caption times within an untimed block without a gap between captio
   expect(captions[0].startTime).toBe(0);
   expect(captions[0].endTime).toBeCloseTo(4.1, 1);
   expect(captions[1].startTime).toBeCloseTo(4.1, 1);
-  expect(captions[1].endTime).toBeCloseTo(11.9, 1);
-  expect(captions[2].startTime).toBeCloseTo(11.9, 1);
-  expect(captions[2].endTime).toBeCloseTo(19.2, 1);
-  expect(captions[3].startTime).toBeCloseTo(19.2, 1);
-  expect(captions[3].endTime).toBe(23.7);
+  expect(captions[1].endTime).toBeCloseTo(14.9, 1);
+  expect(captions[2].startTime).toBeCloseTo(14.9, 1);
+  expect(captions[2].endTime).toBe(23.7);
 });
 
 it('joins authored fragments across cues and splits multiple sentences within one cue', () => {
@@ -327,7 +324,7 @@ it('joins CJK ASR fragments without inserting spaces and recognizes sentence pun
   ]);
 });
 
-it('cuts a long unpunctuated phrase into balanced captions between words', () => {
+it('keeps a long sentence whole when the third-party splitter finds no clause boundary', () => {
   const text =
     'The extraordinarily detailed description of the architecture of the original production deployment system in our main regional data center remains available.';
   const cues = parseYoutubeCaptions(
@@ -335,11 +332,7 @@ it('cuts a long unpunctuated phrase into balanced captions between words', () =>
     'asr',
     'en',
   );
-  expect(cues.map((cue) => cue.text)).toEqual([
-    'The extraordinarily detailed description of the architecture of the original',
-    'production deployment system in our main regional data center remains available.',
-  ]);
-  expect([cues[0].startTime, cues[0].endTime, cues[1].endTime]).toEqual([0, cues[1].startTime, 60]);
+  expect(cues).toEqual([{ text, startTime: 0, endTime: 60 }]);
 });
 
 it('cuts a long list into captions at its commas', () => {
@@ -350,13 +343,12 @@ it('cuts a long list into captions at its commas', () => {
     'en',
   );
   expect(cues.map((cue) => cue.text).join(' ')).toBe(text);
-  expect(cues).toHaveLength(11);
-  expect(cues.every((cue) => subtitleDisplayLength(cue.text) <= captionDisplayLimit)).toBe(true);
+  expect(cues).toHaveLength(41);
   expect(cues.slice(0, -1).every((cue) => cue.text.endsWith(','))).toBe(true);
-  expect([cues[0].startTime, cues[10].endTime]).toEqual([0, 20]);
+  expect([cues[0].startTime, cues.at(-1)!.endTime]).toEqual([0, 20]);
 });
 
-it('cuts an unpunctuated transcript within each caption block without dropping words', () => {
+it('does not force third-party output apart at source cue boundaries', () => {
   const text = 'keep speaking '.repeat(500).trim();
   const cues = parseYoutubeCaptions(
     {
@@ -370,13 +362,7 @@ it('cuts an unpunctuated transcript within each caption block without dropping w
     'en',
   );
   expect(cues.map((cue) => cue.text).join(' ')).toBe(text);
-  expect(cues).toHaveLength(100);
-  expect(
-    cues.every(
-      (cue) =>
-        subtitleDisplayLength(cue.text) <= captionDisplayLimit && cue.endTime > cue.startTime,
-    ),
-  ).toBe(true);
+  expect(cues).toEqual([{ text, startTime: 0, endTime: 150 }]);
 });
 
 it('ignores malformed and non-text events while retaining valid captions', () => {
@@ -396,4 +382,21 @@ it('ignores malformed and non-text events while retaining valid captions', () =>
       'en',
     ),
   ).toEqual([{ startTime: 0, endTime: 1, text: 'Valid.' }]);
+});
+
+it('maps Japanese phrases to consecutive times without changing their source text', () => {
+  const text =
+    'この問題についてはもう少し詳しく調べてから皆さんに説明したいと思いますので今日はまだ結論を出せません。';
+  const cues = parseYoutubeCaptions(
+    { events: [{ tStartMs: 0, dDurationMs: 10000, segs: [{ utf8: text }] }] },
+    'authored',
+    'ja',
+  );
+  expect(cues.map((cue) => cue.text).join('')).toBe(text);
+  expect(cues[0]).toEqual({ text: 'この', startTime: 0, endTime: (10 * 2) / text.length });
+  expect(cues.at(-1)!.endTime).toBe(10);
+  for (let index = 1; index < cues.length; index++) {
+    expect(cues[index].startTime).toBe(cues[index - 1].endTime);
+    expect(cues[index].endTime).toBeGreaterThan(cues[index].startTime);
+  }
 });

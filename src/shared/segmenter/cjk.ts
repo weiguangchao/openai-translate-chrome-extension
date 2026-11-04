@@ -1,11 +1,11 @@
+import { Parser, jaModel } from 'budoux';
+import { splitCaptions } from './captions';
 import { fitCaptions, type LanguageSegmenter, type WordBreak } from './lines';
 
 interface CjkScript {
-  readonly locale: 'zh-Hans' | 'zh-Hant' | 'ja';
+  readonly locale: 'zh-Hans' | 'zh-Hant';
   readonly connectives: readonly string[];
   readonly particles: string;
-  readonly clauseAfter?: readonly string[];
-  readonly joinClauses?: boolean;
 }
 
 const closers = '”’」』）》】"\')\\]';
@@ -32,21 +32,6 @@ function punctuationClauseBreaks(text: string): number[] {
 
 function cjk(script: CjkScript): LanguageSegmenter {
   const words = new Intl.Segmenter(script.locale, { granularity: 'word' });
-  const clauseAfterBreaks = (text: string): number[] => {
-    if (!script.clauseAfter?.length) return [];
-    const ordered = [...script.clauseAfter].sort((a, b) => b.length - a.length);
-    const breaks: number[] = [];
-    for (const { segment, index } of words.segment(text)) {
-      if (!segment.trim()) continue;
-      const match = ordered.find((word) =>
-        word.length === 1 ? segment === word : text.startsWith(word, index),
-      );
-      if (match) breaks.push(index + match.length);
-    }
-    return breaks;
-  };
-  const clauseBreaks = punctuationClauseBreaks;
-  const hardClauseBreaks = clauseAfterBreaks;
   const wordBreaks = (text: string): WordBreak[] => {
     const breaks: WordBreak[] = [];
     let previous = '';
@@ -70,11 +55,7 @@ function cjk(script: CjkScript): LanguageSegmenter {
   return {
     sentenceEnds,
     captions: (text, cueBreaks) =>
-      fitCaptions(
-        text,
-        { clauseBreaks, hardClauseBreaks, wordBreaks, joinClauses: script.joinClauses },
-        cueBreaks,
-      ),
+      fitCaptions(text, { clauseBreaks: punctuationClauseBreaks, wordBreaks }, cueBreaks),
   };
 }
 
@@ -96,16 +77,9 @@ export const traditionalChinese = cjk({
   particles: '的地得了著過嗎呢吧啊呀嘛',
 });
 
-export const japanese = cjk({
-  locale: 'ja',
-  connectives:
-    'けど けれど けれども しかし でも それでも だが だけど だから なので そして それから それで それに すると つまり ただし なぜなら また さらに あるいは または もし たとえ では じゃあ さて のに なのに'.split(
-      ' ',
-    ),
-  particles: 'はがをにへとでもやかねよなぞわ',
-  clauseAfter:
-    'けど だけど けれど けれども のに なのに ので なので から ですが ますが でしたが ましたが ませんが ね よ わ さ な ぞ か'.split(
-      ' ',
-    ),
-  joinClauses: false,
-});
+const japaneseParser = new Parser(jaModel);
+
+export const japanese: LanguageSegmenter = {
+  sentenceEnds,
+  captions: (text) => splitCaptions(text, (sentence) => japaneseParser.parse(sentence)),
+};

@@ -35,6 +35,7 @@ for (const platform of ['youtube', 'hbo', 'x'] as const) {
         await expect(p.original).toBeHidden();
         for (let index = 0; index < sent; index++) await p.release(index);
         await p.pair(longCaptionParts[1], longTranslations[1]);
+        await p.page.screenshot({ path: info.outputPath('english-long-caption.png') });
         expect(p.posts).toHaveLength(sent);
         const inputs = p.posts.flatMap((post) => post.inputs.map((input) => input.text));
         expect(inputs).not.toContain(longCaption);

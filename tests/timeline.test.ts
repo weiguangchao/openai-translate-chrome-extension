@@ -42,7 +42,7 @@ it('snapshots cues that can still reach the playhead within the next minute', ()
 
 it('numbers segments over the captions a long sentence is cut into', () => {
   const pieces = ['a', 'b', 'c'].map((letter) => letter.repeat(60));
-  const long = `${pieces.join(', ')}.`;
+  const long = `${pieces.join('; ')}.`;
   const ordinary = segmentCaptions * 2;
   const list = [
     ...Array.from({ length: ordinary }, (_, index) => ({
@@ -59,8 +59,8 @@ it('numbers segments over the captions a long sentence is cut into', () => {
   ];
   const captions = timedCaptions(authoredSubtitleCaptions(list, 'en'));
   expect(captions.slice(ordinary, ordinary + 3).map((caption) => caption.text)).toEqual([
-    `${pieces[0]},`,
-    `${pieces[1]},`,
+    `${pieces[0]};`,
+    `${pieces[1]};`,
     `${pieces[2]}.`,
   ]);
   expect(captions.map((caption) => caption.segment)).toEqual(

@@ -1,15 +1,6 @@
-import { fitCaptions, type LanguageSegmenter, type WordBreak } from './lines';
-
-const leading = new Set(
-  'and but or nor so yet because although though while whereas unless until since if when whenever where wherever whether which who whom whose that than'.split(
-    ' ',
-  ),
-);
-const binding = new Set(
-  'a an the to of my your his her its our their this these those i we you he she they it not very'.split(
-    ' ',
-  ),
-);
+import nlp from 'compromise';
+import { splitCaptions, type CaptionSplitter } from './captions';
+import type { LanguageSegmenter } from './lines';
 
 function sentenceEnds(text: string): number[] {
   const ends: number[] = [];
@@ -29,37 +20,22 @@ function sentenceEnds(text: string): number[] {
   return ends;
 }
 
-function clauseBreaks(text: string): number[] {
-  const breaks = sentenceEnds(text);
-  for (const match of text.matchAll(
-    /(?:[,;:]|\.{3}|…)["'”’)\]]*(?=\s)|\s[-–—]+(?=\s)|—(?=[\p{L}\p{N}])/gu,
-  ))
-    breaks.push(match.index + match[0].length);
-  return breaks;
-}
-
-const bare = (word: string) => word.toLowerCase().replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '');
-
-function wordBreaks(text: string): WordBreak[] {
-  const words = [...text.matchAll(/\S+/g)];
-  const breaks: WordBreak[] = [];
-  for (let index = 1; index < words.length; index++) {
-    const word = words[index][0];
-    const previous = words[index - 1][0];
-    if (!/^[\p{Ps}\p{Pi}"'¿¡]*[\p{L}\p{N}$£€¥#@]/u.test(word) || /[\p{Ps}\p{Pi}]$/u.test(previous))
-      continue;
-    const cost =
-      leading.has(bare(word)) || /[,;:]$/.test(previous)
-        ? 0
-        : binding.has(bare(previous)) && /[\p{L}\p{N}]$/u.test(previous)
-          ? 3
-          : 1;
-    breaks.push({ at: words[index].index, cost });
-  }
-  return breaks;
-}
+const splitClauses: CaptionSplitter = (text) => {
+  const parts: string[] = [];
+  nlp(text)
+    .clauses()
+    .forEach((clause) => {
+      parts.push(
+        clause
+          .termList()
+          .map((term) => term.pre + term.text + term.post)
+          .join(''),
+      );
+    });
+  return parts;
+};
 
 export const english: LanguageSegmenter = {
   sentenceEnds,
-  captions: (text, cueBreaks) => fitCaptions(text, { clauseBreaks, wordBreaks }, cueBreaks),
+  captions: (text) => splitCaptions(text, splitClauses),
 };

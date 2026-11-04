@@ -15,6 +15,7 @@ import { planSentenceCap, translationBatchLimit } from '../src/shared/tuning';
 import type { Settings } from '../src/shared/settings';
 import { TRACE_PREFIX, type TraceEvent } from '../src/shared/trace';
 import { longCaption, longCaptionParts, longTranslations } from '../tests/fixtures/long-caption';
+import { japaneseCaption, japaneseCaptionParts } from '../tests/fixtures/japanese-caption';
 
 export type Platform = 'youtube' | 'hbo' | 'x';
 export const providerUrl = 'https://www.youtube.com/__e2e_provider__/v1/chat/completions';
@@ -83,6 +84,7 @@ interface Cue {
 }
 interface Options {
   long?: boolean;
+  longJapanese?: boolean;
   dense?: boolean;
   stallFirst?: boolean;
   hold?: boolean;
@@ -265,6 +267,8 @@ export class Player {
     expect(post.released).toBe(false);
     post.released = true;
     const results = post.inputs.map(({ id, text }) => {
+      if (this.options.longJapanese && japaneseCaptionParts.includes(text))
+        return { id, translation: text === '昨日' ? '昨天' : `片段 ${text}` };
       const part = longCaptionParts.indexOf(text);
       if (part >= 0) return { id, translation: longTranslations[part] };
       const sentence = /^Sentence (\d+)\.$/.exec(text);
@@ -277,7 +281,10 @@ export class Player {
   }
   private cues(id: string, language: string, kind: string): Cue[] {
     if (language === 'zh-CN') return [{ start: 0, end: 90, text: translation }];
-    if (language === 'ja') return [{ start: 0, end: 90, text: japaneseSource }];
+    if (language === 'ja')
+      return [
+        { start: 0, end: 90, text: this.options.longJapanese ? japaneseCaption : japaneseSource },
+      ];
     if (language === 'ko') return [{ start: 0, end: 90, text: koreanSource }];
     if (language === 'zh-TW') return [{ start: 0, end: 90, text: traditionalSource }];
     if (kind === 'asr') return [{ start: 0, end: 90, text: asrSource }];

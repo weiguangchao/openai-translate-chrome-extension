@@ -16,15 +16,6 @@ it('counts CJK characters and full-width punctuation as two columns and combinin
   expect(subtitleDisplayLength('cafe\u0301')).toBe(4);
 });
 
-it.each([
-  ['en', `${'a '.repeat((captionDisplayLimit - 2) / 2)}aa`, 1],
-  ['en', `${'a '.repeat((captionDisplayLimit - 2) / 2)}aaa`, 2],
-  ['zh-CN', '甲'.repeat(captionDisplayLimit / 2), 1],
-  ['zh-CN', '甲'.repeat(captionDisplayLimit / 2 + 1), 2],
-])('splits %s only when its display width exceeds the caption limit', (language, text, count) => {
-  expect(captions(language, text)).toHaveLength(count);
-});
-
 it('ends English sentences at terminal punctuation but not at abbreviations, decimals or initials', () => {
   const text =
     'Mr. Smith arrived at 3.30 p.m. today. He left! "Really?" she asked. J. R. R. Tolkien wrote it... Then e.g. this.';
@@ -50,45 +41,51 @@ it('keeps a caption within the limit on one line and returns nothing for blank t
   expect(captions('en', '   ')).toEqual([]);
 });
 
-it('splits English at clause punctuation first, then between words inside a clause still too wide', () => {
-  expect(captions('en', githubCaption)).toEqual([
-    'Myself, Mitchell the creator of Ghostie,',
-    'and many other people are realizing that GitHub might not be the safest place',
-    "for us to be leaving our code now that they're randomly reverting merges",
-    'and having downtime that is measured in days.',
-  ]);
-  expect(
-    captions(
-      'en',
-      'So what we are going to do today is we are going to take a look at how the new compiler works, and then we will talk about why it matters for your team.',
-    ),
-  ).toEqual([
-    'So what we are going to do today is we are going',
-    'to take a look at how the new compiler works,',
-    'and then we will talk about why it matters for your team.',
+it('keeps short English and Japanese sentences whole even when they contain natural breaks', () => {
+  const english = `${'a'.repeat(39)}; ${'b'.repeat(39)}`;
+  expect(subtitleDisplayLength(english)).toBe(captionDisplayLimit);
+  expect(captions('en', english)).toEqual([english]);
+  expect(captions('en', `${english}b`)).toEqual([`${'a'.repeat(39)};`, 'b'.repeat(40)]);
+  expect(captions('ja', '今日は天気がいいので友達と公園に行きます。')).toEqual([
+    '今日は天気がいいので友達と公園に行きます。',
   ]);
 });
 
-it('prefers English breaks before conjunctions and keeps short clauses with a neighbor', () => {
-  expect(captions('en', longCaption)).toEqual(longCaptionParts);
-  expect(
-    captions(
-      'en',
-      'so i was like okay we should probably go and check it out because nobody else was going to do it and honestly it was kind of fun',
-    ),
-  ).toEqual([
-    'so i was like okay we should probably go and check it out',
-    'because nobody else was going to do it and honestly it was kind of fun',
+it('accepts English clauses without forcing the remaining long clause under the limit', () => {
+  const first = 'Although the weather was terrible,';
+  const rest =
+    'we decided to continue our journey because we had promised to meet our friends before sunset.';
+  expect(captions('en', `${first} ${rest}`)).toEqual([first, rest]);
+  expect(subtitleDisplayLength(rest)).toBeGreaterThan(captionDisplayLimit);
+});
+
+it('keeps an oversized English sentence whole when it has no clause break', () => {
+  const text =
+    'I think the book that you recommended last week explains the problem more clearly than the article we read yesterday.';
+  expect(captions('en', text, [20, 50])).toEqual([text]);
+});
+
+it('preserves a real caption clause that still exceeds the display limit', () => {
+  expect(captions('en', githubCaption)).toEqual([
+    'Myself, Mitchell the creator of Ghostie,',
+    'and many other people are realizing that GitHub might not be the safest place for us to be leaving our code',
+    "now that they're randomly reverting merges and having downtime that is measured in days.",
   ]);
-  expect(
-    captions(
-      'en',
-      'Well, I think the most important thing that we learned from this whole experiment is that nobody reads.',
-    ),
-  ).toEqual([
-    'Well, I think the most important thing',
-    'that we learned from this whole experiment is that nobody reads.',
-  ]);
+});
+
+it('preserves punctuation, repeated phrases and contractions in English clauses', () => {
+  const text = `  He said, "I can't believe it's true; I can't believe it's true", and left (although it was raining).  `;
+  const ranges = segmenterFor('en').captions(text);
+  expect(ranges.map(({ from, to }) => text.slice(from, to)).join(' ')).toBe(text.trim());
+  expect(ranges.length).toBeGreaterThan(1);
+});
+
+it('splits long Japanese into phrases without joining short phrases together', () => {
+  const text =
+    'この問題についてはもう少し詳しく調べてから皆さんに説明したいと思います。今日はまだ結論を出せません。';
+  const result = captions('ja', text);
+  expect(result.join('')).toBe(text);
+  expect(result.slice(0, 4)).toEqual(['この', '問題に', 'ついては', 'もう']);
 });
 
 it('splits Chinese at full-width punctuation and at spaces between Chinese clauses', () => {
@@ -136,20 +133,6 @@ it.each([
   },
 );
 
-it('splits unpunctuated Japanese after clause-final connectives without re-joining', () => {
-  expect(
-    captions(
-      'ja',
-      '今日は朝から雨が降っているけれど傘を持ってこなかったので駅まで走って行かなければなりませんでした',
-    ),
-  ).toEqual([
-    '今日は朝から',
-    '雨が降っているけれど',
-    '傘を持ってこなかったので',
-    '駅まで走って行かなければなりませんでした',
-  ]);
-});
-
 it('never starts a Chinese line with closing punctuation or a particle when another break fits', () => {
   const text =
     '这是一个非常非常长的句子它没有任何标点符号但是我们仍然需要把它拆成好几行来显示给观众看的吧而且还要再长一点才行';
@@ -163,9 +146,7 @@ it('never starts a Chinese line with closing punctuation or a particle when anot
 });
 
 it.each([
-  ['en', 'word '.repeat(200)],
   ['ko', '오늘 우리는 새로운 번역 기능을 함께 살펴보고 있습니다. '.repeat(20)],
-  ['en', `${'Hello there, my friend; '.repeat(30)}goodbye.`],
   ['zh-CN', '我们一起去公园散步吧，'.repeat(40)],
   ['zh-TW', '這是一段沒有標點符號的很長的文字'.repeat(20)],
 ])(
@@ -183,11 +164,6 @@ it.each([
   },
 );
 
-it('keeps a word wider than the limit whole on its own line', () => {
-  const url = `https://example.com/${'a'.repeat(100)}`;
-  expect(captions('en', `Open ${url} now please.`)).toEqual(['Open', url, 'now please.']);
-});
-
 it.each(['fr', 'constructor'])(
   'uses English sentence and caption rules when %s has no segmenter',
   (language) => {
@@ -195,33 +171,3 @@ it.each(['fr', 'constructor'])(
     expect(captions(language, longCaption)).toEqual(longCaptionParts);
   },
 );
-
-it('keeps short Japanese clauses apart at clause-final connectives', () => {
-  expect(
-    captions(
-      'ja',
-      '雨だけど晴れなのに風なので今日は傘を持って出かけることにしましたけれど駅まで走って行かなければなりませんでした',
-    ),
-  ).toEqual([
-    '雨だけど',
-    '晴れなのに',
-    '風なので',
-    '今日は傘を持って出かけることにしましたけれど',
-    '駅まで走って行かなければなりませんでした',
-  ]);
-});
-
-it('splits unspaced Japanese into captions within the display limit', () => {
-  const text =
-    '私たちは明日の朝に東京駅で友達と待ち合わせをして一緒に京都まで電車で旅行する予定ですが天気予報によると午後から雨が降るので傘を忘れないようにしてください';
-  const pieces = captions('ja', text);
-  expect(pieces).toEqual([
-    '私たちは明日の朝に東京駅で友達と待ち合わせを',
-    'して一緒に京都まで電車で旅行する予定ですが',
-    '天気予報によると午後から',
-    '雨が降るので',
-    '傘を忘れないようにしてください',
-  ]);
-  expect(pieces.join('')).toBe(text);
-  expect(pieces.every((piece) => subtitleDisplayLength(piece) <= captionDisplayLimit)).toBe(true);
-});

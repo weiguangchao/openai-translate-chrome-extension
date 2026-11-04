@@ -544,7 +544,8 @@ it('translates the displayed overlap together and splits a following long cue in
   ];
   setCues(overlap);
   const pieces = [
-    'Years later, standing on the same bridge,',
+    'Years later,',
+    'standing on the same bridge,',
     'I finally understood that the city had become my home.',
   ];
   controller = new CaptionController(createHboPlatform, publicSettings(saved));
@@ -564,7 +565,7 @@ it('translates the displayed overlap together and splits a following long cue in
     [4, `${joined} 译文`],
     [6, `${second} 译文`],
     [8, `${pieces[0]} 译文`],
-    [11, `${pieces[1]} 译文`],
+    [11, `${pieces[2]} 译文`],
   ] as const) {
     await advance(time - 0.1);
     await deliver();

@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { japaneseCaption, japaneseCaptionParts } from '../tests/fixtures/japanese-caption';
 import {
   asrSource,
   asrTranslation,
@@ -18,6 +19,37 @@ import {
 } from './harness';
 
 for (const platform of ['youtube', 'hbo', 'x'] as const) {
+  test(`${platform}: long Japanese captions reach the Provider as separate phrases`, async ({}, info) => {
+    await withPlayer(
+      platform,
+      info,
+      async (p) => {
+        await p.play();
+        await p.pair(source, translation);
+        await p.pause();
+        const sent = p.posts.length;
+        await p.page.evaluate(() => window.fixture.select('ja', 'asr'));
+        await p.play();
+        await expect
+          .poll(() =>
+            p.posts.slice(sent).some((post) => post.inputs.some((input) => input.text === '昨日')),
+          )
+          .toBe(true);
+        await p.pause();
+        await p.seek(0);
+        await p.pair('昨日', '昨天');
+        const inputs = p.posts
+          .slice(sent)
+          .flatMap((post) => post.inputs.map((input) => input.text));
+        expect(inputs).toContain('昨日');
+        expect(inputs).not.toContain(japaneseCaption);
+        expect(inputs.every((text) => japaneseCaptionParts.includes(text))).toBe(true);
+        await p.page.screenshot({ path: info.outputPath('japanese-long-caption.png') });
+      },
+      { longJapanese: true },
+    );
+  });
+
   test(`${platform}: packaged extension translates a source track through its worker`, async ({}, info) => {
     await withPlayer(platform, info, async (p) => {
       await expect

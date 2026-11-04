@@ -32,7 +32,7 @@ it('rejoins a fragmented sentence and cuts it into back-to-back captions at clau
   expect(captionAt(captions, 6)).toBe(second);
 });
 
-it('cuts an unpunctuated run between cues into captions of at most 90 columns', () => {
+it('uses clause boundaries instead of forcing splits at downloaded cue boundaries', () => {
   const lines = [
     'my children will be using their Sama coins to try and buy dinner',
     "and I'll have to explain to them that when I was a kid",
@@ -45,14 +45,19 @@ it('cuts an unpunctuated run between cues into captions of at most 90 columns', 
     lines.map((text, index) => ({ startTime: index * 4, endTime: index * 4 + 3.8, text })),
     'en',
   );
-  expect(captions.map((caption) => caption.text)).toEqual(lines);
-  expect(captions.map(({ startTime, endTime }) => [startTime, endTime])).toEqual([
-    [0, 4],
-    [4, 8],
-    [8, 12],
-    [12, 16],
-    [16, 20],
-    [20, 23.8],
+  const clause = lines[4].indexOf('but');
+  const boundary = 16 + (3.8 * clause) / lines[4].length;
+  expect(captions).toEqual([
+    {
+      text: [...lines.slice(0, 4), lines[4].slice(0, clause).trimEnd()].join(' '),
+      startTime: 0,
+      endTime: boundary,
+    },
+    {
+      text: `${lines[4].slice(clause)} ${lines[5]}`,
+      startTime: boundary,
+      endTime: 23.8,
+    },
   ]);
 });
 

@@ -23,6 +23,8 @@
     "format:check": "prettier --check src tests scripts e2e .github *.json *.ts *.mjs *.html README.md public/manifest.json"
   },
   "dependencies": {
+    "budoux": "0.10.2",
+    "compromise": "14.19.0",
     "lucide-react": "^0.468.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"

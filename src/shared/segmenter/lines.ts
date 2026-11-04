@@ -19,8 +19,6 @@ export interface WordBreak {
 export interface BreakRules {
   clauseBreaks(text: string): number[];
   wordBreaks(text: string): WordBreak[];
-  joinClauses?: boolean;
-  hardClauseBreaks?(text: string): number[];
 }
 
 const minClauseColumns = 12;
@@ -49,14 +47,8 @@ function cut(text: string, range: TextRange, breaks: readonly number[]): TextRan
   return lines;
 }
 
-function clauses(
-  text: string,
-  range: TextRange,
-  breaks: readonly number[],
-  hard: readonly number[] = [],
-): TextRange[] {
-  const hardSet = new Set(hard);
-  const inside = [...new Set([...breaks, ...hard])]
+function clauses(text: string, range: TextRange, breaks: readonly number[]): TextRange[] {
+  const inside = [...new Set(breaks)]
     .filter((at) => at > range.from && at < range.to)
     .sort((a, b) => a - b);
   const kept: number[] = [];
@@ -64,9 +56,8 @@ function clauses(
   inside.forEach((at, index) => {
     const next = inside[index + 1] ?? range.to;
     if (
-      hardSet.has(at) ||
-      (width(text, trimmed(text, from, at)) >= minClauseColumns &&
-        width(text, trimmed(text, at, next)) >= minClauseColumns)
+      width(text, trimmed(text, from, at)) >= minClauseColumns &&
+      width(text, trimmed(text, at, next)) >= minClauseColumns
     ) {
       kept.push(at);
       from = at;
@@ -116,14 +107,12 @@ export function fitCaptions(
   if (range.to === range.from) return [];
   if (width(text, range) <= captionDisplayLimit) return [range];
   const words = rules.wordBreaks(text);
-  const hard = rules.hardClauseBreaks?.(text) ?? [];
-  const pieces = clauses(text, range, [...rules.clauseBreaks(text), ...cueBreaks], hard).flatMap(
+  const pieces = clauses(text, range, [...rules.clauseBreaks(text), ...cueBreaks]).flatMap(
     (clause) =>
       width(text, clause) > captionDisplayLimit
         ? cut(text, clause, fewestPieces(text, clause, words))
         : [clause],
   );
-  if (rules.joinClauses === false) return pieces;
   const joins = pieces.slice(1).map((piece) => ({ at: piece.from, cost: 0 }));
   return cut(text, range, fewestPieces(text, range, joins));
 }

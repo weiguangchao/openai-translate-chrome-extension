@@ -89,7 +89,7 @@ A sentence is text Subline rejoins from downloaded subtitle cues and splits wher
 
 ### Caption
 
-A caption is what Subline translates and shows. A sentence over `captionDisplayLimit` display columns is cut into captions no wider than that: at clause punctuation or between source cues first, then between words, into the fewest balanced pieces, each ending where the next begins. Overlapping cues and captions read from the page DOM stay whole. The Provider translates each caption as its own input and never chooses the breaks. A caption shows its source only together with its translation.
+A caption is what Subline translates and shows. After Sentence preprocessing, an English or Japanese sentence over `captionDisplayLimit` display columns is passed once to the source language's third-party caption splitter. Each returned piece becomes a caption without another length check, merge or split; a splitter may return the sentence whole. English uses compromise clauses and Japanese uses BudouX phrases. Chinese and Korean retain their existing caption fitting rules. Each caption ends where the next begins. Overlapping cues and captions read from the page DOM stay whole. The Provider translates each caption as its own input and never chooses the breaks. A caption shows its source only together with its translation.
 
 ### Segment
 
