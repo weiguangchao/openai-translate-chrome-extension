@@ -23,6 +23,7 @@
     "format:check": "prettier --check src tests scripts e2e .github *.json *.ts *.mjs *.html README.md public/manifest.json"
   },
   "dependencies": {
+    "@echogarden/text-segmentation": "^0.8.1",
     "lucide-react": "^0.468.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"

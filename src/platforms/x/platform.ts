@@ -6,7 +6,7 @@ import { activeXVideo, findXPlayer, readXCaption, xVideoId } from './player';
 
 export const createXPlatform: PlatformFactory = (changed): Platform => {
   const bridge = new BridgeTimeline('x', changed);
-  const native = new NativeTimeline();
+  const native = new NativeTimeline(changed);
   return {
     id: 'x',
     style: '',

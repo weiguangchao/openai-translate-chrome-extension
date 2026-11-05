@@ -62,11 +62,11 @@ function timedParts(event: CaptionEvent, endTime: number): TimedCue[] {
   return parts;
 }
 
-export function parseYoutubeCaptions(
+export async function parseYoutubeCaptions(
   value: unknown,
   kind: YoutubeCaptionKind,
   language: string,
-): TimedCue[] {
+): Promise<TimedCue[]> {
   const events = readEvents(value);
   const grouped: CaptionEvent[] = [];
   for (const event of events) {
@@ -95,7 +95,7 @@ export function parseYoutubeCaptions(
     ];
   });
   return kind === 'authored'
-    ? authoredSubtitleCaptions(cues, language).map(({ startTime, endTime, text }) => ({
+    ? (await authoredSubtitleCaptions(cues, language)).map(({ startTime, endTime, text }) => ({
         startTime,
         endTime,
         text,

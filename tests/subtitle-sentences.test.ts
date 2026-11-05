@@ -2,9 +2,9 @@ import { expect, it } from 'vitest';
 import { authoredSubtitleCaptions } from '../src/core/sentences';
 import { captionAt } from '../src/core/timeline';
 
-it('splits multiline authored subtitles into timed sentences', () => {
+it('splits multiline authored subtitles into timed sentences', async () => {
   const text = "Oh, thank you.\nI've got to talk to that\nmailman.";
-  const cues = authoredSubtitleCaptions([{ startTime: 3, endTime: 9, text }], 'en');
+  const cues = await authoredSubtitleCaptions([{ startTime: 3, endTime: 9, text }], 'en');
   expect(cues.map((cue) => cue.text)).toEqual([
     'Oh, thank you.',
     "I've got to talk to that mailman.",
@@ -14,10 +14,10 @@ it('splits multiline authored subtitles into timed sentences', () => {
   expect(captionAt(cues, 9)).toBe('');
 });
 
-it('rejoins a fragmented sentence and cuts it into back-to-back captions at clause punctuation', () => {
+it('rejoins a fragmented sentence and cuts it into back-to-back captions at clause punctuation', async () => {
   const first = 'When I first moved to the city I did not know anyone at all,';
   const second = 'and every night I walked along the river wondering why I had come.';
-  const captions = authoredSubtitleCaptions(
+  const captions = await authoredSubtitleCaptions(
     [
       { startTime: 1, endTime: 5, text: first },
       { startTime: 5.2, endTime: 9, text: second },
@@ -32,7 +32,7 @@ it('rejoins a fragmented sentence and cuts it into back-to-back captions at clau
   expect(captionAt(captions, 6)).toBe(second);
 });
 
-it('cuts an unpunctuated run between cues into captions of at most 90 columns', () => {
+it('cuts an unpunctuated run between cues into captions of at most 90 columns', async () => {
   const lines = [
     'my children will be using their Sama coins to try and buy dinner',
     "and I'll have to explain to them that when I was a kid",
@@ -41,7 +41,7 @@ it('cuts an unpunctuated run between cues into captions of at most 90 columns', 
     'I know I am memeing pretty hard here but seriously just a few weeks ago',
     'a plan on your codex sub would get you up to twelve thousand a month',
   ];
-  const captions = authoredSubtitleCaptions(
+  const captions = await authoredSubtitleCaptions(
     lines.map((text, index) => ({ startTime: index * 4, endTime: index * 4 + 3.8, text })),
     'en',
   );
@@ -65,8 +65,8 @@ it.each([
       { startTime: 4, endTime: 5, text: 'for the bus.' },
     ],
   ],
-])('ends a sentence only when a silence reaches two seconds, gap=%s', (gap, expected) => {
-  const captions = authoredSubtitleCaptions(
+])('ends a sentence only when a silence reaches two seconds, gap=%s', async (gap, expected) => {
+  const captions = await authoredSubtitleCaptions(
     [
       { startTime: 0, endTime: 2, text: 'We were waiting' },
       { startTime: 2 + gap, endTime: 5, text: 'for the bus.' },
@@ -76,8 +76,8 @@ it.each([
   expect(captions).toEqual(expected);
 });
 
-it('keeps lyric lines and sound tags apart from the dialogue around them', () => {
-  const captions = authoredSubtitleCaptions(
+it('keeps lyric lines and sound tags apart from the dialogue around them', async () => {
+  const captions = await authoredSubtitleCaptions(
     [
       { startTime: 0, endTime: 1.5, text: '♪ So no one told you ♪' },
       { startTime: 1.55, endTime: 3, text: "♪ 'Cause you're\nthere for me too ♪♪" },
@@ -105,14 +105,14 @@ it.each([
   ],
 ])(
   'preserves overlapping speech and repeated dialogue with their original timing',
-  (text, expected) => {
+  async (text, expected) => {
     const cues = [
       { startTime: 1, endTime: 4, text },
       { startTime: 2, endTime: 3, text: 'No. Stop.' },
       { startTime: 2, endTime: 5, text },
       { startTime: 6, endTime: 8, text: 'Later. Goodbye.' },
     ];
-    const captions = authoredSubtitleCaptions(cues, 'en');
+    const captions = await authoredSubtitleCaptions(cues, 'en');
     expect(captions.slice(0, 3)).toEqual([
       { startTime: 1, endTime: 4, text: expected },
       { startTime: 2, endTime: 3, text: 'No. Stop.' },
@@ -123,8 +123,8 @@ it.each([
   },
 );
 
-it('ends Chinese sentences at full-width punctuation across fragmented cues', () => {
-  const cues = authoredSubtitleCaptions(
+it('keeps unsupported-language captions together across fragmented cues', async () => {
+  const cues = await authoredSubtitleCaptions(
     [
       { startTime: 1, endTime: 3, text: '我昨天去了' },
       { startTime: 3, endTime: 5, text: '商店。你呢？' },
@@ -132,7 +132,27 @@ it('ends Chinese sentences at full-width punctuation across fragmented cues', ()
     ],
     'zh-TW',
   );
-  expect(cues.map((cue) => cue.text)).toEqual(['我昨天去了商店。', '你呢？', '「我在家。」']);
-  expect(cues[0]).toMatchObject({ startTime: 1 });
-  expect(cues[2]).toMatchObject({ startTime: 5, endTime: 7 });
+  expect(cues.map((cue) => cue.text)).toEqual(['我昨天去了商店。你呢？ 「我在家。」']);
+  expect(cues[0]).toMatchObject({ startTime: 1, endTime: 7 });
+});
+
+it('keeps opening punctuation attached to the following word when splitting captions', async () => {
+  const text =
+    'The instructions on the wall beside the main entrance to the building said "take all your belongings and follow the guide to the nearest exit immediately."';
+  const captions = await authoredSubtitleCaptions([{ startTime: 0, endTime: 10, text }], 'en');
+  expect(captions.length).toBeGreaterThan(1);
+  expect(captions.map((caption) => caption.text).join(' ')).toBe(text);
+  expect(captions.some((caption) => caption.text.startsWith('"take'))).toBe(true);
+  expect(
+    captions.every((caption) => !caption.text.endsWith('"') || caption.text.endsWith('."')),
+  ).toBe(true);
+});
+
+it('keeps an oversized URL whole and accepts the segmenter result without another length pass', async () => {
+  const url = `https://example.com/${'a'.repeat(100)}`;
+  const text = `Open ${url} now please.`;
+  const captions = await authoredSubtitleCaptions([{ startTime: 0, endTime: 10, text }], 'en');
+  expect(captions.map((caption) => caption.text)).toEqual(['Open', url, 'now please.']);
+  expect(captions[0].startTime).toBe(0);
+  expect(captions.at(-1)?.endTime).toBe(10);
 });

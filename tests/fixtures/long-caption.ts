@@ -1,6 +1,6 @@
 export const longCaptionParts = [
-  'The most budget option by far is to talk to your friends and family',
-  "and find somebody with an old laptop or desktop that they'll give you for free",
+  'The most budget option by far is to talk to your friends and family and',
+  "find somebody with an old laptop or desktop that they'll give you for free",
   'that has at least 8 gigs of RAM and at least what or at least four cores,',
 ];
 export const longCaption = longCaptionParts.join(' ');
