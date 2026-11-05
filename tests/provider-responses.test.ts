@@ -14,6 +14,7 @@ afterEach(() => vi.unstubAllGlobals());
 it.each([
   '第一行\n\n第二段',
   'OpenAI',
+  '[[placeholder]]\n保留占位符',
   'Use <think> and </think> tags.',
   '```ts\nconst value = "{{text}}";\n```',
   '{"results":[{"id":0,"translation":"literal JSON"}]}',
@@ -54,7 +55,7 @@ it('reads text content parts without displaying reasoning', async () => {
             message: {
               content: [
                 { type: 'thinking', text: 'draft' },
-                { type: 'text', text: '第一行\n' },
+                { type: 'text', text: '[[p0]]\n第一行\n' },
                 { type: 'text', text: '第二行' },
               ],
               reasoning_content: 'draft',
@@ -76,3 +77,60 @@ it('does not substitute reasoning for an absent translation', async () => {
   );
   await expect(translateCaptionBatch(settings, ['One.'])).resolves.toBeNull();
 });
+
+it('translates eight independent captions in one request and maps out-of-order ids', async () => {
+  const fetch = vi.fn(async (_url: string, _init: RequestInit) =>
+    translationReply(
+      Array.from({ length: 8 }, (_, index) => `[[p${7 - index}]]\n译文 ${7 - index}`).join('\n'),
+      false,
+    ),
+  );
+  vi.stubGlobal('fetch', fetch);
+  const published = vi.fn();
+  const sources = [
+    'First\nline',
+    'OpenAI',
+    '<b>three</b>',
+    '{{four}}',
+    'five',
+    'six',
+    'seven',
+    'eight',
+  ];
+  const translations = Array.from({ length: 8 }, (_, index) => `译文 ${index}`);
+  await expect(translateCaptionBatch(settings, sources, undefined, published)).resolves.toEqual(
+    translations,
+  );
+  expect(fetch).toHaveBeenCalledTimes(1);
+  const body = JSON.parse(String(fetch.mock.calls[0][1].body));
+  expect(body.messages[1].content).toBe(
+    'Translate to Simplified Chinese:\n\n' +
+      sources.map((text, index) => `[[p${index}]]\n${text}`).join('\n') +
+      '\n[[source_end]]',
+  );
+  expect(body.messages[0].content).toContain('## Multi-item processing protocol');
+  expect(published.mock.calls).toEqual(translations.map((text, index) => [index, text]));
+});
+
+it.each([
+  '[[p0]]\n第一项',
+  '[[p0]]\n第一项\n[[p0]]\n重复',
+  '[[p0]]\n第一项\n[[p2]]\n未知',
+  '[[p00]]\n第一项\n[[p1]]\n第二项',
+  '说明\n[[p0]]\n第一项\n[[p1]]\n第二项',
+  '```\n[[p0]]\n第一项\n[[p1]]\n第二项\n```',
+  '[[p0]]\n第一项\n[[p1]]\n',
+  '[[p0]]\n第一项\n[[p1]]\n' + '字'.repeat(5001),
+])(
+  'rejects malformed batches without publishing partial captions or retrying, case %#',
+  async (content) => {
+    const fetch = vi.fn(async () => translationReply(content, false));
+    vi.stubGlobal('fetch', fetch);
+    const published = vi.fn();
+    await expect(
+      translateCaptionBatch(settings, ['One', 'Two'], undefined, published),
+    ).resolves.toBeNull();
+    expect(published).not.toHaveBeenCalled();
+    expect(fetch).toHaveBeenCalledTimes(1);
+  },
+);

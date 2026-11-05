@@ -163,7 +163,10 @@ async function complete(
     {
       model: settings.model.trim(),
       messages: [
-        { role: 'system', content: translatorInstructions(settings) },
+        {
+          role: 'system',
+          content: translatorInstructions(settings) + (caption ? multiItemProtocol : ''),
+        },
         {
           role: 'user',
           content: `Translate to ${englishLanguageName(settings.targetLanguage)}:\n\n${input}`,
@@ -207,12 +210,42 @@ export async function translateCaptionBatch(
   texts.forEach(checkText);
   if (!texts.length || texts.length > translationBatchLimit)
     throw new Error(t('单次翻译的字幕过多。', 'Too many subtitles in one translation request.'));
-  const response = await complete(settings, texts[0], 65536, signal, true, policy);
+  const input =
+    texts.map((text, index) => `[[p${index}]]\n${text}`).join('\n') + '\n[[source_end]]';
+  const response = await complete(settings, input, 65536, signal, true, policy);
   signal?.throwIfAborted();
-  const translation = readStoredTranslation(response);
-  if (translation === null) return null;
-  onTranslation?.(0, translation);
-  return [translation];
+  const translations = readCaptionTranslations(response, texts.length);
+  if (!translations) return null;
+  translations.forEach((translation, index) => onTranslation?.(index, translation));
+  return translations;
+}
+
+const multiItemProtocol = `
+## Multi-item processing protocol
+The input contains source items. Each item starts with its exact request id on one title line, followed by that item's source text. The source list ends with exactly one [[source_end]] line. Process every item independently according to the active task instructions, using the other items only as context. Return every supplied id exactly once in any order and preserve each id title byte-for-byte. Processed text may span multiple lines.
+
+Return each id title followed by only its processed text. Do not return the [[source_end]] line.
+Do not wrap the entire response or protocol envelope in a Markdown fence. Fenced code blocks that belong to an item's processed content may be preserved. Do not include explanations outside processed text.
+`;
+
+function readCaptionTranslations(response: string, count: number): string[] | null {
+  const titles = [...response.matchAll(/^\[\[(p\d+|source_end)\]\]\r?$/gm)];
+  if (titles.length !== count || response.slice(0, titles[0].index).trim()) return null;
+  const items = new Map<string, string>();
+  for (const [index, title] of titles.entries()) {
+    const translation = readStoredTranslation(
+      response.slice(title.index + title[0].length, titles[index + 1]?.index),
+    );
+    if (translation === null || items.has(title[1])) return null;
+    items.set(title[1], translation);
+  }
+  const translations: string[] = [];
+  for (let index = 0; index < count; index++) {
+    const translation = items.get(`p${index}`);
+    if (translation === undefined) return null;
+    translations.push(translation);
+  }
+  return translations;
 }
 
 async function readModelText(response: Response, signal: AbortSignal): Promise<string> {

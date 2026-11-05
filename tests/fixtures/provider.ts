@@ -18,7 +18,9 @@ export function requestedTexts(init: RequestInit): string[] {
   const { messages } = JSON.parse(init.body as string) as {
     messages: { role: string; content: string }[];
   };
-  return [messages[1].content.slice(messages[1].content.indexOf('\n\n') + 2)];
+  return [
+    ...messages[1].content.matchAll(/^\[\[p\d+\]\]\n([\s\S]*?)(?=^\[\[(?:p\d+|source_end)\]\]$)/gm),
+  ].map((match) => match[1].trim());
 }
 
 export function providerReply(texts: string[], translate: (text: string) => string): Response {
@@ -26,13 +28,14 @@ export function providerReply(texts: string[], translate: (text: string) => stri
     choices: [
       {
         message: {
-          content: translate(texts[0]),
+          content: texts.map((text, index) => `[[p${index}]]\n${translate(text)}`).join('\n'),
         },
       },
     ],
   });
 }
 
-export function translationReply(content: string): Response {
+export function translationReply(content: string, envelope = true): Response {
+  if (envelope) content = `[[p0]]\n${content}`;
   return Response.json({ choices: [{ message: { content } }] });
 }

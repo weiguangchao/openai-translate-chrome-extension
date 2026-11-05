@@ -65,7 +65,7 @@ for (const platform of ['youtube', 'hbo', 'x'] as const) {
           { role: 'system', content: expect.any(String) },
           {
             role: 'user',
-            content: `Translate to Simplified Chinese:\n\n${[source, nextSource][index]}`,
+            content: `Translate to Simplified Chinese:\n\n[[p0]]\n${[source, nextSource][index]}\n[[source_end]]`,
           },
         ]);
       }
