@@ -171,7 +171,7 @@ async function complete(
       ],
       stream: false,
       max_tokens: maxTokens,
-      reasoning_effort: 'low',
+      temperature: 0,
       thinking: { type: 'disabled' },
     },
     signal,
