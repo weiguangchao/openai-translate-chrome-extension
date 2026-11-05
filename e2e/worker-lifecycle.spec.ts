@@ -13,7 +13,7 @@ import {
   preloadNext,
 } from './harness';
 
-for (const platform of ['youtube', 'hbo', 'x'] as const) {
+for (const platform of ['youtube', 'x'] as const) {
   test(`${platform}: returning to the same tab from another site still translates after a pause`, async ({}, info) => {
     await withPlayer(platform, info, async (p) => {
       await p.play();

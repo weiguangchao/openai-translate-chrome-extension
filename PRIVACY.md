@@ -4,7 +4,7 @@ English version: [Subline privacy policy](#subline-privacy-policy)
 
 本政策自 2026 年 10 月 12 日起生效。
 
-Subline 是一个 Chrome 扩展，在 YouTube、HBO Max 和 X 的视频上显示双语字幕。它用你自己填写的 OpenAI 兼容 API 翻译字幕。Subline 没有开发者服务器，开发者收不到你的字幕、API Key、设置或用量统计。本政策说明扩展处理哪些数据、发给谁、保存多久，以及怎样删除。
+Subline 是一个 Chrome 扩展，在 YouTube 和 X 的视频上显示双语字幕。它用你自己填写的 OpenAI 兼容 API 翻译字幕。Subline 没有开发者服务器，开发者收不到你的字幕、API Key、设置或用量统计。本政策说明扩展处理哪些数据、发给谁、保存多久，以及怎样删除。
 
 ## 扩展处理的数据
 
@@ -58,7 +58,7 @@ Subline 不使用统计分析、广告、错误上报或远程代码。Subline �
 ## 权限
 
 - `storage` 用来保存上面列出的设置和缓存。
-- YouTube、HBO Max 和 X 的网站访问权限用来读取字幕，并在播放器上显示双语字幕。
+- YouTube 和 X 的网站访问权限用来读取字幕，并在播放器上显示双语字幕。
 - 可选的网站访问权限用来连接你的 API，只覆盖 HTTPS 网站和本机的 localhost、127.0.0.1。保存设置时，扩展只请求你填写的 API 地址所在主机的权限。
 
 ## Limited Use
@@ -79,7 +79,7 @@ Subline 对所处理信息的使用遵守 [Chrome Web Store User Data Policy](ht
 
 This policy takes effect on October 12, 2026.
 
-Subline is a Chrome extension that shows bilingual subtitles on YouTube, HBO Max and X videos. It translates subtitles with an OpenAI-compatible API that you configure. Subline has no developer server, so the developer never receives your subtitles, API key, settings or usage counts. This policy lists the data the extension handles, who receives it, how long the extension keeps it and how to delete it.
+Subline is a Chrome extension that shows bilingual subtitles on YouTube and X videos. It translates subtitles with an OpenAI-compatible API that you configure. Subline has no developer server, so the developer never receives your subtitles, API key, settings or usage counts. This policy lists the data the extension handles, who receives it, how long the extension keeps it and how to delete it.
 
 ## Data the extension handles
 
@@ -133,7 +133,7 @@ The extension accepts only HTTPS base URLs, so your API key and subtitle text tr
 ## Permissions
 
 - `storage` saves the settings and caches listed above.
-- Access to YouTube, HBO Max and X lets the extension read subtitles and show bilingual subtitles on the player.
+- Access to YouTube and X lets the extension read subtitles and show bilingual subtitles on the player.
 - Optional site access lets the extension reach your API. It covers HTTPS sites plus localhost and 127.0.0.1 on your own computer. When you save settings, the extension asks only for the host of the API address you entered.
 
 ## Limited Use

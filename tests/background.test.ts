@@ -333,7 +333,7 @@ it.each([
   { name: 'withdrawn consent', patch: { providerConsent: '' }, abort: true },
   { name: 'extension disabled', patch: { enabled: false }, abort: true },
   { name: 'active platform disabled', patch: { youtube: false }, abort: true },
-  { name: 'other platform disabled', patch: { hbo: false }, abort: false },
+  { name: 'other platform disabled', patch: { x: false }, abort: false },
 ])('updates $name with the correct in-flight lifetime', async ({ patch, abort }) => {
   let signal!: AbortSignal;
   let finish!: (response: Response) => void;
@@ -381,9 +381,9 @@ it('retains shared work when only one consuming platform is disabled', async () 
   const initial = { ...consentedSettings, apiKey: 'key', model: 'model' };
   const send = await loadBackground(initial);
   const youtube = send({ type: 'translate', captionLanguage: 'en', text: 'Shared.' });
-  const hbo = send(
+  const x = send(
     { type: 'translate', captionLanguage: 'en', text: 'Shared.' },
-    { url: 'https://play.hbomax.com/video/watch/episode', tab: { id: 2 } as chrome.tabs.Tab },
+    { url: 'https://x.com/example/status/episode', tab: { id: 2 } as chrome.tabs.Tab },
   );
   await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
   const { saveSettings } = await import('../src/shared/storage');
@@ -391,7 +391,7 @@ it('retains shared work when only one consuming platform is disabled', async () 
   await vi.waitFor(() => expect(chrome.tabs.sendMessage).toHaveBeenCalledTimes(1));
   expect(signal.aborted).toBe(false);
   finish(providerReply(['Shared.'], () => '共享译文'));
-  await expect(hbo).resolves.toEqual({ ok: true, data: '共享译文' });
+  await expect(x).resolves.toEqual({ ok: true, data: '共享译文' });
   await youtube;
   expect(fetch).toHaveBeenCalledTimes(1);
 });

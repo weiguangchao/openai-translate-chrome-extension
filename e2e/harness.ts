@@ -16,7 +16,7 @@ import type { Settings } from '../src/shared/settings';
 import { TRACE_PREFIX, type TraceEvent } from '../src/shared/trace';
 import { longCaption, longCaptionParts, longTranslations } from '../tests/fixtures/long-caption';
 
-export type Platform = 'youtube' | 'hbo' | 'x';
+export type Platform = 'youtube' | 'x';
 export const providerUrl = 'https://www.youtube.com/__e2e_provider__/v1/chat/completions';
 export const elsewhereUrl = 'https://example.org/';
 export const apiKey = 'e2e-fake-key';
@@ -130,7 +130,6 @@ export class Player {
   get origin() {
     return {
       youtube: 'https://www.youtube.com',
-      hbo: 'https://play.hbomax.com',
       x: 'https://x.com',
     }[this.platform];
   }
@@ -140,7 +139,6 @@ export class Player {
   urlFor(id: string) {
     return {
       youtube: `${this.origin}/watch?v=${id}`,
-      hbo: `${this.origin}/video/watch/${id}`,
       x: `${this.origin}/e2e/status/${id}`,
     }[this.platform];
   }
@@ -154,7 +152,7 @@ export class Player {
     return this.overlay.locator('.translation');
   }
   get downloads() {
-    return this.requests.filter((r) => /timedtext|\.mpd|\.m3u8|\.vtt/.test(r.url));
+    return this.requests.filter((r) => /timedtext|\.m3u8|\.vtt/.test(r.url));
   }
   async setup() {
     const worker =
@@ -176,7 +174,6 @@ export class Player {
     await this.settings({
       enabled: true,
       youtube: true,
-      hbo: true,
       x: true,
       baseUrl: providerUrl.replace('/chat/completions', ''),
       apiKey,
@@ -352,25 +349,6 @@ export class Player {
           })),
         },
       });
-    }
-    const resource = url.pathname.match(
-      /^\/e2e\/(first|second|third)\/(manifest\.mpd|en\.vtt|en-asr\.vtt|zh-TW\.vtt|zh-CN\.vtt|ja-asr\.vtt|ko-asr\.vtt)$/,
-    );
-    if (this.platform === 'hbo' && url.origin === this.origin && resource) {
-      const [, id, file] = resource;
-      if (file === 'manifest.mpd') {
-        await this.timeline;
-        return route.fulfill({
-          contentType: 'application/dash+xml',
-          body: `<MPD type="static" mediaPresentationDuration="PT90S"><Period start="PT0S" duration="PT90S">${['en', 'en-asr', 'zh-TW', 'zh-CN', 'ja-asr', 'ko-asr'].map((lang) => `<AdaptationSet contentType="text" lang="${lang.replace('-asr', '')}"><Role value="${lang.endsWith('-asr') ? 'caption' : 'subtitle'}"/><Representation id="${lang}" mimeType="text/vtt"><BaseURL>${lang}.vtt</BaseURL></Representation></AdaptationSet>`).join('')}</Period></MPD>`,
-        });
-      }
-      const cues = this.cues(
-        id,
-        file.replace('.vtt', '').replace('-asr', ''),
-        file.endsWith('-asr.vtt') ? 'asr' : 'authored',
-      );
-      return route.fulfill({ contentType: 'text/vtt', body: webvtt(cues) });
     }
     const hls = url.pathname.match(
       /^\/e2e\/(first|second|third)\/(pl\/s0|subs)\/(en|en-asr|zh-TW|zh-CN|ja-asr|ko-asr)\.(m3u8|vtt)$/,

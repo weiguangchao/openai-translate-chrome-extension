@@ -618,7 +618,7 @@ button:hover:not(:disabled) {
 }
 .site-options {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 15px;
 }
 .site-options > div {
@@ -631,7 +631,7 @@ button:hover:not(:disabled) {
   border-left: 1px solid var(--line);
   padding-left: 16px;
 }
-.site-options > div > span:not(.youtube-mark):not(.hbo-mark):not(.x-mark) {
+.site-options > div > span:not(.youtube-mark):not(.x-mark) {
   font-size: 12px;
   font-weight: 550;
 }
@@ -646,16 +646,6 @@ button:hover:not(:disabled) {
 }
 .site-options .youtube-mark {
   width: 25px;
-}
-.site-options .hbo-mark {
-  font-size: 12px;
-  letter-spacing: -1.1px;
-  width: 34px;
-  flex-direction: column;
-  line-height: 1;
-}
-.site-options .hbo-mark > span {
-  font-size: 11px;
 }
 .site-options .x-mark {
   width: 20px;
@@ -681,23 +671,6 @@ button:hover:not(:disabled) {
 .x-mark svg {
   width: 100%;
   display: block;
-}
-.hbo-mark {
-  display: inline-flex;
-  align-items: center;
-  font-family: Arial, sans-serif;
-  letter-spacing: -1.3px;
-  font-size: 18px;
-  font-weight: 900;
-  color: #454159;
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-.hbo-mark > span {
-  font-size: 17px;
-  font-weight: 700;
-  margin-left: 3px;
-  letter-spacing: -1px;
 }
 .preview-panel {
   background: #fff;
@@ -1523,7 +1496,7 @@ html:lang(en) .popup-languages {
     padding: 23px;
   }
   .site-options {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .site-options > div + div {
     border-left: 1px solid var(--line);

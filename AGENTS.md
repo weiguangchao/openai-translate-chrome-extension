@@ -1,6 +1,6 @@
 # Subline
 
-Subline is a Chrome Manifest V3 extension that shows bilingual subtitles on YouTube, HBO Max, and X. It translates existing video captions through the user's OpenAI-compatible API and caches translations for replay. The project uses TypeScript, React, and Vite and has no backend.
+Subline is a Chrome Manifest V3 extension that shows bilingual subtitles on YouTube and X. It translates existing video captions through the user's OpenAI-compatible API and caches translations for replay. The project uses TypeScript, React, and Vite and has no backend.
 
 ## Non-negotiables
 

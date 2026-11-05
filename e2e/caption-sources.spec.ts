@@ -41,7 +41,7 @@ test('x: unpunctuated Chinese captions keep words intact across source cue break
   });
 });
 
-for (const platform of ['youtube', 'hbo', 'x'] as const) {
+for (const platform of ['youtube', 'x'] as const) {
   test(`${platform}: packaged extension translates a source track through its worker`, async ({}, info) => {
     await withPlayer(platform, info, async (p) => {
       await expect
@@ -241,7 +241,7 @@ for (const platform of ['youtube', 'hbo', 'x'] as const) {
   });
 }
 
-for (const platform of ['hbo', 'x'] as const) {
+for (const platform of ['x'] as const) {
   test(`${platform}: website captions read before the timeline loads never show untranslated`, async ({}, info) => {
     await withPlayer(
       platform,

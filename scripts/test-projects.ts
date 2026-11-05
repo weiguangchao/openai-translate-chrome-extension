@@ -19,12 +19,6 @@ export const domTestProjects = [
     ],
   },
   {
-    name: 'hbo',
-    environment: 'jsdom',
-    include: ['tests/hbo.test.ts'],
-    environmentOptions: { jsdom: { url: 'https://play.hbomax.com/video/watch/episode-1' } },
-  },
-  {
     name: 'youtube',
     environment: 'jsdom',
     include: ['tests/youtube.test.ts'],

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { CaptionController } from '../src/core/controller';
 import type { TimedCue } from '../src/core/cues';
 import { seekSettleMs, translationSendsPerSecond } from '../src/shared/tuning';
-import { createHboPlatform } from '../src/platforms/hbo/platform';
+import { createTestPlatform } from './fixtures/platform';
 import { NativeTimeline } from '../src/core/native';
 import { publicSettings } from '../src/shared/settings';
 import { extensionStorage } from './fixtures/extension-storage';
@@ -37,7 +37,7 @@ function setCues(cues: readonly TimedCue[]): void {
 }
 
 beforeEach(async () => {
-  document.body.innerHTML = '<div class="video-js"><video></video></div>';
+  document.body.innerHTML = '<div data-player><video></video></div>';
   video = document.querySelector('video')!;
   Object.defineProperty(video, 'readyState', { value: 1 });
   Object.defineProperty(video, 'paused', { configurable: true, value: false });
@@ -50,7 +50,7 @@ beforeEach(async () => {
   ) => unknown;
   const sender = {
     id: 'extension-id',
-    url: 'https://www.max.com/video/example',
+    url: 'https://www.youtube.com/watch?v=example',
     frameId: 0,
     tab: { id: 1 },
   } as chrome.runtime.MessageSender;
@@ -111,7 +111,10 @@ it.each([true, false])(
       },
     };
     Object.defineProperty(video, 'textTracks', { value: [sourceTrack, targetTrack] });
-    controller = new CaptionController(createHboPlatform, { ...publicSettings(saved), configured });
+    controller = new CaptionController(createTestPlatform, {
+      ...publicSettings(saved),
+      configured,
+    });
     await advance(2);
     expect(targetTrack.mode).toBe('disabled');
     expect(sourceTrack.mode).toBe('showing');
@@ -180,7 +183,7 @@ it('cuts a long cue into captions, translates each on its own, and shows each on
     { text: longCaption, startTime: 2, endTime: 14 },
     { text: 'After.', startTime: 16, endTime: 18 },
   ]);
-  controller = new CaptionController(createHboPlatform, publicSettings(saved));
+  controller = new CaptionController(createTestPlatform, publicSettings(saved));
   await vi.advanceTimersByTimeAsync(0);
   await advance(8);
   expect(requested.flat()).not.toContain(longCaption);
@@ -218,7 +221,7 @@ it('cuts a long cue into captions, translates each on its own, and shows each on
 });
 
 it('preloads in the background and queries it at caption boundaries without another provider request', async () => {
-  controller = new CaptionController(createHboPlatform, publicSettings(saved));
+  controller = new CaptionController(createTestPlatform, publicSettings(saved));
   await vi.advanceTimersByTimeAsync(0);
   const opening = [['First cue.'], ['Second cue.', 'Third cue.']];
   expect(requested).toEqual(opening);
@@ -250,7 +253,7 @@ it('lets the opening window finish during a scrub and requests only the cues at 
     text: `Cue ${index + 1}.`,
   }));
   setCues([...dense, { startTime: 80, endTime: 82, text: 'After seeking.' }]);
-  controller = new CaptionController(createHboPlatform, publicSettings(saved));
+  controller = new CaptionController(createTestPlatform, publicSettings(saved));
   await vi.advanceTimersByTimeAsync(0);
   const opening = [
     ['Cue 1.'],
@@ -285,7 +288,7 @@ it.each(['timeout', '500'] as const)(
       text: `Cue ${index + 1}.`,
     }));
     setCues(dense);
-    controller = new CaptionController(createHboPlatform, publicSettings(saved));
+    controller = new CaptionController(createTestPlatform, publicSettings(saved));
     await vi.advanceTimersByTimeAsync(0);
     const opening = [
       ['Cue 1.'],
@@ -325,7 +328,7 @@ it('keeps requests sent before a seek running, sends the landing at once and cac
     text: `Cue ${index + 1}.`,
   }));
   setCues(dense);
-  controller = new CaptionController(createHboPlatform, publicSettings(saved));
+  controller = new CaptionController(createTestPlatform, publicSettings(saved));
   await vi.advanceTimersByTimeAsync(0);
   const started = requested.length;
   expect(started).toBe(translationSendsPerSecond);
@@ -364,7 +367,7 @@ it('keeps untranslated short sources hidden and sends the short landing before u
     document
       .querySelector('[data-subline-overlay]')
       ?.shadowRoot?.querySelectorAll<HTMLElement>('.line')[0];
-  controller = new CaptionController(createHboPlatform, publicSettings(saved));
+  controller = new CaptionController(createTestPlatform, publicSettings(saved));
   await vi.advanceTimersByTimeAsync(0);
   const opening = [['Stay.'], ['Next.'], ['Third.']];
   expect(requested).toEqual(opening);
@@ -404,7 +407,7 @@ it('finishes in-flight prefetch while paused and does not send more until playba
     video.dispatchEvent(new Event(paused ? 'pause' : 'play'));
     await vi.advanceTimersByTimeAsync(0);
   };
-  controller = new CaptionController(createHboPlatform, publicSettings(saved));
+  controller = new CaptionController(createTestPlatform, publicSettings(saved));
   await advance(2);
   const openingCount = requested.length;
   expect(openingCount).toBeGreaterThan(0);
@@ -441,7 +444,7 @@ it.each(['dropped', 'reply-lost', 'empty', 'failure'] as const)(
         text: `Cue ${index + 1}.`,
       })),
     );
-    controller = new CaptionController(createHboPlatform, publicSettings(saved));
+    controller = new CaptionController(createTestPlatform, publicSettings(saved));
     await advance(2);
     const openingCount = requested.length;
     const sendMessage = chrome.runtime.sendMessage;
@@ -488,7 +491,7 @@ it.each(['dropped', 'reply-lost', 'empty', 'failure'] as const)(
 );
 
 it('invalidates the old translation when the same video element loads a different source', async () => {
-  controller = new CaptionController(createHboPlatform, publicSettings(saved));
+  controller = new CaptionController(createTestPlatform, publicSettings(saved));
   await advance(2);
   Object.defineProperty(video, 'currentSrc', { value: 'https://media.example/next.mp4' });
   const track = video.textTracks[0];
@@ -508,7 +511,7 @@ it('invalidates the old translation when the same video element loads a differen
 it('continues using the provider when a native target track appears', async () => {
   const tracks = [video.textTracks[0]];
   Object.defineProperty(video, 'textTracks', { value: tracks });
-  controller = new CaptionController(createHboPlatform, publicSettings(saved));
+  controller = new CaptionController(createTestPlatform, publicSettings(saved));
   await advance(2);
   await finish({ 'First cue.': '模型生成的字幕', 'Second cue.': 'Second cue 译文' });
   const target = {
@@ -529,7 +532,7 @@ it('continues using the provider when a native target track appears', async () =
 });
 
 it('queries the background again on a repeated caption while keeping the displayed caption between ticks', async () => {
-  controller = new CaptionController(createHboPlatform, publicSettings(saved));
+  controller = new CaptionController(createTestPlatform, publicSettings(saved));
   await vi.advanceTimersByTimeAsync(0);
   await finish({ 'First cue.': '第一句', 'Second cue.': '第二句' });
   await advance(2);
@@ -560,7 +563,7 @@ it('translates the displayed overlap together and splits a following long cue in
     'Years later, standing on the same bridge,',
     'I finally understood that the city had become my home.',
   ];
-  controller = new CaptionController(createHboPlatform, publicSettings(saved));
+  controller = new CaptionController(createTestPlatform, publicSettings(saved));
   await vi.advanceTimersByTimeAsync(0);
   expect(requested).toEqual([[first], [joined, second, ...pieces]]);
   const delivered = new Set<(typeof pending)[number]>();
@@ -615,7 +618,7 @@ it.each([false, true])(
       { startTime: 40, endTime: 40.3, text: 'Landing.' },
       { startTime: 40.3, endTime: 44, text: 'Upcoming.' },
     ]);
-    controller = new CaptionController(createHboPlatform, publicSettings(saved));
+    controller = new CaptionController(createTestPlatform, publicSettings(saved));
     await vi.advanceTimersByTimeAsync(0);
     Object.defineProperty(video, 'seeking', { configurable: true, value: true });
     video.currentTime = 35;

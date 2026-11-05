@@ -22,8 +22,6 @@ await build({
 for (const [entry, output] of [
   ['src/platforms/youtube/page.ts', 'youtube-page.js'],
   ['src/platforms/youtube/content.ts', 'youtube-content.js'],
-  ['src/platforms/hbo/page.ts', 'hbo-page.js'],
-  ['src/platforms/hbo/content.ts', 'hbo-content.js'],
   ['src/platforms/x/page.ts', 'x-page.js'],
   ['src/platforms/x/content.ts', 'x-content.js'],
 ])

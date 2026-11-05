@@ -92,11 +92,15 @@ it('cancels a stopped download without caching a late result and allows the read
 
 it('ignores signed media credentials while preserving parameters that identify content', () => {
   expect(
-    mediaIdentity('https://cdn.h264.io/manifest.mpd?asset=one&token=old&Signature=old&Expires=1'),
+    mediaIdentity(
+      'https://video.twimg.com/subtitles.m3u8?asset=one&token=old&Signature=old&Expires=1',
+    ),
   ).toBe(
-    mediaIdentity('https://cdn.h264.io/manifest.mpd?Expires=2&token=new&asset=one&Signature=new'),
+    mediaIdentity(
+      'https://video.twimg.com/subtitles.m3u8?Expires=2&token=new&asset=one&Signature=new',
+    ),
   );
-  expect(mediaIdentity('https://cdn.h264.io/manifest.mpd?asset=one')).not.toBe(
-    mediaIdentity('https://cdn.h264.io/manifest.mpd?asset=two'),
+  expect(mediaIdentity('https://video.twimg.com/subtitles.m3u8?asset=one')).not.toBe(
+    mediaIdentity('https://video.twimg.com/subtitles.m3u8?asset=two'),
   );
 });

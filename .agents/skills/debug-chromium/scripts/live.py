@@ -493,7 +493,7 @@ def reload(args):
         print(f"Reload failed from {folder}: {reply.get('error')}", file=sys.stderr)
         return 1
     print(f"Reloaded {reply.get('name')} from {folder}, build {fingerprint(folder)}. "
-          "Refresh YouTube/HBO/X tabs.")
+          "Refresh YouTube/X tabs.")
     return 0
 
 

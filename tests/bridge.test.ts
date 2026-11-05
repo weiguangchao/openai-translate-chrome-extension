@@ -14,12 +14,12 @@ it.each(['request-id', 'origin', 'source', 'cue-timing'] as const)(
   (invalid) => {
     const changed = vi.fn();
     const send = vi.spyOn(window, 'postMessage').mockImplementation(() => {});
-    timeline = new BridgeTimeline('hbo', changed);
+    timeline = new BridgeTimeline('x', changed);
     timeline.read('video');
     const request = send.mock.calls[0][0] as { requestId: number };
     const accepted = [{ startTime: 1, endTime: 3, text: 'Accepted caption.' }];
     const response = {
-      type: 'subline:hbo-timeline-response',
+      type: 'subline:x-timeline-response',
       requestId: request.requestId,
       revision: 1,
       state: { mode: 'model', language: 'en', source: accepted },
