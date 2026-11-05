@@ -14,15 +14,22 @@ import {
   hasProviderConsent,
   normalizeSettings,
   publicSettings,
+  MICROSOFT_ORIGIN,
   STORAGE_KEY,
   type Settings,
 } from '../shared/settings';
 import { loadSettings } from '../shared/storage';
 import { printTrace, readTraceRequest } from '../shared/trace';
-import { TranslationQueue, translationCacheLimit } from './queue';
+import { HybridTranslationQueue, translationCacheLimit } from './queue';
 import { restoreTranslations } from './translation-store';
 
-const queue = new TranslationQueue(translationCacheLimit, printTrace);
+const queue = new HybridTranslationQueue(
+  translationCacheLimit,
+  printTrace,
+  () =>
+    settings.provider === 'microsoft' ||
+    settings.providerConsent.split(',').includes(MICROSOFT_ORIGIN),
+);
 let settings: Settings;
 let translationRevision = crypto.randomUUID();
 let updateSequence = 0;
@@ -127,12 +134,19 @@ chrome.storage.onChanged.addListener((changes, area) => {
     const next = await loadSettings();
     if (sequence !== updateSequence) return;
     const change = classifySettingsChange(settings, next);
+    const microsoftWasAllowed =
+      settings.provider === 'microsoft' ||
+      settings.providerConsent.split(',').includes(MICROSOFT_ORIGIN);
     settings = next;
     if (change.translation) translationRevision = crypto.randomUUID();
     if (change.translation || !settings.enabled || !hasProviderConsent(settings)) {
       queue.reset();
       consumers.clear();
     } else if (change.availability) {
+      const microsoftAllowed =
+        settings.provider === 'microsoft' ||
+        settings.providerConsent.split(',').includes(MICROSOFT_ORIGIN);
+      if (microsoftWasAllowed && !microsoftAllowed) queue.disableMicrosoft();
       const disabled = [...consumers]
         .filter(([, { platform }]) => !settings[platform])
         .map(([consumer]) => consumer);

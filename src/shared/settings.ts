@@ -168,7 +168,7 @@ export function providerOrigin(settings: Settings): string {
 }
 export function hasProviderConsent(settings: Settings): boolean {
   const origin = providerOrigin(settings);
-  return Boolean(origin) && settings.providerConsent === origin;
+  return Boolean(origin) && settings.providerConsent.split(',').includes(origin);
 }
 export function isProviderConfigured(settings: Settings): boolean {
   return (
