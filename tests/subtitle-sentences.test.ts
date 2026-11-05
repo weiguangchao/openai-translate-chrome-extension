@@ -123,7 +123,7 @@ it.each([
   },
 );
 
-it('keeps unsupported-language captions together across fragmented cues', async () => {
+it('rejoins fragmented Chinese cues and splits them into timed sentences', async () => {
   const cues = await authoredSubtitleCaptions(
     [
       { startTime: 1, endTime: 3, text: '我昨天去了' },
@@ -132,8 +132,28 @@ it('keeps unsupported-language captions together across fragmented cues', async 
     ],
     'zh-TW',
   );
-  expect(cues.map((cue) => cue.text)).toEqual(['我昨天去了商店。你呢？ 「我在家。」']);
-  expect(cues[0]).toMatchObject({ startTime: 1, endTime: 7 });
+  expect(cues.map((cue) => cue.text)).toEqual(['我昨天去了商店。', '你呢？', '「我在家。」']);
+  expect(captionAt(cues, 1)).toBe('我昨天去了商店。');
+  expect(captionAt(cues, 4.5)).toBe('你呢？');
+  expect(captionAt(cues, 5)).toBe('「我在家。」');
+  expect(captionAt(cues, 7)).toBe('');
+});
+
+it('uses source cue breaks to split unpunctuated Chinese into back-to-back captions', async () => {
+  const lines = [
+    '不会讲话不是口才不好是你思想不够立体这是发生在阿里公益基金会的会议现场',
+    '马云当场怒怼秘书长不会讲话一句话便让整个会场的气氛瞬间变得尴尬和紧张',
+  ];
+  const captions = await authoredSubtitleCaptions(
+    lines.map((text, index) => ({ startTime: index * 4, endTime: index * 4 + 3.8, text })),
+    'zh-CN',
+  );
+  expect(captions).toEqual([
+    { startTime: 0, endTime: 4, text: lines[0] },
+    { startTime: 4, endTime: 7.8, text: lines[1] },
+  ]);
+  expect(captionAt(captions, 3.9)).toBe(lines[0]);
+  expect(captionAt(captions, 4)).toBe(lines[1]);
 });
 
 it('keeps opening punctuation attached to the following word when splitting captions', async () => {

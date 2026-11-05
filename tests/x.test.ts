@@ -324,6 +324,36 @@ it('downloads the selected X subtitle track and follows language changes', async
   expect(lines()?.[1].textContent).toBe('译文 Cue 1');
 });
 
+it('shows short Chinese captions without Provider traffic when the track matches the target language', async () => {
+  const first = '不会讲话不是口才不好是你思想不够立体这是发生在阿里公益基金会的会议现场';
+  const second = '马云当场怒怼秘书长不会讲话一句话便让整个会场的气氛瞬间变得尴尬和紧张';
+  const originalFetch = fetch;
+  vi.stubGlobal(
+    'fetch',
+    vi.fn((url: string, init: RequestInit) =>
+      url.endsWith('.vtt')
+        ? Promise.resolve(
+            new Response(
+              `WEBVTT\n\n00:00:00.000 --> 00:00:04.000\n${first}\n\n00:00:04.000 --> 00:00:08.000\n${second}\n`,
+            ),
+          )
+        : originalFetch(url, init),
+    ),
+  );
+  const { video } = addPlayer('a', { top: 0, bottom: 360 }, false, [track('a', 'zh-Hans')]);
+  controller = new CaptionController(
+    createXPlatform,
+    publicSettings({ ...settings, targetLanguage: 'zh-CN' }),
+  );
+  await playTo(video, 3);
+  expect(lines()?.[0].textContent).toBe(first);
+  expect(lines()?.[0].hidden).toBe(false);
+  expect(lines()?.[1].hidden).toBe(true);
+  await playTo(video, 4);
+  expect(lines()?.[0].textContent).toBe(second);
+  expect(requested).toEqual([]);
+});
+
 it('follows the playing, most visible video and moves the overlay when another one takes over', async () => {
   const first = addPlayer('a', { top: -200, bottom: 160 }, true);
   const second = addPlayer('b', { top: 200, bottom: 560 }, false);
