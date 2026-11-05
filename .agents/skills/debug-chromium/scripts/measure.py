@@ -99,8 +99,9 @@ class CommandError(RuntimeError):
 
 
 class Commands:
-    def __init__(self, folder, session):
+    def __init__(self, folder, session, browser):
         self.folder, self.session = folder, session
+        self.browser = browser
         self.folder.mkdir(parents=True, exist_ok=True)
         self.index = len(list(folder.glob('*.stdout')))
 
@@ -111,7 +112,7 @@ class Commands:
         write_json(prefix.with_suffix('.json'), {'args': list(args), 'started': now()})
         with prefix.with_suffix('.stdout').open('w') as stdout, prefix.with_suffix('.stderr').open('w') as stderr:
             process = subprocess.Popen([sys.executable, str(HERE / 'live.py'), *map(str, args),
-                                        '--session', self.session], stdout=stdout, stderr=stderr)
+                                        '--session', self.session, *self.browser], stdout=stdout, stderr=stderr)
             try:
                 process.wait(timeout=timeout)
             finally:
@@ -292,7 +293,9 @@ def execute(args):
         summary_path = output / 'summary.json'
         summary = json.loads(summary_path.read_text())
         summary['runs'] = recover_runs(output)
-        cleanup = Commands(output / 'cleanup', args.session)
+        browser = ['--launch-session', str(Path(args.launch_session).resolve())] if args.launch_session else [
+            '--existing-browser', str(Path(args.existing_browser).resolve())]
+        cleanup = Commands(output / 'cleanup', args.session, browser)
         if args.focus:
             print('Focus: Chrome activates before traces.', flush=True)
         try:
@@ -307,7 +310,7 @@ def execute(args):
                     last = max((int(path.name) for path in attempts.glob('*') if path.name.isdigit()), default=0)
                     for attempt in range(last + 1, last + args.attempts + 1):
                         folder = output / 'runs' / case['name'] / build['name'] / str(attempt)
-                        commands = Commands(folder / 'commands', args.session)
+                        commands = Commands(folder / 'commands', args.session, browser)
                         try:
                             run = collect(case, build, plan, folder, commands, loaded,
                                           output / 'builds' / build['name'], args.focus)
@@ -340,14 +343,21 @@ def main():
     parser.add_argument('--loaded', type=Path, required=True, help='loaded extension folder')
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--session', required=True, help='this task\'s live.py session')
+    browser = parser.add_mutually_exclusive_group(required=True)
+    browser.add_argument('--launch-session', help='setup-headless-chromium session.json')
+    browser.add_argument('--existing-browser', metavar='PORT_FILE', help='explicit existing browser endpoint')
     parser.add_argument('--resume', action='store_true')
     parser.add_argument('--focus', action='store_true', help='activate Chrome before traces')
     parser.add_argument('--attempts', type=int, choices=(1, 2, 3), default=1, help='attempts per unfinished case')
     args = parser.parse_args()
+    if args.focus and args.launch_session:
+        parser.error('--focus requires --existing-browser')
     def interrupt(_number, _frame):
         raise KeyboardInterrupt
     signal.signal(signal.SIGTERM, interrupt)
     try:
+        args.command = 'run'
+        live.configure_browser(args)
         return execute(args)
     except (ValueError, OSError, CommandError, live.SessionConflict) as error:
         print(str(error), file=sys.stderr)

@@ -118,10 +118,6 @@ def main():
         "browser": str(browser), "version": version, "extension": str(extension),
         "fingerprint": fingerprint(extension), "profile": str(profile), "port": port,
         "user_agent": ua, "flags": flags,
-        "debug_chromium_env": {
-            "DEBUG_CHROMIUM_PORT_FILE": str(output / "endpoint"),
-            "DEBUG_CHROMIUM_STATE": str(output / "holder.json"),
-        },
     }
 
     def save():
@@ -140,6 +136,7 @@ def main():
         record["browser_pid"] = process.pid
         save()
         path = endpoint(process, port)
+        record["endpoint_path"] = path
         developer_mode(port, path)
         (output / "endpoint").write_text(f"{port}\n{path}\n")
         record["state"] = "ready"

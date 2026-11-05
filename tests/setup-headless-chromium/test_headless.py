@@ -1,6 +1,7 @@
 """Headless launch, debug-chromium handoff and cleanup through their CLI interfaces."""
 import json
 import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -10,6 +11,7 @@ import unittest
 from pathlib import Path
 
 from support import LIVE, REPO, SESSION, Result, Site, copy_extension, find_browser
+import measure
 
 LAUNCH = REPO / ".agents/skills/setup-headless-chromium/scripts/launch.py"
 
@@ -47,16 +49,25 @@ class Headless(unittest.TestCase):
             diagnostics += (self.output / "chromium.log").read_text()
         self.assertEqual(record.get("state"), "ready", diagnostics)
         self.assertGreater(record["port"], 0)
-        env = {**os.environ, **record["debug_chromium_env"], "DEBUG_CHROMIUM_SESSION": SESSION}
+        env = {**os.environ, "DEBUG_CHROMIUM_SESSION": SESSION}
+        env.pop("DEBUG_CHROMIUM_PORT_FILE", None)
+        env.pop("DEBUG_CHROMIUM_STATE", None)
 
         def live(*args):
-            result = Result(subprocess.run([sys.executable, str(LIVE), *args], cwd=REPO,
+            result = Result(subprocess.run([sys.executable, str(LIVE), *args,
+                                           "--launch-session", str(self.output / "session.json")], cwd=REPO,
                                           env=env, capture_output=True, text=True, timeout=90))
             self.assertEqual(result.code, 0, result)
             return result
 
-        live("start")
+        started = live("start")
+        stop_command = started.out.split("Stop it with: ", 1)[1].strip()
+        self.assertIn(str(self.output / "session.json"), shlex.split(stop_command))
         self.addCleanup(live, "stop")
+        self.assertEqual(live("status").json["chrome_port"], record["port"])
+        commands = measure.Commands(self.root / "measure", SESSION,
+                                    ["--launch-session", str(self.output / "session.json")])
+        self.assertEqual(commands.call("status")["chrome_port"], record["port"])
         live("reload", "--path", str(extension))
         site = Site()
         self.addCleanup(site.close)
@@ -69,8 +80,16 @@ class Headless(unittest.TestCase):
         self.assertNotIn("HeadlessChrome", value["ua"])
         self.assertIn("Chrome/", value["ua"])
         self.assertGreaterEqual(value["width"], 1200)
+        result = subprocess.run([sys.executable, str(LIVE), "do", tab,
+                                 '{"action":"focus"}', "--launch-session",
+                                 str(self.output / "session.json")], cwd=REPO,
+                                env=env, capture_output=True, text=True, timeout=15)
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("focus requires", result.stdout)
         live("close", tab)
-        live("stop")
+        stopped = subprocess.run(shlex.split(stop_command), cwd=REPO,
+                                 capture_output=True, text=True, timeout=15)
+        self.assertEqual(stopped.returncode, 0, stopped.stdout + stopped.stderr)
         self.stop_launcher(launcher)
         record = json.loads((self.output / "session.json").read_text())
         self.assertEqual(record["state"], "stopped",
