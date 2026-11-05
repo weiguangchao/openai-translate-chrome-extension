@@ -63,8 +63,7 @@
       const video = document.querySelector('video');
       const youtube = location.hostname === 'www.youtube.com';
       const x = location.hostname === 'x.com';
-      const path = (id) =>
-        youtube ? `/watch?v=${id}` : x ? `/e2e/status/${id}` : `/video/watch/${id}`;
+      const path = (id) => (youtube ? `/watch?v=${id}` : `/e2e/status/${id}`);
       let nativeTrack;
       const state = {
         id:
@@ -144,40 +143,6 @@
                       return subtitles.findIndex(([id]) => id === code);
                     },
                   },
-                },
-              },
-            },
-          },
-        };
-      } else {
-        player.setAttribute('data-testid', 'playerContainer');
-        native.setAttribute('data-testid', 'caption_renderer_overlay');
-        native.__reactFiber$fixture = {
-          memoizedProps: {
-            eventConsumer: {
-              selectedTextTrack$: {
-                subscribe(callback) {
-                  callback({
-                    selectedTextTrack: state.language
-                      ? {
-                          language: state.language,
-                          role: state.kind === 'asr' ? 'closedcaptions' : 'subtitle',
-                        }
-                      : null,
-                  });
-                  return { unsubscribe() {} };
-                },
-              },
-            },
-          },
-          return: {
-            memoizedProps: {
-              value: {
-                get activeStreamInfo() {
-                  return {
-                    url: `${location.origin}/e2e/${state.id}/manifest.mpd`,
-                    streamMode: 'VOD',
-                  };
                 },
               },
             },

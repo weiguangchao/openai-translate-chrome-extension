@@ -9,14 +9,14 @@
   "host_permissions": [
     "https://www.youtube.com/*",
     "https://m.youtube.com/*",
-    "https://*.max.com/*",
-    "https://*.hbomax.com/*",
-    "https://*.hbo.com/*",
     "https://x.com/*",
     "https://twitter.com/*"
   ],
   "optional_host_permissions": ["https://*/*", "http://localhost/*", "http://127.0.0.1/*"],
-  "background": { "service_worker": "background.js", "type": "module" },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
   "action": {
     "default_popup": "popup.html",
     "default_title": "__MSG_extensionTitle__",
@@ -36,13 +36,6 @@
   "options_page": "index.html",
   "content_scripts": [
     {
-      "matches": ["https://*.max.com/*", "https://*.hbomax.com/*", "https://*.hbo.com/*"],
-      "js": ["hbo-page.js"],
-      "world": "MAIN",
-      "run_at": "document_start",
-      "all_frames": true
-    },
-    {
       "matches": ["https://www.youtube.com/*", "https://m.youtube.com/*"],
       "js": ["youtube-page.js"],
       "world": "MAIN",
@@ -52,12 +45,6 @@
     {
       "matches": ["https://www.youtube.com/*", "https://m.youtube.com/*"],
       "js": ["youtube-content.js"],
-      "run_at": "document_end",
-      "all_frames": true
-    },
-    {
-      "matches": ["https://*.max.com/*", "https://*.hbomax.com/*", "https://*.hbo.com/*"],
-      "js": ["hbo-content.js"],
       "run_at": "document_end",
       "all_frames": true
     },

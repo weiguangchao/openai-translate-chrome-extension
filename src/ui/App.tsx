@@ -41,7 +41,6 @@ import {
 } from '../shared/storage';
 import {
   GithubMark,
-  HboMark,
   LanguageSelect,
   Logo,
   Select,
@@ -485,8 +484,8 @@ export function App() {
                       <ul>
                         <li>
                           {t(
-                            `在 YouTube、HBO Max、X 上播放带字幕的视频时，Subline 会把字幕原文发送到 ${provider} 翻译。`,
-                            `When you watch videos with subtitles on YouTube, HBO Max, or X, Subline sends subtitle text to ${provider} for translation.`,
+                            `在 YouTube、X 上播放带字幕的视频时，Subline 会把字幕原文发送到 ${provider} 翻译。`,
+                            `When you watch videos with subtitles on YouTube or X, Subline sends subtitle text to ${provider} for translation.`,
                           )}
                         </li>
                         <li>
@@ -541,15 +540,6 @@ export function App() {
                           label={t('在 YouTube 启用', 'Enable on YouTube')}
                           checked={settings.youtube}
                           onChange={(value) => update('youtube', value)}
-                        />
-                      </div>
-                      <div>
-                        <HboMark />
-                        <span>HBO Max</span>
-                        <Toggle
-                          label={t('在 HBO Max 启用', 'Enable on HBO Max')}
-                          checked={settings.hbo}
-                          onChange={(value) => update('hbo', value)}
                         />
                       </div>
                       <div>
@@ -761,8 +751,8 @@ export function App() {
                   >
                     <p className="about-intro">
                       {t(
-                        '在 YouTube、HBO Max 和 X 上看视频时，Subline 读取视频的原文字幕，用你自己的 OpenAI 兼容接口翻译，再把原文和译文一起显示在播放器里。',
-                        'Subline reads subtitles on YouTube, HBO Max, and X, translates them through your OpenAI-compatible API, and displays the source and translation in the player.',
+                        '在 YouTube 和 X 上看视频时，Subline 读取视频的原文字幕，用你自己的 OpenAI 兼容接口翻译，再把原文和译文一起显示在播放器里。',
+                        'Subline reads subtitles on YouTube and X, translates them through your OpenAI-compatible API, and displays the source and translation in the player.',
                       )}
                     </p>
                     <ul className="about-features">

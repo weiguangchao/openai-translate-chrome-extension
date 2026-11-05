@@ -8,6 +8,7 @@ const { content_scripts: scripts, host_permissions: hosts } = manifest as {
 };
 
 it('injects each platform page and content script exactly on its registered sites', () => {
+  expect(PLATFORMS.map(({ id }) => id)).toEqual(['youtube', 'x']);
   expect(hosts).toEqual(platformMatches);
   expect(scripts).toHaveLength(PLATFORMS.length * 2);
   for (const platform of PLATFORMS) {
@@ -27,13 +28,10 @@ it('recognizes registered sites and rejects lookalike or insecure hosts', () => 
     [
       'https://www.youtube.com/watch?v=1',
       'https://m.youtube.com/',
-      'https://play.max.com/video',
-      'https://play.hbomax.com/',
-      'https://www.hbo.com/',
       'https://x.com/NASA/status/1',
       'https://twitter.com/NASA',
     ].map(platformForUrl),
-  ).toEqual(['youtube', 'youtube', 'hbo', 'hbo', 'hbo', 'x', 'x']);
+  ).toEqual(['youtube', 'youtube', 'x', 'x']);
   for (const url of [
     'http://www.youtube.com/',
     'https://notyoutube.com/',

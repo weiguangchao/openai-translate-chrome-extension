@@ -103,13 +103,6 @@ export function YoutubeMark() {
     </span>
   );
 }
-export function HboMark() {
-  return (
-    <span className="hbo-mark">
-      HBO<span>max</span>
-    </span>
-  );
-}
 export function XMark() {
   return (
     <span className="x-mark">

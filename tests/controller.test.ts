@@ -35,7 +35,7 @@ beforeEach(() => {
   });
   source = { kind: 'waiting', language: null, mode: 'checking' };
   platform = {
-    id: 'hbo',
+    id: 'x',
     toolbar: () => null,
     style: '.subline-player #layer { opacity: 0 !important; }',
     videoId: () => 'video',

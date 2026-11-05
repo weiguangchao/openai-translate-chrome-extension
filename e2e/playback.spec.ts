@@ -11,7 +11,7 @@ import {
   preloadNext,
 } from './harness';
 
-for (const platform of ['youtube', 'hbo', 'x'] as const) {
+for (const platform of ['youtube', 'x'] as const) {
   test(`${platform}: a long sentence goes out as separate captions and style changes preserve in-flight work`, async ({}, info) => {
     await withPlayer(
       platform,

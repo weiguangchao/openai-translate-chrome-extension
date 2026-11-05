@@ -5,7 +5,7 @@ description: Measure or compare Subline playback in Chromium on request.
 
 # Verify performance
 
-Use [setup](../setup-headless-chromium/SKILL.md)/[debug](../debug-chromium/SKILL.md), or requested existing/headed browsers. Edits alone need no real-site measurements. Test YouTube/X at 1x, 1.25x, 1.5x, 2x per build; HBO Max only explicitly requested. Read [page checks](references/page-readiness.md).
+Use [setup](../setup-headless-chromium/SKILL.md)/[debug](../debug-chromium/SKILL.md), or requested existing/headed browsers. Edits alone need no real-site measurements. Test YouTube/X at 1x, 1.25x, 1.5x, 2x per build. Read [page checks](references/page-readiness.md).
 
 Authorized MiMo: read `MIMO_BASE_URL`, `MIMO_MODEL`, `MIMO_API_KEY` from ignored worktree `.env` before asking. Keep `0600`; configure in real settings, retain `.env`, exclude keys from builds/evidence.
 

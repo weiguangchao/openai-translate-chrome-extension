@@ -5,7 +5,6 @@ import { withPlayer } from './harness';
 for (const { platform, size, width } of [
   { platform: 'youtube', size: 18.333, width: 36 },
   { platform: 'x', size: 20, width: 40 },
-  { platform: 'hbo', size: 20, width: 40 },
 ] as const) {
   test(`${platform}: the player logo follows the native toolbar and its lifecycle`, async ({}, info) => {
     await withPlayer(platform, info, async (p) => {

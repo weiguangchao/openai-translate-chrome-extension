@@ -1,7 +1,6 @@
 import type { TimelineState } from './bridge/protocol';
 import type { TimedCue } from './cues';
 import { supportedLanguage } from '../shared/languages';
-import type { LiveCaption } from './platform';
 import { authoredSubtitleCaptions } from './sentences';
 
 const cueTextCache = new WeakMap<TextTrackCue, { source: unknown; text: string }>();
@@ -26,12 +25,6 @@ export function selectedTrack(video: HTMLVideoElement): TextTrack | undefined {
     (track) => track.mode === 'showing' && ['subtitles', 'captions'].includes(track.kind),
   );
   return tracks[0];
-}
-
-export function activeTrackCaption(video: HTMLVideoElement): LiveCaption {
-  const track = selectedTrack(video);
-  const text = track?.activeCues ? [...track.activeCues].map(captionText).join('\n').trim() : '';
-  return { text, layers: [], nativeTrack: Boolean(text) };
 }
 
 export class NativeTimeline {

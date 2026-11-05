@@ -282,7 +282,7 @@ class Clock(unittest.TestCase):
 
 
 class RecordedTraces(unittest.TestCase):
-    """PR #30's YouTube and HBO traces, recounted after 61030c9.
+    """PR #30's recorded playback traces, recounted after 61030c9.
 
     Expected values come from docs/reviews/assets/debug-chromium-high-rate-summary.json.
     Subtitle text was replaced with placeholders; timing and states are as recorded.

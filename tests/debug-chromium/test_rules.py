@@ -327,7 +327,7 @@ class CheckFiles(unittest.TestCase):
     def test_smoke_checks_are_valid(self):
         checks = live.load_checks([str(support.SKILL / "checks/smoke.json")], None)
         self.assertEqual(holder.validate(checks), [])
-        self.assertEqual([c["name"] for c in checks], ["youtube", "hbo", "x"])
+        self.assertEqual([c["name"] for c in checks], ["youtube", "x"])
 
 
 class ReloadFrom(unittest.TestCase):

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi, type Mock } from 'vitest';
+import { createTestPlatform } from './fixtures/platform';
 import { publicSettings } from '../src/shared/settings';
 import { consentedSettings } from './fixtures/settings';
 
@@ -13,7 +14,7 @@ beforeEach(() => {
   vi.useFakeTimers();
   vi.resetModules();
   document.body.innerHTML =
-    '<div data-testid="playerContainer"><video></video><div data-testid="caption_renderer_overlay">First cue</div></div>';
+    '<div data-player><video></video><div data-caption-layer>First cue</div></div>';
   Object.defineProperty(document.querySelector('video'), 'textTracks', {
     value: [{ mode: 'showing', kind: 'subtitles', language: 'en', cues: null, activeCues: [] }],
   });
@@ -55,7 +56,8 @@ it.each(['initial', 'restore'])(
       if (invalidated) throw new Error('Extension context invalidated.');
       return send(message);
     });
-    await import('../src/platforms/hbo/content');
+    const { startContentScript } = await import('../src/core/content');
+    startContentScript(createTestPlatform);
     await vi.advanceTimersByTimeAsync(450);
     if (stage === 'restore') {
       expect(translated()).toBe('第一句译文');
@@ -73,7 +75,7 @@ it.each(['initial', 'restore'])(
     await vi.advanceTimersByTimeAsync(450);
     expect(document.querySelector('[data-subline-overlay]')).toBeNull();
     vi.resetModules();
-    await import('../src/platforms/hbo/content');
+    startContentScript(createTestPlatform);
     await vi.advanceTimersByTimeAsync(450);
     expect(translated()).toBe('第一句译文');
     expect(document.querySelectorAll('[data-subline-overlay]').length).toBe(1);
@@ -86,7 +88,8 @@ it('discards settings replies from before pagehide and loads current settings on
   runtime.sendMessage.mockImplementation((message) =>
     message.type === 'settings' ? new Promise((resolve) => replies.push(resolve)) : send(message),
   );
-  await import('../src/platforms/hbo/content');
+  const { startContentScript } = await import('../src/core/content');
+  startContentScript(createTestPlatform);
   await vi.advanceTimersByTimeAsync(0);
   window.dispatchEvent(new PageTransitionEvent('pagehide', { persisted: true }));
   window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }));

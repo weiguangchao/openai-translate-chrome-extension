@@ -40,14 +40,14 @@ it('allows the transport and unrelated subtitle downloads', async () => {
 it.each([
   ['src/core/probe.ts', 'import "../platforms/youtube/platform";'],
   ['src/core/probe.ts', 'import("../platforms/youtube/platform");'],
-  ['src/core/probe.ts', 'type P = import("../platforms/hbo/platform").Platform;'],
-  ['src/core/probe.ts', 'export * from "../platforms/hbo/platform";'],
+  ['src/core/probe.ts', 'type P = import("../platforms/x/platform").Platform;'],
+  ['src/core/probe.ts', 'export * from "../platforms/x/platform";'],
   ['src/shared/probe.ts', 'import("../core/platform");'],
   ['src/extension/probe.ts', 'import("../core/overlay");'],
   ['src/platforms/third/probe.ts', 'import "../youtube/captions";'],
-  ['src/platforms/third/probe.ts', 'import("../hbo/captions");'],
+  ['src/platforms/third/probe.ts', 'import("../x/captions");'],
   ['src/platforms/youtube/probe.ts', 'import("../third/captions");'],
-  ['src/platforms/third/probe.ts', 'require("../hbo/captions");'],
+  ['src/platforms/third/probe.ts', 'require("../x/captions");'],
   ['src/platforms/third/probe.ts', 'import("../../shared/../ui/App");'],
 ])('rejects cross-layer imports in %s: %s', async (filePath, source) => {
   const [result] = await eslint.lintText(source, { filePath });
