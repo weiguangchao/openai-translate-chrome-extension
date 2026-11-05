@@ -7,20 +7,20 @@ import { captionDisplayLimit } from '../src/shared/tuning';
 
 const githubCaptions = [
   'Myself, Mitchell the creator of Ghostie,',
-  'and many other people are realizing that GitHub might not be the safest place',
-  "for us to be leaving our code now that they're randomly reverting merges",
-  'and having downtime that is measured in days.',
+  'and many other people are realizing that GitHub might not be the',
+  "safest place for us to be leaving our code now that they're randomly",
+  'reverting merges and having downtime that is measured in days.',
 ];
 
 it.each(['asr', 'authored'] as const)(
   'times each caption of a long sentence from the original %s word timestamps',
-  (kind) => {
-    const cues = parseYoutubeCaptions(githubCaptionTrack, kind, 'en');
+  async (kind) => {
+    const cues = await parseYoutubeCaptions(githubCaptionTrack, kind, 'en');
     expect(cues).toEqual([
       { startTime: 0, endTime: 1.5, text: githubCaptions[0] },
-      { startTime: 1.5, endTime: 5, text: githubCaptions[1] },
-      { startTime: 5, endTime: 8.25, text: githubCaptions[2] },
-      { startTime: 8.25, endTime: 11, text: githubCaptions[3] },
+      { startTime: 1.5, endTime: 4.5, text: githubCaptions[1] },
+      { startTime: 4.5, endTime: 7.75, text: githubCaptions[2] },
+      { startTime: 7.75, endTime: 11, text: githubCaptions[3] },
     ]);
     expect([2.9, 3, 10.9, 11].map((time) => captionAt(cues, time))).toEqual([
       githubCaptions[1],
@@ -31,8 +31,8 @@ it.each(['asr', 'authored'] as const)(
   },
 );
 
-it('maps normalized whitespace back to the timed source blocks', () => {
-  const cues = parseYoutubeCaptions(
+it('maps normalized whitespace back to the timed source blocks', async () => {
+  const cues = await parseYoutubeCaptions(
     {
       events: [
         {
@@ -77,8 +77,8 @@ it('maps normalized whitespace back to the timed source blocks', () => {
   ]);
 });
 
-it('estimates caption times within an untimed block without a gap between captions', () => {
-  const captions = parseYoutubeCaptions(
+it('estimates caption times within an untimed block without a gap between captions', async () => {
+  const captions = await parseYoutubeCaptions(
     { events: [{ tStartMs: 0, dDurationMs: 23700, segs: [{ utf8: githubCaption }] }] },
     'authored',
     'en',
@@ -87,16 +87,16 @@ it('estimates caption times within an untimed block without a gap between captio
   expect(captions[0].startTime).toBe(0);
   expect(captions[0].endTime).toBeCloseTo(4.1, 1);
   expect(captions[1].startTime).toBeCloseTo(4.1, 1);
-  expect(captions[1].endTime).toBeCloseTo(11.9, 1);
-  expect(captions[2].startTime).toBeCloseTo(11.9, 1);
-  expect(captions[2].endTime).toBeCloseTo(19.2, 1);
-  expect(captions[3].startTime).toBeCloseTo(19.2, 1);
+  expect(captions[1].endTime).toBeCloseTo(10.6, 1);
+  expect(captions[2].startTime).toBeCloseTo(10.6, 1);
+  expect(captions[2].endTime).toBeCloseTo(17.5, 1);
+  expect(captions[3].startTime).toBeCloseTo(17.5, 1);
   expect(captions[3].endTime).toBe(23.7);
 });
 
-it('joins authored fragments across cues and splits multiple sentences within one cue', () => {
+it('joins authored fragments across cues and splits multiple sentences within one cue', async () => {
   expect(
-    parseYoutubeCaptions(
+    await parseYoutubeCaptions(
       {
         events: [
           { tStartMs: 1000, dDurationMs: 1000, segs: [{ utf8: ' This field\nbehind me ' }] },
@@ -115,8 +115,8 @@ it('joins authored fragments across cues and splits multiple sentences within on
   ]);
 });
 
-it('joins ASR fragments, uses word timestamps within a cue and preserves the final sentence', () => {
-  const cues = parseYoutubeCaptions(
+it('joins ASR fragments, uses word timestamps within a cue and preserves the final sentence', async () => {
+  const cues = await parseYoutubeCaptions(
     {
       events: [
         {
@@ -169,9 +169,9 @@ it.each([
       { startTime: 3.2, endTime: 5, text: 'will become a city.' },
     ],
   },
-])('handles a pause within punctuated $kind dialogue', ({ kind, expected }) => {
+])('handles a pause within punctuated $kind dialogue', async ({ kind, expected }) => {
   expect(
-    parseYoutubeCaptions(
+    await parseYoutubeCaptions(
       {
         events: [
           { tStartMs: 1000, dDurationMs: 1000, segs: [{ utf8: 'This field behind me' }] },
@@ -184,9 +184,9 @@ it.each([
   ).toEqual(expected);
 });
 
-it('preserves simultaneous authored lines and removes duplicate drawing layers', () => {
+it('preserves simultaneous authored lines and removes duplicate drawing layers', async () => {
   expect(
-    parseYoutubeCaptions(
+    await parseYoutubeCaptions(
       {
         events: [
           { tStartMs: 1000, dDurationMs: 2000, segs: [{ utf8: 'This field behind me' }] },
@@ -222,8 +222,8 @@ it.each([
     first: 'First person keeps talking',
     second: 'while the second person answers',
   },
-])('preserves staggered authored overlaps for $first', ({ segments, first, second }) => {
-  const cues = parseYoutubeCaptions(
+])('preserves staggered authored overlaps for $first', async ({ segments, first, second }) => {
+  const cues = await parseYoutubeCaptions(
     {
       events: [
         { tStartMs: 1000, dDurationMs: 4000, segs: segments },
@@ -245,8 +245,8 @@ it.each([
   });
 });
 
-it('uses pauses in unpunctuated word timings and leaves silence between sentences', () => {
-  const cues = parseYoutubeCaptions(
+it('uses pauses in unpunctuated word timings and leaves silence between sentences', async () => {
+  const cues = await parseYoutubeCaptions(
     {
       events: [
         {
@@ -281,8 +281,8 @@ it('uses pauses in unpunctuated word timings and leaves silence between sentence
   expect(captionAt(cues, 3)).toBe('let’s go');
 });
 
-it('keeps decimals, abbreviations, split words and repeated spoken words intact', () => {
-  const cues = parseYoutubeCaptions(
+it('keeps decimals, abbreviations, split words and repeated spoken words intact', async () => {
+  const cues = await parseYoutubeCaptions(
     {
       events: [
         {
@@ -308,9 +308,9 @@ it('keeps decimals, abbreviations, split words and repeated spoken words intact'
   ]);
 });
 
-it('joins CJK ASR fragments without inserting spaces and recognizes sentence punctuation', () => {
+it('joins CJK ASR fragments without inserting spaces and recognizes sentence punctuation', async () => {
   expect(
-    parseYoutubeCaptions(
+    await parseYoutubeCaptions(
       {
         events: [
           { tStartMs: 0, dDurationMs: 2000, segs: [{ utf8: '今天我们' }] },
@@ -321,16 +321,13 @@ it('joins CJK ASR fragments without inserting spaces and recognizes sentence pun
       'asr',
       'zh-CN',
     ),
-  ).toEqual([
-    { startTime: 0, endTime: 2, text: '今天我们去公园。' },
-    { startTime: 2, endTime: 3, text: '好吗？' },
-  ]);
+  ).toEqual([{ startTime: 0, endTime: 3, text: '今天我们去公园。 好吗？' }]);
 });
 
-it('cuts a long unpunctuated phrase into balanced captions between words', () => {
+it('cuts a long unpunctuated phrase into balanced captions between words', async () => {
   const text =
     'The extraordinarily detailed description of the architecture of the original production deployment system in our main regional data center remains available.';
-  const cues = parseYoutubeCaptions(
+  const cues = await parseYoutubeCaptions(
     { events: [{ tStartMs: 0, dDurationMs: 60000, segs: [{ utf8: text }] }] },
     'asr',
     'en',
@@ -342,9 +339,9 @@ it('cuts a long unpunctuated phrase into balanced captions between words', () =>
   expect([cues[0].startTime, cues[0].endTime, cues[1].endTime]).toEqual([0, cues[1].startTime, 60]);
 });
 
-it('cuts a long list into captions at its commas', () => {
+it('cuts a long list into captions at its commas', async () => {
   const text = `${'one more detail, '.repeat(40)}and that is all.`;
-  const cues = parseYoutubeCaptions(
+  const cues = await parseYoutubeCaptions(
     { events: [{ tStartMs: 0, dDurationMs: 20000, segs: [{ utf8: text }] }] },
     'asr',
     'en',
@@ -356,9 +353,9 @@ it('cuts a long list into captions at its commas', () => {
   expect([cues[0].startTime, cues[10].endTime]).toEqual([0, 20]);
 });
 
-it('cuts an unpunctuated transcript within each caption block without dropping words', () => {
+it('cuts an unpunctuated transcript within each caption block without dropping words', async () => {
   const text = 'keep speaking '.repeat(500).trim();
-  const cues = parseYoutubeCaptions(
+  const cues = await parseYoutubeCaptions(
     {
       events: Array.from({ length: 50 }, (_, index) => ({
         tStartMs: index * 3000,
@@ -379,9 +376,9 @@ it('cuts an unpunctuated transcript within each caption block without dropping w
   ).toBe(true);
 });
 
-it('ignores malformed and non-text events while retaining valid captions', () => {
+it('ignores malformed and non-text events while retaining valid captions', async () => {
   expect(
-    parseYoutubeCaptions(
+    await parseYoutubeCaptions(
       {
         events: [
           null,

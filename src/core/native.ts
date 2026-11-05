@@ -40,6 +40,9 @@ export class NativeTimeline {
   private track: TextTrack | undefined;
   private cues: TimedCue[] | null = null;
   private captions: TimedCue[] | null = null;
+  private generation = 0;
+
+  constructor(private readonly changed: () => void = () => {}) {}
 
   read(video: HTMLVideoElement): TimelineState {
     const track = selectedTrack(video);
@@ -68,10 +71,15 @@ export class NativeTimeline {
       )
     ) {
       this.cues = cues;
-      this.captions =
-        cues && track && supportedLanguage(track.language)
-          ? authoredSubtitleCaptions(cues, track.language)
-          : cues;
+      this.captions = null;
+      const generation = ++this.generation;
+      if (cues && track && supportedLanguage(track.language)) {
+        void authoredSubtitleCaptions(cues, track.language).then((captions) => {
+          if (generation !== this.generation || this.cues !== cues) return;
+          this.captions = captions;
+          this.changed();
+        });
+      } else this.captions = cues;
     }
     return {
       mode: video.readyState >= 1 ? 'model' : 'checking',
@@ -86,5 +94,6 @@ export class NativeTimeline {
     this.track = undefined;
     this.cues = null;
     this.captions = null;
+    this.generation++;
   }
 }

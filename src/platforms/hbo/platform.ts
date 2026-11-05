@@ -6,7 +6,7 @@ import { CAPTION_LAYERS, findHboPlayer, hboVideoId, readHboCaption } from './pla
 
 export const createHboPlatform: PlatformFactory = (changed): Platform => {
   const bridge = new BridgeTimeline('hbo', changed);
-  const native = new NativeTimeline();
+  const native = new NativeTimeline(changed);
   return {
     id: 'hbo',
     style: '',

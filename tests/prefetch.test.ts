@@ -181,6 +181,7 @@ it('cuts a long cue into captions, translates each on its own, and shows each on
     { text: 'After.', startTime: 16, endTime: 18 },
   ]);
   controller = new CaptionController(createHboPlatform, publicSettings(saved));
+  await vi.advanceTimersByTimeAsync(0);
   await advance(8);
   expect(requested.flat()).not.toContain(longCaption);
   expect(translated()?.textContent).toBe('Translating');
@@ -578,14 +579,19 @@ it('translates the displayed overlap together and splits a following long cue in
   expect(messages).toContain('translate');
 });
 
-it('reuses the cues read from a track until the track changes', () => {
+it('reuses the cues read from a track until the track changes', async () => {
   const timeline = new NativeTimeline();
   const read = () => timeline.read(video).source;
+  expect(read()).toBeNull();
+  await vi.advanceTimersByTimeAsync(0);
   const first = read();
+  expect(first).not.toBeNull();
   expect(read()).toBe(first);
   Object.defineProperty(video.textTracks[0], 'cues', {
     value: [{ startTime: 2, endTime: 4, text: 'Changed' }],
   });
+  expect(read()).toBeNull();
+  await vi.advanceTimersByTimeAsync(0);
   expect(read()).not.toBe(first);
   expect(read()?.map((cue) => cue.text)).toEqual(['Changed']);
 });
