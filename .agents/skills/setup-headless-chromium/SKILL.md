@@ -17,7 +17,7 @@ Keep launcher running in a tool session/new task-owned directory. `session.json`
 
 Use authorized Providers through real settings/caption-sharing consent. Keys belong in private files/secret tools, never arguments/source/manifests/evidence. Headless macOS saving may await native origin approval, absent from DOM/screenshots. Inspect native UI, approve only authorized origin, verify saving/connection. Failed/unavailable approval blocks setup; preserve failure, never bypass consent/change production manifest.
 
-Close bootstrap connections before handoff. Export session `debug_chromium_env`; follow [debug context rules](../debug-chromium/SKILL.md) to start/reload. Launcher bootstrap closes before ready; no later debugging calls.
+Close bootstrap connections before handoff. Pass `--launch-session "$PWD/.artifacts/headless-check/session.json"` to every `live.py` command; follow [debug context rules](../debug-chromium/SKILL.md) to start/reload. The CLI derives endpoint/state paths and rejects stopped or mismatched sessions. Launcher bootstrap closes before ready; no later debugging calls.
 
 ## Cleanup
 

@@ -4,6 +4,8 @@ import io
 import json
 import os
 import socket
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -174,6 +176,107 @@ class Ownership(unittest.TestCase):
         os.environ.pop("DEBUG_CHROMIUM_SESSION")
         with self.assertRaisesRegex(live.SessionConflict, "A session id is required"):
             live.require_owner({"owner": "task-a"})
+
+
+class BrowserSelection(unittest.TestCase):
+
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name).resolve()
+        self.server = socket.socket()
+        self.server.bind(("127.0.0.1", 0))
+        self.server.listen()
+        self.server.settimeout(0.05)
+        self.addCleanup(self.server.close)
+        self.port = self.server.getsockname()[1]
+        self.endpoint = self.root / "endpoint"
+        self.endpoint.write_text(f"{self.port}\n/devtools/browser/owned\n")
+        self.profile = self.root / "profile"
+        self.profile.mkdir()
+        self.record = {
+            "state": "ready", "launcher_pid": os.getpid(), "browser_pid": os.getpid(),
+            "profile": str(self.profile), "port": self.port,
+            "endpoint_path": "/devtools/browser/owned",
+            "flags": ["--headless=new", f"--user-data-dir={self.profile}"],
+        }
+        self.session = self.root / "session.json"
+        self.env = {**os.environ, "HOME": str(self.root),
+                    "DEBUG_CHROMIUM_STATE": str(self.root / "holder.json"),
+                    "DEBUG_CHROMIUM_SESSION": "test-owner"}
+        self.env.pop("DEBUG_CHROMIUM_PORT_FILE", None)
+        personal = self.root / "Library/Application Support/Google/Chrome/DevToolsActivePort"
+        personal.parent.mkdir(parents=True)
+        personal.write_text(self.endpoint.read_text())
+
+    def cli(self, *args):
+        return subprocess.run([sys.executable, str(support.LIVE), *map(str, args)],
+                              env=self.env, capture_output=True, text=True, timeout=5)
+
+    def assert_no_connection(self):
+        with self.assertRaises(socket.timeout):
+            self.server.accept()
+
+    def test_missing_selection_never_uses_personal_chrome(self):
+        for command in ("start", "open"):
+            args = [command] + (["https://example.com"] if command == "open" else [])
+            result = self.cli(*args)
+            self.assertEqual(result.returncode, 2, result.stderr)
+            self.assertIn("--launch-session", result.stderr)
+        result = subprocess.run([sys.executable, str(support.SCRIPTS / "holder.py")],
+                                env=self.env, capture_output=True, text=True, timeout=5)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("explicit Chromium endpoint", result.stderr)
+        self.assert_no_connection()
+
+    def test_invalid_launch_sessions_fail_before_connecting(self):
+        cases = [
+            {"state": "stopped"},
+            {"launcher_pid": 0},
+            {"browser_pid": 0},
+            {"port": self.port + 1},
+            {"endpoint_path": "/devtools/browser/other"},
+            {"profile": str(self.root / "absent")},
+            {"flags": []},
+        ]
+        for changes in cases:
+            with self.subTest(changes=changes):
+                self.session.write_text(json.dumps({**self.record, **changes}))
+                result = self.cli("start", "--launch-session", self.session)
+                self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+                self.assert_no_connection()
+
+    def test_wrong_holder_endpoint_cannot_receive_page_commands(self):
+        self.session.write_text(json.dumps(self.record))
+        for changes in ({"chrome_port": self.port + 1}, {"endpoint_path": "/devtools/browser/other"},
+                        {"existing_browser": True}):
+            state = {"pid": os.getpid(), "port": self.port, "owner": "test-owner",
+                     "chrome_port": self.port, "endpoint_path": "/devtools/browser/owned",
+                     "existing_browser": False, **changes}
+            (self.root / "holder.json").write_text(json.dumps(state))
+            result = self.cli("open", "https://example.com", "--launch-session", self.session)
+            self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+            self.assertIn("does not match", result.stderr)
+            self.assert_no_connection()
+
+    def test_headless_focus_never_activates_system_chrome(self):
+        tab = holder.Tab(Mock(), "target", "session", 0, None)
+        with patch.dict(os.environ, {"DEBUG_CHROMIUM_EXISTING_BROWSER": ""}), \
+                patch.object(holder, "activate_chrome") as activate:
+            self.assertFalse(tab.do_focus({})["ok"])
+        activate.assert_not_called()
+        tab.chrome.call.assert_not_called()
+
+    def test_slow_headless_handshake_never_approves_system_chrome(self):
+        sock = Mock()
+        sock.recv.return_value = b"HTTP/1.1 101 Switching Protocols\r\n\r\n"
+        with patch.dict(os.environ, {"DEBUG_CHROMIUM_EXISTING_BROWSER": ""}), \
+                patch.object(holder.socket, "create_connection", return_value=sock), \
+                patch.object(holder.time, "monotonic", side_effect=[0, 0, 3]), \
+                patch.object(holder.select, "select", side_effect=[([], [], []), ([sock], [], []), ([sock], [], [])]), \
+                patch.object(holder, "click_allow") as approve:
+            holder.handshake(self.port, "/devtools/browser/owned").close()
+        approve.assert_not_called()
 
 
 class CheckFiles(unittest.TestCase):

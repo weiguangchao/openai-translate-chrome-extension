@@ -235,10 +235,12 @@ class Live:
         return [sys.executable, str(LIVE), *map(str, args), *(["--session", session] if session else [])]
 
     def __call__(self, *args, session=None, timeout=180):
+        args = (*args, "--existing-browser", self.env["DEBUG_CHROMIUM_PORT_FILE"])
         return Result(subprocess.run(self.command(args, session), cwd=REPO, env=self.env,
                                      capture_output=True, text=True, timeout=timeout))
 
     def spawn(self, *args, session=None):
+        args = (*args, "--existing-browser", self.env["DEBUG_CHROMIUM_PORT_FILE"])
         return subprocess.Popen(self.command(args, session), cwd=REPO, env=self.env,
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
 

@@ -15,14 +15,10 @@ import time
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from live import STATE, alive, load_state, session_id
+from live import STATE, alive, load_state, read_endpoint, session_id
 from worker_trace import (MARK_SLACK_SECONDS, MAX_RATE, media_clock, continuous, settled,
                           summarize as summarize_worker, trace_line)
 
-PORT_FILE = Path(
-    os.environ.get("DEBUG_CHROMIUM_PORT_FILE")
-    or Path.home() / "Library/Application Support/Google/Chrome/DevToolsActivePort"
-)
 IDLE_SECONDS = int(os.environ.get("DEBUG_CHROMIUM_IDLE", "3600"))
 ALLOW_SECONDS = 60
 POLL_SECONDS = 1.0
@@ -326,18 +322,6 @@ class Chrome:
             pass
 
 
-def read_endpoint():
-    try:
-        lines = [line.strip() for line in PORT_FILE.read_text().splitlines() if line.strip()]
-    except FileNotFoundError:
-        lines = []
-    if len(lines) < 2:
-        raise SystemExit(
-            f"{PORT_FILE} has no port. Turn on remote debugging at chrome://inspect/#remote-debugging."
-        )
-    return int(lines[0]), lines[1]
-
-
 def click_allow():
     try:
         result = subprocess.run(
@@ -380,7 +364,7 @@ def handshake(port, path):
                 'Click Allow on "Allow remote debugging?", then start again.'
             )
         ready, _, _ = select.select([sock], [], [], 0)
-        if not ready and now >= next_click:
+        if not ready and now >= next_click and os.environ.get("DEBUG_CHROMIUM_EXISTING_BROWSER") == "1":
             problem = click_allow()
             ready, _, _ = select.select([sock], [], [], 0)
             if problem and not warned and not ready:
@@ -1010,6 +994,8 @@ class Tab:
         return {"ok": ok is True, "count": len(self.requests), "urls": (value or [])[:50]}
 
     def do_focus(self, _step):
+        if os.environ.get("DEBUG_CHROMIUM_EXISTING_BROWSER") != "1":
+            return {"ok": False, "error": "focus requires an explicitly selected existing browser"}
         try:
             self.chrome.call("Target.activateTarget", {"targetId": self.target_id})
         except CdpError as error:
@@ -1158,9 +1144,11 @@ class Tab:
 
 
 class Holder:
-    def __init__(self, chrome, chrome_port):
+    def __init__(self, chrome, chrome_port, endpoint_path=None):
         self.chrome = chrome
         self.chrome_port = chrome_port
+        self.endpoint_path = endpoint_path
+        self.existing_browser = os.environ.get("DEBUG_CHROMIUM_EXISTING_BROWSER") == "1"
         self.token = secrets.token_hex(16)
         self.owner = session_id()
         if not self.owner:
@@ -1199,6 +1187,8 @@ class Holder:
         tabs = [{'tab': tab.id, 'url': tab.url, 'idle': round(time.monotonic() - tab.used),
                  'video': tab.video_time} for tab in self.tabs.values()]
         return {'done': True, 'ok': True, 'pid': os.getpid(), 'chrome_port': self.chrome_port,
+                'endpoint_path': self.endpoint_path,
+                'existing_browser': self.existing_browser,
                 'started': self.started, 'idle_minutes': IDLE_SECONDS // 60, 'tabs': tabs,
                 'state': 'running' if self.active else 'ready', 'active': self.active}
 
@@ -1211,7 +1201,9 @@ class Holder:
     def publish(self):
         targets = [tab.target_id for tab in self.tabs.values()] + self.temporary
         write_state({"pid": os.getpid(), "port": self.port, "token": self.token,
-                     "owner": self.owner, "chrome_port": self.chrome_port, "tabs": targets})
+                     "owner": self.owner, "chrome_port": self.chrome_port,
+                     "endpoint_path": self.endpoint_path, "existing_browser": self.existing_browser,
+                     "tabs": targets})
 
     def open_tab(self, url, trace, deadline, progress):
         target_id = self.chrome.call("Target.createTarget", {"url": "about:blank"})["targetId"]
@@ -1555,7 +1547,7 @@ def main():
         raise SystemExit(f"A holder is already running (pid {previous['pid']}).")
     port, path = read_endpoint()
     chrome = handshake(port, path)
-    holder = Holder(chrome, port)
+    holder = Holder(chrome, port, path)
     for number in (signal.SIGTERM, signal.SIGHUP):
         signal.signal(number, lambda *_: sys.exit(0))
     try:

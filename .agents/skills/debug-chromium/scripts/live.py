@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 import secrets
+import shlex
 import shutil
 import signal
 import socket
@@ -21,6 +22,8 @@ STATE = Path(
 )
 LOG = STATE.with_suffix(".log")
 START_SECONDS = 75
+EXPECTED_ENDPOINT = None
+BROWSER_ARGS = []
 
 ACTIONS_HELP = """JSON action fields
 media: optional time, rate (0.25-4), play, pause, keep_playing, skip_ads, selector
@@ -80,6 +83,68 @@ def require_owner(state):
         raise SessionConflict("Holder belongs to another session. Wait for its owner to stop it.")
 
 
+def read_endpoint():
+    name = os.environ.get("DEBUG_CHROMIUM_PORT_FILE")
+    if not name:
+        raise SystemExit("An explicit Chromium endpoint is required; use --launch-session or --existing-browser.")
+    try:
+        port, path = Path(name).read_text().split()
+        port = int(port)
+        if not 0 < port < 65536 or not path.startswith("/devtools/browser/"):
+            raise ValueError("invalid browser endpoint")
+    except (OSError, ValueError) as error:
+        raise SystemExit(f"Cannot read Chromium endpoint {name}: {error}")
+    return port, path
+
+
+def configure_browser(args):
+    global STATE, LOG, EXPECTED_ENDPOINT, BROWSER_ARGS
+    if args.launch_session:
+        file = Path(args.launch_session).resolve()
+        BROWSER_ARGS = ["--launch-session", str(file)]
+        try:
+            record = json.loads(file.read_text())
+            STATE = file.parent / "holder.json"
+            LOG = STATE.with_suffix(".log")
+            os.environ["DEBUG_CHROMIUM_STATE"] = str(STATE)
+            os.environ["DEBUG_CHROMIUM_PORT_FILE"] = str(file.parent / "endpoint")
+            os.environ.pop("DEBUG_CHROMIUM_EXISTING_BROWSER", None)
+            if args.command in ("stop", "status"):
+                return
+            if record["state"] != "ready":
+                raise ValueError("launch session is not ready")
+            for field in ("launcher_pid", "browser_pid"):
+                if not isinstance(record[field], int) or record[field] <= 0 or not pid_alive(record[field]):
+                    raise ValueError(f"{field} is not running")
+            profile = Path(record["profile"])
+            if not profile.is_dir() or profile.parent != file.parent or not {
+                "--headless=new", f"--user-data-dir={profile}",
+            }.issubset(record["flags"]):
+                raise ValueError("launch session has no isolated headless profile")
+            EXPECTED_ENDPOINT = read_endpoint()
+            if EXPECTED_ENDPOINT != (record["port"], record["endpoint_path"]):
+                raise ValueError("endpoint does not match the launch record")
+        except (OSError, ValueError, KeyError, TypeError) as error:
+            invalid(f"Invalid launch session {file}: {error}")
+    else:
+        os.environ["DEBUG_CHROMIUM_PORT_FILE"] = str(Path(args.existing_browser).resolve())
+        BROWSER_ARGS = ["--existing-browser", os.environ["DEBUG_CHROMIUM_PORT_FILE"]]
+        os.environ["DEBUG_CHROMIUM_EXISTING_BROWSER"] = "1"
+        if args.command not in ("stop", "status"):
+            EXPECTED_ENDPOINT = read_endpoint()
+
+
+def require_endpoint(state):
+    if EXPECTED_ENDPOINT is not None and (
+        state.get("chrome_port"), state.get("endpoint_path")
+    ) != EXPECTED_ENDPOINT:
+        raise SessionConflict("Holder endpoint does not match the selected browser. Stop the owned holder first.")
+    if EXPECTED_ENDPOINT is not None and state.get("existing_browser") != (
+        os.environ.get("DEBUG_CHROMIUM_EXISTING_BROWSER") == "1"
+    ):
+        raise SessionConflict("Holder browser mode does not match the selection. Stop the owned holder first.")
+
+
 @contextmanager
 def lifecycle_lock():
     STATE.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -127,6 +192,7 @@ def request(method, params=None, timeout=15):
         raise NotRunning
     if method != "Session.status":
         require_owner(state)
+    require_endpoint(state)
     if not alive(state):
         raise NotRunning
     with socket.create_connection(("127.0.0.1", state["port"]), 5) as sock:
@@ -159,6 +225,7 @@ def start(_args):
     state = load_state()
     if state and alive(state):
         require_owner(state)
+        require_endpoint(state)
         print(f"Holder already running (pid {state['pid']}). Reusing socket.")
         return 0
     owner = session_id() or secrets.token_hex(16)
@@ -184,7 +251,7 @@ def start(_args):
         state = load_state()
         if state and state.get("pid") == holder.pid:
             print(f"Holder pid {holder.pid}. Stop it with: "
-                  f"python3 {display(__file__)} stop --session {owner}")
+                  + shlex.join([sys.executable, str(HERE / "live.py"), "stop", *BROWSER_ARGS, "--session", owner]))
             return 0
         time.sleep(0.5)
     holder.terminate()
@@ -198,15 +265,9 @@ def start(_args):
     return 1
 
 
-def display(path):
-    try:
-        return str(Path(path).resolve().relative_to(Path.cwd()))
-    except ValueError:
-        return str(path)
-
-
 def not_running():
-    print(f"Holder is not running. Start it with: python3 {display(__file__)} start", file=sys.stderr)
+    print("Holder is not running. Start it with: "
+          + shlex.join([sys.executable, str(HERE / "live.py"), "start", *BROWSER_ARGS]), file=sys.stderr)
     return 1
 
 
@@ -495,10 +556,14 @@ def main():
         for flag, options in arguments:
             command.add_argument(flag, **options)
         command.add_argument("--session", help="task's start ID or DEBUG_CHROMIUM_SESSION")
+        browser = command.add_mutually_exclusive_group(required=True)
+        browser.add_argument("--launch-session", help="setup-headless-chromium session.json")
+        browser.add_argument("--existing-browser", metavar="PORT_FILE", help="explicit existing browser endpoint")
     args = parser.parse_args()
     if args.session is not None:
         os.environ["DEBUG_CHROMIUM_SESSION"] = args.session
     try:
+        configure_browser(args)
         with lifecycle_lock() if args.command in ("start", "stop") else nullcontext():
             result = args.func(args)
     except SessionConflict as error:
