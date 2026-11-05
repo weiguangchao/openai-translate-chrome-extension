@@ -17,6 +17,30 @@ import {
   expectOpeningPosts,
 } from './harness';
 
+test('x: unpunctuated Chinese captions keep words intact across source cue breaks', async ({}, info) => {
+  await withPlayer('x', info, async (p) => {
+    const first = '会的会议现场马云当场怒怼秘书长不会讲话一句话便让整个会场的气';
+    const second = '氛瞬间变得尴尬和紧张关键时刻蔡崇信迅速站出来救场仅';
+    await p.page.route('https://video.twimg.com/e2e/first/subs/zh-CN.vtt', (route) =>
+      route.fulfill({
+        contentType: 'text/vtt',
+        headers: { 'access-control-allow-origin': '*' },
+        body: `WEBVTT\n\n00:00:00.000 --> 00:00:04.000\n${first}\n\n00:00:04.000 --> 00:00:08.000\n${second}\n`,
+      }),
+    );
+    await p.page.evaluate(() => window.fixture.select('zh-CN'));
+    await expect(p.original).toContainText('会的会议现场');
+    await p.play();
+    await expect(p.original).toBeVisible();
+    await expect(p.original).not.toHaveText(first + second);
+    await p.seek(6);
+    await expect(p.original).toContainText('气氛');
+    await expect(p.translated).toBeHidden();
+    expect(p.posts).toEqual([]);
+    await p.page.screenshot({ path: info.outputPath('chinese-captions.png') });
+  });
+});
+
 for (const platform of ['youtube', 'hbo', 'x'] as const) {
   test(`${platform}: packaged extension translates a source track through its worker`, async ({}, info) => {
     await withPlayer(platform, info, async (p) => {

@@ -321,7 +321,10 @@ it('joins CJK ASR fragments without inserting spaces and recognizes sentence pun
       'asr',
       'zh-CN',
     ),
-  ).toEqual([{ startTime: 0, endTime: 3, text: '今天我们去公园。 好吗？' }]);
+  ).toEqual([
+    { startTime: 0, endTime: 2, text: '今天我们去公园。' },
+    { startTime: 2, endTime: 3, text: '好吗？' },
+  ]);
 });
 
 it('cuts a long unpunctuated phrase into balanced captions between words', async () => {

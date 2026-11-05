@@ -34,8 +34,8 @@ it('keeps line breaks inside a sentence without shifting its original offsets', 
 });
 
 it('uses the default no-op for unsupported languages', async () => {
-  expect(await segmenterFor('zh-CN').sentenceEnds('你好。再见。')).toEqual([]);
-  expect(await captions('zh-CN', '短句。')).toEqual(['短句。']);
+  expect(await segmenterFor('ja').sentenceEnds('こんにちは。さようなら。')).toEqual([]);
+  expect(await captions('ja', '短句。')).toEqual(['短句。']);
 });
 
 it('splits long English sentences only after the caller chooses the long path', async () => {
@@ -53,6 +53,54 @@ it('keeps a short sentence as one caption', async () => {
 
 it('keeps an over-limit unsupported-language sentence whole', async () => {
   const text = '甲'.repeat(captionDisplayLimit);
-  const pieces = await captions('zh-CN', text);
+  const pieces = await captions('ja', text);
   expect(pieces).toEqual([text]);
+});
+
+it.each(['zh-CN', 'zh-TW', 'zh-Hans', 'zh-Hant'])(
+  'finds Chinese sentence ends with quotes and UTF-16 offsets for %s',
+  async (language) => {
+    const first = '😀她说：“你好！”';
+    const second = '接著說：「再見。」';
+    const text = `${first}\r\n${second}沒有標點的結尾`;
+    expect(await segmenterFor(language).sentenceEnds(text)).toEqual([
+      first.length,
+      first.length + 2 + second.length,
+    ]);
+  },
+);
+
+it.each(['zh-CN', 'zh-TW'])(
+  'splits unpunctuated Chinese into balanced captions without losing text for %s',
+  async (language) => {
+    const text =
+      '不会讲话不是口才不好是你思想不够立体这是发生在阿里公益基金会的会议现场马云当场怒怼秘书长不会讲话一句话便让整个会场的气氛瞬间变得尴尬和紧张关键时刻蔡崇信迅速站出来救场仅凭几句机智得体的话便轻松化解了这场突发危机';
+    const pieces = await captions(language, text);
+    expect(pieces.length).toBeGreaterThan(1);
+    expect(pieces.join('')).toBe(text);
+    expect(pieces.every((piece) => subtitleDisplayLength(piece) <= captionDisplayLimit)).toBe(true);
+    expect(pieces.every((piece) => piece.length > 1)).toBe(true);
+  },
+);
+
+it('keeps Chinese punctuation with its words and preserves mixed-language tokens', async () => {
+  const phrase = '我们使用 API 计算 3.14 的结果，并且向大家解释这个结果的含义，';
+  const text = `${phrase.repeat(4)}「最后再说一句话。」`;
+  const pieces = await captions('zh-CN', text);
+  expect(pieces.length).toBeGreaterThan(1);
+  expect(pieces.join('').replace(/\s/g, '')).toBe(text.replace(/\s/g, ''));
+  expect(pieces.every((piece) => subtitleDisplayLength(piece) <= captionDisplayLimit)).toBe(true);
+  expect(pieces.flatMap((piece) => piece.match(/API/g) ?? [])).toHaveLength(4);
+  expect(pieces.flatMap((piece) => piece.match(/3\.14/g) ?? [])).toHaveLength(4);
+  expect(pieces.every((piece) => !/^[，。！？；：」』”）]/u.test(piece))).toBe(true);
+  expect(pieces.every((piece) => !/[「『“（]$/u.test(piece))).toBe(true);
+});
+
+it('keeps a Chinese word intact when a source cue ends inside it', async () => {
+  const first = '会的会议现场马云当场怒怼秘书长不会讲话一句话便让整个会场的气';
+  const second = '氛瞬间变得尴尬和紧张关键时刻蔡崇信迅速站出来救场仅';
+  const pieces = await captions('zh-CN', first + second, [first.length]);
+  expect(pieces.join('')).toBe(first + second);
+  expect(pieces.some((piece) => piece.includes('气氛'))).toBe(true);
+  expect(pieces.every((piece) => subtitleDisplayLength(piece) <= captionDisplayLimit)).toBe(true);
 });

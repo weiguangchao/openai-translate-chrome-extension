@@ -85,11 +85,11 @@ For user-requested real-browser performance checks, use [verify-chromium-perform
 
 ### Sentence
 
-A sentence is text Subline rejoins from downloaded subtitle cues and splits where sentences end: using the English segmenter, at a silence of at least `sentencePauseSeconds`, and around lyric lines (♪) and sound tags ([…]), which stand alone. Overlapping cues are left as they are.
+A sentence is text Subline rejoins from downloaded subtitle cues and splits where sentences end: using the English or Chinese segmenter, at a silence of at least `sentencePauseSeconds`, and around lyric lines (♪) and sound tags ([…]), which stand alone. Overlapping cues are left as they are.
 
 ### Caption
 
-A caption is what Subline translates and shows. A sentence at or below `captionDisplayLimit` display columns is one caption. A longer sentence goes through the language segmenter once, with no length check afterward. English uses Echogarden phrase and word boundaries with source cue breaks to choose balanced captions. Other languages pass through without language-specific splitting. Each caption ends where the next begins. Overlapping cues and captions read from the page DOM stay whole. The Provider translates each caption as its own input and never chooses the breaks. A caption shows its source only together with its translation.
+A caption is what Subline translates and shows. A sentence at or below `captionDisplayLimit` display columns is one caption. A longer sentence goes through the language segmenter once, with no length check afterward. English and Chinese use Echogarden phrase boundaries with source cue breaks to choose balanced captions. English uses Echogarden word boundaries; Chinese also uses native `Intl.Segmenter` word boundaries within Han text and accepts source cue breaks only at word boundaries. Other languages pass through without language-specific splitting. Each caption ends where the next begins. Overlapping cues and captions read from the page DOM stay whole. The Provider translates each caption as its own input and never chooses the breaks. A caption shows its source only together with its translation.
 
 ### Segment
 
