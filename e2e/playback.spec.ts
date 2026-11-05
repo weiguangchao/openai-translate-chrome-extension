@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { translationSendsPerSecond } from '../src/shared/tuning';
+import { translationBatchLimit, translationSendsPerSecond } from '../src/shared/tuning';
 import { longCaption, longCaptionParts, longTranslations } from '../tests/fixtures/long-caption';
 import {
   denseCue,
@@ -142,8 +142,8 @@ test('youtube: 1.5x playback sends the landing caption first after each complete
       await expect.poll(() => p.posts.length).toBe(translationSendsPerSecond);
       expect(p.posts.map((post) => post.inputs.map((input) => input.text))).toEqual([
         [denseCue(0).text],
-        [denseCue(1).text],
-        [denseCue(2).text],
+        [denseCue(1).text, denseCue(2).text],
+        [denseCue(3).text, denseCue(4).text],
       ]);
       await expect(p.translated).toHaveText('Translating');
       await p.release(0);
@@ -152,8 +152,8 @@ test('youtube: 1.5x playback sends the landing caption first after each complete
       await expect.poll(() => p.posts.length).toBe(translationSendsPerSecond * 2);
       let landingPost = -1;
       for (const [time, index] of [
-        [28.8, 7],
-        [44.8, 11],
+        [48.8, 12],
+        [4.8, 1],
         [60.8, 15],
       ]) {
         const before = p.posts.length;
@@ -174,7 +174,7 @@ test('youtube: 1.5x playback sends the landing caption first after each complete
   );
 });
 
-test('youtube: playback stays ahead after startup when every fourth single-caption reply takes 15 s', async ({}, info) => {
+test('youtube: playback stays ahead after startup when every fourth batch reply takes 15 s', async ({}, info) => {
   const steadyUntil = 60;
   test.setTimeout((steadyUntil + 40) * 1000);
   await withPlayer(
@@ -188,6 +188,8 @@ test('youtube: playback stays ahead after startup when every fourth single-capti
           intervals: [1000],
         })
         .toBeGreaterThan(steadyUntil);
+      expect(p.posts.some((post) => post.inputs.length > 1)).toBe(true);
+      expect(p.posts.every((post) => post.inputs.length <= translationBatchLimit)).toBe(true);
       const frames = await p.frames();
       expect(
         frames.filter(

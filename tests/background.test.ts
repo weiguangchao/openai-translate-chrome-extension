@@ -210,7 +210,7 @@ it('answers a prefetch with translations in the order asked, settling cues a lat
     rate: 1,
     cues: packedCues(['A', 'B']),
   });
-  await vi.waitFor(() => expect(pending).toHaveLength(2));
+  await vi.waitFor(() => expect(pending).toHaveLength(1));
   const sliding = send({
     type: 'prefetch',
     captionLanguage: 'en',
@@ -218,7 +218,7 @@ it('answers a prefetch with translations in the order asked, settling cues a lat
     rate: 1,
     cues: packedCues(['B', 'C']),
   });
-  await vi.waitFor(() => expect(pending).toHaveLength(3));
+  await vi.waitFor(() => expect(pending).toHaveLength(2));
   for (const request of pending)
     request.resolve(providerReply(request.texts, (text) => `${text} 译文`));
   await expect(opening).resolves.toEqual({ ok: true, data: [null, 'B 译文'] });
@@ -236,7 +236,7 @@ it('answers a prefetch with translations in the order asked, settling cues a lat
     data: ['B 译文', 'C 译文'],
   });
   await expect(send({ type: 'prefetch-pause' })).resolves.toEqual({ ok: true });
-  expect(fetch).toHaveBeenCalledTimes(3);
+  expect(fetch).toHaveBeenCalledTimes(2);
 });
 
 it('starts a new page in the same tab without the pause the previous page left', async () => {
@@ -296,7 +296,7 @@ it('packs a prefetch by its time span and rejects a snapshot without usable time
     rate: 1,
     cues: [...packedCues(['A', 'B']), { text: 'C', start: 80, end: 81 }],
   });
-  await vi.waitFor(() => expect(pending).toEqual([['A'], ['B']]));
+  await vi.waitFor(() => expect(pending).toEqual([['A', 'B']]));
 });
 
 it('shares one translation between duplicate captions across messages', async () => {

@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import manifest from '../public/manifest.json';
 import { fetchModels, translate, translateCaptionBatch } from '../src/shared/api';
-import { translationBatchLimit } from '../src/shared/tuning';
 import { TOKEN_USAGE_KEY } from '../src/shared/token-usage';
 import {
   DEFAULT_SETTINGS,
@@ -107,10 +106,12 @@ describe('OpenAI-compatible provider contract', () => {
     },
   );
 
-  it('sends the supplied prompts verbatim with one caption and reads its plain translation', async () => {
+  it('keeps the translation instructions and adds the caption id protocol', async () => {
     const fetch = vi
       .fn()
-      .mockResolvedValue(Response.json({ choices: [{ message: { content: '第一句\n第二行' } }] }));
+      .mockResolvedValue(
+        Response.json({ choices: [{ message: { content: '[[p0]]\n第一句\n第二行' } }] }),
+      );
     vi.stubGlobal('fetch', fetch);
     const published = vi.fn();
     const text = 'One "quoted"\nline with {{to}} and $&.';
@@ -120,18 +121,18 @@ describe('OpenAI-compatible provider contract', () => {
     expect(published.mock.calls).toEqual([[0, '第一句\n第二行']]);
     expect(fetch).toHaveBeenCalledTimes(1);
     const body = JSON.parse(fetch.mock.calls[0][1].body);
-    expect(body.messages).toEqual([
-      {
-        role: 'system',
-        content: `You are a professional Simplified Chinese native translator. Translate each source item accurately and fluently into Simplified Chinese.
-
-## Translation Requirements
-- Return only the translated content for each item, following the required response format. Do not add explanations, apologies, greetings, or commentary. If an item should remain untranslated, return it unchanged.
-- Do not add punctuation, ellipses, dashes, or decorative symbols that are not present or required in the source text.
-`,
-      },
-      { role: 'user', content: `Translate to Simplified Chinese:\n\n${text}` },
-    ]);
+    expect(body.messages[0]).toEqual({
+      role: 'system',
+      content: expect.stringContaining(
+        'You are a professional Simplified Chinese native translator.',
+      ),
+    });
+    expect(body.messages[0].content).toContain('Do not add punctuation');
+    expect(body.messages[0].content).toContain('## Multi-item processing protocol');
+    expect(body.messages[1]).toEqual({
+      role: 'user',
+      content: `Translate to Simplified Chinese:\n\n[[p0]]\n${text}\n[[source_end]]`,
+    });
     expect(body).not.toHaveProperty('response_format');
     expect(body.stream).toBe(false);
     expect(body).not.toHaveProperty('reasoning_effort');
@@ -145,7 +146,7 @@ describe('OpenAI-compatible provider contract', () => {
     await expect(
       translateCaptionBatch(
         config(),
-        Array.from({ length: translationBatchLimit + 1 }, (_, index) => `${index}`),
+        Array.from({ length: 9 }, (_, index) => `${index}`),
       ),
     ).rejects.toThrow();
     expect(fetch).not.toHaveBeenCalled();

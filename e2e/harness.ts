@@ -272,7 +272,7 @@ export class Player {
       expect(translations[text], `Known Provider input: ${text}`).toBeTruthy();
       return { id, translation: translations[text] };
     });
-    const content = results[0].translation;
+    const content = results.map(({ id, translation }) => `[[p${id}]]\n${translation}`).join('\n');
     await post.route.fulfill({ json: { choices: [{ message: { content } }] } });
   }
   private cues(id: string, language: string, kind: string): Cue[] {
@@ -401,7 +401,9 @@ export class Player {
     ) {
       const body = request.postDataJSON();
       const content = body.messages.find((m: { role: string }) => m.role === 'user').content;
-      const inputs = [{ id: 0, text: content.slice(content.indexOf('\n\n') + 2) }];
+      const inputs = [
+        ...content.matchAll(/^\[\[p(\d+)\]\]\n([\s\S]*?)(?=^\[\[(?:p\d+|source_end)\]\]$)/gm),
+      ].map((match) => ({ id: Number(match[1]), text: match[2].trim() }));
       const key = request.headers().authorization?.replace(/^Bearer /, '');
       const post: Post = { inputs, body, worker, route, released: false, status: 200 };
       const unavailable = this.posts.filter((p) => p.status === 503).length;

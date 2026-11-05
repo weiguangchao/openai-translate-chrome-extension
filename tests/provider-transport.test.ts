@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { DEFAULT_SETTINGS } from '../src/shared/settings';
-import { prefetchItems, providerReply, requestedTexts } from './fixtures/provider';
+import { packedCues, prefetchItems, providerReply, requestedTexts } from './fixtures/provider';
 import {
   providerSendWindowMs,
   providerTimeoutMs,
@@ -55,7 +55,9 @@ it('shares the POST budget with connection checks while GET models remain availa
   const fetch = vi.fn(async (_url: string, init: RequestInit) =>
     init.method === 'GET'
       ? Response.json({ data: [{ id: 'model' }] })
-      : providerReply(requestedTexts(init), () => '完成'),
+      : requestedTexts(init).length
+        ? providerReply(requestedTexts(init), () => '完成')
+        : Response.json({ choices: [{ message: { content: '完成' } }] }),
   );
   vi.stubGlobal('fetch', fetch);
   const queue = new TranslationQueue();
@@ -152,11 +154,7 @@ it('prioritizes the visible caption when the next send window opens', async () =
   );
   const queue = new TranslationQueue();
   await Promise.all(['A', 'B', 'C'].map((text) => queue.request(text, settings, text)));
-  const prefetch = queue.prefetch(
-    'window',
-    settings,
-    prefetchItems(Array.from({ length: 2 }, (_, index) => `Future ${index}`)),
-  );
+  const prefetch = queue.prefetch('window', settings, packedCues(['Future 0', 'Future 1'], 1));
   const current = queue.request('current', settings, 'Visible');
   await vi.advanceTimersByTimeAsync(1000);
   expect(sent.slice(3)).toEqual(['Visible', 'Future 0', 'Future 1']);
