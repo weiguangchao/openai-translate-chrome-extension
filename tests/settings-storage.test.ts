@@ -1,5 +1,11 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { DEFAULT_SETTINGS, STORAGE_KEY, settingsPatch } from '../src/shared/settings';
+import {
+  DEFAULT_SETTINGS,
+  STORAGE_KEY,
+  settingsPatch,
+  publicSettings,
+  type Settings,
+} from '../src/shared/settings';
 import { extensionStorage } from './fixtures/extension-storage';
 
 const saved = { ...DEFAULT_SETTINGS, apiKey: 'sk-private-key', model: 'model', subtitleGap: 16 };
@@ -94,4 +100,70 @@ it('preserves independent edits from stale drafts and serializes writes across c
   ]);
   await expect(first.loadSettings()).resolves.toMatchObject({ targetLanguage: 'zh-TW' });
   expect(JSON.stringify([...first.stored])).not.toContain(saved.apiKey);
+});
+
+it('defaults a fresh install to Microsoft and requires consent to its origin', async () => {
+  const { loadSettings } = await openStorage();
+  const settings = await loadSettings();
+  expect(settings.provider).toBe('microsoft');
+  expect(settings.apiKey).toBe('');
+  expect(publicSettings(settings).configured).toBe(false);
+  expect(
+    publicSettings({ ...settings, providerConsent: 'https://edge.microsoft.com' }).configured,
+  ).toBe(true);
+  expect(
+    publicSettings({ ...settings, providerConsent: 'https://api.openai.com' }).configured,
+  ).toBe(false);
+});
+
+it.each(['plaintext', 'encrypted'] as const)(
+  'preserves legacy OpenAI configuration with a %s key across saves',
+  async (kind) => {
+    const storage = await openStorage();
+    const configured: Settings = {
+      ...saved,
+      provider: 'openai',
+      providerConsent: 'https://api.openai.com',
+    };
+    await storage.saveSettings(configured);
+    const legacy: unknown = storage.stored.get(STORAGE_KEY);
+    if (!legacy || typeof legacy !== 'object') throw new Error('Missing saved settings');
+    Reflect.deleteProperty(legacy, 'provider');
+    if (kind === 'plaintext') Reflect.set(legacy, 'apiKey', saved.apiKey);
+    storage.stored.set(STORAGE_KEY, legacy);
+    const loaded = await storage.loadSettings();
+    expect(loaded).toEqual(configured);
+    expect(publicSettings(loaded).configured).toBe(true);
+    expect(await storage.saveSettings({ subtitleGap: 8 })).toMatchObject({
+      provider: 'openai',
+      apiKey: saved.apiKey,
+      model: saved.model,
+      providerConsent: configured.providerConsent,
+    });
+    expect(JSON.stringify([...storage.stored])).not.toContain(saved.apiKey);
+  },
+);
+
+it('keeps OpenAI credentials when selecting Microsoft and persists the selected provider', async () => {
+  const { loadSettings, saveSettings } = await openStorage();
+  await saveSettings({ ...saved, provider: 'openai' });
+  await saveSettings({ provider: 'microsoft', providerConsent: 'https://edge.microsoft.com' });
+  expect(await loadSettings()).toMatchObject({
+    provider: 'microsoft',
+    apiKey: saved.apiKey,
+    model: saved.model,
+  });
+  expect(await saveSettings({ provider: 'openai' })).toMatchObject({
+    provider: 'openai',
+    apiKey: saved.apiKey,
+    model: saved.model,
+  });
+});
+
+it('requests host access for the selected Microsoft provider instead of the stored OpenAI address', async () => {
+  const { allowApiHost } = await openStorage();
+  const request = vi.fn().mockResolvedValue(true);
+  vi.stubGlobal('chrome', { ...chrome, permissions: { request } });
+  await allowApiHost({ ...DEFAULT_SETTINGS, baseUrl: 'https://unused.example/v1' });
+  expect(request).toHaveBeenCalledExactlyOnceWith({ origins: ['https://edge.microsoft.com/*'] });
 });

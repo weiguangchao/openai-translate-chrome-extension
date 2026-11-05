@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { type Settings } from '../src/shared/settings';
+import { DEFAULT_SETTINGS, type Settings } from '../src/shared/settings';
 import { extensionStorage } from './fixtures/extension-storage';
 import { consentedSettings } from './fixtures/settings';
 import { packedCues, providerReply, requestedTexts, translationReply } from './fixtures/provider';
@@ -485,3 +485,26 @@ it('keeps translations in session storage, without the API key, for a restarted 
     });
   expect(fetch).toHaveBeenCalledTimes(1);
 });
+
+it.each([
+  { consent: '', allowed: false },
+  { consent: 'https://api.openai.com', allowed: false },
+  { consent: 'https://edge.microsoft.com', allowed: true },
+])(
+  'sends Microsoft captions only with consent to its origin: $consent',
+  async ({ consent, allowed }) => {
+    const fetch = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify([{ translations: [{ text: '你好', to: 'zh-Hans' }] }])),
+      );
+    vi.stubGlobal('fetch', fetch);
+    const send = await loadBackground({ ...DEFAULT_SETTINGS, providerConsent: consent });
+    const result = await send({ type: 'translate', captionLanguage: 'en', text: 'Hello' });
+    expect(result.ok).toBe(allowed);
+    if (allowed) {
+      expect(result.data).toBe('你好');
+      expect(fetch).toHaveBeenCalledTimes(1);
+    } else expect(fetch).not.toHaveBeenCalled();
+  },
+);

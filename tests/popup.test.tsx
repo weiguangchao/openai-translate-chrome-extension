@@ -25,7 +25,12 @@ beforeEach(() => {
     setItem: (key: string, value: string) => pageValues.set(key, value),
     removeItem: (key: string) => pageValues.delete(key),
   });
-  stored = { ...structuredClone(DEFAULT_SETTINGS), apiKey: 'test-key', model: 'provider/model-id' };
+  stored = {
+    ...structuredClone(DEFAULT_SETTINGS),
+    provider: 'openai',
+    apiKey: 'test-key',
+    model: 'provider/model-id',
+  };
   vi.mocked(loadSettings)
     .mockReset()
     .mockImplementation(async () => structuredClone(stored));

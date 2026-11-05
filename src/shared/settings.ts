@@ -5,7 +5,11 @@ export interface SubtitleStyle {
   color: string;
   size: number;
 }
+export type ProviderKind = 'microsoft' | 'openai';
+export const MICROSOFT_ORIGIN = 'https://edge.microsoft.com';
+
 export interface Settings {
+  provider: ProviderKind;
   enabled: boolean;
   baseUrl: string;
   apiKey: string;
@@ -53,6 +57,7 @@ export type PublicSettings = Omit<Settings, 'apiKey' | 'baseUrl' | 'model' | 'pr
   translationRevision: string;
 };
 export const DEFAULT_SETTINGS: Settings = {
+  provider: 'microsoft',
   enabled: true,
   baseUrl: 'https://api.openai.com/v1',
   apiKey: '',
@@ -71,6 +76,15 @@ export const STORAGE_KEY = 'subline.settings.v1';
 export function normalizeSettings(value: unknown): Settings {
   const input = value && typeof value === 'object' ? (value as Partial<Settings>) : {};
   const result = structuredClone(DEFAULT_SETTINGS);
+  if (input.provider === 'openai' || input.provider === 'microsoft')
+    result.provider = input.provider;
+  else if (
+    input.apiKey ||
+    input.model ||
+    input.providerConsent ||
+    (typeof input.baseUrl === 'string' && input.baseUrl !== DEFAULT_SETTINGS.baseUrl)
+  )
+    result.provider = 'openai';
   for (const key of ['enabled', 'translationOnly', 'youtube', 'x'] as const)
     if (typeof input[key] === 'boolean') result[key] = input[key];
   for (const key of ['baseUrl', 'apiKey', 'model', 'providerConsent'] as const)
@@ -102,8 +116,7 @@ export function publicSettings(settings: Settings, translationRevision = ''): Pu
   return {
     ...rest,
     translationRevision,
-    configured:
-      Boolean(settings.apiKey.trim() && settings.model.trim()) && hasProviderConsent(settings),
+    configured: isProviderConfigured(settings) && hasProviderConsent(settings),
   };
 }
 const localHttpHosts = ['localhost', '127.0.0.1'];
@@ -145,18 +158,25 @@ export function validateBaseUrl(raw: string): URL {
     );
   return url;
 }
-export function providerOrigin(baseUrl: string): string {
+export function providerOrigin(settings: Settings): string {
+  if (settings.provider === 'microsoft') return MICROSOFT_ORIGIN;
   try {
-    return validateBaseUrl(baseUrl).origin;
+    return validateBaseUrl(settings.baseUrl).origin;
   } catch {
     return '';
   }
 }
 export function hasProviderConsent(settings: Settings): boolean {
-  const origin = providerOrigin(settings.baseUrl);
+  const origin = providerOrigin(settings);
   return Boolean(origin) && settings.providerConsent === origin;
 }
+export function isProviderConfigured(settings: Settings): boolean {
+  return (
+    settings.provider === 'microsoft' || Boolean(settings.apiKey.trim() && settings.model.trim())
+  );
+}
 export function validateSettings(settings: Settings, requireConnection = false): void {
+  if (settings.provider === 'microsoft') return;
   validateBaseUrl(settings.baseUrl);
   if (requireConnection && !settings.apiKey.trim())
     throw new Error(t('请先填写 API Key。', 'Enter an API Key first.'));
@@ -166,6 +186,7 @@ export function validateSettings(settings: Settings, requireConnection = false):
 type SettingScope = 'availability' | 'credentials' | 'translation' | 'style';
 
 const SETTING_SCOPES: Record<keyof Settings, SettingScope> = {
+  provider: 'translation',
   enabled: 'availability',
   baseUrl: 'translation',
   apiKey: 'credentials',

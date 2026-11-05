@@ -25,6 +25,7 @@ import {
   DEFAULT_SETTINGS,
   applySettingsPatch,
   hasProviderConsent,
+  isProviderConfigured,
   providerOrigin,
   settingsPatch,
   validateSettings,
@@ -116,9 +117,14 @@ export function App() {
   const [connection, setConnection] = useState('');
   const dirty = ready && JSON.stringify(settings) !== JSON.stringify(saved);
   const current = PAGES.find((item) => item.id === page)!;
-  const fingerprint = JSON.stringify([settings.baseUrl, settings.apiKey, settings.model]);
+  const fingerprint = JSON.stringify([
+    settings.provider,
+    settings.baseUrl,
+    settings.apiKey,
+    settings.model,
+  ]);
   const connected = connection === fingerprint;
-  const origin = providerOrigin(settings.baseUrl);
+  const origin = providerOrigin(settings);
   const provider = origin ? new URL(origin).host : t('你填写的 Provider', 'your provider');
   const consented = hasProviderConsent(settings);
 
@@ -177,7 +183,10 @@ export function App() {
   async function save() {
     try {
       validateSettings(settings);
-      const permission = settings.apiKey.trim() ? allowApiHost(settings) : Promise.resolve();
+      const permission =
+        settings.provider === 'microsoft' || settings.apiKey.trim()
+          ? allowApiHost(settings)
+          : Promise.resolve();
       setBusy('save');
       await permission;
       const normalized = {
@@ -192,7 +201,7 @@ export function App() {
       setSettings((draft) => applySettingsPatch(persisted, settingsPatch(settings, draft)));
       setSaved(persisted);
       showAlert(
-        persisted.apiKey && persisted.model && !hasProviderConsent(persisted)
+        isProviderConfigured(persisted) && !hasProviderConsent(persisted)
           ? {
               kind: 'info',
               text: t(
@@ -224,7 +233,7 @@ export function App() {
   }
   async function runApi(kind: 'models' | 'test') {
     try {
-      if (!settings.apiKey.trim())
+      if (settings.provider === 'openai' && !settings.apiKey.trim())
         throw new Error(
           t(
             '请先填写 API Key，再连接翻译服务。',
@@ -253,7 +262,12 @@ export function App() {
         });
       } else {
         setConnection(
-          JSON.stringify([requestSettings.baseUrl, requestSettings.apiKey, requestSettings.model]),
+          JSON.stringify([
+            requestSettings.provider,
+            requestSettings.baseUrl,
+            requestSettings.apiKey,
+            requestSettings.model,
+          ]),
         );
         showAlert({
           kind: 'success',
@@ -359,123 +373,144 @@ export function App() {
                       <i />
                       {connected
                         ? t('连接正常', 'Connected')
-                        : settings.apiKey && settings.model
+                        : isProviderConfigured(settings)
                           ? t('等待测试', 'Not tested')
                           : t('待配置', 'Not configured')}
                     </div>
                     <fieldset disabled={Boolean(busy)}>
                       <div className="field">
-                        <label htmlFor="base-url">
-                          Base URL{' '}
-                          <span
-                            className="field-tip"
-                            title={t(
-                              '填写包含版本路径的接口根地址，例如 https://api.openai.com/v1',
-                              'Enter the API base URL including its version path, such as https://api.openai.com/v1',
-                            )}
-                          >
-                            <CircleHelp size={13} />
-                          </span>
-                        </label>
-                        <div className="input-icon">
-                          <Globe2 size={16} />
-                          <input
-                            id="base-url"
-                            type="url"
-                            value={settings.baseUrl}
-                            onChange={(event) => update('baseUrl', event.target.value)}
-                            placeholder="https://api.openai.com/v1"
-                            spellCheck={false}
-                          />
-                        </div>
-                        <p className="field-hint">
-                          {t(
-                            '填写接口根地址，无需添加 /chat/completions',
-                            'Enter the API base URL without /chat/completions',
-                          )}
-                        </p>
+                        <label htmlFor="provider">Provider</label>
+                        <Select
+                          id="provider"
+                          value={settings.provider}
+                          onChange={(value) => {
+                            if (value === 'microsoft' || value === 'openai')
+                              update('provider', value);
+                          }}
+                        >
+                          <option value="microsoft">Microsoft Translate</option>
+                          <option value="openai">OpenAI Chat Completions</option>
+                        </Select>
                       </div>
-                      <div className="field">
-                        <label htmlFor="api-key">API Key</label>
-                        <div className="input-icon key-input">
-                          <LockKeyhole size={16} />
-                          <input
-                            id="api-key"
-                            type={showKey ? 'text' : 'password'}
-                            value={settings.apiKey}
-                            onChange={(event) => update('apiKey', event.target.value)}
-                            placeholder={t('输入你的 API Key', 'Enter your API Key')}
-                            autoComplete="off"
-                            spellCheck={false}
-                          />
-                          <button
-                            type="button"
-                            aria-label={
-                              showKey
-                                ? t('隐藏 API Key', 'Hide API Key')
-                                : t('显示 API Key', 'Show API Key')
-                            }
-                            onClick={() => setShowKey((value) => !value)}
-                          >
-                            {showKey ? <EyeOff size={16} /> : <Eye size={16} />}
-                          </button>
-                        </div>
-                      </div>
-                      <div className="field">
-                        <label htmlFor="model">
-                          Model ID{' '}
-                          <button
-                            className="text-button"
-                            onClick={() => setManualModel((value) => !value)}
-                          >
-                            {manualModel
-                              ? t('从列表选择', 'Choose from list')
-                              : t('手动填写', 'Enter manually')}
-                          </button>
-                        </label>
-                        <div className="model-row">
-                          {manualModel ? (
-                            <input
-                              id="model"
-                              value={settings.model}
-                              onChange={(event) => update('model', event.target.value)}
-                              placeholder={t(
-                                '输入服务商提供的 Model ID',
-                                'Enter the Model ID from your provider',
+                      {settings.provider === 'openai' && (
+                        <>
+                          <div className="field">
+                            <label htmlFor="base-url">
+                              Base URL{' '}
+                              <span
+                                className="field-tip"
+                                title={t(
+                                  '填写包含版本路径的接口根地址，例如 https://api.openai.com/v1',
+                                  'Enter the API base URL including its version path, such as https://api.openai.com/v1',
+                                )}
+                              >
+                                <CircleHelp size={13} />
+                              </span>
+                            </label>
+                            <div className="input-icon">
+                              <Globe2 size={16} />
+                              <input
+                                id="base-url"
+                                type="url"
+                                value={settings.baseUrl}
+                                onChange={(event) => update('baseUrl', event.target.value)}
+                                placeholder="https://api.openai.com/v1"
+                                spellCheck={false}
+                              />
+                            </div>
+                            <p className="field-hint">
+                              {t(
+                                '填写接口根地址，无需添加 /chat/completions',
+                                'Enter the API base URL without /chat/completions',
                               )}
-                              spellCheck={false}
-                            />
-                          ) : (
-                            <Select
-                              id="model"
-                              value={settings.model}
-                              onChange={(value) => update('model', value)}
-                            >
-                              <option value="">
-                                {t('选择翻译模型', 'Choose a translation model')}
-                              </option>
-                              {[
-                                ...new Set([
-                                  ...(settings.model ? [settings.model] : []),
-                                  ...models,
-                                ]),
-                              ].map((model) => (
-                                <option key={model} value={model}>
-                                  {model}
-                                </option>
-                              ))}
-                            </Select>
-                          )}
-                          <button
-                            className="fetch-button"
-                            aria-label={t('获取模型', 'Fetch models')}
-                            title={t('获取模型', 'Fetch models')}
-                            onClick={() => void runApi('models')}
-                          >
-                            <RefreshCw size={16} className={busy === 'models' ? 'spinning' : ''} />
-                          </button>
-                        </div>
-                      </div>
+                            </p>
+                          </div>
+                          <div className="field">
+                            <label htmlFor="api-key">API Key</label>
+                            <div className="input-icon key-input">
+                              <LockKeyhole size={16} />
+                              <input
+                                id="api-key"
+                                type={showKey ? 'text' : 'password'}
+                                value={settings.apiKey}
+                                onChange={(event) => update('apiKey', event.target.value)}
+                                placeholder={t('输入你的 API Key', 'Enter your API Key')}
+                                autoComplete="off"
+                                spellCheck={false}
+                              />
+                              <button
+                                type="button"
+                                aria-label={
+                                  showKey
+                                    ? t('隐藏 API Key', 'Hide API Key')
+                                    : t('显示 API Key', 'Show API Key')
+                                }
+                                onClick={() => setShowKey((value) => !value)}
+                              >
+                                {showKey ? <EyeOff size={16} /> : <Eye size={16} />}
+                              </button>
+                            </div>
+                          </div>
+                          <div className="field">
+                            <label htmlFor="model">
+                              Model ID{' '}
+                              <button
+                                className="text-button"
+                                onClick={() => setManualModel((value) => !value)}
+                              >
+                                {manualModel
+                                  ? t('从列表选择', 'Choose from list')
+                                  : t('手动填写', 'Enter manually')}
+                              </button>
+                            </label>
+                            <div className="model-row">
+                              {manualModel ? (
+                                <input
+                                  id="model"
+                                  value={settings.model}
+                                  onChange={(event) => update('model', event.target.value)}
+                                  placeholder={t(
+                                    '输入服务商提供的 Model ID',
+                                    'Enter the Model ID from your provider',
+                                  )}
+                                  spellCheck={false}
+                                />
+                              ) : (
+                                <Select
+                                  id="model"
+                                  value={settings.model}
+                                  onChange={(value) => update('model', value)}
+                                >
+                                  <option value="">
+                                    {t('选择翻译模型', 'Choose a translation model')}
+                                  </option>
+                                  {[
+                                    ...new Set([
+                                      ...(settings.model ? [settings.model] : []),
+                                      ...models,
+                                    ]),
+                                  ].map((model) => (
+                                    <option key={model} value={model}>
+                                      {model}
+                                    </option>
+                                  ))}
+                                </Select>
+                              )}
+                              <button
+                                className="fetch-button"
+                                aria-label={t('获取模型', 'Fetch models')}
+                                title={t('获取模型', 'Fetch models')}
+                                onClick={() => void runApi('models')}
+                              >
+                                <RefreshCw
+                                  size={16}
+                                  className={busy === 'models' ? 'spinning' : ''}
+                                />
+                              </button>
+                            </div>
+                          </div>
+                        </>
+                      )}
                     </fieldset>
                     <div className="data-notice">
                       <h3>
@@ -751,8 +786,8 @@ export function App() {
                   >
                     <p className="about-intro">
                       {t(
-                        '在 YouTube 和 X 上看视频时，Subline 读取视频的原文字幕，用你自己的 OpenAI 兼容接口翻译，再把原文和译文一起显示在播放器里。',
-                        'Subline reads subtitles on YouTube and X, translates them through your OpenAI-compatible API, and displays the source and translation in the player.',
+                        '在 YouTube 和 X 上看视频时，Subline 读取视频的原文字幕，通过 Microsoft Translate 或你自己的 OpenAI 兼容接口翻译，再把原文和译文一起显示在播放器里。',
+                        'Subline reads subtitles on YouTube and X, translates them through Microsoft Translate or your OpenAI-compatible API, and displays the source and translation in the player.',
                       )}
                     </p>
                     <ul className="about-features">
