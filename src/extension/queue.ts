@@ -117,6 +117,10 @@ export class TranslationQueue {
     }
   }
 
+  hasPrefetch(consumer: string): boolean {
+    return (this.consumers.get(consumer)?.packs.length ?? 0) > 0;
+  }
+
   prefetch(
     consumer: string,
     settings: CaptionTranslationSettings,
@@ -500,5 +504,158 @@ export class TranslationQueue {
         reject(failure);
       },
     );
+  }
+}
+
+export class HybridTranslationQueue {
+  private readonly microsoft: TranslationQueue;
+  private readonly openai: TranslationQueue;
+  private readonly microsoftStopped = new Set<string>();
+
+  constructor(
+    cacheLimit = translationCacheLimit,
+    trace: (event: TraceEvent) => void = () => {},
+    private readonly microsoftAllowed: () => boolean = () => true,
+  ) {
+    this.microsoft = new TranslationQueue(cacheLimit, trace);
+    this.openai = new TranslationQueue(cacheLimit, trace);
+  }
+
+  restore(entries: Iterable<readonly [string, string]>, store: TranslationStore): void {
+    const microsoft: (readonly [string, string])[] = [];
+    const openai: (readonly [string, string])[] = [];
+    for (const entry of entries) {
+      const provider = translationProvider(entry[0]);
+      if (provider === 'microsoft') microsoft.push(entry);
+      if (provider === 'openai') openai.push(entry);
+    }
+    this.microsoft.restore(microsoft, store);
+    this.openai.restore(openai, store);
+  }
+
+  lookup(settings: CaptionTranslationSettings, text: string): Promise<string | null> {
+    if (settings.provider === 'microsoft') return this.microsoft.lookup(settings, text);
+    const microsoftSettings = { ...settings, provider: 'microsoft' as const };
+    const microsoft = this.microsoftAllowed()
+      ? this.microsoft.lookup(microsoftSettings, text)
+      : Promise.resolve(null);
+    return firstLookup(this.openai.lookup(settings, text), microsoft);
+  }
+
+  request(consumer: string, settings: CaptionTranslationSettings, text: string): Promise<string> {
+    if (settings.provider === 'microsoft') return this.microsoft.request(consumer, settings, text);
+    const microsoftSettings = { ...settings, provider: 'microsoft' as const };
+    const openai = this.openai.request(consumer, settings, text).then((translation) => {
+      if (!this.openai.hasPrefetch(consumer)) this.stopMicrosoft(consumer);
+      return translation;
+    });
+    const microsoft =
+      this.microsoftAllowed() && !this.microsoftStopped.has(consumer)
+        ? this.microsoft.request(consumer, microsoftSettings, text)
+        : Promise.reject(new Error('Microsoft fallback is not authorized.'));
+    return firstTranslation(openai, microsoft);
+  }
+
+  prefetch(
+    consumer: string,
+    settings: CaptionTranslationSettings,
+    cues: readonly PlaybackCue[],
+    time = 0,
+    rate = 1,
+  ): Promise<(string | null)[]> {
+    if (settings.provider === 'microsoft')
+      return this.microsoft.prefetch(consumer, settings, cues, time, rate);
+    const microsoftSettings = { ...settings, provider: 'microsoft' as const };
+    const openai = this.openai.prefetch(consumer, settings, cues, time, rate);
+    const microsoft =
+      !this.microsoftAllowed() || this.microsoftStopped.has(consumer)
+        ? Promise.resolve<(string | null)[]>([])
+        : this.microsoft.prefetch(consumer, microsoftSettings, cues, time, rate);
+    return Promise.all([openai, microsoft]).then(([openaiResults, microsoftResults]) => {
+      if (openaiResults.length && openaiResults.every((translation) => translation !== null))
+        this.stopMicrosoft(consumer);
+      return cues.map((_, index) => openaiResults[index] ?? microsoftResults[index] ?? null);
+    });
+  }
+
+  hold(consumer: string, time: number): void {
+    this.microsoft.hold(consumer, time);
+    this.openai.hold(consumer, time);
+  }
+
+  pause(consumer: string): void {
+    this.microsoft.pause(consumer);
+    this.openai.pause(consumer);
+  }
+
+  resume(consumer: string): void {
+    this.microsoft.resume(consumer);
+    this.openai.resume(consumer);
+  }
+
+  release(consumers: readonly string[]): void {
+    this.microsoft.release(consumers);
+    this.openai.release(consumers);
+    for (const consumer of consumers) this.microsoftStopped.delete(consumer);
+  }
+
+  reset(): void {
+    this.microsoft.reset();
+    this.openai.reset();
+    this.microsoftStopped.clear();
+  }
+
+  disableMicrosoft(): void {
+    this.microsoft.reset();
+    this.microsoftStopped.clear();
+  }
+
+  private stopMicrosoft(consumer: string): void {
+    if (this.microsoftStopped.has(consumer)) return;
+    this.microsoftStopped.add(consumer);
+    this.microsoft.hold(consumer, 0);
+  }
+}
+
+function firstTranslation(first: Promise<string>, second: Promise<string>): Promise<string> {
+  return new Promise((resolve, reject) => {
+    let rejected = 0;
+    let firstError: unknown;
+    const settle = (promise: Promise<string>, remember: (error: unknown) => void) =>
+      promise.then(resolve, (error) => {
+        remember(error);
+        rejected += 1;
+        if (rejected === 2) reject(firstError ?? error);
+      });
+    settle(first, (error) => {
+      firstError = error;
+    });
+    settle(second, () => {});
+  });
+}
+
+function firstLookup(
+  first: Promise<string | null>,
+  second: Promise<string | null>,
+): Promise<string | null> {
+  return new Promise((resolve) => {
+    let empty = 0;
+    const settle = (promise: Promise<string | null>) =>
+      promise.then((translation) => {
+        if (translation !== null) resolve(translation);
+        else if (++empty === 2) resolve(null);
+      });
+    settle(first);
+    settle(second);
+  });
+}
+
+function translationProvider(key: string): 'microsoft' | 'openai' | null {
+  try {
+    const parsed: unknown = JSON.parse(key);
+    if (!Array.isArray(parsed)) return null;
+    return parsed[0] === 'microsoft' || parsed[0] === 'openai' ? parsed[0] : null;
+  } catch {
+    return null;
   }
 }

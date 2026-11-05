@@ -1,6 +1,10 @@
 import { readStoredTranslation } from '../shared/caption-translation';
 import { translationIdentityLength } from '../shared/settings';
-import type { TranslationQueue, TranslationStore } from './queue';
+import type { TranslationStore } from './queue';
+
+interface TranslationRestorer {
+  restore(entries: Iterable<readonly [string, string]>, store: TranslationStore): void;
+}
 
 const PREFIX = 'subline.translation.v3:';
 
@@ -50,7 +54,7 @@ function sessionStore(): TranslationStore {
   };
 }
 
-export async function restoreTranslations(queue: TranslationQueue): Promise<void> {
+export async function restoreTranslations(queue: TranslationRestorer): Promise<void> {
   let stored: Record<string, unknown> = {};
   try {
     stored = await chrome.storage.session.get(null);

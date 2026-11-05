@@ -25,6 +25,7 @@ import {
   DEFAULT_SETTINGS,
   applySettingsPatch,
   hasProviderConsent,
+  MICROSOFT_ORIGIN,
   isProviderConfigured,
   providerOrigin,
   settingsPatch,
@@ -127,6 +128,7 @@ export function App() {
   const origin = providerOrigin(settings);
   const provider = origin ? new URL(origin).host : t('你填写的 Provider', 'your provider');
   const consented = hasProviderConsent(settings);
+  const microsoftConsented = settings.providerConsent.split(',').includes(MICROSOFT_ORIGIN);
 
   useEffect(() => {
     void loadSettings()
@@ -550,6 +552,26 @@ export function App() {
                           `I agree to send subtitle text to ${provider} for translation`,
                         )}
                       </label>
+                      {settings.provider === 'openai' && (
+                        <label className="consent-check">
+                          <input
+                            type="checkbox"
+                            checked={microsoftConsented}
+                            onChange={(event) => {
+                              const origins = new Set(
+                                settings.providerConsent.split(',').filter(Boolean),
+                              );
+                              if (event.target.checked) origins.add(MICROSOFT_ORIGIN);
+                              else origins.delete(MICROSOFT_ORIGIN);
+                              update('providerConsent', [...origins].join(','));
+                            }}
+                          />
+                          {t(
+                            '我同意将字幕原文发送到 Microsoft 作为临时翻译',
+                            'I agree to send subtitle text to Microsoft for temporary translations',
+                          )}
+                        </label>
+                      )}
                     </div>
                     <div className="api-footer">
                       <button
