@@ -27,7 +27,12 @@ let settings: Settings;
 
 beforeEach(() => {
   vi.resetAllMocks();
-  settings = { ...structuredClone(DEFAULT_SETTINGS), apiKey: 'test-key', model: 'chosen-model' };
+  settings = {
+    ...structuredClone(DEFAULT_SETTINGS),
+    provider: 'openai',
+    apiKey: 'test-key',
+    model: 'chosen-model',
+  };
   vi.mocked(loadSettings).mockImplementation(async () => structuredClone(settings));
   vi.mocked(loadCachedModels).mockResolvedValue(['cached-a', 'cached-b']);
   vi.mocked(saveCachedModels).mockResolvedValue(undefined);
@@ -141,4 +146,37 @@ it('keeps fetched models usable but reports that persistence failed', async () =
     'could not be cached locally',
   );
   expect(document.querySelector<HTMLButtonElement>('.fetch-button')!.disabled).toBe(false);
+});
+
+async function chooseProvider(value: string) {
+  await act(async () => {
+    const select = document.querySelector<HTMLSelectElement>('#provider')!;
+    select.value = value;
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+}
+
+it('shows Microsoft by default and tests without an API key or model', async () => {
+  settings = structuredClone(DEFAULT_SETTINGS);
+  vi.mocked(apiAction).mockResolvedValue('译文');
+  await render();
+  expect(document.querySelector<HTMLSelectElement>('#provider')!.value).toBe('microsoft');
+  expect(document.querySelector('#api-key')).toBeNull();
+  expect(document.querySelector('#model')).toBeNull();
+  expect(document.querySelector('#base-url')).toBeNull();
+  await act(async () => document.querySelector<HTMLButtonElement>('.test-button')!.click());
+  expect(allowApiHost).toHaveBeenCalledWith(settings);
+  expect(apiAction).toHaveBeenCalledWith('test', settings);
+  expect(document.querySelector('.connection-badge')!.textContent).toContain('Connected');
+});
+
+it('restores the OpenAI fields after switching away and back', async () => {
+  await render();
+  await chooseProvider('microsoft');
+  expect(document.querySelector('#api-key')).toBeNull();
+  expect(document.querySelector('.consent-check')!.textContent).toContain('edge.microsoft.com');
+  await chooseProvider('openai');
+  expect(document.querySelector<HTMLInputElement>('#api-key')!.value).toBe('test-key');
+  expect(document.querySelector<HTMLSelectElement>('#model')!.value).toBe('chosen-model');
+  expect(document.querySelector<HTMLInputElement>('#base-url')!.value).toBe(settings.baseUrl);
 });

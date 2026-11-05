@@ -5,6 +5,7 @@ import {
   normalizeSettings,
   STORAGE_KEY,
   validateBaseUrl,
+  providerOrigin,
   type Settings,
   type SettingsPatch,
 } from './settings';
@@ -100,7 +101,7 @@ export async function saveCachedModels(settings: ModelProvider, models: string[]
 }
 
 export async function allowApiHost(settings: Settings): Promise<void> {
-  const url = validateBaseUrl(settings.baseUrl);
+  const url = new URL(providerOrigin(settings) || validateBaseUrl(settings.baseUrl).origin);
   if (!isExtension) return;
   const granted = await chrome.permissions.request({
     origins: [`${url.protocol}//${url.hostname}/*`],

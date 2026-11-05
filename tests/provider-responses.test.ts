@@ -1,10 +1,11 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { translateCaptionBatch } from '../src/shared/api';
-import { DEFAULT_SETTINGS } from '../src/shared/settings';
+import { DEFAULT_SETTINGS, type CaptionTranslationSettings } from '../src/shared/settings';
 import { translationReply } from './fixtures/provider';
 
-const settings = {
+const settings: CaptionTranslationSettings = {
   ...DEFAULT_SETTINGS,
+  provider: 'openai',
   captionLanguage: 'en' as const,
   apiKey: 'key',
   model: 'test',

@@ -2,7 +2,12 @@ import { t } from '../shared/i18n';
 import { LANGUAGES } from '../shared/languages';
 import { useEffect, useState } from 'react';
 import { Settings2, Subtitles } from 'lucide-react';
-import { DEFAULT_SETTINGS, hasProviderConsent, type Settings } from '../shared/settings';
+import {
+  DEFAULT_SETTINGS,
+  hasProviderConsent,
+  isProviderConfigured,
+  type Settings,
+} from '../shared/settings';
 import { isExtension, loadSettings, saveSettings } from '../shared/storage';
 import {
   formatExactTokens,
@@ -143,7 +148,7 @@ export function Popup() {
     }
   }
 
-  const configured = Boolean(settings.apiKey.trim() && settings.model.trim());
+  const configured = isProviderConfigured(settings);
 
   return (
     <main
@@ -202,8 +207,10 @@ export function Popup() {
 
       <section className="popup-model" aria-labelledby="popup-model-label">
         <div className="popup-model-row">
-          <h2 id="popup-model-label">Model</h2>
-          {ready && settings.model.trim() ? (
+          <h2 id="popup-model-label">{settings.provider === 'microsoft' ? 'Provider' : 'Model'}</h2>
+          {ready && settings.provider === 'microsoft' ? (
+            <span className="popup-model-id">Microsoft Translate</span>
+          ) : ready && settings.model.trim() ? (
             <code className="popup-model-id" title={settings.model}>
               {settings.model}
             </code>

@@ -34,6 +34,7 @@ beforeEach(() => {
   environment.extension = true;
   stored = {
     ...structuredClone(DEFAULT_SETTINGS),
+    provider: 'openai',
     apiKey: 'test-key',
     model: 'test-model',
   };
@@ -176,7 +177,10 @@ it('shows only a brief connection success alert and gives its replacement a full
 });
 
 it('restarts the lifetime for identical validation errors and allows manual dismissal', async () => {
-  vi.mocked(loadSettings).mockResolvedValue(structuredClone(DEFAULT_SETTINGS));
+  vi.mocked(loadSettings).mockResolvedValue({
+    ...structuredClone(DEFAULT_SETTINGS),
+    provider: 'openai',
+  });
   await render();
   await click('.test-button');
   const first = document.querySelector('[role="alert"]')!;

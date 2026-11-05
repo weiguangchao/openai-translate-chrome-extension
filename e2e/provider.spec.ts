@@ -168,3 +168,54 @@ test('youtube: a stalled opening batch times out without a retry and the next ba
     { dense: true, stallFirst: true },
   );
 });
+
+test('youtube: Microsoft translates captions without OpenAI credentials', async ({}, info) => {
+  await withPlayer('youtube', info, async (p) => {
+    const microsoftPosts: string[][] = [];
+    await p.context.route('https://edge.microsoft.com/translate/translatetext?*', async (route) => {
+      const request = route.request();
+      if (request.method() === 'OPTIONS') {
+        await route.fulfill({
+          status: 204,
+          headers: {
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'POST',
+            'Access-Control-Allow-Headers': 'Content-Type',
+          },
+        });
+        return;
+      }
+      const texts: string[] = request.postDataJSON();
+      microsoftPosts.push(texts);
+      expect(request.headers()).not.toHaveProperty('authorization');
+      const url = new URL(request.url());
+      expect(url.searchParams.get('from')).toBe('en');
+      expect(url.searchParams.get('to')).toBe('zh-Hans');
+      await route.fulfill({
+        contentType: 'text/plain',
+        headers: { 'Access-Control-Allow-Origin': '*' },
+        body: JSON.stringify(
+          texts.map((text) => ({
+            translations: [{ text: text === source ? translation : '下一条译文。', to: 'zh-Hans' }],
+          })),
+        ),
+      });
+    });
+    await p.settings({
+      provider: 'microsoft',
+      apiKey: '',
+      model: '',
+      providerConsent: 'https://edge.microsoft.com',
+    });
+    await p.settingsPage.goto(`chrome-extension://${p.extensionId}/index.html`);
+    await expect(p.settingsPage.locator('#provider')).toHaveValue('microsoft');
+    await expect(p.settingsPage.locator('#api-key')).toHaveCount(0);
+    await p.play();
+    await p.pair(source, translation);
+    expect(microsoftPosts.flat()).toContain(source);
+    expect(p.posts).toHaveLength(0);
+    await p.settingsPage.reload();
+    await expect(p.settingsPage.locator('#provider')).toHaveValue('microsoft');
+    await expect(p.settingsPage.locator('.consent-check input')).toBeChecked();
+  });
+});

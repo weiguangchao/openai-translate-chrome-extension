@@ -12,6 +12,7 @@ import {
 
 const config = (): CaptionTranslationSettings => ({
   ...structuredClone(DEFAULT_SETTINGS),
+  provider: 'openai',
   captionLanguage: 'en',
   baseUrl: 'https://provider.example/api/v1/',
   apiKey: 'private-test-key',

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { DEFAULT_SETTINGS } from '../src/shared/settings';
+import { DEFAULT_SETTINGS, type CaptionTranslationSettings } from '../src/shared/settings';
 import { packedCues, prefetchItems, providerReply, requestedTexts } from './fixtures/provider';
 import {
   providerSendWindowMs,
@@ -9,8 +9,9 @@ import {
 
 let api: typeof import('../src/shared/api');
 let TranslationQueue: typeof import('../src/extension/queue').TranslationQueue;
-const settings = {
+const settings: CaptionTranslationSettings = {
   ...DEFAULT_SETTINGS,
+  provider: 'openai',
   captionLanguage: 'en' as const,
   apiKey: 'key',
   model: 'budget-test',

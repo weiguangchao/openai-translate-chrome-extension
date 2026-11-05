@@ -8,7 +8,7 @@ import {
 import { planPlayback } from '../src/shared/playback-plan';
 let TranslationQueue: typeof import('../src/extension/queue').TranslationQueue;
 let failureOf: typeof import('../src/shared/provider-error').failureOf;
-import { DEFAULT_SETTINGS } from '../src/shared/settings';
+import { DEFAULT_SETTINGS, type CaptionTranslationSettings } from '../src/shared/settings';
 import { providerReply, requestedTexts, translationReply } from './fixtures/provider';
 import type { TraceEvent } from '../src/shared/trace';
 
@@ -39,8 +39,9 @@ function pendingProvider() {
     requests[index].resolve(providerReply(requests[index].texts, (text) => `${text} 译文`));
   return { fetch, requests, batches, reply };
 }
-const settings = {
+const settings: CaptionTranslationSettings = {
   ...DEFAULT_SETTINGS,
+  provider: 'openai',
   captionLanguage: 'en' as const,
   apiKey: 'test-key',
   model: 'test-model',

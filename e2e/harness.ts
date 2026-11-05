@@ -175,6 +175,7 @@ export class Player {
       enabled: true,
       youtube: true,
       x: true,
+      provider: 'openai',
       baseUrl: providerUrl.replace('/chat/completions', ''),
       apiKey,
       model: 'e2e-fixed-model',
