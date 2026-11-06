@@ -15,12 +15,14 @@ export interface TranslateRequest {
   type: 'translate';
   text: string;
   captionLanguage: Language;
+  pageTitle: string;
   cacheOnly?: boolean;
 }
 
 export interface PrefetchRequest {
   type: 'prefetch';
   captionLanguage: Language | null;
+  pageTitle: string;
   time: number;
   rate: number;
   cues: readonly PlaybackCue[];
@@ -66,6 +68,12 @@ function captionLanguageOf(message: object): Language {
   return language;
 }
 
+function pageTitleOf(message: object): string {
+  const { pageTitle } = message as Record<string, unknown>;
+  if (typeof pageTitle !== 'string') throw new Error(t('页面标题无效。', 'Invalid page title.'));
+  return pageTitle;
+}
+
 export function readTranslateRequest(message: object): TranslateRequest & { cacheOnly: boolean } {
   const { text, cacheOnly } = message as Record<string, unknown>;
   if (!validText(text)) throw new Error(t('字幕内容无效。', 'Invalid subtitle text.'));
@@ -74,6 +82,7 @@ export function readTranslateRequest(message: object): TranslateRequest & { cach
     text,
     cacheOnly: cacheOnly === true,
     captionLanguage: captionLanguageOf(message),
+    pageTitle: pageTitleOf(message),
   };
 }
 
@@ -97,6 +106,7 @@ export function readPrefetchRequest(message: object): PrefetchRequest {
   return {
     type: 'prefetch',
     captionLanguage: cues.length ? captionLanguageOf(message) : null,
+    pageTitle: cues.length ? pageTitleOf(message) : '',
     time,
     rate,
     cues: cues.map((cue: unknown): PlaybackCue => {

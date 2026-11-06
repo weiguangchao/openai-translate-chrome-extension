@@ -13,14 +13,14 @@ import type { SourceCache } from '../src/core/bridge/source-cache';
 declare const caption: TimedCaption;
 declare const item: PlaybackCue;
 declare const cache: SourceCache;
-const frame: CaptionFrame = { text: 'DOM caption.', captionLanguage: 'en', cacheOnly: false, debounce: 0 };
-const request: PrefetchRequest = { type: 'prefetch', captionLanguage: 'en', time: 0, rate: 1, cues: [{ text: item.text, start: 0, end: 1 }] };
+const frame: CaptionFrame = { text: 'DOM caption.', captionLanguage: 'en', pageTitle: 'Video title', cacheOnly: false, debounce: 0 };
+const request: PrefetchRequest = { type: 'prefetch', captionLanguage: 'en', pageTitle: 'Video title', time: 0, rate: 1, cues: [{ text: item.text, start: 0, end: 1 }] };
 timedCaptions([{ startTime: 0, endTime: 1, text: 'A' }]);
 `;
   const invalid = [
-    `const oldSplit: CaptionFrame = { kind: 'split', text: 'A', captionLanguage: 'en', cacheOnly: false, debounce: 0 };`,
-    `const missingText: CaptionFrame = { captionLanguage: 'en', cacheOnly: false, debounce: 0 };`,
-    `const parallelArrays: PrefetchRequest = { type: 'prefetch', captionLanguage: 'en', texts: ['A'], segments: [0] };`,
+    `const oldSplit: CaptionFrame = { kind: 'split', text: 'A', captionLanguage: 'en', pageTitle: 'Video title', cacheOnly: false, debounce: 0 };`,
+    `const missingText: CaptionFrame = { captionLanguage: 'en', pageTitle: 'Video title', cacheOnly: false, debounce: 0 };`,
+    `const parallelArrays: PrefetchRequest = { type: 'prefetch', captionLanguage: 'en', pageTitle: 'Video title', texts: ['A'], segments: [0] };`,
     `const missingTime: PlaybackCue = { text: 'A' };`,
     `const oldSplitFlag: PlaybackCue = { text: 'A', start: 0, end: 1, needsSplit: false };`,
     `item.start = 1;`,

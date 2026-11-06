@@ -13,7 +13,11 @@ beforeEach(async () => {
   ({ TranslationQueue } = await import('../src/extension/queue'));
 });
 
-const settings: CaptionTranslationSettings = { ...DEFAULT_SETTINGS, captionLanguage: 'en' };
+const settings: CaptionTranslationSettings = {
+  ...DEFAULT_SETTINGS,
+  captionLanguage: 'en',
+  pageTitle: '',
+};
 const reply = (texts: string[], to = 'zh-Hans') =>
   new Response(JSON.stringify(texts.map((text) => ({ translations: [{ text, to }] }))), {
     headers: { 'Content-Type': 'text/plain' },

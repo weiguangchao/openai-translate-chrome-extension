@@ -32,6 +32,7 @@ export interface Platform {
   readonly id: PlatformId;
   readonly style: string;
   videoId(): string;
+  title(): string;
   findVideo?(): HTMLVideoElement | undefined;
   findPlayer(video: HTMLVideoElement): HTMLElement | null;
   toolbar(player: HTMLElement): PlayerToolbar | null;
@@ -41,3 +42,10 @@ export interface Platform {
 }
 
 export type PlatformFactory = (changed: () => void) => Platform;
+
+export function pageTitle(siteSuffix: RegExp): string {
+  return document.title
+    .replace(/^\(\d+\+?\)\s*/, '')
+    .replace(siteSuffix, '')
+    .trim();
+}

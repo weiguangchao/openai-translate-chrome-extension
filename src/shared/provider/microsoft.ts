@@ -88,7 +88,7 @@ export async function translate(
   signal?: AbortSignal,
 ): Promise<string> {
   const translations = await translateCaptionBatch(
-    { ...settings, captionLanguage: 'en' },
+    { ...settings, captionLanguage: 'en', pageTitle: '' },
     [text],
     signal,
   );

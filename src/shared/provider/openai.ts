@@ -133,18 +133,20 @@ export async function fetchModels(settings: Settings): Promise<string[]> {
     );
   return [...new Set(ids)].sort((a, b) => a.localeCompare(b));
 }
-function translatorInstructions(settings: Settings): string {
+function translatorInstructions(settings: Settings, pageTitle: string): string {
   const target = englishLanguageName(settings.targetLanguage);
-  return `You are a professional ${target} native translator. Translate each source item accurately and fluently into ${target}.
+  return `You are a professional native ${target} translator. Accurately and fluently translate each source item into ${target}, preserving meaning, tone, paragraphs, line breaks, and formatting; for each item provide only the translation, with no explanations, preambles, or notes. If the content contains HTML tags, place them correctly according to the translated word order and keep the tags intact; fully preserve placeholders and code; keep proper nouns and other content untranslated only when they do not need translation. Complete the translation using the following title, summary, and terminology context:
 
-## Translation Requirements
-- Return only the translated content for each item, following the required response format. Do not add explanations, apologies, greetings, or commentary. If an item should remain untranslated, return it unchanged.
-- Do not add punctuation, ellipses, dashes, or decorative symbols that are not present or required in the source text.
+## Context Awareness
+Document Metadata:
+Title: “${pageTitle}”
+
 `;
 }
 
 async function complete(
   settings: Settings,
+  instructions: string,
   input: string,
   maxTokens: number,
   signal: AbortSignal | undefined,
@@ -160,7 +162,7 @@ async function complete(
       messages: [
         {
           role: 'system',
-          content: translatorInstructions(settings) + (caption ? multiItemProtocol : ''),
+          content: instructions,
         },
         {
           role: 'user',
@@ -191,7 +193,7 @@ export async function translate(
   text: string,
   signal?: AbortSignal,
 ): Promise<string> {
-  return complete(settings, text, 65536, signal);
+  return complete(settings, translatorInstructions(settings, ''), text, 65536, signal);
 }
 
 export async function translateCaptionBatch(
@@ -203,7 +205,15 @@ export async function translateCaptionBatch(
 ): Promise<string[] | null> {
   const input =
     texts.map((text, index) => `[[p${index}]]\n${text}`).join('\n') + '\n[[source_end]]';
-  const response = await complete(settings, input, 65536, signal, true, policy);
+  const response = await complete(
+    settings,
+    translatorInstructions(settings, settings.pageTitle) + multiItemProtocol,
+    input,
+    65536,
+    signal,
+    true,
+    policy,
+  );
   signal?.throwIfAborted();
   const translations = readCaptionTranslations(response, texts.length);
   if (!translations) return null;
@@ -212,10 +222,14 @@ export async function translateCaptionBatch(
 }
 
 const multiItemProtocol = `
+
 ## Multi-item processing protocol
 The input contains source items. Each item starts with its exact request id on one title line, followed by that item's source text. The source list ends with exactly one [[source_end]] line. Process every item independently according to the active task instructions, using the other items only as context. Return every supplied id exactly once in any order and preserve each id title byte-for-byte. Processed text may span multiple lines.
 
-Return each id title followed by only its processed text. Do not return the [[source_end]] line.
+When a native response schema is supplied, follow it exactly. Otherwise, return each id title followed by only its processed text.
+
+
+
 Do not wrap the entire response or protocol envelope in a Markdown fence. Fenced code blocks that belong to an item's processed content may be preserved. Do not include explanations outside processed text.
 `;
 

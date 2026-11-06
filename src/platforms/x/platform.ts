@@ -1,7 +1,7 @@
 import { NativeTimeline, selectedTrack } from '../../core/native';
 import { BridgeTimeline } from '../../core/bridge/client';
 import { languageTrack } from '../../core/languages';
-import type { Platform, PlatformFactory } from '../../core/platform';
+import { pageTitle, type Platform, type PlatformFactory } from '../../core/platform';
 import { activeXVideo, findXPlayer, readXCaption, xVideoId } from './player';
 
 export const createXPlatform: PlatformFactory = (changed): Platform => {
@@ -11,6 +11,7 @@ export const createXPlatform: PlatformFactory = (changed): Platform => {
     id: 'x',
     style: '',
     videoId: xVideoId,
+    title: () => pageTitle(/\s+\/\s+X$/),
     findVideo: activeXVideo,
     findPlayer: findXPlayer,
     toolbar(player) {

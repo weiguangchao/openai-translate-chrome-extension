@@ -626,7 +626,9 @@ it.each([false, true])(
     if (occupied) {
       const { translateCaptionBatch } = await import('../src/shared/api');
       for (let index = 0; index < translationSendsPerSecond; index++)
-        void translateCaptionBatch({ ...saved, captionLanguage: 'en' }, [`Other tab ${index}.`]);
+        void translateCaptionBatch({ ...saved, captionLanguage: 'en', pageTitle: '' }, [
+          `Other tab ${index}.`,
+        ]);
       await vi.advanceTimersByTimeAsync(0);
     }
     const before = requested.length;

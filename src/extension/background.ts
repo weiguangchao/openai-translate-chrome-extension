@@ -82,7 +82,7 @@ async function contentRequest(
     if (!snapshot.captionLanguage) throw new UnsupportedLanguageError();
     return queue.prefetch(
       consumer,
-      { ...settings, captionLanguage: snapshot.captionLanguage },
+      { ...settings, captionLanguage: snapshot.captionLanguage, pageTitle: snapshot.pageTitle },
       snapshot.cues,
       snapshot.time,
       snapshot.rate,
@@ -90,8 +90,8 @@ async function contentRequest(
   }
   if (type === 'translate') {
     requireEnabled(platform);
-    const { text, cacheOnly, captionLanguage } = readTranslateRequest(message);
-    const effective = { ...settings, captionLanguage };
+    const { text, cacheOnly, captionLanguage, pageTitle } = readTranslateRequest(message);
+    const effective = { ...settings, captionLanguage, pageTitle };
     return cacheOnly ? queue.lookup(effective, text) : queue.request(consumer, effective, text);
   }
   throw new Error(t('不支持的请求。', 'Unsupported request.'));
