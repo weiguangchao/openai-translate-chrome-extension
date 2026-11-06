@@ -1,7 +1,7 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import manifest from '../public/manifest.json';
-import { fetchModels, translate, translateCaptionBatch } from '../src/shared/api';
 import { TOKEN_USAGE_KEY } from '../src/shared/token-usage';
+import { providerSendWindowMs } from '../src/shared/tuning';
 import {
   DEFAULT_SETTINGS,
   normalizeSettings,
@@ -19,7 +19,19 @@ const config = (): CaptionTranslationSettings => ({
   apiKey: 'private-test-key',
   model: 'subtitle-model',
 });
-afterEach(() => vi.unstubAllGlobals());
+let fetchModels: typeof import('../src/shared/api').fetchModels;
+let translate: typeof import('../src/shared/api').translate;
+let translateCaptionBatch: typeof import('../src/shared/api').translateCaptionBatch;
+
+beforeEach(async () => {
+  vi.useFakeTimers();
+  vi.resetModules();
+  ({ fetchModels, translate, translateCaptionBatch } = await import('../src/shared/api'));
+});
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.useRealTimers();
+});
 
 const localHttpProviders = ['http://localhost:11434/api/v1', 'http://127.0.0.1:59271/v1'];
 
@@ -216,7 +228,9 @@ describe('OpenAI-compatible provider contract', () => {
     expect(values[TOKEN_USAGE_KEY]).toBeUndefined();
     await expect(translate(config(), 'Hello')).rejects.toThrow('The model returned no translation');
     await expect(translate(config(), 'Hello')).resolves.toBe('第一句');
-    await expect(translate(config(), 'Next')).resolves.toBe('第二句');
+    const next = translate(config(), 'Next');
+    await vi.advanceTimersByTimeAsync(providerSendWindowMs);
+    await expect(next).resolves.toBe('第二句');
     expect(values[TOKEN_USAGE_KEY]).toEqual({ input: 1831, output: 266, cache: 906 });
     expect(chrome.storage.local.set).toHaveBeenCalledTimes(3);
   });

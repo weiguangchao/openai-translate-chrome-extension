@@ -1,5 +1,4 @@
-import { afterEach, expect, it, vi } from 'vitest';
-import { translateCaptionBatch } from '../src/shared/api';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { DEFAULT_SETTINGS, type CaptionTranslationSettings } from '../src/shared/settings';
 import { translationReply } from './fixtures/provider';
 
@@ -11,7 +10,17 @@ const settings: CaptionTranslationSettings = {
   apiKey: 'key',
   model: 'test',
 };
-afterEach(() => vi.unstubAllGlobals());
+let translateCaptionBatch: typeof import('../src/shared/api').translateCaptionBatch;
+
+beforeEach(async () => {
+  vi.useFakeTimers();
+  vi.resetModules();
+  ({ translateCaptionBatch } = await import('../src/shared/api'));
+});
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.useRealTimers();
+});
 
 it.each([
   '第一行\n\n第二段',

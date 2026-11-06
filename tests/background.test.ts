@@ -3,9 +3,10 @@ import { DEFAULT_SETTINGS, MICROSOFT_ORIGIN, type Settings } from '../src/shared
 import { extensionStorage } from './fixtures/extension-storage';
 import { consentedSettings } from './fixtures/settings';
 import { packedCues, providerReply, requestedTexts, translationReply } from './fixtures/provider';
-import { translationBatchLimit } from '../src/shared/tuning';
+import { providerSendWindowMs, translationBatchLimit } from '../src/shared/tuning';
 
 afterEach(async () => {
+  vi.useRealTimers();
   await new Promise((resolve) => setTimeout(resolve, 0));
   vi.unstubAllGlobals();
   vi.resetModules();
@@ -171,6 +172,7 @@ async function loadBackground(saved: Settings, session = new Map<string, unknown
   });
   await (await import('../src/shared/storage')).saveSettings(saved);
   await import('../src/extension/background');
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
   const sender = {
     id: 'extension-id',
     url: 'https://www.youtube.com/watch?v=example',
@@ -703,6 +705,7 @@ it('runs Microsoft beside OpenAI again after a seek until OpenAI covers the new 
 
   await send({ type: 'prefetch-hold', time: 600 });
   const seeked = send(window(600, batch('X')));
+  await vi.advanceTimersByTimeAsync(providerSendWindowMs);
   await vi.waitFor(() => expect(sent(true)).toEqual([...batch('A'), ...batch('X')]), wait);
   answer(true);
   await expect(
@@ -747,6 +750,7 @@ it('takes OpenAI translations from the cache after a seek and asks Microsoft onl
   ).resolves.toEqual({ ok: true, data: 'OpenAI B0' });
   const cached = batch('B').slice(0, 4);
   const back = send(window(0, [...cached, ...batch('C')]));
+  await vi.advanceTimersByTimeAsync(providerSendWindowMs);
   await vi.waitFor(() => expect(sent(true)).toEqual([...batch('A'), ...batch('C')]), wait);
   await vi.waitFor(
     () => expect(sent(false)).toEqual([...batch('A'), ...batch('B'), ...batch('C')]),
