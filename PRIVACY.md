@@ -14,7 +14,7 @@ Subline 是一个 Chrome 扩展，在 YouTube 和 X 的视频上显示双语字�
 
 你开启 Subline、选择翻译服务，并在设置页的「数据使用说明」里勾选同意后，扩展把即将播放的字幕原文发送给所选服务。没有同意时扩展不发送字幕；切换到其他服务地址后要重新同意。Microsoft Translate 请求发送到 https://edge.microsoft.com，包含字幕原文和源语言、目标语言代码，不携带 API Key、Model ID 或 Cookie。OpenAI 兼容服务请求还带有你的 API Key、Model ID、原文和译文的语言名称、当前页面标题，以及一段固定的翻译要求。页面标题去掉了开头的通知数和末尾的网站名，模型用它理解字幕所属的视频。Microsoft Translate 请求不包含页面标题。所有请求都不包含视频地址、你的视频网站账号或浏览记录。
 
-扩展把字幕原文、译文和页面标题缓存在 Chrome 的会话存储 chrome.storage.session 中，回看时不用重新请求。同一句字幕在标题不同的页面上分开缓存。会话存储只在内存中，不写入磁盘。
+扩展把字幕原文、所选翻译服务的译文和页面标题缓存在 Chrome 的会话存储 chrome.storage.session 中，回看时不用重新请求。选择 OpenAI 时，先返回的微软译文只用于当前这次显示，不写入这份缓存。同一句字幕在标题不同的页面上分开缓存。会话存储只在内存中，不写入磁盘。
 
 ### API 设置
 
@@ -89,7 +89,7 @@ On video sites where Subline is turned on, the extension reads the original subt
 
 After you turn Subline on, select a provider and accept the data use notice on the settings page, the extension sends upcoming subtitle text to that provider. Without consent, it sends no subtitles. A different provider origin needs consent again. Microsoft Translate requests go to https://edge.microsoft.com and contain subtitle text and source and target language codes, without an API key, model ID or cookies. OpenAI-compatible requests also carry your API key, model ID, source and target language names, the current page title and fixed translation instructions. The extension removes the leading notification count and the trailing site name from the page title, and the model uses the title to understand which video the subtitles belong to. Microsoft Translate requests do not include the page title. No request includes the video address, your video site account or browsing history.
 
-The extension caches subtitle text, translations and page titles in Chrome session storage, chrome.storage.session, so replayed subtitles need no new request. The same subtitle on pages with different titles gets separate cache entries. Session storage lives in memory and is never written to disk.
+The extension caches subtitle text, the selected provider's translations and page titles in Chrome session storage, chrome.storage.session, so replayed subtitles need no new request. While OpenAI is selected, a Microsoft translation shown for the current request stays out of that cache. The same subtitle on pages with different titles gets separate cache entries. Session storage lives in memory and is never written to disk.
 
 ### API settings
 

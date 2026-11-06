@@ -599,8 +599,9 @@ const openai = (texts: string[]) => texts.map((text) => `OpenAI ${text}`);
 const wait = { timeout: 3000 };
 
 it('runs Microsoft beside OpenAI again after a seek until OpenAI covers the new window', async () => {
+  const session = new Map<string, unknown>();
   const { sent, answer } = dualProvider();
-  const send = await loadBackground(dualSettings);
+  const send = await loadBackground(dualSettings, session);
   const opening = send(window(0, batch('A')));
   await vi.waitFor(() => expect(sent(true)).toEqual(batch('A')), wait);
   answer(false);
@@ -618,6 +619,14 @@ it('runs Microsoft beside OpenAI again after a seek until OpenAI covers the new 
   await vi.advanceTimersByTimeAsync(providerSendWindowMs);
   await vi.waitFor(() => expect(sent(true)).toEqual([...batch('A'), ...batch('X')]), wait);
   answer(true);
+  await vi.advanceTimersByTimeAsync(0);
+  expect([...session.values()]).not.toContain('微软 X0');
+  await vi.waitFor(
+    () => expect(sent(false)).toEqual([...batch('A'), ...batch('B'), ...batch('X')]),
+    wait,
+  );
+  answer(false);
+  await expect(seeked).resolves.toEqual({ ok: true, data: openai(batch('X')) });
   await expect(
     send({
       type: 'translate',
@@ -626,13 +635,10 @@ it('runs Microsoft beside OpenAI again after a seek until OpenAI covers the new 
       text: 'X0',
       cacheOnly: true,
     }),
-  ).resolves.toEqual({ ok: true, data: '微软 X0' });
-  await vi.waitFor(
-    () => expect(sent(false)).toEqual([...batch('A'), ...batch('B'), ...batch('X')]),
-    wait,
-  );
-  answer(false);
-  await expect(seeked).resolves.toEqual({ ok: true, data: openai(batch('X')) });
+  ).resolves.toEqual({ ok: true, data: 'OpenAI X0' });
+  await vi.advanceTimersByTimeAsync(0);
+  expect([...session.values()]).toContain('OpenAI X0');
+  expect([...session.values()]).not.toContain('微软 X0');
 
   const steady = send(window(600, batch('Y')));
   await vi.waitFor(() => expect(sent(false)).toContain('Y0'), wait);
@@ -670,4 +676,67 @@ it('takes OpenAI translations from the cache after a seek and asks Microsoft onl
   answer(true);
   await expect(back).resolves.toEqual({ ok: true, data: openai([...cached, ...batch('C')]) });
   expect(sent(true)).toEqual([...batch('A'), ...batch('C')]);
+});
+
+it('shows a Microsoft translation for the current request and leaves it out of the cache', async () => {
+  const session = new Map<string, unknown>();
+  const { sent, answer } = dualProvider();
+  const send = await loadBackground(dualSettings, session);
+  const pending = send({
+    type: 'translate',
+    captionLanguage: 'en',
+    pageTitle: 'Video title',
+    text: 'Hello',
+  });
+  await vi.waitFor(() => expect(sent(true)).toEqual(['Hello']), wait);
+  answer(true);
+  await expect(pending).resolves.toEqual({ ok: true, data: '微软 Hello' });
+  await vi.advanceTimersByTimeAsync(0);
+  expect([...session.values()]).not.toContain('微软 Hello');
+  let cached: Reply | undefined;
+  const lookup = send({
+    type: 'translate',
+    captionLanguage: 'en',
+    pageTitle: 'Video title',
+    text: 'Hello',
+    cacheOnly: true,
+  }).then((value) => {
+    cached = value;
+  });
+  await vi.advanceTimersByTimeAsync(0);
+  expect(cached).toBeUndefined();
+  answer(false);
+  await lookup;
+  expect(cached).toEqual({ ok: true, data: 'OpenAI Hello' });
+  await vi.advanceTimersByTimeAsync(0);
+  expect([...session.values()]).toContain('OpenAI Hello');
+  expect([...session.values()]).not.toContain('微软 Hello');
+  expect(sent(true)).toEqual(['Hello']);
+});
+
+it('caches a translation made while Microsoft is the selected provider', async () => {
+  const session = new Map<string, unknown>();
+  const fetch = vi
+    .fn()
+    .mockResolvedValue(Response.json([{ translations: [{ text: '你好', to: 'zh-Hans' }] }]));
+  vi.stubGlobal('fetch', fetch);
+  const send = await loadBackground(
+    { ...DEFAULT_SETTINGS, providerConsent: MICROSOFT_ORIGIN },
+    session,
+  );
+  await expect(
+    send({ type: 'translate', captionLanguage: 'en', pageTitle: 'Video title', text: 'Hello' }),
+  ).resolves.toEqual({ ok: true, data: '你好' });
+  await vi.advanceTimersByTimeAsync(0);
+  expect([...session.values()]).toContain('你好');
+  await expect(
+    send({
+      type: 'translate',
+      captionLanguage: 'en',
+      pageTitle: 'Video title',
+      text: 'Hello',
+      cacheOnly: true,
+    }),
+  ).resolves.toEqual({ ok: true, data: '你好' });
+  expect(fetch).toHaveBeenCalledTimes(1);
 });
