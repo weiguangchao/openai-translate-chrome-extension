@@ -714,6 +714,30 @@ it('shows a Microsoft translation for the current request and leaves it out of t
   expect(sent(true)).toEqual(['Hello']);
 });
 
+it('reuses a Microsoft fallback for the current window and leaves it out of storage', async () => {
+  const session = new Map<string, unknown>();
+  const { sent, answer } = dualProvider();
+  const send = await loadBackground(dualSettings, session);
+  const first = send(window(0, batch('A')));
+  await vi.waitFor(() => expect(sent(true)).toEqual(batch('A')), wait);
+  answer(true);
+  await vi.advanceTimersByTimeAsync(0);
+  expect([...session.values()]).not.toContain('微软 A0');
+  const again = send(window(0, batch('A')));
+  await vi.advanceTimersByTimeAsync(providerSendWindowMs);
+  expect(sent(true)).toEqual(batch('A'));
+  await expect(
+    send({ type: 'translate', captionLanguage: 'en', pageTitle: 'Video title', text: 'A0' }),
+  ).resolves.toEqual({ ok: true, data: '微软 A0' });
+  expect(sent(true)).toEqual(batch('A'));
+  answer(false);
+  await expect(first).resolves.toEqual({ ok: true, data: openai(batch('A')) });
+  await expect(again).resolves.toEqual({ ok: true, data: openai(batch('A')) });
+  await vi.advanceTimersByTimeAsync(0);
+  expect([...session.values()]).toContain('OpenAI A0');
+  expect([...session.values()]).not.toContain('微软 A0');
+});
+
 it('caches a translation made while Microsoft is the selected provider', async () => {
   const session = new Map<string, unknown>();
   const fetch = vi

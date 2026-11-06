@@ -58,6 +58,7 @@ interface Consumer {
 export class TranslationQueue {
   private jobs = new Map<string, Job>();
   private finished = new Map<string, string>();
+  private preview = new Map<string, string>();
   private consumers = new Map<string, Consumer>();
   private backoff: { until: number; error: Error } | undefined;
   private failed = new Map<string, Error>();
@@ -108,7 +109,7 @@ export class TranslationQueue {
     this.consumers.set(consumer, state);
     this.prune('keep');
     this.retainFailed();
-    const finished = this.finished.get(key);
+    const finished = this.finished.get(key) ?? this.preview.get(key);
     if (finished !== undefined) return Promise.resolve(finished);
     const failure = this.failed.get(key);
     if (failure) return Promise.reject(failure);
@@ -153,7 +154,10 @@ export class TranslationQueue {
     }));
     const open = snapshot.filter(
       ({ key }) =>
-        !this.finished.has(key) && !this.failed.has(key) && !this.jobs.get(key)?.controller,
+        !this.finished.has(key) &&
+        !this.preview.has(key) &&
+        !this.failed.has(key) &&
+        !this.jobs.get(key)?.controller,
     );
     const planned = planPlayback({
       time,
@@ -187,7 +191,7 @@ export class TranslationQueue {
         const pack = packs[index];
         request.cues.forEach((cue, cueIndex) => {
           const key = pack.keys[cueIndex];
-          if (this.finished.has(key) || this.failed.has(key)) return;
+          if (this.finished.has(key) || this.preview.has(key) || this.failed.has(key)) return;
           const job = this.enqueue(key, settings, cue.text, consumer, {
             pack: pack.id,
             cache: options?.cache,
@@ -241,6 +245,7 @@ export class TranslationQueue {
     this.prune('abort');
     this.backoff = undefined;
     this.failed.clear();
+    this.preview.clear();
     clearTimeout(this.sendTimer);
     this.sendTimer = undefined;
   }
@@ -248,7 +253,11 @@ export class TranslationQueue {
   private results(keys: string[]): Promise<(string | null)[]> {
     return Promise.all(
       keys.map(
-        (key) => this.finished.get(key) ?? this.jobs.get(key)?.promise.catch(() => null) ?? null,
+        (key) =>
+          this.finished.get(key) ??
+          this.preview.get(key) ??
+          this.jobs.get(key)?.promise.catch(() => null) ??
+          null,
       ),
     );
   }
@@ -260,10 +269,14 @@ export class TranslationQueue {
       for (const { key } of state.snapshot) live.add(key);
     }
     for (const key of this.failed.keys()) if (!live.has(key)) this.failed.delete(key);
+    for (const key of this.preview.keys()) if (!live.has(key)) this.preview.delete(key);
   }
 
   private remember(job: Job, translation: string): void {
-    if (!job.cache) return;
+    if (!job.cache) {
+      this.preview.set(job.key, translation);
+      return;
+    }
     this.finished.delete(job.key);
     this.finished.set(job.key, translation);
     this.store?.save(job.key, translation);
@@ -293,7 +306,6 @@ export class TranslationQueue {
   ): Job {
     const existing = this.jobs.get(key);
     if (existing) {
-      if (options?.cache !== false) existing.cache = true;
       if (!existing.controller) {
         if (options?.pack) existing.pack = options.pack;
       }
