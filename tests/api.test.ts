@@ -14,6 +14,7 @@ const config = (): CaptionTranslationSettings => ({
   ...structuredClone(DEFAULT_SETTINGS),
   provider: 'openai',
   captionLanguage: 'en',
+  pageTitle: 'Video title',
   baseUrl: 'https://provider.example/api/v1/',
   apiKey: 'private-test-key',
   model: 'subtitle-model',
@@ -89,7 +90,7 @@ describe('OpenAI-compatible provider contract', () => {
       expect(body.model).toBe('subtitle-model');
       const instructions: string = body.messages[0].content;
       expect(instructions).toMatch(
-        /^You are a professional Simplified Chinese native translator\./,
+        /^You are a professional native Simplified Chinese translator\./,
       );
       expect(body.messages[0].role).toBe('system');
       expect(body.messages[1]).toEqual({
@@ -125,10 +126,10 @@ describe('OpenAI-compatible provider contract', () => {
     expect(body.messages[0]).toEqual({
       role: 'system',
       content: expect.stringContaining(
-        'You are a professional Simplified Chinese native translator.',
+        'You are a professional native Simplified Chinese translator.',
       ),
     });
-    expect(body.messages[0].content).toContain('Do not add punctuation');
+    expect(body.messages[0].content).toContain('Title: “Video title”');
     expect(body.messages[0].content).toContain('## Multi-item processing protocol');
     expect(body.messages[1]).toEqual({
       role: 'user',

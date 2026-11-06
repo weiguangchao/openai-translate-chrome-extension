@@ -160,6 +160,7 @@ beforeEach(async () => {
       sendMessage: async (message: {
         type: string;
         captionLanguage?: Language | null;
+        pageTitle?: string;
         text?: string;
         time?: number;
         rate?: number;
@@ -181,7 +182,11 @@ beforeEach(async () => {
             ok: true,
             data: await queue.prefetch(
               'x',
-              { ...settings, captionLanguage: message.captionLanguage! },
+              {
+                ...settings,
+                captionLanguage: message.captionLanguage!,
+                pageTitle: message.pageTitle!,
+              },
               message.cues,
               message.time ?? 0,
               message.rate ?? 1,
@@ -193,12 +198,20 @@ beforeEach(async () => {
             ok: true,
             data: await (message.cacheOnly
               ? queue.lookup(
-                  { ...settings, captionLanguage: message.captionLanguage! },
+                  {
+                    ...settings,
+                    captionLanguage: message.captionLanguage!,
+                    pageTitle: message.pageTitle!,
+                  },
                   message.text,
                 )
               : queue.request(
                   'x',
-                  { ...settings, captionLanguage: message.captionLanguage! },
+                  {
+                    ...settings,
+                    captionLanguage: message.captionLanguage!,
+                    pageTitle: message.pageTitle!,
+                  },
                   message.text,
                 )),
           };
@@ -548,6 +561,13 @@ it('follows native X track changes and stops prefetch when captions are disabled
   const count = requested.length;
   await playTo(video, 20);
   expect(requested).toHaveLength(count);
+});
+
+it('names the page without its notification count or X suffix', () => {
+  document.title = '(2) Someone on X: "A post" / X';
+  const platform = createXPlatform(() => {});
+  expect(platform.title()).toBe('Someone on X: "A post"');
+  platform.destroy();
 });
 
 it('accepts only X video CDN URLs and finished subtitle playlists', () => {

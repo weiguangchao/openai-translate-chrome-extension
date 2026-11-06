@@ -15,6 +15,7 @@ export const createTestPlatform: PlatformFactory = (changed) => {
     id: 'youtube',
     style: '',
     videoId: () => 'fixture-video',
+    title: () => 'Fixture video',
     findPlayer: (video) => video.closest<HTMLElement>('[data-player]') ?? video.parentElement,
     toolbar: () => null,
     source(video, player) {

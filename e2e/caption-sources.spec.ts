@@ -133,7 +133,7 @@ for (const platform of ['youtube', 'x'] as const) {
             expect.objectContaining({
               role: 'system',
               content: expect.stringMatching(
-                '^You are a professional Simplified Chinese native translator[.]',
+                '^You are a professional native Simplified Chinese translator[.]',
               ),
             }),
           ]),

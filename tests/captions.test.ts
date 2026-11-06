@@ -51,6 +51,7 @@ it('shows the current translation, ignores a late reply, clears a missing cue an
   expect(sendMessage).toHaveBeenCalledWith({
     type: 'translate',
     captionLanguage: 'en',
+    pageTitle: 'Fixture video',
     text: 'First cue',
   });
   expect(translationNode()?.textContent).toBe('Translating');
@@ -209,7 +210,7 @@ it('stops a cached caption when Chrome removes the runtime ID, even without anot
   expect(document.querySelector('.subline-player')).toBeNull();
   expect(vi.getTimerCount()).toBe(0);
   expect(runtime.sendMessage.mock.calls.map(([message]) => message)).toEqual([
-    { type: 'translate', captionLanguage: 'en', text: 'First cue' },
+    { type: 'translate', captionLanguage: 'en', pageTitle: 'Fixture video', text: 'First cue' },
   ]);
 });
 
@@ -253,6 +254,7 @@ it('keeps the error on its caption without retrying it and translates the next c
   expect(sendMessage).toHaveBeenCalledExactlyOnceWith({
     type: 'translate',
     captionLanguage: 'en',
+    pageTitle: 'Fixture video',
     text: 'First cue',
   });
   document.getElementById('cue')!.textContent = 'Second cue';
@@ -283,6 +285,7 @@ it('finishes an in-flight translation while paused and does not start another un
   expect(sendMessage).toHaveBeenCalledExactlyOnceWith({
     type: 'translate',
     captionLanguage: 'en',
+    pageTitle: 'Fixture video',
     text: 'First cue',
     cacheOnly: true,
   });
@@ -290,6 +293,7 @@ it('finishes an in-flight translation while paused and does not start another un
   expect(sendMessage).toHaveBeenLastCalledWith({
     type: 'translate',
     captionLanguage: 'en',
+    pageTitle: 'Fixture video',
     text: 'First cue',
   });
   await setPaused(true);
@@ -309,8 +313,14 @@ it('finishes an in-flight translation while paused and does not start another un
   expect(translationNode()?.textContent).toBe('第一句译文');
   expect(translationNode()?.hidden).toBe(false);
   expect(sendMessage.mock.calls.map(([message]) => message)).toEqual([
-    { type: 'translate', captionLanguage: 'en', text: 'First cue', cacheOnly: true },
-    { type: 'translate', captionLanguage: 'en', text: 'First cue' },
+    {
+      type: 'translate',
+      captionLanguage: 'en',
+      pageTitle: 'Fixture video',
+      text: 'First cue',
+      cacheOnly: true,
+    },
+    { type: 'translate', captionLanguage: 'en', pageTitle: 'Fixture video', text: 'First cue' },
     { type: 'prefetch-pause' },
     { type: 'prefetch-resume' },
     { type: 'prefetch-pause' },

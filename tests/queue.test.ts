@@ -43,6 +43,7 @@ const settings: CaptionTranslationSettings = {
   ...DEFAULT_SETTINGS,
   provider: 'openai',
   captionLanguage: 'en' as const,
+  pageTitle: '',
   apiKey: 'test-key',
   model: 'test-model',
 };

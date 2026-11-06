@@ -1,5 +1,5 @@
 import { BridgeTimeline } from '../../core/bridge/client';
-import type { Platform, PlatformFactory } from '../../core/platform';
+import { pageTitle, type Platform, type PlatformFactory } from '../../core/platform';
 import { CAPTION_LAYER, PLAYER, subtitlesHidden, youtubeVideoId } from './player';
 
 export const createYoutubePlatform: PlatformFactory = (changed): Platform => {
@@ -8,6 +8,7 @@ export const createYoutubePlatform: PlatformFactory = (changed): Platform => {
     id: 'youtube',
     style: `.subline-player ${CAPTION_LAYER} { opacity: 0 !important; pointer-events: none !important; }`,
     videoId: youtubeVideoId,
+    title: () => pageTitle(/\s+-\s+YouTube$/),
     findPlayer: (video) => video.closest<HTMLElement>(PLAYER) ?? video.parentElement,
     toolbar(player) {
       const container = player.querySelector<HTMLElement>('.ytp-right-controls');

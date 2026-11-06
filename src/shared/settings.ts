@@ -208,9 +208,12 @@ function settingsIn(...scopes: SettingScope[]): (keyof Settings)[] {
   );
 }
 
-export type CaptionTranslationSettings = Settings & { captionLanguage: Language };
+export type CaptionTranslationSettings = Settings & {
+  captionLanguage: Language;
+  pageTitle: string;
+};
 
-const identityKeys = [...settingsIn('translation'), 'captionLanguage'] as const;
+const identityKeys = [...settingsIn('translation'), 'captionLanguage', 'pageTitle'] as const;
 
 export const translationIdentityLength = identityKeys.length;
 

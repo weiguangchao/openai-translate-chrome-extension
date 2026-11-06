@@ -235,15 +235,23 @@ export class CaptionController {
       }
       return;
     }
+    const pageTitle = this.platform.title();
     const frame = {
       text: caption.text,
       captionLanguage: language,
+      pageTitle,
       cacheOnly: video.paused || this.gate.settling,
       debounce: captions ? 0 : 300,
     };
     if (completedSeek && caption.text && usesModel) this.translator.show(frame);
     if (usesModel && !video.paused && !this.gate.settling && captions)
-      this.translator.plan(time, video.playbackRate || 1, playbackCues(captions, time), language);
+      this.translator.plan(
+        time,
+        video.playbackRate || 1,
+        playbackCues(captions, time),
+        language,
+        pageTitle,
+      );
     const cueIndex =
       captions?.findIndex(
         (item) => item.startTime <= time && time < item.endTime && item.text === caption.text,

@@ -2,7 +2,7 @@
 
 English version: [Subline privacy policy](#subline-privacy-policy)
 
-本政策自 2026 年 11 月 5 日起生效。
+本政策自 2026 年 11 月 6 日起生效。
 
 Subline 是一个 Chrome 扩展，在 YouTube 和 X 的视频上显示双语字幕。它通过你选择的 Microsoft Translate 或自己配置的 OpenAI 兼容 API 翻译字幕。Subline 没有开发者服务器，开发者收不到你的字幕、API Key、设置或用量统计。本政策说明扩展处理哪些数据、发给谁、保存多久，以及怎样删除。
 
@@ -12,9 +12,9 @@ Subline 是一个 Chrome 扩展，在 YouTube 和 X 的视频上显示双语字�
 
 在你开启了 Subline 的视频网站上，扩展从字幕文件或播放器显示的字幕中读取原文。扩展只从视频网站给出的地址下载字幕文件。
 
-你开启 Subline、选择翻译服务，并在设置页的「数据使用说明」里勾选同意后，扩展把即将播放的字幕原文发送给所选服务。没有同意时扩展不发送字幕；切换到其他服务地址后要重新同意。Microsoft Translate 请求发送到 https://edge.microsoft.com，包含字幕原文和源语言、目标语言代码，不携带 API Key、Model ID 或 Cookie。OpenAI 兼容服务请求还带有你的 API Key、Model ID、原文和译文的语言名称，以及一段固定的翻译要求。请求不包含视频地址、视频标题、你的视频网站账号或浏览记录。
+你开启 Subline、选择翻译服务，并在设置页的「数据使用说明」里勾选同意后，扩展把即将播放的字幕原文发送给所选服务。没有同意时扩展不发送字幕；切换到其他服务地址后要重新同意。Microsoft Translate 请求发送到 https://edge.microsoft.com，包含字幕原文和源语言、目标语言代码，不携带 API Key、Model ID 或 Cookie。OpenAI 兼容服务请求还带有你的 API Key、Model ID、原文和译文的语言名称、当前页面标题，以及一段固定的翻译要求。页面标题去掉了开头的通知数和末尾的网站名，模型用它理解字幕所属的视频。Microsoft Translate 请求不包含页面标题。所有请求都不包含视频地址、你的视频网站账号或浏览记录。
 
-扩展把字幕原文和译文缓存在 Chrome 的会话存储 chrome.storage.session 中，回看时不用重新请求。会话存储只在内存中，不写入磁盘。
+扩展把字幕原文、译文和页面标题缓存在 Chrome 的会话存储 chrome.storage.session 中，回看时不用重新请求。同一句字幕在标题不同的页面上分开缓存。会话存储只在内存中，不写入磁盘。
 
 ### API 设置
 
@@ -34,7 +34,7 @@ API 在响应中返回 token 用量时，扩展把它累加成输入、输出和
 
 ### 视频页面信息
 
-扩展在视频页面里读取视频编号或页面地址，以及播放进度，用来区分不同视频并对齐字幕时间。这些信息只在浏览器内存中使用，扩展不保存也不发送。
+扩展在视频页面里读取视频编号或页面地址、页面标题，以及播放进度，用来区分不同视频并对齐字幕时间。视频编号、页面地址和播放进度只在浏览器内存中使用，扩展不保存也不发送。页面标题的发送和保存方式见「字幕原文和译文」。
 
 ## 数据接收方
 
@@ -77,7 +77,7 @@ Subline 对所处理信息的使用遵守 [Chrome Web Store User Data Policy](ht
 
 # Subline privacy policy
 
-This policy takes effect on November 5, 2026.
+This policy takes effect on November 6, 2026.
 
 Subline is a Chrome extension that shows bilingual subtitles on YouTube and X videos. It translates subtitles through your selected Microsoft Translate or OpenAI-compatible API. Subline has no developer server, so the developer never receives your subtitles, API key, settings or usage counts. This policy lists the data the extension handles, who receives it, how long the extension keeps it and how to delete it.
 
@@ -87,9 +87,9 @@ Subline is a Chrome extension that shows bilingual subtitles on YouTube and X vi
 
 On video sites where Subline is turned on, the extension reads the original subtitles from subtitle files or from the subtitles the player shows. It downloads subtitle files only from the addresses the video site provides.
 
-After you turn Subline on, select a provider and accept the data use notice on the settings page, the extension sends upcoming subtitle text to that provider. Without consent, it sends no subtitles. A different provider origin needs consent again. Microsoft Translate requests go to https://edge.microsoft.com and contain subtitle text and source and target language codes, without an API key, model ID or cookies. OpenAI-compatible requests also carry your API key, model ID, source and target language names, and fixed translation instructions. Requests do not include the video address, video title, your video site account or browsing history.
+After you turn Subline on, select a provider and accept the data use notice on the settings page, the extension sends upcoming subtitle text to that provider. Without consent, it sends no subtitles. A different provider origin needs consent again. Microsoft Translate requests go to https://edge.microsoft.com and contain subtitle text and source and target language codes, without an API key, model ID or cookies. OpenAI-compatible requests also carry your API key, model ID, source and target language names, the current page title and fixed translation instructions. The extension removes the leading notification count and the trailing site name from the page title, and the model uses the title to understand which video the subtitles belong to. Microsoft Translate requests do not include the page title. No request includes the video address, your video site account or browsing history.
 
-The extension caches subtitle text and translations in Chrome session storage, chrome.storage.session, so replayed subtitles need no new request. Session storage lives in memory and is never written to disk.
+The extension caches subtitle text, translations and page titles in Chrome session storage, chrome.storage.session, so replayed subtitles need no new request. The same subtitle on pages with different titles gets separate cache entries. Session storage lives in memory and is never written to disk.
 
 ### API settings
 
@@ -109,7 +109,7 @@ When your API reports token usage in its response, the extension adds it to thre
 
 ### Video page information
 
-Inside the video page, the extension reads the video ID or page address and the playback position to tell videos apart and to time subtitles. This information stays in browser memory. The extension neither stores nor sends it.
+Inside the video page, the extension reads the video ID or page address, the page title and the playback position to tell videos apart and to time subtitles. The video ID, page address and playback position stay in browser memory, and the extension neither stores nor sends them. "Subtitle text and translations" describes how the extension sends and stores the page title.
 
 ## Who receives data
 

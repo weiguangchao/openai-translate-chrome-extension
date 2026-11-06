@@ -39,6 +39,7 @@ beforeEach(() => {
     toolbar: () => null,
     style: '.subline-player #layer { opacity: 0 !important; }',
     videoId: () => 'video',
+    title: () => 'Video title',
     findPlayer: (element) => element.parentElement,
     source: () => source,
     reset: vi.fn(),
@@ -111,6 +112,7 @@ it('releases a DOM-only consumer when the controller is destroyed', async () => 
   expect(sendMessage).toHaveBeenCalledWith({
     type: 'prefetch',
     captionLanguage: null,
+    pageTitle: '',
     time: 0,
     rate: 1,
     cues: [],
@@ -171,6 +173,7 @@ it('drives any platform through the waiting, live and timeline caption sources',
   expect(sendMessage).toHaveBeenCalledWith({
     type: 'prefetch',
     captionLanguage: 'en',
+    pageTitle: 'Video title',
     time: 0,
     rate: 1,
     cues: [{ text: 'Timed cue.', start: 0, end: 10 }],
@@ -350,8 +353,20 @@ it('retries a paused cache lookup invalidated by a later seek event', async () =
   await vi.advanceTimersByTimeAsync(0);
   expect(lines()).toEqual(['Cached source.', '缓存译文']);
   expect(sendMessage.mock.calls.filter(([m]) => m.type === 'translate').map(([m]) => m)).toEqual([
-    { type: 'translate', captionLanguage: 'en', text: 'Cached source.', cacheOnly: true },
-    { type: 'translate', captionLanguage: 'en', text: 'Cached source.', cacheOnly: true },
+    {
+      type: 'translate',
+      captionLanguage: 'en',
+      pageTitle: 'Video title',
+      text: 'Cached source.',
+      cacheOnly: true,
+    },
+    {
+      type: 'translate',
+      captionLanguage: 'en',
+      pageTitle: 'Video title',
+      text: 'Cached source.',
+      cacheOnly: true,
+    },
   ]);
 });
 
@@ -553,6 +568,7 @@ it('keeps ready captions when the playback rate changes and plans at the new rat
     {
       type: 'prefetch',
       captionLanguage: 'en',
+      pageTitle: 'Video title',
       time: 0,
       rate: 1.5,
       cues: [

@@ -1,8 +1,12 @@
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { CaptionController } from '../src/core/controller';
 import { createYoutubePlatform } from '../src/platforms/youtube/platform';
 import { DEFAULT_SETTINGS, publicSettings } from '../src/shared/settings';
 import { consentedSettings } from './fixtures/settings';
+
+beforeEach(() => {
+  document.title = '(3) Test video - YouTube';
+});
 
 let controller: CaptionController | undefined;
 let clockStart = 0;
@@ -342,6 +346,7 @@ it('uses the current video session to load source subtitles and removes duplicat
   expect(sendMessage).toHaveBeenCalledWith({
     type: 'translate',
     captionLanguage: 'en',
+    pageTitle: 'Test video',
     text: 'This field behind me',
   });
 });
@@ -485,7 +490,12 @@ it.each([
     await vi.advanceTimersByTimeAsync(1500);
     expect([...lines()].map((line) => line.textContent)).toEqual([text, `译文：${text}`]);
     expect(sendMessage).toHaveBeenCalledWith(
-      expect.objectContaining({ type: 'translate', captionLanguage: language, text }),
+      expect.objectContaining({
+        type: 'translate',
+        captionLanguage: language,
+        pageTitle: 'Test video',
+        text,
+      }),
     );
   },
 );
@@ -570,6 +580,7 @@ it.each([
     expect(sendMessage).toHaveBeenCalledWith({
       type: 'translate',
       captionLanguage: 'en',
+      pageTitle: 'Test video',
       text: 'We are ready.',
     });
     controller.destroy();
@@ -649,6 +660,7 @@ it('follows selected caption language changes without a settings update', async 
   expect(sendMessage).toHaveBeenCalledWith({
     type: 'translate',
     captionLanguage: 'zh-CN',
+    pageTitle: 'Test video',
     text: '中文字幕。',
   });
   active = 'en';
@@ -661,6 +673,7 @@ it('follows selected caption language changes without a settings update', async 
   expect(sendMessage).toHaveBeenCalledWith({
     type: 'translate',
     captionLanguage: 'en',
+    pageTitle: 'Test video',
     text: 'English source.',
   });
 });

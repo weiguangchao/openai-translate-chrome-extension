@@ -17,18 +17,32 @@ it('answers cache-only lookups without starting model work and reuses background
   vi.stubGlobal('fetch', fetch);
   const send = await loadBackground({ ...consentedSettings, apiKey: 'key', model: 'model' });
   await expect(
-    send({ type: 'translate', captionLanguage: 'en', text: 'Hello', cacheOnly: true }),
+    send({
+      type: 'translate',
+      captionLanguage: 'en',
+      pageTitle: 'Video title',
+      text: 'Hello',
+      cacheOnly: true,
+    }),
   ).resolves.toEqual({
     ok: true,
     data: null,
   });
   expect(fetch).not.toHaveBeenCalled();
-  await expect(send({ type: 'translate', captionLanguage: 'en', text: 'Hello' })).resolves.toEqual({
+  await expect(
+    send({ type: 'translate', captionLanguage: 'en', pageTitle: 'Video title', text: 'Hello' }),
+  ).resolves.toEqual({
     ok: true,
     data: '你好',
   });
   await expect(
-    send({ type: 'translate', captionLanguage: 'en', text: 'Hello', cacheOnly: true }),
+    send({
+      type: 'translate',
+      captionLanguage: 'en',
+      pageTitle: 'Video title',
+      text: 'Hello',
+      cacheOnly: true,
+    }),
   ).resolves.toEqual({
     ok: true,
     data: '你好',
@@ -43,21 +57,56 @@ it('separates translations of identical text by actual caption language', async 
     .mockImplementationOnce(async () => providerReply(['同文'], () => '日语译文'));
   vi.stubGlobal('fetch', fetch);
   const send = await loadBackground({ ...consentedSettings, apiKey: 'key', model: 'model' });
-  await expect(send({ type: 'translate', captionLanguage: 'en', text: '同文' })).resolves.toEqual({
+  await expect(
+    send({ type: 'translate', captionLanguage: 'en', pageTitle: 'Video title', text: '同文' }),
+  ).resolves.toEqual({
     ok: true,
     data: '英语译文',
   });
   await expect(
-    send({ type: 'translate', captionLanguage: 'ja', text: '同文', cacheOnly: true }),
+    send({
+      type: 'translate',
+      captionLanguage: 'ja',
+      pageTitle: 'Video title',
+      text: '同文',
+      cacheOnly: true,
+    }),
   ).resolves.toEqual({ ok: true, data: null });
-  await expect(send({ type: 'translate', captionLanguage: 'ja', text: '同文' })).resolves.toEqual({
+  await expect(
+    send({ type: 'translate', captionLanguage: 'ja', pageTitle: 'Video title', text: '同文' }),
+  ).resolves.toEqual({
     ok: true,
     data: '日语译文',
   });
   await expect(
-    send({ type: 'translate', captionLanguage: 'en', text: '同文', cacheOnly: true }),
+    send({
+      type: 'translate',
+      captionLanguage: 'en',
+      pageTitle: 'Video title',
+      text: '同文',
+      cacheOnly: true,
+    }),
   ).resolves.toEqual({ ok: true, data: '英语译文' });
   expect(fetch).toHaveBeenCalledTimes(2);
+});
+
+it('gives the Provider the page title and keeps translations from different pages apart', async () => {
+  const fetch = vi
+    .fn()
+    .mockImplementationOnce(async () => providerReply(['Hello'], () => '你好'))
+    .mockImplementationOnce(async () => providerReply(['Hello'], () => '喂'));
+  vi.stubGlobal('fetch', fetch);
+  const send = await loadBackground({ ...consentedSettings, apiKey: 'key', model: 'model' });
+  const translate = (pageTitle: string) =>
+    send({ type: 'translate', captionLanguage: 'en', pageTitle, text: 'Hello' });
+  await expect(translate('First video')).resolves.toEqual({ ok: true, data: '你好' });
+  await expect(translate('Second video')).resolves.toEqual({ ok: true, data: '喂' });
+  await expect(translate('First video')).resolves.toEqual({ ok: true, data: '你好' });
+  const prompts = fetch.mock.calls.map(([, init]) => JSON.parse(init.body).messages[0].content);
+  expect(prompts).toEqual([
+    expect.stringContaining('Title: “First video”'),
+    expect.stringContaining('Title: “Second video”'),
+  ]);
 });
 
 it.each([undefined, '', 'fr', 'ko-Latn', 'invalid'])(
@@ -67,11 +116,18 @@ it.each([undefined, '', 'fr', 'ko-Latn', 'invalid'])(
     vi.stubGlobal('fetch', fetch);
     const send = await loadBackground({ ...consentedSettings, apiKey: 'key', model: 'model' });
     const failure = { ok: false, failure: { kind: 'unsupported-language' } };
-    await expect(send({ type: 'translate', captionLanguage, text: 'Caption.' })).resolves.toEqual(
-      failure,
-    );
     await expect(
-      send({ type: 'prefetch', captionLanguage, time: 0, rate: 1, cues: packedCues(['Caption.']) }),
+      send({ type: 'translate', captionLanguage, pageTitle: 'Video title', text: 'Caption.' }),
+    ).resolves.toEqual(failure);
+    await expect(
+      send({
+        type: 'prefetch',
+        captionLanguage,
+        pageTitle: 'Video title',
+        time: 0,
+        rate: 1,
+        cues: packedCues(['Caption.']),
+      }),
     ).resolves.toEqual(failure);
     expect(fetch).not.toHaveBeenCalled();
   },
@@ -146,6 +202,7 @@ it('keeps credentials in the background and rejects content-script requests to u
     send({
       type: 'translate',
       captionLanguage: 'en',
+      pageTitle: 'Video title',
       text: 'Hello',
       settings: { apiKey: 'page-key', baseUrl: 'https://untrusted.example' },
     }),
@@ -176,13 +233,14 @@ it.each([
       message: 'Allow subtitles to be sent to your provider in settings first.',
     },
   };
-  await expect(send({ type: 'translate', captionLanguage: 'en', text: 'Hello' })).resolves.toEqual(
-    refused,
-  );
+  await expect(
+    send({ type: 'translate', captionLanguage: 'en', pageTitle: 'Video title', text: 'Hello' }),
+  ).resolves.toEqual(refused);
   await expect(
     send({
       type: 'prefetch',
       captionLanguage: 'en',
+      pageTitle: 'Video title',
       time: 0,
       rate: 1,
       cues: packedCues(['Hello']),
@@ -206,6 +264,7 @@ it('answers a prefetch with translations in the order asked, settling cues a lat
   const opening = send({
     type: 'prefetch',
     captionLanguage: 'en',
+    pageTitle: 'Video title',
     time: 0,
     rate: 1,
     cues: packedCues(['A', 'B']),
@@ -214,6 +273,7 @@ it('answers a prefetch with translations in the order asked, settling cues a lat
   const sliding = send({
     type: 'prefetch',
     captionLanguage: 'en',
+    pageTitle: 'Video title',
     time: 0,
     rate: 1,
     cues: packedCues(['B', 'C']),
@@ -227,6 +287,7 @@ it('answers a prefetch with translations in the order asked, settling cues a lat
     send({
       type: 'prefetch',
       captionLanguage: 'en',
+      pageTitle: 'Video title',
       time: 0,
       rate: 1,
       cues: packedCues(['B', 'C']),
@@ -251,12 +312,26 @@ it('starts a new page in the same tab without the pause the previous page left',
   });
   const first = { documentId: 'first-page' };
   await send(
-    { type: 'prefetch', captionLanguage: 'en', time: 0, rate: 1, cues: packedCues(['Old.'], 2) },
+    {
+      type: 'prefetch',
+      captionLanguage: 'en',
+      pageTitle: 'Video title',
+      time: 0,
+      rate: 1,
+      cues: packedCues(['Old.'], 2),
+    },
     first,
   );
   await expect(send({ type: 'prefetch-pause' }, first)).resolves.toEqual({ ok: true });
   const next = send(
-    { type: 'prefetch', captionLanguage: 'en', time: 0, rate: 1, cues: packedCues(['New.'], 2) },
+    {
+      type: 'prefetch',
+      captionLanguage: 'en',
+      pageTitle: 'Video title',
+      time: 0,
+      rate: 1,
+      cues: packedCues(['New.'], 2),
+    },
     { url: 'https://www.youtube.com/watch?v=next', documentId: 'next-page' },
   );
   await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
@@ -277,13 +352,27 @@ it('packs a prefetch by its time span and rejects a snapshot without usable time
   });
   for (const cues of [['A'], [{ text: 'A', start: -1, end: 1 }], [{ text: 'A', start: 2, end: 2 }]])
     await expect(
-      send({ type: 'prefetch', captionLanguage: 'en', time: 0, rate: 1, cues }),
+      send({
+        type: 'prefetch',
+        captionLanguage: 'en',
+        pageTitle: 'Video title',
+        time: 0,
+        rate: 1,
+        cues,
+      }),
     ).resolves.toEqual({
       ok: false,
       failure: { kind: 'error', message: 'Invalid subtitle prefetch data.' },
     });
   await expect(
-    send({ type: 'prefetch', captionLanguage: 'en', time: 0, rate: 0, cues: packedCues(['A']) }),
+    send({
+      type: 'prefetch',
+      captionLanguage: 'en',
+      pageTitle: 'Video title',
+      time: 0,
+      rate: 0,
+      cues: packedCues(['A']),
+    }),
   ).resolves.toEqual({
     ok: false,
     failure: { kind: 'error', message: 'Invalid subtitle prefetch data.' },
@@ -292,6 +381,7 @@ it('packs a prefetch by its time span and rejects a snapshot without usable time
   void send({
     type: 'prefetch',
     captionLanguage: 'en',
+    pageTitle: 'Video title',
     time: 0,
     rate: 1,
     cues: [...packedCues(['A', 'B']), { text: 'C', start: 80, end: 81 }],
@@ -307,13 +397,20 @@ it('shares one translation between duplicate captions across messages', async ()
     send({
       type: 'prefetch',
       captionLanguage: 'en',
+      pageTitle: 'Video title',
       time: 0,
       rate: 1,
       cues: packedCues(['Same.', 'Same.', 'Same.']),
     }),
   ).resolves.toEqual({ ok: true, data: ['完整译文', '完整译文', '完整译文'] });
   await expect(
-    send({ type: 'translate', captionLanguage: 'en', text: 'Same.', cacheOnly: true }),
+    send({
+      type: 'translate',
+      captionLanguage: 'en',
+      pageTitle: 'Video title',
+      text: 'Same.',
+      cacheOnly: true,
+    }),
   ).resolves.toEqual({
     ok: true,
     data: '完整译文',
@@ -346,7 +443,12 @@ it.each([
   vi.stubGlobal('fetch', fetch);
   const initial = { ...consentedSettings, apiKey: 'old-secret', model: 'model' };
   const send = await loadBackground(initial);
-  const pending = send({ type: 'translate', captionLanguage: 'en', text: 'Original.' });
+  const pending = send({
+    type: 'translate',
+    captionLanguage: 'en',
+    pageTitle: 'Video title',
+    text: 'Original.',
+  });
   await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
   const { saveSettings } = await import('../src/shared/storage');
   await saveSettings({ ...initial, ...patch });
@@ -357,7 +459,13 @@ it.each([
   else {
     await expect(pending).resolves.toEqual({ ok: true, data: '原来的译文' });
     await expect(
-      send({ type: 'translate', captionLanguage: 'en', text: 'Original.', cacheOnly: true }),
+      send({
+        type: 'translate',
+        captionLanguage: 'en',
+        pageTitle: 'Video title',
+        text: 'Original.',
+        cacheOnly: true,
+      }),
     ).resolves.toEqual({
       ok: true,
       data: '原来的译文',
@@ -380,9 +488,14 @@ it('retains shared work when only one consuming platform is disabled', async () 
   vi.stubGlobal('fetch', fetch);
   const initial = { ...consentedSettings, apiKey: 'key', model: 'model' };
   const send = await loadBackground(initial);
-  const youtube = send({ type: 'translate', captionLanguage: 'en', text: 'Shared.' });
+  const youtube = send({
+    type: 'translate',
+    captionLanguage: 'en',
+    pageTitle: 'Video title',
+    text: 'Shared.',
+  });
   const x = send(
-    { type: 'translate', captionLanguage: 'en', text: 'Shared.' },
+    { type: 'translate', captionLanguage: 'en', pageTitle: 'Video title', text: 'Shared.' },
     { url: 'https://x.com/example/status/episode', tab: { id: 2 } as chrome.tabs.Tab },
   );
   await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
@@ -449,7 +562,9 @@ it('keeps translations in session storage, without the API key, for a restarted 
   const session = new Map<string, unknown>();
   const saved = { ...consentedSettings, apiKey: 'trusted-secret', model: 'model' };
   let send = await loadBackground(saved, session);
-  await expect(send({ type: 'translate', captionLanguage: 'en', text: 'Hello' })).resolves.toEqual({
+  await expect(
+    send({ type: 'translate', captionLanguage: 'en', pageTitle: 'Video title', text: 'Hello' }),
+  ).resolves.toEqual({
     ok: true,
     data: '你好',
   });
@@ -471,14 +586,26 @@ it('keeps translations in session storage, without the API key, for a restarted 
   vi.resetModules();
   send = await loadBackground(saved, session);
   await expect(
-    send({ type: 'translate', captionLanguage: 'en', text: 'Hello', cacheOnly: true }),
+    send({
+      type: 'translate',
+      captionLanguage: 'en',
+      pageTitle: 'Video title',
+      text: 'Hello',
+      cacheOnly: true,
+    }),
   ).resolves.toEqual({
     ok: true,
     data: '你好',
   });
   for (const { text } of invalid)
     await expect(
-      send({ type: 'translate', captionLanguage: 'en', text, cacheOnly: true }),
+      send({
+        type: 'translate',
+        captionLanguage: 'en',
+        pageTitle: 'Video title',
+        text,
+        cacheOnly: true,
+      }),
     ).resolves.toEqual({
       ok: true,
       data: null,
@@ -500,7 +627,12 @@ it.each([
       );
     vi.stubGlobal('fetch', fetch);
     const send = await loadBackground({ ...DEFAULT_SETTINGS, providerConsent: consent });
-    const result = await send({ type: 'translate', captionLanguage: 'en', text: 'Hello' });
+    const result = await send({
+      type: 'translate',
+      captionLanguage: 'en',
+      pageTitle: 'Video title',
+      text: 'Hello',
+    });
     expect(result.ok).toBe(allowed);
     if (allowed) {
       expect(result.data).toBe('你好');
