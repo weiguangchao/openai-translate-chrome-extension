@@ -223,6 +223,10 @@ The input is a list of captions. Each caption starts with an id line such as [[p
 function readCaptionTranslations(reply: string, count: number): string[] | null {
   const response = reply.replace(/\r?\n\[\[source_end\]\]$/, '');
   const titles = [...response.matchAll(/^\[\[(p\d+|source_end)\]\]\r?$/gm)];
+  if (count === 1 && !titles.length) {
+    const translation = readStoredTranslation(response);
+    return translation === null ? null : [translation];
+  }
   if (titles.length !== count || response.slice(0, titles[0].index).trim()) return null;
   const items = new Map<string, string>();
   for (const [index, title] of titles.entries()) {

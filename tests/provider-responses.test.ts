@@ -125,8 +125,32 @@ it('accepts one echoed [[source_end]] line at the end of the reply', async () =>
   ]);
 });
 
+it.each(['标准-6导弹解决了这个问题。', '标准-6导弹解决了这个问题。\n[[source_end]]'])(
+  'accepts a reply to one caption without its id line: %j',
+  async (content) => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => translationReply(content, false)),
+    );
+    const published = vi.fn();
+    await expect(
+      translateCaptionBatch(
+        settings,
+        ['The Standard Missile 6 solves this problem.'],
+        undefined,
+        published,
+      ),
+    ).resolves.toEqual(['标准-6导弹解决了这个问题。']);
+    expect(published.mock.calls).toEqual([[0, '标准-6导弹解决了这个问题。']]);
+  },
+);
+
 it.each([
   [['One.'], '[[p0]]\n'],
+  [['One.'], ' '],
+  [['One.'], '字'.repeat(5001)],
+  [['One.'], '[[p1]]\n第一项'],
+  [['One', 'Two'], '第一项\n第二项'],
   [['One.'], '[[p0]]\n '],
   [['One.'], '[[p0]]\n' + '字'.repeat(5001)],
   [['One', 'Two'], '[[p0]]\n第一项'],
