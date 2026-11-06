@@ -1,8 +1,9 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { DEFAULT_SETTINGS, type Settings } from '../src/shared/settings';
+import { DEFAULT_SETTINGS, MICROSOFT_ORIGIN, type Settings } from '../src/shared/settings';
 import { extensionStorage } from './fixtures/extension-storage';
 import { consentedSettings } from './fixtures/settings';
 import { packedCues, providerReply, requestedTexts, translationReply } from './fixtures/provider';
+import { translationBatchLimit } from '../src/shared/tuning';
 
 afterEach(async () => {
   await new Promise((resolve) => setTimeout(resolve, 0));
@@ -640,3 +641,119 @@ it.each([
     } else expect(fetch).not.toHaveBeenCalled();
   },
 );
+
+function dualProvider() {
+  const pending: { microsoft: boolean; texts: string[]; resolve: (value: Response) => void }[] = [];
+  const fetch = vi.fn((url: string, init: RequestInit) => {
+    const microsoft = url.startsWith(MICROSOFT_ORIGIN);
+    const texts = microsoft ? (JSON.parse(init.body as string) as string[]) : requestedTexts(init);
+    return new Promise<Response>((resolve) => pending.push({ microsoft, texts, resolve }));
+  });
+  vi.stubGlobal('fetch', fetch);
+  const sent = (microsoft: boolean) =>
+    pending.filter((request) => request.microsoft === microsoft).flatMap(({ texts }) => texts);
+  const answer = (microsoft: boolean) => {
+    for (const request of pending.filter((item) => item.microsoft === microsoft))
+      request.resolve(
+        microsoft
+          ? Response.json(
+              request.texts.map((text) => ({
+                translations: [{ text: `微软 ${text}`, to: 'zh-Hans' }],
+              })),
+            )
+          : providerReply(request.texts, (text) => `OpenAI ${text}`),
+      );
+  };
+  return { sent, answer };
+}
+
+const dualSettings: Settings = {
+  ...consentedSettings,
+  providerConsent: `https://api.openai.com,${MICROSOFT_ORIGIN}`,
+  apiKey: 'key',
+  model: 'model',
+};
+const window = (time: number, texts: string[]) => ({
+  type: 'prefetch',
+  captionLanguage: 'en',
+  pageTitle: 'Video title',
+  time,
+  rate: 1,
+  cues: packedCues(texts, time + 5),
+});
+const batch = (prefix: string) =>
+  Array.from({ length: translationBatchLimit }, (_, index) => `${prefix}${index}`);
+const openai = (texts: string[]) => texts.map((text) => `OpenAI ${text}`);
+const wait = { timeout: 3000 };
+
+it('runs Microsoft beside OpenAI again after a seek until OpenAI covers the new window', async () => {
+  const { sent, answer } = dualProvider();
+  const send = await loadBackground(dualSettings);
+  const opening = send(window(0, batch('A')));
+  await vi.waitFor(() => expect(sent(true)).toEqual(batch('A')), wait);
+  answer(false);
+  answer(true);
+  await expect(opening).resolves.toEqual({ ok: true, data: openai(batch('A')) });
+
+  const caughtUp = send(window(0, batch('B')));
+  await vi.waitFor(() => expect(sent(false)).toEqual([...batch('A'), ...batch('B')]), wait);
+  answer(false);
+  await caughtUp;
+  expect(sent(true)).toEqual(batch('A'));
+
+  await send({ type: 'prefetch-hold', time: 600 });
+  const seeked = send(window(600, batch('X')));
+  await vi.waitFor(() => expect(sent(true)).toEqual([...batch('A'), ...batch('X')]), wait);
+  answer(true);
+  await expect(
+    send({
+      type: 'translate',
+      captionLanguage: 'en',
+      pageTitle: 'Video title',
+      text: 'X0',
+      cacheOnly: true,
+    }),
+  ).resolves.toEqual({ ok: true, data: '微软 X0' });
+  await vi.waitFor(
+    () => expect(sent(false)).toEqual([...batch('A'), ...batch('B'), ...batch('X')]),
+    wait,
+  );
+  answer(false);
+  await expect(seeked).resolves.toEqual({ ok: true, data: openai(batch('X')) });
+
+  const steady = send(window(600, batch('Y')));
+  await vi.waitFor(() => expect(sent(false)).toContain('Y0'), wait);
+  answer(false);
+  await steady;
+  expect(sent(true)).toEqual([...batch('A'), ...batch('X')]);
+});
+
+it('takes OpenAI translations from the cache after a seek and asks Microsoft only for the rest', async () => {
+  const { sent, answer } = dualProvider();
+  const send = await loadBackground(dualSettings);
+  const opening = send(window(0, batch('A')));
+  await vi.waitFor(() => expect(sent(true)).toEqual(batch('A')), wait);
+  answer(false);
+  answer(true);
+  await opening;
+  const caughtUp = send(window(0, batch('B')));
+  await vi.waitFor(() => expect(sent(false)).toEqual([...batch('A'), ...batch('B')]), wait);
+  answer(false);
+  await caughtUp;
+
+  await send({ type: 'prefetch-hold', time: 0 });
+  await expect(
+    send({ type: 'translate', captionLanguage: 'en', pageTitle: 'Video title', text: 'B0' }),
+  ).resolves.toEqual({ ok: true, data: 'OpenAI B0' });
+  const cached = batch('B').slice(0, 4);
+  const back = send(window(0, [...cached, ...batch('C')]));
+  await vi.waitFor(() => expect(sent(true)).toEqual([...batch('A'), ...batch('C')]), wait);
+  await vi.waitFor(
+    () => expect(sent(false)).toEqual([...batch('A'), ...batch('B'), ...batch('C')]),
+    wait,
+  );
+  answer(false);
+  answer(true);
+  await expect(back).resolves.toEqual({ ok: true, data: openai([...cached, ...batch('C')]) });
+  expect(sent(true)).toEqual([...batch('A'), ...batch('C')]);
+});

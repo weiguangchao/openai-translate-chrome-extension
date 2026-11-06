@@ -117,6 +117,10 @@ export class TranslationQueue {
     }
   }
 
+  cached(settings: CaptionTranslationSettings, text: string): boolean {
+    return this.finished.has(this.key(settings, text));
+  }
+
   hasPrefetch(consumer: string): boolean {
     return (this.consumers.get(consumer)?.packs.length ?? 0) > 0;
   }
@@ -544,6 +548,7 @@ export class HybridTranslationQueue {
 
   request(consumer: string, settings: CaptionTranslationSettings, text: string): Promise<string> {
     if (settings.provider === 'microsoft') return this.microsoft.request(consumer, settings, text);
+    if (this.openai.cached(settings, text)) return this.openai.request(consumer, settings, text);
     const microsoftSettings = { ...settings, provider: 'microsoft' as const };
     const openai = this.openai.request(consumer, settings, text).then((translation) => {
       if (!this.openai.hasPrefetch(consumer)) this.stopMicrosoft(consumer);
@@ -566,19 +571,22 @@ export class HybridTranslationQueue {
     if (settings.provider === 'microsoft')
       return this.microsoft.prefetch(consumer, settings, cues, time, rate);
     const microsoftSettings = { ...settings, provider: 'microsoft' as const };
+    const uncached = cues.filter((cue) => !this.openai.cached(settings, cue.text));
     const openai = this.openai.prefetch(consumer, settings, cues, time, rate);
     const microsoft =
-      !this.microsoftAllowed() || this.microsoftStopped.has(consumer)
+      !uncached.length || !this.microsoftAllowed() || this.microsoftStopped.has(consumer)
         ? Promise.resolve<(string | null)[]>([])
-        : this.microsoft.prefetch(consumer, microsoftSettings, cues, time, rate);
+        : this.microsoft.prefetch(consumer, microsoftSettings, uncached, time, rate);
     return Promise.all([openai, microsoft]).then(([openaiResults, microsoftResults]) => {
       if (openaiResults.length && openaiResults.every((translation) => translation !== null))
         this.stopMicrosoft(consumer);
-      return cues.map((_, index) => openaiResults[index] ?? microsoftResults[index] ?? null);
+      const fallback = new Map(uncached.map((cue, index) => [cue, microsoftResults[index]]));
+      return cues.map((cue, index) => openaiResults[index] ?? fallback.get(cue) ?? null);
     });
   }
 
   hold(consumer: string, time: number): void {
+    this.microsoftStopped.delete(consumer);
     this.microsoft.hold(consumer, time);
     this.openai.hold(consumer, time);
   }
