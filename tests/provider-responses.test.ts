@@ -114,8 +114,25 @@ it('translates eight independent captions in one request and maps out-of-order i
   expect(published.mock.calls).toEqual(translations.map((text, index) => [index, text]));
 });
 
+it('accepts one echoed [[source_end]] line at the end of the reply', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => translationReply('[[p1]]\n第二项\n[[p0]]\n第一项\n[[source_end]]', false)),
+  );
+  const published = vi.fn();
+  await expect(
+    translateCaptionBatch(settings, ['One', 'Two'], undefined, published),
+  ).resolves.toEqual(['第一项', '第二项']);
+  expect(published.mock.calls).toEqual([
+    [0, '第一项'],
+    [1, '第二项'],
+  ]);
+});
+
 it.each([
   '[[p0]]\n第一项',
+  '[[p0]]\n第一项\n[[source_end]]\n[[p1]]\n第二项',
+  '[[p0]]\n第一项\n[[p1]]\n第二项\n[[source_end]]\n[[source_end]]',
   '[[p0]]\n第一项\n[[p0]]\n重复',
   '[[p0]]\n第一项\n[[p2]]\n未知',
   '[[p00]]\n第一项\n[[p1]]\n第二项',
