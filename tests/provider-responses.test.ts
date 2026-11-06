@@ -110,7 +110,7 @@ it('translates eight independent captions in one request and maps out-of-order i
       sources.map((text, index) => `[[p${index}]]\n${text}`).join('\n') +
       '\n[[source_end]]',
   );
-  expect(body.messages[0].content).toContain('## Multi-item processing protocol');
+  expect(body.messages[0].content).toContain('[[source_end]]');
   expect(published.mock.calls).toEqual(translations.map((text, index) => [index, text]));
 });
 

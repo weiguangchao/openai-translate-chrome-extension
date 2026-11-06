@@ -92,6 +92,7 @@ describe('OpenAI-compatible provider contract', () => {
       expect(instructions).toMatch(
         /^You are a professional native Simplified Chinese translator\./,
       );
+      expect(instructions).not.toContain('titled');
       expect(body.messages[0].role).toBe('system');
       expect(body.messages[1]).toEqual({
         role: 'user',
@@ -129,8 +130,8 @@ describe('OpenAI-compatible provider contract', () => {
         'You are a professional native Simplified Chinese translator.',
       ),
     });
-    expect(body.messages[0].content).toContain('Title: “Video title”');
-    expect(body.messages[0].content).toContain('## Multi-item processing protocol');
+    expect(body.messages[0].content).toContain('Video title');
+    expect(body.messages[0].content).toContain('[[source_end]]');
     expect(body.messages[1]).toEqual({
       role: 'user',
       content: `Translate to Simplified Chinese:\n\n[[p0]]\n${text}\n[[source_end]]`,

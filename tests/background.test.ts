@@ -105,8 +105,8 @@ it('gives the Provider the page title and keeps translations from different page
   await expect(translate('First video')).resolves.toEqual({ ok: true, data: '你好' });
   const prompts = fetch.mock.calls.map(([, init]) => JSON.parse(init.body).messages[0].content);
   expect(prompts).toEqual([
-    expect.stringContaining('Title: “First video”'),
-    expect.stringContaining('Title: “Second video”'),
+    expect.stringContaining('First video'),
+    expect.stringContaining('Second video'),
   ]);
 });
 
