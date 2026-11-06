@@ -135,13 +135,8 @@ export async function fetchModels(settings: Settings): Promise<string[]> {
 }
 function translatorInstructions(settings: Settings, pageTitle: string): string {
   const target = englishLanguageName(settings.targetLanguage);
-  return `You are a professional native ${target} translator. Accurately and fluently translate each source item into ${target}, preserving meaning, tone, paragraphs, line breaks, and formatting; for each item provide only the translation, with no explanations, preambles, or notes. If the content contains HTML tags, place them correctly according to the translated word order and keep the tags intact; fully preserve placeholders and code; keep proper nouns and other content untranslated only when they do not need translation. Complete the translation using the following title, summary, and terminology context:
-
-## Context Awareness
-Document Metadata:
-Title: “${pageTitle}”
-
-`;
+  const context = pageTitle ? `\n\nThe text comes from a page titled: ${pageTitle}` : '';
+  return `You are a professional native ${target} translator. Translate the text into ${target} accurately and fluently, keeping its meaning, tone, and line breaks. Return only the translation, with no explanations or notes. Return text that needs no translation unchanged.${context}`;
 }
 
 async function complete(
@@ -223,15 +218,7 @@ export async function translateCaptionBatch(
 
 const multiItemProtocol = `
 
-## Multi-item processing protocol
-The input contains source items. Each item starts with its exact request id on one title line, followed by that item's source text. The source list ends with exactly one [[source_end]] line. Process every item independently according to the active task instructions, using the other items only as context. Return every supplied id exactly once in any order and preserve each id title byte-for-byte. Processed text may span multiple lines.
-
-When a native response schema is supplied, follow it exactly. Otherwise, return each id title followed by only its processed text.
-
-
-
-Do not wrap the entire response or protocol envelope in a Markdown fence. Fenced code blocks that belong to an item's processed content may be preserved. Do not include explanations outside processed text.
-`;
+The input is a list of captions. Each caption starts with an id line such as [[p0]], followed by its text, and the list ends with [[source_end]]. Translate each caption on its own, using the other captions only as context. Return every id line exactly as given, once each, followed by its translation. Do not output [[source_end]], a Markdown fence, or anything else.`;
 
 function readCaptionTranslations(reply: string, count: number): string[] | null {
   const response = reply.replace(/\r?\n\[\[source_end\]\]$/, '');
