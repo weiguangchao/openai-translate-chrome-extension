@@ -96,74 +96,109 @@ async function playTo(video: HTMLVideoElement, time: number) {
   await vi.advanceTimersByTimeAsync(0);
 }
 
-it('translates and displays complete ASR sentences across rolling events', async () => {
+it.each([
+  {
+    name: 'ASR sentences across rolling events',
+    option: { vssId: 'a.en' },
+    tracks: [{ languageCode: 'en', vssId: 'a.en', kind: 'asr' }],
+    nativeTracks: [],
+    pageCaption: 'This field behind me',
+    events: [
+      { tStartMs: 1000, dDurationMs: 4000, segs: [{ utf8: 'This field behind me' }] },
+      { tStartMs: 2500, dDurationMs: 4000, segs: [{ utf8: 'will become a city.' }] },
+      { tStartMs: 4500, dDurationMs: 3000, segs: [{ utf8: 'Let’s build it.' }] },
+    ],
+    upcoming: ['Let’s build it.'],
+  },
+  {
+    name: 'authored sentences when authored, automatic and browser target tracks exist',
+    option: { languageCode: 'en', vss_id: '.en', kind: '' },
+    tracks: [
+      { languageCode: 'zh-Hans', vssId: '.zh-Hans' },
+      { languageCode: 'zh-Hans', vssId: 'a.zh-Hans', kind: 'asr' },
+      { languageCode: 'en', vssId: 'a.en', kind: 'asr' },
+      { languageCode: 'en', vssId: '.en' },
+    ],
+    nativeTracks: [
+      {
+        mode: 'showing',
+        kind: 'subtitles',
+        language: 'zh-Hans',
+        cues: [{ startTime: 0, endTime: 100, text: '浏览器已有译文' }],
+        activeCues: [],
+      },
+    ],
+    pageCaption: '网站已有中文字幕',
+    events: [
+      { tStartMs: 1000, dDurationMs: 1500, segs: [{ utf8: 'This field behind me' }] },
+      { tStartMs: 2500, dDurationMs: 2000, segs: [{ utf8: 'will become a city.' }] },
+      { tStartMs: 4500, dDurationMs: 7000, segs: [{ utf8: 'Go. Go.' }] },
+    ],
+    upcoming: ['Go.', 'Go.'],
+  },
+])('translates and displays complete $name', async (row) => {
   const { video, player, sendMessage, lines } = setup();
+  const selected = row.tracks.at(-1)!.vssId;
   Object.assign(player, {
-    getOption: () => ({ vssId: 'a.en' }),
+    getOption: () => row.option,
     getPlayerResponse: () => ({
       videoDetails: { videoId: 'video-1' },
       captions: {
         playerCaptionsTracklistRenderer: {
-          captionTracks: [
-            {
-              languageCode: 'en',
-              kind: 'asr',
-              vssId: 'a.en',
-              baseUrl: 'https://www.youtube.com/api/timedtext?v=video-1&lang=en',
-            },
-          ],
+          captionTracks: row.tracks.map((track) => ({
+            ...track,
+            baseUrl: `https://www.youtube.com/api/timedtext?v=video-1&lang=${track.languageCode}&track=${track.vssId}`,
+          })),
         },
       },
     }),
   });
-  vi.stubGlobal(
-    'fetch',
-    vi.fn().mockResolvedValue(
-      Response.json({
-        events: [
-          { tStartMs: 1000, dDurationMs: 4000, segs: [{ utf8: 'This field behind me' }] },
-          { tStartMs: 2500, dDurationMs: 4000, segs: [{ utf8: 'will become a city.' }] },
-          { tStartMs: 4500, dDurationMs: 3000, segs: [{ utf8: 'Let’s build it.' }] },
-        ],
-      }),
-    ),
+  Object.defineProperty(video, 'textTracks', { configurable: true, value: row.nativeTracks });
+  const fetch = vi.fn(async (url: string) =>
+    Response.json({
+      events:
+        new URL(url).searchParams.get('track') === selected
+          ? row.events
+          : [{ tStartMs: 0, dDurationMs: 100000, segs: [{ utf8: '错误的字幕轨道' }] }],
+    }),
   );
-  document.querySelector('.ytp-caption-window-container')!.innerHTML =
-    '<span class="ytp-caption-segment">This field behind me</span>';
+  vi.stubGlobal('fetch', fetch);
+  const layer = document.querySelector<HTMLElement>('.ytp-caption-window-container')!;
+  layer.innerHTML = `<span class="ytp-caption-segment">${row.pageCaption}</span>`;
   await import('../src/platforms/youtube/page');
   controller = new CaptionController(
     createYoutubePlatform,
     publicSettings({ ...consentedSettings, apiKey: 'key', model: 'model' }),
   );
   await vi.advanceTimersByTimeAsync(0);
-  expect(prefetchTexts(sendMessage)).toEqual([
-    'This field behind me will become a city.',
-    'Let’s build it.',
+  const sentence = 'This field behind me will become a city.';
+  expect(prefetchTexts(sendMessage)).toEqual([sentence, ...row.upcoming]);
+  expect(fetch.mock.calls.map(([url]) => new URL(url).searchParams.get('track'))).toEqual([
+    selected,
   ]);
   await playTo(video, 1.2);
-  expect([...lines()].map((line) => line.textContent)).toEqual([
-    'This field behind me will become a city.',
-    '译文：This field behind me will become a city.',
-  ]);
+  expect([...lines()].map((line) => line.textContent)).toEqual([sentence, `译文：${sentence}`]);
+  expect(row.nativeTracks.map((track) => track.mode)).toEqual(
+    row.nativeTracks.map(() => 'showing'),
+  );
+  expect(getComputedStyle(layer).opacity).toBe('0');
   await playTo(video, 3);
-  expect(lines()[0].textContent).toBe('This field behind me will become a city.');
+  expect(lines()[0].textContent).toBe(sentence);
   expect(
     sendMessage.mock.calls
       .filter(([message]) => message.type === 'translate')
       .map(([message]) => message.text),
-  ).toEqual(['This field behind me will become a city.']);
-  expect(getComputedStyle(document.querySelector('.ytp-caption-window-container')!).opacity).toBe(
-    '0',
-  );
+  ).toEqual([sentence]);
   await playTo(video, 4.5);
   expect([...lines()].map((line) => line.textContent)).toEqual([
-    'Let’s build it.',
-    '译文：Let’s build it.',
+    row.upcoming[0],
+    `译文：${row.upcoming[0]}`,
   ]);
+  video.currentTime = 12;
+  video.dispatchEvent(new Event('timeupdate'));
+  expect([...lines()].map((line) => line.hidden)).toEqual([true, true]);
   controller.update({ ...publicSettings(DEFAULT_SETTINGS), enabled: false });
-  expect(
-    getComputedStyle(document.querySelector('.ytp-caption-window-container')!).opacity,
-  ).not.toBe('0');
+  expect(getComputedStyle(layer).opacity).not.toBe('0');
 });
 
 it('loads the selected YouTube track before playback, aligns rolling captions, and drops a late track response after navigation', async () => {
@@ -342,86 +377,6 @@ it('uses the current video session to load source subtitles', async () => {
     pageTitle: 'Test video',
     text: 'This field behind me',
   });
-});
-
-it('translates authored English sentences even when authored, automatic and browser target tracks exist', async () => {
-  const { video, player, sendMessage, lines } = setup();
-  const tracks = [
-    { languageCode: 'zh-Hans', vssId: '.zh-Hans' },
-    { languageCode: 'zh-Hans', vssId: 'a.zh-Hans', kind: 'asr' },
-    { languageCode: 'en', vssId: 'a.en', kind: 'asr' },
-    { languageCode: 'en', vssId: '.en' },
-  ].map((track) => ({
-    ...track,
-    baseUrl: `https://www.youtube.com/api/timedtext?v=video-1&lang=${track.languageCode}&track=${track.vssId}`,
-  }));
-  Object.assign(player, {
-    getOption: () => ({ languageCode: 'en', vss_id: '.en', kind: '' }),
-    getPlayerResponse: () => ({
-      videoDetails: { videoId: 'video-1' },
-      captions: {
-        playerCaptionsTracklistRenderer: { captionTracks: tracks },
-      },
-    }),
-  });
-  const targetTrack = {
-    mode: 'showing',
-    kind: 'subtitles',
-    language: 'zh-Hans',
-    cues: [{ startTime: 0, endTime: 100, text: '浏览器已有译文' }],
-    activeCues: [],
-  };
-  Object.defineProperty(video, 'textTracks', { configurable: true, value: [targetTrack] });
-  document.querySelector('.ytp-caption-window-container')!.innerHTML =
-    '<span class="ytp-caption-segment">网站已有中文字幕</span>';
-  const fetch = vi.fn(async (url: string) =>
-    Response.json({
-      events: url.includes('track=.en')
-        ? [
-            { tStartMs: 1000, dDurationMs: 1500, segs: [{ utf8: 'This field behind me' }] },
-            { tStartMs: 2500, dDurationMs: 2000, segs: [{ utf8: 'will become a city.' }] },
-            { tStartMs: 4500, dDurationMs: 7000, segs: [{ utf8: 'Go. Go.' }] },
-          ]
-        : [{ tStartMs: 0, dDurationMs: 100000, segs: [{ utf8: '错误的字幕轨道' }] }],
-    }),
-  );
-  vi.stubGlobal('fetch', fetch);
-  await import('../src/platforms/youtube/page');
-  controller = new CaptionController(
-    createYoutubePlatform,
-    publicSettings({ ...consentedSettings, apiKey: 'key', model: 'model' }),
-  );
-  await playTo(video, 1.2);
-  expect([...lines()].map((line) => line.textContent)).toEqual([
-    'This field behind me will become a city.',
-    '译文：This field behind me will become a city.',
-  ]);
-  expect(prefetchTexts(sendMessage)).toEqual([
-    'This field behind me will become a city.',
-    'Go.',
-    'Go.',
-  ]);
-  expect(fetch.mock.calls.map(([url]) => new URL(url).searchParams.get('track'))).toEqual(['.en']);
-  expect(targetTrack.mode).toBe('showing');
-  expect(getComputedStyle(document.querySelector('.ytp-caption-window-container')!).opacity).toBe(
-    '0',
-  );
-  await playTo(video, 3);
-  expect(lines()[0].textContent).toBe('This field behind me will become a city.');
-  expect(
-    sendMessage.mock.calls
-      .filter(([message]) => message.type === 'translate')
-      .map(([message]) => message.text),
-  ).toEqual(['This field behind me will become a city.']);
-  await playTo(video, 4.5);
-  expect([...lines()].map((line) => line.textContent)).toEqual(['Go.', '译文：Go.']);
-  video.currentTime = 12;
-  video.dispatchEvent(new Event('timeupdate'));
-  expect([...lines()].map((line) => line.hidden)).toEqual([true, true]);
-  controller.destroy();
-  expect(
-    getComputedStyle(document.querySelector('.ytp-caption-window-container')!).opacity,
-  ).not.toBe('0');
 });
 
 it.each([

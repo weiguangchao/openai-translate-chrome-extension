@@ -256,23 +256,89 @@ it('prefetches from the selected HLS subtitle playlist before any cue is shown',
   expect(requested.some((request) => request.texts.includes('Cue 11'))).toBe(true);
 });
 
-it('stops prefetch and clears the overlay when X captions are turned off', async () => {
-  const { video, hls } = addPlayer('a', { top: 0, bottom: 360 }, false);
-  controller = new CaptionController(createXPlatform, publicSettings(settings));
-  await playTo(video, 19);
-  expect(lines()?.[1].textContent).toBe('译文 Cue 6');
-  hls.subtitleTrack = -1;
-  await vi.advanceTimersByTimeAsync(1200);
-  expect(lines()?.[0].hidden).toBe(true);
-  expect(lines()?.[1].hidden).toBe(true);
-  const count = requested.length;
-  await playTo(video, 33);
-  expect(requested).toHaveLength(count);
-  hls.subtitleTrack = 0;
-  await vi.advanceTimersByTimeAsync(4000);
-  expect(lines()?.[0].textContent).toBe('Cue 11');
-  expect(lines()?.[1].textContent).toBe('译文 Cue 11');
+function captionSource(kind: 'HLS' | 'native') {
+  if (kind === 'HLS') {
+    const { video, hls } = addPlayer('a', { top: 0, bottom: 360 }, false, [
+      track('a', 'zh-Hans'),
+      track('a', 'EN'),
+    ]);
+    return {
+      video,
+      targetLanguage: 'ja',
+      downloads: 4,
+      captions: ['字幕 1', 'Cue 1', '字幕 11'],
+      select(index: number) {
+        hls.subtitleTrack = index;
+      },
+    };
+  }
+  const { video } = addPlayer('a', { top: 0, bottom: 360 }, false);
+  Reflect.deleteProperty(video.parentElement!, '__reactFiber$test');
+  const tracks = [
+    [
+      { startTime: 3, endTime: 9, text: 'English caption.' },
+      { startTime: 33, endTime: 35, text: 'Later English caption.' },
+    ],
+    [{ startTime: 3, endTime: 9, text: '日本語の字幕。' }],
+  ].map((cues, index) => ({
+    kind: 'subtitles',
+    language: index ? 'ja' : 'en',
+    mode: index ? 'disabled' : 'showing',
+    activeCues: [],
+    cues,
+  }));
+  Object.defineProperty(video, 'textTracks', { value: tracks });
+  return {
+    video,
+    targetLanguage: settings.targetLanguage,
+    downloads: 0,
+    captions: ['English caption.', '日本語の字幕。', 'Later English caption.'],
+    select(index: number) {
+      tracks.forEach((track, at) => (track.mode = at === index ? 'showing' : 'disabled'));
+    },
+  };
+}
+
+it.each(['HLS', 'native'] as const)('follows a track switch on the %s source', async (kind) => {
+  const source = captionSource(kind);
+  const [first, second] = source.captions;
+  controller = new CaptionController(
+    createXPlatform,
+    publicSettings({ ...settings, targetLanguage: source.targetLanguage }),
+  );
+  await playTo(source.video, 3);
+  expect(lines()?.[1].textContent).toBe(`译文 ${first}`);
+  expect(downloads(/\.m3u8|\.vtt/)).toHaveLength(source.downloads);
+  source.select(1);
+  await vi.advanceTimersByTimeAsync(5000);
+  expect(lines()?.[0].textContent).toBe(second);
+  expect(lines()?.[1].textContent).toBe(`译文 ${second}`);
 });
+
+it.each(['HLS', 'native'] as const)(
+  'hides lines and stops prefetch while %s captions are off',
+  async (kind) => {
+    const source = captionSource(kind);
+    const [first, , later] = source.captions;
+    controller = new CaptionController(
+      createXPlatform,
+      publicSettings({ ...settings, targetLanguage: source.targetLanguage }),
+    );
+    await playTo(source.video, 3);
+    expect(lines()?.[1].textContent).toBe(`译文 ${first}`);
+    source.select(-1);
+    await vi.advanceTimersByTimeAsync(1200);
+    expect(lines()?.[0].hidden).toBe(true);
+    expect(lines()?.[1].hidden).toBe(true);
+    const count = requested.length;
+    await playTo(source.video, 33);
+    expect(requested).toHaveLength(count);
+    source.select(0);
+    await vi.advanceTimersByTimeAsync(4000);
+    expect(lines()?.[0].textContent).toBe(later);
+    expect(lines()?.[1].textContent).toBe(`译文 ${later}`);
+  },
+);
 
 it.each([-1, 0])(
   'honors the initial HLS selection %s before prefetching a conflicting native track',
@@ -309,24 +375,6 @@ it.each([-1, 0])(
     }
   },
 );
-
-it('downloads the selected X subtitle track and follows language changes', async () => {
-  const { video, hls } = addPlayer('a', { top: 0, bottom: 360 }, false, [
-    track('a', 'zh-Hans'),
-    track('a', 'EN'),
-  ]);
-  controller = new CaptionController(
-    createXPlatform,
-    publicSettings({ ...settings, targetLanguage: 'ja' }),
-  );
-  await playTo(video, 3);
-  expect(lines()?.[1].textContent).toBe('译文 字幕 1');
-  expect(downloads(/zh-Hans/)).toHaveLength(4);
-  hls.subtitleTrack = 1;
-  await vi.advanceTimersByTimeAsync(5000);
-  expect(lines()?.[0].textContent).toBe('Cue 1');
-  expect(lines()?.[1].textContent).toBe('译文 Cue 1');
-});
 
 it('follows the playing, most visible video and moves the overlay when another one takes over', async () => {
   const first = addPlayer('a', { top: -200, bottom: 160 }, true);
@@ -489,41 +537,6 @@ it('prefetches loaded native X captions before they appear and after seeking wit
   expect(lines()?.[0].textContent).toBe('Native landing.');
   expect(lines()?.[1].textContent).toBe('译文 Native landing.');
   expect(downloads(/\.m3u8|\.vtt/)).toEqual([]);
-});
-
-it('follows native X track changes and stops prefetch when captions are disabled', async () => {
-  const { video } = addPlayer('a', { top: 0, bottom: 360 }, false);
-  Reflect.deleteProperty(video.parentElement!, '__reactFiber$test');
-  const english = {
-    kind: 'subtitles',
-    language: 'en',
-    mode: 'showing',
-    activeCues: [],
-    cues: [{ startTime: 3, endTime: 9, text: 'English caption.' }],
-  };
-  const japanese = {
-    kind: 'subtitles',
-    language: 'ja',
-    mode: 'disabled',
-    activeCues: [],
-    cues: [{ startTime: 3, endTime: 9, text: '日本語の字幕。' }],
-  };
-  Object.defineProperty(video, 'textTracks', { value: [english, japanese] });
-  controller = new CaptionController(createXPlatform, publicSettings(settings));
-  await playTo(video, 3);
-  expect(lines()?.[1].textContent).toBe('译文 English caption.');
-  english.mode = 'disabled';
-  japanese.mode = 'showing';
-  await vi.advanceTimersByTimeAsync(4000);
-  expect(lines()?.[0].textContent).toBe('日本語の字幕。');
-  expect(lines()?.[1].textContent).toBe('译文 日本語の字幕。');
-  japanese.mode = 'disabled';
-  await vi.advanceTimersByTimeAsync(1000);
-  expect(lines()?.[0].hidden).toBe(true);
-  expect(lines()?.[1].hidden).toBe(true);
-  const count = requested.length;
-  await playTo(video, 20);
-  expect(requested).toHaveLength(count);
 });
 
 it('names the page without its notification count or X suffix', () => {

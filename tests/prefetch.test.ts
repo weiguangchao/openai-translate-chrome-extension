@@ -383,47 +383,8 @@ it('keeps untranslated short sources hidden and sends the short landing before u
   expect(translated()?.textContent).toBe('落点译文');
 });
 
-it('finishes in-flight prefetch while paused and does not send more until playback resumes', async () => {
-  const dense = Array.from({ length: 25 }, (_, index) => ({
-    startTime: 2 + index * 2,
-    endTime: 4 + index * 2,
-    text: `Cue ${index + 1}.`,
-  }));
-  setCues(dense);
-  const setPaused = async (paused: boolean) => {
-    Object.defineProperty(video, 'paused', { value: paused });
-    video.dispatchEvent(new Event(paused ? 'pause' : 'play'));
-    await vi.advanceTimersByTimeAsync(0);
-  };
-  controller = new CaptionController(createTestPlatform, publicSettings(saved));
-  await advance(2);
-  const openingCount = requested.length;
-  expect(openingCount).toBeGreaterThan(0);
-  expect(openingCount).toBeGreaterThan(translationSendsPerSecond);
-  await setPaused(true);
-  expect(pending.every((request) => !request.signal.aborted)).toBe(true);
-  await vi.advanceTimersByTimeAsync(5000);
-  expect(requested).toHaveLength(openingCount);
-  await finish({ 'Cue 1.': '第一句' });
-  expect(translated()?.textContent).toBe('第一句');
-  expect(translated()?.hidden).toBe(false);
-  expect(requested).toHaveLength(openingCount);
-  video.currentTime = 12;
-  video.dispatchEvent(new Event('timeupdate'));
-  await vi.advanceTimersByTimeAsync(5000);
-  expect(requested).toHaveLength(openingCount);
-  await setPaused(false);
-  await vi.advanceTimersByTimeAsync(1000);
-  expect(requested.length).toBeGreaterThan(openingCount);
-  await setPaused(true);
-  const sent = requested.length;
-  await vi.advanceTimersByTimeAsync(5000);
-  expect(requested).toHaveLength(sent);
-  expect(pending.at(-1)?.signal.aborted).toBe(false);
-});
-
-it.each(['dropped', 'reply-lost', 'empty', 'failure'] as const)(
-  'recovers pause and resume after a control message is %s',
+it.each(['none', 'dropped', 'reply-lost', 'empty', 'failure'] as const)(
+  'finishes in-flight prefetch while paused and recovers pause and resume, control fault=%s',
   async (fault) => {
     setCues(
       Array.from({ length: 25 }, (_, index) => ({
@@ -435,8 +396,9 @@ it.each(['dropped', 'reply-lost', 'empty', 'failure'] as const)(
     controller = new CaptionController(createTestPlatform, publicSettings(saved));
     await advance(2);
     const openingCount = requested.length;
+    expect(openingCount).toBeGreaterThan(translationSendsPerSecond);
     const sendMessage = chrome.runtime.sendMessage;
-    let failType = 'prefetch-pause';
+    let failType = fault === 'none' ? '' : 'prefetch-pause';
     const faultySend = async (message: { type: string }) => {
       if (message.type !== failType) return sendMessage(message);
       failType = '';
@@ -456,25 +418,30 @@ it.each(['dropped', 'reply-lost', 'empty', 'failure'] as const)(
       video.dispatchEvent(new Event(paused ? 'pause' : 'play'));
       await vi.advanceTimersByTimeAsync(150);
     };
+    const resent = fault === 'none' || fault === 'dropped' ? 1 : 2;
     await setPaused(true);
-    expect(messages.filter((type) => type === 'prefetch-pause')).toHaveLength(
-      fault === 'dropped' ? 1 : 2,
-    );
+    expect(messages.filter((type) => type === 'prefetch-pause')).toHaveLength(resent);
+    expect(pending.every((request) => !request.signal.aborted)).toBe(true);
     await finish({ 'Cue 1.': '第一句' });
-    await vi.advanceTimersByTimeAsync(1000);
+    expect(translated()?.textContent).toBe('第一句');
+    await vi.advanceTimersByTimeAsync(5000);
     expect(requested).toHaveLength(openingCount);
     video.currentTime = 12;
     video.dispatchEvent(new Event('timeupdate'));
-    await vi.advanceTimersByTimeAsync(150);
-    failType = 'prefetch-resume';
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(requested).toHaveLength(openingCount);
+    if (fault !== 'none') failType = 'prefetch-resume';
     await setPaused(false);
-    expect(messages.filter((type) => type === 'prefetch-resume')).toHaveLength(
-      fault === 'dropped' ? 1 : 2,
-    );
+    expect(messages.filter((type) => type === 'prefetch-resume')).toHaveLength(resent);
     await vi.advanceTimersByTimeAsync(1000);
     expect(requested.length).toBeGreaterThan(openingCount);
     await finish({ 'Cue 6.': '第六句' });
     expect(translated()?.textContent).toBe('第六句');
+    await setPaused(true);
+    const sent = requested.length;
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(requested).toHaveLength(sent);
+    expect(pending.at(-1)?.signal.aborted).toBe(false);
   },
 );
 
