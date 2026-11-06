@@ -18,7 +18,7 @@ from pathlib import Path
 DEBUG = Path(__file__).resolve().parents[2] / "debug-chromium/scripts"
 sys.path.insert(0, str(DEBUG))
 from holder import handshake
-from live import fingerprint
+from live import extension_id, fingerprint
 
 
 def endpoint(process, port):
@@ -38,7 +38,15 @@ def endpoint(process, port):
     raise RuntimeError("No Chromium endpoint; inspect chromium.log.")
 
 
-def developer_mode(port, path):
+def provider_origin(url):
+    parts = urllib.parse.urlsplit(url)
+    local = parts.scheme == "http" and parts.hostname in {"localhost", "127.0.0.1"}
+    if not parts.hostname or not (parts.scheme == "https" or local):
+        return None
+    return f"{parts.scheme}://{parts.hostname}/*"
+
+
+def prepare_extensions(port, path, extension, origin):
     chrome = handshake(port, path)
     target = None
     try:
@@ -57,9 +65,18 @@ def developer_mode(port, path):
                 "expression": expression, "awaitPromise": True, "returnByValue": True,
             }, session=session)
             if reply.get("result", {}).get("value") is True:
-                return
+                break
             time.sleep(0.1)
-        raise RuntimeError("Could not enable extension developer mode")
+        else:
+            raise RuntimeError("Could not enable extension developer mode")
+        if origin:
+            reply = chrome.call("Runtime.evaluate", {
+                "expression": f"chrome.developerPrivate.addHostPermission("
+                              f"{json.dumps(extension_id(extension))}, {json.dumps(origin)}).then(() => true)",
+                "awaitPromise": True, "returnByValue": True,
+            }, session=session)
+            if reply.get("result", {}).get("value") is not True:
+                raise RuntimeError(f"Could not grant site access to {origin}")
     finally:
         try:
             if target:
@@ -78,6 +95,7 @@ def main():
     parser.add_argument("--extension", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True, help="New task-owned directory")
     parser.add_argument("--window-size", default="1280,900")
+    parser.add_argument("--provider-url", help="Provider URL whose origin Subline may reach")
     args = parser.parse_args()
     browser, extension, output = (p.expanduser().resolve() for p in (
         args.browser, args.extension, args.output,
@@ -88,6 +106,9 @@ def main():
         parser.error("--extension needs manifest.json; build first.")
     if not re.fullmatch(r"[1-9]\d*,[1-9]\d*", args.window_size):
         parser.error("--window-size needs positive WIDTH,HEIGHT")
+    origin = provider_origin(args.provider_url) if args.provider_url else None
+    if args.provider_url and not origin:
+        parser.error("--provider-url needs https, or http to localhost or 127.0.0.1")
     version = subprocess.run([str(browser), "--version"], check=True,
                              capture_output=True, text=True).stdout.strip()
     match = re.search(r"\b(\d+)\.\d+\.\d+\.\d+\b", version)
@@ -117,7 +138,7 @@ def main():
         "state": "starting", "launcher_pid": os.getpid(), "browser_pid": None,
         "browser": str(browser), "version": version, "extension": str(extension),
         "fingerprint": fingerprint(extension), "profile": str(profile), "port": port,
-        "user_agent": ua, "flags": flags,
+        "user_agent": ua, "flags": flags, "provider_origin": origin,
     }
 
     def save():
@@ -137,7 +158,7 @@ def main():
         save()
         path = endpoint(process, port)
         record["endpoint_path"] = path
-        developer_mode(port, path)
+        prepare_extensions(port, path, extension, origin)
         (output / "endpoint").write_text(f"{port}\n{path}\n")
         record["state"] = "ready"
         save()

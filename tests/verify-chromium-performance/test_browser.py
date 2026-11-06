@@ -105,7 +105,8 @@ class Measurements(BrowserCase):
                                                'rate': 1, 'seek': [44]}]}))
         output = folder / 'results'
         command = [sys.executable, measure.__file__, str(plan), '--build', f'new={source}',
-                   '--loaded', str(self.extension), '--output', str(output), '--session', SESSION]
+                   '--loaded', str(self.extension), '--output', str(output), '--session', SESSION,
+                   '--existing-browser', self.live.env['DEBUG_CHROMIUM_PORT_FILE']]
         before = live_module.fingerprint(self.extension)
         result = subprocess.run(command, env=self.live.env, capture_output=True, text=True, timeout=120)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)

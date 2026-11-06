@@ -26,8 +26,9 @@ EXPECTED_ENDPOINT = None
 BROWSER_ARGS = []
 
 ACTIONS_HELP = """JSON action fields
-media: optional time, rate (0.25-4), play, pause, keep_playing, skip_ads, selector
-(default video). Waits for readiness/motion; no fields only reports. Seeks at
+media: optional time, rate (0.25-4), play, pause, keep_playing, skip_ads, captions,
+selector (default video). Waits for readiness/motion; no fields only reports.
+captions turns on the first native subtitle track unless one already shows. Seeks at
 most 3 times if playback leaves reach. YouTube uses its player rate. Later steps
 enforce rate/keep_playing/skip_ads; pause disables keep_playing; close restores rate.
 wait: seconds (wall duration) OR time (video position/end); optional selector.

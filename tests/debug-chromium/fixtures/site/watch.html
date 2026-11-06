@@ -16,6 +16,7 @@
   //                    restores a resume position
   //   stuck=1          play() does nothing, so the video never advances
   //   unmute=1         unmute the video once it plays
+  //   track=1          add an English subtitle track that starts disabled, as X does
   const params = new URLSearchParams(location.search);
   const video = document.querySelector('video');
   const player = document.querySelector('#movie_player');
@@ -60,6 +61,8 @@
   });
 
   if (params.has('stuck')) HTMLMediaElement.prototype.play = () => Promise.resolve();
+
+  if (params.has('track')) video.addTextTrack('subtitles', 'English', 'en').mode = 'disabled';
 
   if (params.has('unmute'))
     video.addEventListener('playing', () => {
