@@ -414,7 +414,7 @@ it('finishes in-flight prefetch while paused and does not send more until playba
   expect(openingCount).toBeGreaterThan(translationSendsPerSecond);
   await setPaused(true);
   expect(pending.every((request) => !request.signal.aborted)).toBe(true);
-  await vi.advanceTimersByTimeAsync(60000);
+  await vi.advanceTimersByTimeAsync(5000);
   expect(requested).toHaveLength(openingCount);
   await finish({ 'Cue 1.': '第一句' });
   expect(translated()?.textContent).toBe('第一句');
@@ -422,14 +422,14 @@ it('finishes in-flight prefetch while paused and does not send more until playba
   expect(requested).toHaveLength(openingCount);
   video.currentTime = 12;
   video.dispatchEvent(new Event('timeupdate'));
-  await vi.advanceTimersByTimeAsync(60000);
+  await vi.advanceTimersByTimeAsync(5000);
   expect(requested).toHaveLength(openingCount);
   await setPaused(false);
   await vi.advanceTimersByTimeAsync(1000);
   expect(requested.length).toBeGreaterThan(openingCount);
   await setPaused(true);
   const sent = requested.length;
-  await vi.advanceTimersByTimeAsync(60000);
+  await vi.advanceTimersByTimeAsync(5000);
   expect(requested).toHaveLength(sent);
   expect(pending.at(-1)?.signal.aborted).toBe(false);
 });

@@ -1,5 +1,3 @@
-import { spawnSync } from 'node:child_process';
-import path from 'node:path';
 import { ESLint } from 'eslint';
 import { expect, it } from 'vitest';
 
@@ -129,22 +127,19 @@ it.each([
   );
 });
 
-it('checks dependency boundaries when ESLint runs from a subdirectory', () => {
-  const run = spawnSync(
-    process.execPath,
-    [
-      path.resolve('node_modules/eslint/bin/eslint.js'),
-      '--stdin',
-      '--stdin-filename',
-      'core/probe.ts',
-    ],
-    {
-      cwd: path.resolve('src'),
-      input: 'import "../platforms/youtube/platform";',
-      encoding: 'utf8',
-    },
-  );
-  expect(run.stdout).toContain('local/dependency-boundaries');
+it('checks dependency boundaries when ESLint runs from a subdirectory', async () => {
+  const root = process.cwd();
+  process.chdir('src');
+  try {
+    const [result] = await new ESLint().lintText('import "../platforms/youtube/platform";', {
+      filePath: 'core/probe.ts',
+    });
+    expect(result.messages).toEqual([
+      expect.objectContaining({ ruleId: 'local/dependency-boundaries' }),
+    ]);
+  } finally {
+    process.chdir(root);
+  }
 });
 
 it.each([
