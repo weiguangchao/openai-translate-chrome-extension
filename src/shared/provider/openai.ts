@@ -233,7 +233,8 @@ When a native response schema is supplied, follow it exactly. Otherwise, return 
 Do not wrap the entire response or protocol envelope in a Markdown fence. Fenced code blocks that belong to an item's processed content may be preserved. Do not include explanations outside processed text.
 `;
 
-function readCaptionTranslations(response: string, count: number): string[] | null {
+function readCaptionTranslations(reply: string, count: number): string[] | null {
+  const response = reply.replace(/\r?\n\[\[source_end\]\]$/, '');
   const titles = [...response.matchAll(/^\[\[(p\d+|source_end)\]\]\r?$/gm)];
   if (titles.length !== count || response.slice(0, titles[0].index).trim()) return null;
   const items = new Map<string, string>();
