@@ -45,7 +45,7 @@ for (const failure of [
         await expect(p.translated).toHaveText(failure.text);
         await expect(p.translated).toBeVisible();
         await expect(p.translated).toHaveCSS('color', 'rgb(255, 204, 0)');
-        await expect(p.translated).toHaveCSS('font-size', '20px');
+        await expect(p.translated).toHaveCSS('font-size', '22px');
         await expect(p.overlay.locator('.stack')).toHaveCSS(
           'background-color',
           'rgba(0, 0, 0, 0.45)',
@@ -90,7 +90,7 @@ test('youtube: an invalid key shows a safe error and recovers once fixed', async
     await p.play();
     await expect(p.translated).toHaveText('The API Key is invalid or expired.');
     await expect(p.translated).toHaveCSS('color', 'rgb(255, 204, 0)');
-    await expect(p.translated).toHaveCSS('font-size', '20px');
+    await expect(p.translated).toHaveCSS('font-size', '22px');
     await expect(p.overlay.locator('.stack')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0.45)');
     await expect(p.original).toBeHidden();
     expect(p.posts.map((post) => post.status)).toContain(401);
@@ -146,7 +146,7 @@ test('youtube: a stalled opening batch times out without a retry and the next ba
       await expect.poll(() => p.posts.length).toBeGreaterThan(0);
       expect(p.posts[0].inputs.map((input) => input.text)).toEqual([denseCue(0).text]);
       await expect(p.translated).toHaveText('Translating');
-      await expect(p.translated).toHaveCSS('font-size', '20px');
+      await expect(p.translated).toHaveCSS('font-size', '22px');
       await p.pause();
       expect(
         await p.page.locator('video').evaluate((v: HTMLVideoElement) => v.currentTime),
@@ -158,7 +158,7 @@ test('youtube: a stalled opening batch times out without a retry and the next ba
       ).toHaveLength(1);
       await expect(p.translated).toHaveText('Request timed out');
       await expect(p.translated).toHaveCSS('color', 'rgb(255, 204, 0)');
-      await expect(p.translated).toHaveCSS('font-size', '20px');
+      await expect(p.translated).toHaveCSS('font-size', '22px');
       const later = denseCue(4);
       await p.seek(later.start + 0.2);
       await p.play();
