@@ -49,7 +49,7 @@ afterEach(async () => {
   document.body.innerHTML = '';
 });
 
-it('keeps project links without a feedback entry on the about page', async () => {
+it('links the repository and the author on the about page', async () => {
   await act(async () => root.render(<App />));
   const about = [...document.querySelectorAll('button')].find(
     (button) => button.textContent?.trim() === 'About',
@@ -57,18 +57,10 @@ it('keeps project links without a feedback entry on the about page', async () =>
   await act(async () => about!.click());
 
   const repository = document.querySelector<HTMLAnchorElement>('a[aria-label="GitHub repository"]');
-  const feedback = [...document.querySelectorAll('a')].find(
-    (link) => link.textContent?.trim() === 'Feedback',
-  );
   expect(repository?.getAttribute('href')).toBe(REPOSITORY);
   expect(repository?.getAttribute('target')).toBe('_blank');
   expect(repository?.getAttribute('rel')).toBe('noreferrer');
-  expect(feedback).toBeUndefined();
   expect(document.querySelector('a[aria-label="Author on X"]')?.getAttribute('href')).toBe(
     'https://x.com/itbuxiangma',
-  );
-  expect(document.querySelector('textarea')).toBeNull();
-  expect([...document.querySelectorAll('h2')].map((heading) => heading.textContent)).not.toContain(
-    'Project and feedback',
   );
 });

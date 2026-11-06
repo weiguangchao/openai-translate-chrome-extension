@@ -83,7 +83,9 @@ it('does not substitute reasoning for an absent translation', async () => {
   vi.stubGlobal(
     'fetch',
     vi.fn(async () =>
-      Response.json({ choices: [{ message: { content: null, reasoning_content: 'draft' } }] }),
+      Response.json({
+        choices: [{ message: { content: null, reasoning_content: '[[p0]]\n草稿' } }],
+      }),
     ),
   );
   await expect(translateCaptionBatch(settings, ['One.'])).resolves.toBeNull();

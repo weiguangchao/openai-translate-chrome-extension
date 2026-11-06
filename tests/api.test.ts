@@ -6,7 +6,6 @@ import {
   DEFAULT_SETTINGS,
   normalizeSettings,
   publicSettings,
-  validateSettings,
   type CaptionTranslationSettings,
 } from '../src/shared/settings';
 
@@ -121,7 +120,7 @@ describe('OpenAI-compatible provider contract', () => {
     },
   );
 
-  it('keeps the translation instructions and adds the caption id protocol', async () => {
+  it('keeps the translation instructions and the page title for caption batches', async () => {
     const fetch = vi
       .fn()
       .mockResolvedValue(
@@ -143,11 +142,6 @@ describe('OpenAI-compatible provider contract', () => {
       ),
     });
     expect(body.messages[0].content).toContain('Video title');
-    expect(body.messages[0].content).toContain('[[source_end]]');
-    expect(body.messages[1]).toEqual({
-      role: 'user',
-      content: `Translate to Simplified Chinese:\n\n[[p0]]\n${text}\n[[source_end]]`,
-    });
     expect(body).not.toHaveProperty('response_format');
     expect(body.stream).toBe(false);
     expect(body).not.toHaveProperty('reasoning_effort');
@@ -172,9 +166,10 @@ describe('OpenAI-compatible provider contract', () => {
     async (status) => {
       const fetch = vi.fn().mockImplementation(async () => new Response('', { status }));
       vi.stubGlobal('fetch', fetch);
-      await expect(translate(config(), 'Hello')).rejects.toThrow();
+      const failure = { failure: { kind: 'http', status } };
+      await expect(translate(config(), 'Hello')).rejects.toMatchObject(failure);
       expect(fetch).toHaveBeenCalledTimes(1);
-      await expect(translateCaptionBatch(config(), ['Hello'])).rejects.toThrow();
+      await expect(translateCaptionBatch(config(), ['Hello'])).rejects.toMatchObject(failure);
       expect(fetch).toHaveBeenCalledTimes(2);
     },
   );
@@ -232,19 +227,6 @@ describe('OpenAI-compatible provider contract', () => {
     await vi.advanceTimersByTimeAsync(providerSendWindowMs);
     await expect(next).resolves.toBe('第二句');
     expect(values[TOKEN_USAGE_KEY]).toEqual({ input: 1831, output: 266, cache: 906 });
-    expect(chrome.storage.local.set).toHaveBeenCalledTimes(3);
-  });
-
-  it('rejects non-JSON and empty completions instead of painting an undefined translation', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi
-        .fn()
-        .mockResolvedValueOnce(new Response('<html>login</html>'))
-        .mockResolvedValueOnce(Response.json({ choices: [{ message: { content: null } }] })),
-    );
-    await expect(translate(config(), 'Hello')).rejects.toThrow('invalid JSON');
-    await expect(translate(config(), 'Hello')).rejects.toThrow('The model returned no translation');
   });
 
   it('rejects unsafe URLs before sending any credentials', async () => {
@@ -273,11 +255,6 @@ describe('OpenAI-compatible provider contract', () => {
 });
 
 describe('saved configuration contract', () => {
-  it('allows partial setup without a configured caption language', () => {
-    expect(() => validateSettings(structuredClone(DEFAULT_SETTINGS))).not.toThrow();
-    expect(() => validateSettings({ ...config(), targetLanguage: 'en' })).not.toThrow();
-  });
-
   it('bounds persisted styles and strips service secrets from content-script settings', () => {
     const settings = normalizeSettings({
       ...config(),

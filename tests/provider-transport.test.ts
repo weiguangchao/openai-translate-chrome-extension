@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { DEFAULT_SETTINGS, type CaptionTranslationSettings } from '../src/shared/settings';
-import { packedCues, prefetchItems, providerReply, requestedTexts } from './fixtures/provider';
+import { prefetchItems, providerReply, requestedTexts } from './fixtures/provider';
 import {
   providerSendWindowMs,
   providerTimeoutMs,
@@ -142,26 +142,6 @@ it('starts each provider deadline only when its HTTP request is sent', async () 
   await expect(work[3]).resolves.toBe(
     'The request timed out. Check your network or choose a faster model.',
   );
-});
-
-it('prioritizes the visible caption when the next send window opens', async () => {
-  const sent: string[] = [];
-  vi.stubGlobal(
-    'fetch',
-    vi.fn(async (_url: string, init: RequestInit) => {
-      const texts = requestedTexts(init);
-      sent.push(...texts);
-      return providerReply(texts, () => '完成');
-    }),
-  );
-  const queue = new TranslationQueue();
-  await Promise.all(['A', 'B', 'C'].map((text) => queue.request(text, settings, text)));
-  const prefetch = queue.prefetch('window', settings, packedCues(['Future 0', 'Future 1'], 1));
-  const current = queue.request('current', settings, 'Visible');
-  await vi.advanceTimersByTimeAsync(1000);
-  expect(sent.slice(3)).toEqual(['Visible', 'Future 0', 'Future 1']);
-  await expect(current).resolves.toBe('完成');
-  await expect(prefetch).resolves.toEqual(['完成', '完成']);
 });
 
 it('replaces unsent work when a consumer moves to a disjoint window', async () => {

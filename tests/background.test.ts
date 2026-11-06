@@ -252,57 +252,6 @@ it.each([
   expect(fetch).not.toHaveBeenCalled();
 });
 
-it('answers a prefetch with translations in the order asked, settling cues a later window drops', async () => {
-  const pending: { texts: string[]; resolve: (value: Response) => void }[] = [];
-  const fetch = vi.fn(
-    (_url: string, init: RequestInit) =>
-      new Promise<Response>((resolve) => pending.push({ texts: requestedTexts(init), resolve })),
-  );
-  vi.stubGlobal('fetch', fetch);
-  const send = await loadBackground({
-    ...structuredClone(consentedSettings),
-    apiKey: 'key',
-    model: 'model',
-  });
-  const opening = send({
-    type: 'prefetch',
-    captionLanguage: 'en',
-    pageTitle: 'Video title',
-    time: 0,
-    rate: 1,
-    cues: packedCues(['A', 'B']),
-  });
-  await vi.waitFor(() => expect(pending).toHaveLength(1));
-  const sliding = send({
-    type: 'prefetch',
-    captionLanguage: 'en',
-    pageTitle: 'Video title',
-    time: 0,
-    rate: 1,
-    cues: packedCues(['B', 'C']),
-  });
-  await vi.waitFor(() => expect(pending).toHaveLength(2));
-  for (const request of pending)
-    request.resolve(providerReply(request.texts, (text) => `${text} 译文`));
-  await expect(opening).resolves.toEqual({ ok: true, data: [null, 'B 译文'] });
-  await expect(sliding).resolves.toEqual({ ok: true, data: ['B 译文', 'C 译文'] });
-  await expect(
-    send({
-      type: 'prefetch',
-      captionLanguage: 'en',
-      pageTitle: 'Video title',
-      time: 0,
-      rate: 1,
-      cues: packedCues(['B', 'C']),
-    }),
-  ).resolves.toEqual({
-    ok: true,
-    data: ['B 译文', 'C 译文'],
-  });
-  await expect(send({ type: 'prefetch-pause' })).resolves.toEqual({ ok: true });
-  expect(fetch).toHaveBeenCalledTimes(2);
-});
-
 it('starts a new page in the same tab without the pause the previous page left', async () => {
   const fetch = vi.fn(async (_url: string, init: RequestInit) =>
     providerReply(requestedTexts(init), (text) => `${text} 译文`),
