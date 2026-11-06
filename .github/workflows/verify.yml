@@ -26,7 +26,7 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
-      - run: npx playwright install --with-deps chromium
+      - run: npx playwright install chromium
       - name: Allow the installed Chromium to create sandbox namespaces
         run: |
           subline_chromium="$(node --input-type=module -e 'import { chromium } from "playwright"; console.log(chromium.executablePath())')"
