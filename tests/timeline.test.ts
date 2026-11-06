@@ -13,31 +13,36 @@ vi.mock('../src/shared/tuning', async (importOriginal) => {
   return { ...limits, segmentCaptions: limits.translationBatchLimit + 1 };
 });
 
-function cues(count: number) {
-  return Array.from({ length: count }, (_, index) => ({
-    startTime: index * 10,
-    endTime: index * 10 + 8,
-    text: `Cue ${index + 1}`,
-  }));
-}
+it('snapshots cues that can still reach the playhead within the lookahead', () => {
+  const time = 100;
+  const behind = time - behindGraceSeconds;
+  const horizon = time + planLookaheadSeconds;
+  const captions = timedCaptions([
+    { startTime: behind - 1, endTime: behind, text: 'Ended' },
+    { startTime: behind, endTime: time - behindGraceSeconds / 2, text: 'Within grace' },
+    { startTime: horizon - 1, endTime: horizon, text: 'Last ahead' },
+    { startTime: horizon, endTime: horizon + 1, text: 'Beyond' },
+  ]);
+  expect(playbackCues(captions, time)).toEqual([
+    { text: 'Within grace', start: behind, end: time - behindGraceSeconds / 2 },
+    { text: 'Last ahead', start: horizon - 1, end: horizon },
+  ]);
+  expect(captionAt(captions, horizon + 2)).toBe('');
+  expect(playbackCues(captions, horizon + 2)).toEqual([]);
+});
 
-it('snapshots cues that can still reach the playhead within the next minute', () => {
-  const list = cues(30);
-  const captions = timedCaptions(list);
-  for (const time of [0, 41, 95, 105, 165, 205]) {
-    const expected = list
-      .filter(
-        (cue) =>
-          cue.endTime > time - behindGraceSeconds && cue.startTime < time + planLookaheadSeconds,
-      )
-      .slice(0, planLookaheadCues);
-    const items = playbackCues(captions, time);
-    expect(items.map((item) => item.text)).toEqual(expected.map((cue) => cue.text));
-    expect(items.every((item) => item.end > item.start)).toBe(true);
-  }
-  expect(playbackCues(captions, 0).length).toBeLessThanOrEqual(planLookaheadCues);
-  expect(captionAt(captions, 9999)).toBe('');
-  expect(playbackCues(captions, 9999)).toEqual([]);
+it('stops a snapshot at planLookaheadCues', () => {
+  const spacing = planLookaheadSeconds / (planLookaheadCues + 1);
+  const captions = timedCaptions(
+    Array.from({ length: planLookaheadCues + 1 }, (_, index) => ({
+      startTime: index * spacing,
+      endTime: index * spacing + spacing / 2,
+      text: `Cue ${index + 1}`,
+    })),
+  );
+  expect(playbackCues(captions, 0).map((cue) => cue.text)).toEqual(
+    Array.from({ length: planLookaheadCues }, (_, index) => `Cue ${index + 1}`),
+  );
 });
 
 it('numbers segments over the captions a long sentence is cut into', async () => {

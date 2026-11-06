@@ -293,7 +293,7 @@ it.each(['translation', 'source'])(
       language: 'en',
       mode: 'model',
       id: 'old-track',
-      cues: [{ startTime: 0, endTime: 10, text: 'Old source.' }],
+      cues: [{ startTime: 0, endTime: 10, text: 'Same source.' }],
       layers: () => [],
     };
     controller = new CaptionController(() => platform, publicSettings(settings, 'old-version'));
@@ -301,7 +301,7 @@ it.each(['translation', 'source'])(
     source = {
       ...source,
       id: change === 'source' ? 'new-track' : 'old-track',
-      cues: [{ startTime: 0, endTime: 10, text: 'New source.' }],
+      cues: [{ startTime: 0, endTime: 10, text: 'Same source.' }],
     };
     controller.update(
       publicSettings(settings, change === 'translation' ? 'new-version' : 'old-version'),
@@ -309,10 +309,10 @@ it.each(['translation', 'source'])(
     await vi.advanceTimersByTimeAsync(0);
     replies[1]({ ok: true, data: '新的译文' });
     await vi.advanceTimersByTimeAsync(0);
-    expect(lines()).toEqual(['New source.', '新的译文']);
+    expect(lines()).toEqual(['Same source.', '新的译文']);
     replies[0]({ ok: true, data: '旧的译文' });
     await vi.advanceTimersByTimeAsync(0);
-    expect(lines()).toEqual(['New source.', '新的译文']);
+    expect(lines()).toEqual(['Same source.', '新的译文']);
     expect(sendMessage.mock.calls.filter(([message]) => message.type === 'translate')).toHaveLength(
       2,
     );

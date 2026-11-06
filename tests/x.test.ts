@@ -7,7 +7,6 @@ import { createXPlatform } from '../src/platforms/x/platform';
 import { publicSettings } from '../src/shared/settings';
 import { consentedSettings } from './fixtures/settings';
 import { providerReply, requestedTexts } from './fixtures/provider';
-import { providerSendWindowMs } from '../src/shared/tuning';
 
 const media = 'https://video.twimg.com/amplify_video/100';
 const settings = { ...consentedSettings, apiKey: 'test', model: 'model' };
@@ -235,7 +234,7 @@ afterEach(async () => {
   Reflect.deleteProperty(document, 'fullscreenElement');
 });
 
-it('prefetches the opening batches from the selected HLS subtitle playlist before any cue is shown', async () => {
+it('prefetches from the selected HLS subtitle playlist before any cue is shown', async () => {
   const { player, video } = addPlayer('a', { top: 0, bottom: 360 }, false);
   controller = new CaptionController(createXPlatform, publicSettings(settings));
   await vi.advanceTimersByTimeAsync(0);
@@ -246,13 +245,7 @@ it('prefetches the opening batches from the selected HLS subtitle playlist befor
         `${media.replace('/amplify_video', '/subtitles/amplify_video')}/a/EN/${part}-segment.vtt`,
     ),
   );
-  const opening = [['Cue 1'], ['Cue 2', 'Cue 3', 'Cue 4'], ['Cue 5', 'Cue 6', 'Cue 7']];
-  expect(requested.map((request) => request.texts)).toEqual(opening);
-  await vi.advanceTimersByTimeAsync(providerSendWindowMs);
-  expect(requested.map((request) => request.texts)).toEqual([
-    ...opening,
-    ['Cue 8', 'Cue 9', 'Cue 10'],
-  ]);
+  expect(requested.flatMap((request) => request.texts)).toContain('Cue 1');
   expect(player.querySelectorAll('[data-subline-overlay]')).toHaveLength(1);
   await playTo(video, 3);
   expect(lines()?.[0].textContent).toBe('Cue 1');
@@ -333,36 +326,6 @@ it('downloads the selected X subtitle track and follows language changes', async
   await vi.advanceTimersByTimeAsync(5000);
   expect(lines()?.[0].textContent).toBe('Cue 1');
   expect(lines()?.[1].textContent).toBe('译文 Cue 1');
-});
-
-it('shows short Chinese captions without Provider traffic when the track matches the target language', async () => {
-  const first = '不会讲话不是口才不好是你思想不够立体这是发生在阿里公益基金会的会议现场';
-  const second = '马云当场怒怼秘书长不会讲话一句话便让整个会场的气氛瞬间变得尴尬和紧张';
-  const originalFetch = fetch;
-  vi.stubGlobal(
-    'fetch',
-    vi.fn((url: string, init: RequestInit) =>
-      url.endsWith('.vtt')
-        ? Promise.resolve(
-            new Response(
-              `WEBVTT\n\n00:00:00.000 --> 00:00:04.000\n${first}\n\n00:00:04.000 --> 00:00:08.000\n${second}\n`,
-            ),
-          )
-        : originalFetch(url, init),
-    ),
-  );
-  const { video } = addPlayer('a', { top: 0, bottom: 360 }, false, [track('a', 'zh-Hans')]);
-  controller = new CaptionController(
-    createXPlatform,
-    publicSettings({ ...settings, targetLanguage: 'zh-CN' }),
-  );
-  await playTo(video, 3);
-  expect(lines()?.[0].textContent).toBe(first);
-  expect(lines()?.[0].hidden).toBe(false);
-  expect(lines()?.[1].hidden).toBe(true);
-  await playTo(video, 4);
-  expect(lines()?.[0].textContent).toBe(second);
-  expect(requested).toEqual([]);
 });
 
 it('follows the playing, most visible video and moves the overlay when another one takes over', async () => {

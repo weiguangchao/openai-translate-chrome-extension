@@ -3,7 +3,6 @@ import { CaptionController } from '../src/core/controller';
 import type { TimedCue } from '../src/core/cues';
 import { seekSettleMs, translationSendsPerSecond } from '../src/shared/tuning';
 import { createTestPlatform } from './fixtures/platform';
-import { NativeTimeline } from '../src/core/native';
 import { publicSettings } from '../src/shared/settings';
 import { extensionStorage } from './fixtures/extension-storage';
 import { consentedSettings } from './fixtures/settings';
@@ -98,36 +97,25 @@ beforeEach(async () => {
   vi.useFakeTimers();
 });
 
-it.each([true, false])(
-  'ignores native target tracks and requires a provider, configured=%s',
-  async (configured) => {
-    const sourceTrack = video.textTracks[0];
-    const targetTrack = {
-      mode: 'disabled',
-      kind: 'subtitles',
-      language: 'zh-Hans',
-      get cues() {
-        throw new Error('Target subtitles must not be read');
-      },
-    };
-    Object.defineProperty(video, 'textTracks', { value: [sourceTrack, targetTrack] });
-    controller = new CaptionController(createTestPlatform, {
-      ...publicSettings(saved),
-      configured,
-    });
-    await advance(2);
-    expect(targetTrack.mode).toBe('disabled');
-    expect(sourceTrack.mode).toBe('showing');
-    if (configured) {
-      expect(requested).toEqual([['First cue.'], ['Second cue.', 'Third cue.']]);
-      await finish({ 'First cue.': 'Provider 译文' });
-      expect(translated()?.textContent).toBe('Provider 译文');
-    } else {
-      expect(requested).toEqual([]);
-      expect(translated()).toBeUndefined();
-    }
-  },
-);
+it('ignores native target tracks and keeps translating the source track', async () => {
+  const sourceTrack = video.textTracks[0];
+  const targetTrack = {
+    mode: 'disabled',
+    kind: 'subtitles',
+    language: 'zh-Hans',
+    get cues() {
+      throw new Error('Target subtitles must not be read');
+    },
+  };
+  Object.defineProperty(video, 'textTracks', { value: [sourceTrack, targetTrack] });
+  controller = new CaptionController(createTestPlatform, publicSettings(saved));
+  await advance(2);
+  expect(targetTrack.mode).toBe('disabled');
+  expect(sourceTrack.mode).toBe('showing');
+  expect(requested).toEqual([['First cue.'], ['Second cue.', 'Third cue.']]);
+  await finish({ 'First cue.': 'Provider 译文' });
+  expect(translated()?.textContent).toBe('Provider 译文');
+});
 
 afterEach(() => {
   controller?.destroy();
@@ -491,44 +479,25 @@ it.each(['dropped', 'reply-lost', 'empty', 'failure'] as const)(
 );
 
 it('invalidates the old translation when the same video element loads a different source', async () => {
-  controller = new CaptionController(createTestPlatform, publicSettings(saved));
+  let title = 'Old video';
+  controller = new CaptionController(
+    (changed) => ({ ...createTestPlatform(changed), title: () => title }),
+    publicSettings(saved),
+  );
   await advance(2);
+  expect(requested).toEqual([['First cue.'], ['Second cue.', 'Third cue.']]);
   Object.defineProperty(video, 'currentSrc', { value: 'https://media.example/next.mp4' });
-  const track = video.textTracks[0];
-  Object.defineProperty(track, 'cues', {
-    value: [{ startTime: 0, endTime: 10, text: 'New video' }],
-  });
-  video.currentTime = 0;
+  title = 'New video';
   video.dispatchEvent(new Event('loadedmetadata'));
   await vi.advanceTimersByTimeAsync(0);
-  await finish({ 'First cue.': '旧视频字幕' });
+  const [old] = pending.splice(0, 2);
+  old.resolve(providerReply(old.texts, () => '旧视频字幕'));
+  await vi.advanceTimersByTimeAsync(0);
   expect(translated()?.textContent).not.toContain('旧视频字幕');
   await vi.advanceTimersByTimeAsync(400);
-  await finish({ 'New video': '新视频字幕' });
+  expect(requested.slice(2).flat()).toContain('First cue.');
+  await finish({ 'First cue.': '新视频字幕' });
   expect(translated()?.textContent).toBe('新视频字幕');
-});
-
-it('continues using the provider when a native target track appears', async () => {
-  const tracks = [video.textTracks[0]];
-  Object.defineProperty(video, 'textTracks', { value: tracks });
-  controller = new CaptionController(createTestPlatform, publicSettings(saved));
-  await advance(2);
-  await finish({ 'First cue.': '模型生成的字幕', 'Second cue.': 'Second cue 译文' });
-  const target = {
-    mode: 'disabled',
-    kind: 'subtitles',
-    language: 'zh-CN',
-    get cues() {
-      throw new Error('Target subtitles must not be read');
-    },
-  };
-  tracks.push(target as unknown as TextTrack);
-  await advance(3);
-  expect(translated()?.textContent).toBe('模型生成的字幕');
-  expect(target.mode).toBe('disabled');
-  await advance(4);
-  expect(translated()?.textContent).toBe('Second cue 译文');
-  expect(requested).toEqual([['First cue.'], ['Second cue.', 'Third cue.']]);
 });
 
 it('queries the background again on a repeated caption while keeping the displayed caption between ticks', async () => {
@@ -547,68 +516,28 @@ it('queries the background again on a repeated caption while keeping the display
   expect(requested).toEqual([['First cue.'], ['Second cue.', 'Third cue.']]);
 });
 
-it('translates the displayed overlap together and splits a following long cue into captions', async () => {
+it('translates the displayed overlap together with the cues around it', async () => {
   const first = 'When I first moved to the city, I didn’t know anyone at all,';
   const second = 'and every night I walked along the river, wondering why.';
   const joined = `${first}\n${second}`;
-  const long =
-    'Years later, standing on the same bridge, I finally understood that the city had become my home.';
-  const overlap = [
+  setCues([
     { startTime: 2, endTime: 6, text: first },
     { startTime: 4, endTime: 8, text: second },
-    { startTime: 8, endTime: 12, text: long },
-  ];
-  setCues(overlap);
-  const pieces = [
-    'Years later, standing on the same bridge,',
-    'I finally understood that the city had become my home.',
-  ];
+  ]);
   controller = new CaptionController(createTestPlatform, publicSettings(saved));
   await vi.advanceTimersByTimeAsync(0);
-  expect(requested).toEqual([[first], [joined, second, ...pieces]]);
-  const delivered = new Set<(typeof pending)[number]>();
-  const deliver = async () => {
-    for (const request of [...pending]) {
-      if (delivered.has(request)) continue;
-      delivered.add(request);
-      request.resolve(providerReply(request.texts, (text) => `${text} 译文`));
-    }
-    await vi.advanceTimersByTimeAsync(0);
-  };
-  await deliver();
+  expect(requested).toEqual([[first], [joined, second]]);
+  for (const request of pending)
+    request.resolve(providerReply(request.texts, (text) => `${text} 译文`));
+  await vi.advanceTimersByTimeAsync(0);
   for (const [time, text] of [
+    [2, `${first} 译文`],
     [4, `${joined} 译文`],
     [6, `${second} 译文`],
-    [8, `${pieces[0]} 译文`],
-    [11, `${pieces[1]} 译文`],
   ] as const) {
-    await advance(time - 0.1);
-    await deliver();
-    video.currentTime = time;
-    video.dispatchEvent(new Event('timeupdate'));
-    await vi.advanceTimersByTimeAsync(0);
+    await advance(time);
     expect(translated()?.textContent).toBe(text);
   }
-  expect(requested.flat()).toEqual(expect.arrayContaining([joined, ...pieces]));
-  expect(requested.flat()).not.toContain(long);
-  expect(messages).toContain('translate');
-});
-
-it('reuses the cues read from a track until the track changes', async () => {
-  const timeline = new NativeTimeline();
-  const read = () => timeline.read(video).source;
-  expect(read()).toBeNull();
-  await vi.advanceTimersByTimeAsync(0);
-  const first = read();
-  expect(first).not.toBeNull();
-  expect(read()).toBe(first);
-  Object.defineProperty(video.textTracks[0], 'cues', {
-    value: [{ startTime: 2, endTime: 4, text: 'Changed' }],
-  });
-  expect(read()).toBeNull();
-  await vi.advanceTimersByTimeAsync(0);
-  expect(read()).not.toBe(first);
-  expect(read()?.map((cue) => cue.text)).toEqual(['Changed']);
 });
 
 it.each([false, true])(

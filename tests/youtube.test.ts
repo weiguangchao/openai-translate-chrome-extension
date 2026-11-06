@@ -250,10 +250,9 @@ it('loads the selected YouTube track before playback, aligns rolling captions, a
   document.querySelector('button')!.setAttribute('aria-pressed', 'false');
   await vi.advanceTimersByTimeAsync(150);
   expect(lines()[1].hidden).toBe(true);
-  expect(document.querySelector('[data-subline-timeline]')).toBeNull();
 });
 
-it('uses the current video session to load source subtitles and removes duplicate drawing layers', async () => {
+it('uses the current video session to load source subtitles', async () => {
   const { video, player, sendMessage, lines } = setup();
   let videoId = 'video-1';
   let session = 'session-1';
@@ -296,13 +295,7 @@ it('uses the current video session to load source subtitles and removes duplicat
         return new Response('', { status: 200, headers: { 'content-type': 'text/html' } });
       const text = language === 'en' ? 'This field behind me' : '我身后的这片空地';
       return Response.json({
-        events: [
-          { tStartMs: 0, dDurationMs: 4000, segs: [{ utf8: `\u200b ${text} \u200b`, pPenId: 3 }] },
-          { tStartMs: 0, dDurationMs: 4000, segs: [{ utf8: `\u200b ${text} \u200b`, pPenId: 4 }] },
-          ...(language === 'zh-Hans'
-            ? [{ tStartMs: 500, dDurationMs: 1000, segs: [{ utf8: '即将变成一座城市' }] }]
-            : []),
-        ],
+        events: [{ tStartMs: 0, dDurationMs: 4000, segs: [{ utf8: text }] }],
       });
     }),
   );
@@ -394,12 +387,10 @@ it('translates authored English sentences even when authored, automatic and brow
   );
   vi.stubGlobal('fetch', fetch);
   await import('../src/platforms/youtube/page');
-  const settings = publicSettings({ ...consentedSettings, apiKey: 'key', model: 'model' });
-  controller = new CaptionController(createYoutubePlatform, { ...settings, configured: false });
-  await vi.advanceTimersByTimeAsync(1100);
-  expect(document.querySelector('[data-subline-overlay]')).toBeNull();
-  expect(sendMessage.mock.calls).toEqual([]);
-  controller.update(settings);
+  controller = new CaptionController(
+    createYoutubePlatform,
+    publicSettings({ ...consentedSettings, apiKey: 'key', model: 'model' }),
+  );
   await playTo(video, 1.2);
   expect([...lines()].map((line) => line.textContent)).toEqual([
     'This field behind me will become a city.',

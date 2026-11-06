@@ -97,7 +97,7 @@ it('takes the median of the latest replies and the 90th percentile of all kept o
   expect(slowLatency([500])).toBe(latencyMinMs);
 });
 
-it('batches at most eight captions and caps the plan by the sentence cap', () => {
+it('batches at most translationBatchLimit captions and caps the plan by the sentence cap', () => {
   const dense = planPlayback({ time: 0, rate: 1, cues: cues(planSentenceCap * 3, 0.1, 5) });
   expect(dense.flatMap((request) => request.cues)).toHaveLength(planSentenceCap);
   expect(dense.every((request) => request.cues.length === translationBatchLimit)).toBe(true);

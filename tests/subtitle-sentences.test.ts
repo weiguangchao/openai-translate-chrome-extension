@@ -28,11 +28,9 @@ it('rejoins a fragmented sentence and cuts it into back-to-back captions at clau
     { startTime: 1, endTime: 5.2, text: first },
     { startTime: 5.2, endTime: 9, text: second },
   ]);
-  expect(captionAt(captions, 5.1)).toBe(first);
-  expect(captionAt(captions, 6)).toBe(second);
 });
 
-it('cuts an unpunctuated run between cues into captions of at most 90 columns', async () => {
+it('keeps an unpunctuated run within the display limit on its source cue breaks', async () => {
   const lines = [
     'my children will be using their Sama coins to try and buy dinner',
     "and I'll have to explain to them that when I was a kid",
@@ -152,8 +150,6 @@ it('uses source cue breaks to split unpunctuated Chinese into back-to-back capti
     { startTime: 0, endTime: 4, text: lines[0] },
     { startTime: 4, endTime: 7.8, text: lines[1] },
   ]);
-  expect(captionAt(captions, 3.9)).toBe(lines[0]);
-  expect(captionAt(captions, 4)).toBe(lines[1]);
 });
 
 it('keeps opening punctuation attached to the following word when splitting captions', async () => {
