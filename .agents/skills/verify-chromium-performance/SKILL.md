@@ -7,7 +7,13 @@ description: Measure or compare Subline playback in Chromium on request.
 
 Use [setup](../setup-headless-chromium/SKILL.md)/[debug](../debug-chromium/SKILL.md), or requested existing/headed browsers. Edits alone need no real-site measurements. Test YouTube/X at 1x, 1.25x, 1.5x, 2x per build. Read [page checks](references/page-readiness.md).
 
-Authorized MiMo: read `MIMO_BASE_URL`, `MIMO_MODEL`, `MIMO_API_KEY` from ignored worktree `.env` before asking. Keep `0600`; configure in real settings, retain `.env`, exclude keys from builds/evidence.
+Authorized MiMo: read `OPENAI_BASE_URL`, `OPENAI_MODEL`, `OPENAI_API_KEY` from the ignored `.env` before asking. Git does not copy `.env` into new worktrees, so it usually lives only in the main checkout. This prints the first `.env` found, checking the current worktree and then every worktree of the repository:
+
+```sh
+{ git rev-parse --show-toplevel; git worktree list --porcelain | sed -n 's/^worktree //p'; } | while read -r d; do [ -f "$d/.env" ] && echo "$d/.env" && break; done
+```
+
+Read that file where it is. Don't copy it, change it, or loosen its `0600` mode. Configure the values in real settings and keep keys out of builds and evidence.
 
 Each run: reload to clear translations, open/set rate; trace 45 video seconds `since: "open"`, seek once to uncached captions outside opening/prefetch, trace 45 seconds `since: "seek"`, then 180 continuous video seconds. YouTube needs first `media.time` in speech, not unreliable `&t=`. Keep headed Chrome in front; omit headless `focus`. For plans/comparisons/resume/saved checks read [measurement](references/measurement.md).
 
