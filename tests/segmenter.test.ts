@@ -33,9 +33,12 @@ it('keeps line breaks inside a sentence without shifting its original offsets', 
   expect(await segmenterFor('en').sentenceEnds(text)).toEqual([text.indexOf('.') + 1, text.length]);
 });
 
-it('uses the default no-op for unsupported languages', async () => {
+it('leaves unsupported languages unsplit, even over the display limit', async () => {
+  const long = '甲'.repeat(captionDisplayLimit);
+  expect(subtitleDisplayLength(long)).toBeGreaterThan(captionDisplayLimit);
   expect(await segmenterFor('ja').sentenceEnds('こんにちは。さようなら。')).toEqual([]);
   expect(await captions('ja', '短句。')).toEqual(['短句。']);
+  expect(await captions('ja', long)).toEqual([long]);
 });
 
 it('splits long English sentences only after the caller chooses the long path', async () => {
@@ -49,12 +52,6 @@ it('splits long English sentences only after the caller chooses the long path', 
 
 it('keeps a short sentence as one caption', async () => {
   expect(await captions('en', 'Short line.')).toEqual(['Short line.']);
-});
-
-it('keeps an over-limit unsupported-language sentence whole', async () => {
-  const text = '甲'.repeat(captionDisplayLimit);
-  const pieces = await captions('ja', text);
-  expect(pieces).toEqual([text]);
 });
 
 it.each(['zh-CN', 'zh-TW', 'zh-Hans', 'zh-Hant'])(

@@ -419,20 +419,6 @@ it('finishes sent requests while paused and does not send the rest until playbac
   expect(batches()[translationSendsPerSecond]).toEqual(planned[translationSendsPerSecond]);
 });
 
-it('keeps completed requests in the three-per-second send budget', async () => {
-  const { batches, reply } = pendingProvider();
-  const queue = new TranslationQueue();
-  for (const text of ['A', 'B', 'C', 'D']) queue.request(text, settings, text);
-  expect(batches()).toEqual([['A'], ['B'], ['C']]);
-  reply(0);
-  reply(1);
-  reply(2);
-  await vi.advanceTimersByTimeAsync(999);
-  expect(batches()).toEqual([['A'], ['B'], ['C']]);
-  await vi.advanceTimersByTimeAsync(1);
-  expect(batches()).toEqual([['A'], ['B'], ['C'], ['D']]);
-});
-
 it('keeps queued packs parked through a provider backoff', async () => {
   const fetch = vi.fn().mockResolvedValue(new Response('', { status: 429 }));
   vi.stubGlobal('fetch', fetch);

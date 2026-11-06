@@ -1,5 +1,4 @@
-import { afterEach, expect, it, vi } from 'vitest';
-import { translateCaptionBatch } from '../src/shared/api';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { DEFAULT_SETTINGS, type CaptionTranslationSettings } from '../src/shared/settings';
 import { translationReply } from './fixtures/provider';
 
@@ -11,7 +10,17 @@ const settings: CaptionTranslationSettings = {
   apiKey: 'key',
   model: 'test',
 };
-afterEach(() => vi.unstubAllGlobals());
+let translateCaptionBatch: typeof import('../src/shared/api').translateCaptionBatch;
+
+beforeEach(async () => {
+  vi.useFakeTimers();
+  vi.resetModules();
+  ({ translateCaptionBatch } = await import('../src/shared/api'));
+});
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.useRealTimers();
+});
 
 it.each([
   '第一行\n\n第二段',
@@ -31,21 +40,6 @@ it.each([
   ]);
   expect(published.mock.calls).toEqual([[0, translation]]);
 });
-
-it.each(['', ' ', '字'.repeat(5001)])(
-  'rejects empty or oversized translations',
-  async (content) => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async () => translationReply(content)),
-    );
-    const published = vi.fn();
-    await expect(
-      translateCaptionBatch(settings, ['One.'], undefined, published),
-    ).resolves.toBeNull();
-    expect(published).not.toHaveBeenCalled();
-  },
-);
 
 it('reads text content parts without displaying reasoning', async () => {
   vi.stubGlobal(
@@ -74,7 +68,9 @@ it('does not substitute reasoning for an absent translation', async () => {
   vi.stubGlobal(
     'fetch',
     vi.fn(async () =>
-      Response.json({ choices: [{ message: { content: null, reasoning_content: 'draft' } }] }),
+      Response.json({
+        choices: [{ message: { content: null, reasoning_content: '[[p0]]\n草稿' } }],
+      }),
     ),
   );
   await expect(translateCaptionBatch(settings, ['One.'])).resolves.toBeNull();
@@ -130,24 +126,27 @@ it('accepts one echoed [[source_end]] line at the end of the reply', async () =>
 });
 
 it.each([
-  '[[p0]]\n第一项',
-  '[[p0]]\n第一项\n[[source_end]]\n[[p1]]\n第二项',
-  '[[p0]]\n第一项\n[[p1]]\n第二项\n[[source_end]]\n[[source_end]]',
-  '[[p0]]\n第一项\n[[p0]]\n重复',
-  '[[p0]]\n第一项\n[[p2]]\n未知',
-  '[[p00]]\n第一项\n[[p1]]\n第二项',
-  '说明\n[[p0]]\n第一项\n[[p1]]\n第二项',
-  '```\n[[p0]]\n第一项\n[[p1]]\n第二项\n```',
-  '[[p0]]\n第一项\n[[p1]]\n',
-  '[[p0]]\n第一项\n[[p1]]\n' + '字'.repeat(5001),
+  [['One.'], '[[p0]]\n'],
+  [['One.'], '[[p0]]\n '],
+  [['One.'], '[[p0]]\n' + '字'.repeat(5001)],
+  [['One', 'Two'], '[[p0]]\n第一项'],
+  [['One', 'Two'], '[[p0]]\n第一项\n[[source_end]]\n[[p1]]\n第二项'],
+  [['One', 'Two'], '[[p0]]\n第一项\n[[p1]]\n第二项\n[[source_end]]\n[[source_end]]'],
+  [['One', 'Two'], '[[p0]]\n第一项\n[[p0]]\n重复'],
+  [['One', 'Two'], '[[p0]]\n第一项\n[[p2]]\n未知'],
+  [['One', 'Two'], '[[p00]]\n第一项\n[[p1]]\n第二项'],
+  [['One', 'Two'], '说明\n[[p0]]\n第一项\n[[p1]]\n第二项'],
+  [['One', 'Two'], '```\n[[p0]]\n第一项\n[[p1]]\n第二项\n```'],
+  [['One', 'Two'], '[[p0]]\n第一项\n[[p1]]\n'],
+  [['One', 'Two'], '[[p0]]\n第一项\n[[p1]]\n' + '字'.repeat(5001)],
 ])(
-  'rejects malformed batches without publishing partial captions or retrying, case %#',
-  async (content) => {
+  'rejects a bad reply to %j without publishing partial captions or retrying, case %#',
+  async (sources, content) => {
     const fetch = vi.fn(async () => translationReply(content, false));
     vi.stubGlobal('fetch', fetch);
     const published = vi.fn();
     await expect(
-      translateCaptionBatch(settings, ['One', 'Two'], undefined, published),
+      translateCaptionBatch(settings, sources, undefined, published),
     ).resolves.toBeNull();
     expect(published).not.toHaveBeenCalled();
     expect(fetch).toHaveBeenCalledTimes(1);

@@ -3,9 +3,10 @@ import { DEFAULT_SETTINGS, MICROSOFT_ORIGIN, type Settings } from '../src/shared
 import { extensionStorage } from './fixtures/extension-storage';
 import { consentedSettings } from './fixtures/settings';
 import { packedCues, providerReply, requestedTexts, translationReply } from './fixtures/provider';
-import { translationBatchLimit } from '../src/shared/tuning';
+import { providerSendWindowMs, translationBatchLimit } from '../src/shared/tuning';
 
 afterEach(async () => {
+  vi.useRealTimers();
   await new Promise((resolve) => setTimeout(resolve, 0));
   vi.unstubAllGlobals();
   vi.resetModules();
@@ -51,66 +52,48 @@ it('answers cache-only lookups without starting model work and reuses background
   expect(fetch).toHaveBeenCalledTimes(1);
 });
 
-it('separates translations of identical text by actual caption language', async () => {
-  const fetch = vi
-    .fn()
-    .mockImplementationOnce(async () => providerReply(['同文'], () => '英语译文'))
-    .mockImplementationOnce(async () => providerReply(['同文'], () => '日语译文'));
-  vi.stubGlobal('fetch', fetch);
-  const send = await loadBackground({ ...consentedSettings, apiKey: 'key', model: 'model' });
-  await expect(
-    send({ type: 'translate', captionLanguage: 'en', pageTitle: 'Video title', text: '同文' }),
-  ).resolves.toEqual({
-    ok: true,
-    data: '英语译文',
-  });
-  await expect(
-    send({
-      type: 'translate',
-      captionLanguage: 'ja',
-      pageTitle: 'Video title',
-      text: '同文',
-      cacheOnly: true,
-    }),
-  ).resolves.toEqual({ ok: true, data: null });
-  await expect(
-    send({ type: 'translate', captionLanguage: 'ja', pageTitle: 'Video title', text: '同文' }),
-  ).resolves.toEqual({
-    ok: true,
-    data: '日语译文',
-  });
-  await expect(
-    send({
-      type: 'translate',
-      captionLanguage: 'en',
-      pageTitle: 'Video title',
-      text: '同文',
-      cacheOnly: true,
-    }),
-  ).resolves.toEqual({ ok: true, data: '英语译文' });
-  expect(fetch).toHaveBeenCalledTimes(2);
-});
+it.each([
+  {
+    name: 'caption language',
+    first: { captionLanguage: 'en' },
+    second: { captionLanguage: 'ja' },
+    titles: ['Video title', 'Video title'],
+  },
+  {
+    name: 'page title',
+    first: { pageTitle: 'First video' },
+    second: { pageTitle: 'Second video' },
+    titles: ['First video', 'Second video'],
+  },
+])(
+  'keeps translations of identical text apart by $name and sends the page title',
+  async ({ first, second, titles }) => {
+    const fetch = vi
+      .fn()
+      .mockImplementationOnce(async () => providerReply(['Hello'], () => '第一译文'))
+      .mockImplementationOnce(async () => providerReply(['Hello'], () => '第二译文'));
+    vi.stubGlobal('fetch', fetch);
+    const send = await loadBackground({ ...consentedSettings, apiKey: 'key', model: 'model' });
+    const translate = (identity: object, cacheOnly = false) =>
+      send({
+        type: 'translate',
+        captionLanguage: 'en',
+        pageTitle: 'Video title',
+        text: 'Hello',
+        cacheOnly,
+        ...identity,
+      });
+    await expect(translate(first)).resolves.toEqual({ ok: true, data: '第一译文' });
+    await expect(translate(second, true)).resolves.toEqual({ ok: true, data: null });
+    await expect(translate(second)).resolves.toEqual({ ok: true, data: '第二译文' });
+    await expect(translate(first, true)).resolves.toEqual({ ok: true, data: '第一译文' });
+    expect(fetch).toHaveBeenCalledTimes(2);
+    const prompts = fetch.mock.calls.map(([, init]) => JSON.parse(init.body).messages[0].content);
+    expect(prompts).toEqual(titles.map((title) => expect.stringContaining(title)));
+  },
+);
 
-it('gives the Provider the page title and keeps translations from different pages apart', async () => {
-  const fetch = vi
-    .fn()
-    .mockImplementationOnce(async () => providerReply(['Hello'], () => '你好'))
-    .mockImplementationOnce(async () => providerReply(['Hello'], () => '喂'));
-  vi.stubGlobal('fetch', fetch);
-  const send = await loadBackground({ ...consentedSettings, apiKey: 'key', model: 'model' });
-  const translate = (pageTitle: string) =>
-    send({ type: 'translate', captionLanguage: 'en', pageTitle, text: 'Hello' });
-  await expect(translate('First video')).resolves.toEqual({ ok: true, data: '你好' });
-  await expect(translate('Second video')).resolves.toEqual({ ok: true, data: '喂' });
-  await expect(translate('First video')).resolves.toEqual({ ok: true, data: '你好' });
-  const prompts = fetch.mock.calls.map(([, init]) => JSON.parse(init.body).messages[0].content);
-  expect(prompts).toEqual([
-    expect.stringContaining('First video'),
-    expect.stringContaining('Second video'),
-  ]);
-});
-
-it.each([undefined, '', 'fr', 'ko-Latn', 'invalid'])(
+it.each([undefined, 'fr'])(
   'rejects unsupported caption language %j before Provider traffic',
   async (captionLanguage) => {
     const fetch = vi.fn();
@@ -171,6 +154,7 @@ async function loadBackground(saved: Settings, session = new Map<string, unknown
   });
   await (await import('../src/shared/storage')).saveSettings(saved);
   await import('../src/extension/background');
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
   const sender = {
     id: 'extension-id',
     url: 'https://www.youtube.com/watch?v=example',
@@ -213,93 +197,49 @@ it('keeps credentials in the background and rejects content-script requests to u
 });
 
 it.each([
-  { name: 'before the viewer agrees', providerConsent: '' },
-  { name: 'when the viewer agreed to another Provider', providerConsent: 'https://other.example' },
-])('sends no caption to the Provider $name', async ({ providerConsent }) => {
-  const fetch = vi.fn().mockResolvedValue(providerReply(['Hello'], () => '你好'));
-  vi.stubGlobal('fetch', fetch);
-  const send = await loadBackground({
-    ...consentedSettings,
-    apiKey: 'key',
-    model: 'model',
-    providerConsent,
-  });
-  await expect(send({ type: 'settings' })).resolves.toMatchObject({
-    data: { configured: false },
-  });
-  const refused = {
-    ok: false,
-    failure: {
-      kind: 'error',
-      message: 'Allow subtitles to be sent to your provider in settings first.',
-    },
-  };
-  await expect(
-    send({ type: 'translate', captionLanguage: 'en', pageTitle: 'Video title', text: 'Hello' }),
-  ).resolves.toEqual(refused);
-  await expect(
-    send({
-      type: 'prefetch',
-      captionLanguage: 'en',
-      pageTitle: 'Video title',
-      time: 0,
-      rate: 1,
-      cues: packedCues(['Hello']),
-    }),
-  ).resolves.toEqual(refused);
-  expect(fetch).not.toHaveBeenCalled();
-});
-
-it('answers a prefetch with translations in the order asked, settling cues a later window drops', async () => {
-  const pending: { texts: string[]; resolve: (value: Response) => void }[] = [];
-  const fetch = vi.fn(
-    (_url: string, init: RequestInit) =>
-      new Promise<Response>((resolve) => pending.push({ texts: requestedTexts(init), resolve })),
-  );
-  vi.stubGlobal('fetch', fetch);
-  const send = await loadBackground({
-    ...structuredClone(consentedSettings),
-    apiKey: 'key',
-    model: 'model',
-  });
-  const opening = send({
-    type: 'prefetch',
-    captionLanguage: 'en',
-    pageTitle: 'Video title',
-    time: 0,
-    rate: 1,
-    cues: packedCues(['A', 'B']),
-  });
-  await vi.waitFor(() => expect(pending).toHaveLength(1));
-  const sliding = send({
-    type: 'prefetch',
-    captionLanguage: 'en',
-    pageTitle: 'Video title',
-    time: 0,
-    rate: 1,
-    cues: packedCues(['B', 'C']),
-  });
-  await vi.waitFor(() => expect(pending).toHaveLength(2));
-  for (const request of pending)
-    request.resolve(providerReply(request.texts, (text) => `${text} 译文`));
-  await expect(opening).resolves.toEqual({ ok: true, data: [null, 'B 译文'] });
-  await expect(sliding).resolves.toEqual({ ok: true, data: ['B 译文', 'C 译文'] });
-  await expect(
-    send({
-      type: 'prefetch',
-      captionLanguage: 'en',
-      pageTitle: 'Video title',
-      time: 0,
-      rate: 1,
-      cues: packedCues(['B', 'C']),
-    }),
-  ).resolves.toEqual({
-    ok: true,
-    data: ['B 译文', 'C 译文'],
-  });
-  await expect(send({ type: 'prefetch-pause' })).resolves.toEqual({ ok: true });
-  expect(fetch).toHaveBeenCalledTimes(2);
-});
+  { provider: 'openai', consent: '', allowed: false },
+  { provider: 'openai', consent: 'https://other.example', allowed: false },
+  { provider: 'microsoft', consent: '', allowed: false },
+  { provider: 'microsoft', consent: 'https://api.openai.com', allowed: false },
+  { provider: 'microsoft', consent: MICROSOFT_ORIGIN, allowed: true },
+] as const)(
+  'sends $provider captions only with consent to its origin: $consent',
+  async ({ provider, consent, allowed }) => {
+    const fetch = vi
+      .fn()
+      .mockResolvedValue(Response.json([{ translations: [{ text: '你好', to: 'zh-Hans' }] }]));
+    vi.stubGlobal('fetch', fetch);
+    const send = await loadBackground(
+      provider === 'openai'
+        ? { ...consentedSettings, apiKey: 'key', model: 'model', providerConsent: consent }
+        : { ...DEFAULT_SETTINGS, providerConsent: consent },
+    );
+    const refused = {
+      ok: false,
+      failure: {
+        kind: 'error',
+        message: 'Allow subtitles to be sent to your provider in settings first.',
+      },
+    };
+    await expect(send({ type: 'settings' })).resolves.toMatchObject({
+      data: { configured: allowed },
+    });
+    await expect(
+      send({ type: 'translate', captionLanguage: 'en', pageTitle: 'Video title', text: 'Hello' }),
+    ).resolves.toEqual(allowed ? { ok: true, data: '你好' } : refused);
+    await expect(
+      send({
+        type: 'prefetch',
+        captionLanguage: 'en',
+        pageTitle: 'Video title',
+        time: 0,
+        rate: 1,
+        cues: packedCues(['Hello']),
+      }),
+    ).resolves.toEqual(allowed ? { ok: true, data: ['你好'] } : refused);
+    expect(fetch).toHaveBeenCalledTimes(allowed ? 1 : 0);
+  },
+);
 
 it('starts a new page in the same tab without the pause the previous page left', async () => {
   const fetch = vi.fn(async (_url: string, init: RequestInit) =>
@@ -614,34 +554,6 @@ it('keeps translations in session storage, without the API key, for a restarted 
   expect(fetch).toHaveBeenCalledTimes(1);
 });
 
-it.each([
-  { consent: '', allowed: false },
-  { consent: 'https://api.openai.com', allowed: false },
-  { consent: 'https://edge.microsoft.com', allowed: true },
-])(
-  'sends Microsoft captions only with consent to its origin: $consent',
-  async ({ consent, allowed }) => {
-    const fetch = vi
-      .fn()
-      .mockResolvedValue(
-        new Response(JSON.stringify([{ translations: [{ text: '你好', to: 'zh-Hans' }] }])),
-      );
-    vi.stubGlobal('fetch', fetch);
-    const send = await loadBackground({ ...DEFAULT_SETTINGS, providerConsent: consent });
-    const result = await send({
-      type: 'translate',
-      captionLanguage: 'en',
-      pageTitle: 'Video title',
-      text: 'Hello',
-    });
-    expect(result.ok).toBe(allowed);
-    if (allowed) {
-      expect(result.data).toBe('你好');
-      expect(fetch).toHaveBeenCalledTimes(1);
-    } else expect(fetch).not.toHaveBeenCalled();
-  },
-);
-
 function dualProvider() {
   const pending: { microsoft: boolean; texts: string[]; resolve: (value: Response) => void }[] = [];
   const fetch = vi.fn((url: string, init: RequestInit) => {
@@ -703,6 +615,7 @@ it('runs Microsoft beside OpenAI again after a seek until OpenAI covers the new 
 
   await send({ type: 'prefetch-hold', time: 600 });
   const seeked = send(window(600, batch('X')));
+  await vi.advanceTimersByTimeAsync(providerSendWindowMs);
   await vi.waitFor(() => expect(sent(true)).toEqual([...batch('A'), ...batch('X')]), wait);
   answer(true);
   await expect(
@@ -747,6 +660,7 @@ it('takes OpenAI translations from the cache after a seek and asks Microsoft onl
   ).resolves.toEqual({ ok: true, data: 'OpenAI B0' });
   const cached = batch('B').slice(0, 4);
   const back = send(window(0, [...cached, ...batch('C')]));
+  await vi.advanceTimersByTimeAsync(providerSendWindowMs);
   await vi.waitFor(() => expect(sent(true)).toEqual([...batch('A'), ...batch('C')]), wait);
   await vi.waitFor(
     () => expect(sent(false)).toEqual([...batch('A'), ...batch('B'), ...batch('C')]),

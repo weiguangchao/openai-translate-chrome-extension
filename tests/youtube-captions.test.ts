@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest';
 import { parseYoutubeCaptions } from '../src/platforms/youtube/captions';
 import { subtitleDisplayLength } from '../src/shared/segmenter';
-import { captionAt, playbackCues, timedCaptions } from '../src/core/timeline';
+import { playbackCues, timedCaptions } from '../src/core/timeline';
 import { githubCaption, githubCaptionTrack } from './fixtures/github-caption';
 import { captionDisplayLimit } from '../src/shared/tuning';
 
@@ -21,12 +21,6 @@ it.each(['asr', 'authored'] as const)(
       { startTime: 1.5, endTime: 4.5, text: githubCaptions[1] },
       { startTime: 4.5, endTime: 7.75, text: githubCaptions[2] },
       { startTime: 7.75, endTime: 11, text: githubCaptions[3] },
-    ]);
-    expect([2.9, 3, 10.9, 11].map((time) => captionAt(cues, time))).toEqual([
-      githubCaptions[1],
-      githubCaptions[1],
-      githubCaptions[3],
-      '',
     ]);
   },
 );
@@ -148,13 +142,11 @@ it('joins ASR fragments, uses word timestamps within a cue and preserves the fin
     { startTime: 2, endTime: 3, text: 'Are you?' },
     { startTime: 3, endTime: 4, text: 'Let’s go' },
   ]);
-  expect(captionAt(cues, 1.5)).toBe('We are ready.');
   expect(playbackCues(timedCaptions(cues), 1.5)).toEqual([
     { text: 'We are ready.', start: 0, end: 2 },
     { text: 'Are you?', start: 2, end: 3 },
     { text: 'Let’s go', start: 3, end: 4 },
   ]);
-  expect(captionAt(cues, 2)).toBe('Are you?');
 });
 
 it.each([
@@ -237,7 +229,6 @@ it.each([
     { startTime: 1, endTime: 5, text: first },
     { startTime: 3, endTime: 7, text: second },
   ]);
-  expect(captionAt(cues, 4)).toBe(`${first}\n${second}`);
   expect(playbackCues(timedCaptions(cues), 4)).toContainEqual({
     text: `${first}\n${second}`,
     start: 3,
@@ -277,8 +268,6 @@ it('uses pauses in unpunctuated word timings and leaves silence between sentence
     { startTime: 2.5, endTime: 3.7, text: 'let’s go' },
     { startTime: 6, endTime: 7, text: 'goodbye' },
   ]);
-  expect(captionAt(cues, 2)).toBe('');
-  expect(captionAt(cues, 3)).toBe('let’s go');
 });
 
 it('keeps decimals, abbreviations, split words and repeated spoken words intact', async () => {
