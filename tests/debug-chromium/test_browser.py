@@ -70,6 +70,15 @@ class Media(BrowserCase):
         self.result(self.do(tab, action="wait", seconds=2))
         self.assertTrue(self.result(self.do(tab, action="media"))["video"]["paused"])
 
+    def test_captions_turns_on_a_disabled_subtitle_track(self):
+        """X starts a fresh profile with its subtitle track disabled, so Subline had nothing to show."""
+        modes = "[...document.querySelector('video').textTracks].map(t => t.mode).join()"
+        tab = self.open("captions", track=1)
+        self.result(self.do(tab, action="media", play=True))
+        self.assertEqual(self.result(self.do(tab, action="evaluate", expression=modes))["value"], "disabled")
+        self.assertTrue(self.result(self.do(tab, action="media", captions=True))["video"]["captions"])
+        self.assertEqual(self.result(self.do(tab, action="evaluate", expression=modes))["value"], "showing")
+
     def test_media_stays_muted(self):
         """1a99823: check tabs stay muted from navigation until they close, even if the page unmutes."""
         tab = self.open("muted", unmute=1)

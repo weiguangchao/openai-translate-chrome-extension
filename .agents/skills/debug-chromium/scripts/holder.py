@@ -151,6 +151,9 @@ def set_rate(rate):
             "if (video.playbackRate !== %s) video.playbackRate = %s; }") % ((rate,) * 4)
 
 
+NATIVE_TRACKS = "[...video.textTracks].filter(t => t.kind === 'subtitles' || t.kind === 'captions')"
+
+
 def video_report():
     return """const ad = Boolean(document.querySelector('#movie_player.ad-showing'));
       return {time: Math.round(video.currentTime * 100) / 100, paused: video.paused,
@@ -389,7 +392,7 @@ def handshake(port, path):
 NUMBER = (int, float)
 STEP_FIELDS = {
     "media": ({}, {"selector": str, "time": NUMBER, "rate": NUMBER, "play": bool, "pause": bool,
-                   "keep_playing": bool, "skip_ads": bool}),
+                   "keep_playing": bool, "skip_ads": bool, "captions": bool}),
     "wait": ({}, {"seconds": NUMBER, "time": NUMBER, "selector": str}),
     "click": ({"selector": str}, {}),
     "overlay": ({}, {"wait": bool}),
@@ -838,6 +841,7 @@ class Tab:
         selector = step.get("selector", "video")
         target, rate = step.get("time"), step.get("rate")
         play, pause = step.get("play", False), step.get("pause", False)
+        captions = step.get("captions", False)
         self.keep_playing = step.get("keep_playing", self.keep_playing and not pause)
         self.skip_ads = step.get("skip_ads", self.skip_ads)
         if rate is not None and self.original_rate is None:
@@ -854,6 +858,9 @@ class Tab:
                            "if (playing && playing.catch) playing.catch(() => {}); }")
         if pause:
             actions.append("if (!video.paused) video.pause();")
+        if captions:
+            actions.append(f"const native = {NATIVE_TRACKS}; "
+                           "if (native.length && !native.some(t => t.mode === 'showing')) native[0].mode = 'showing';")
 
         def media_probe(seek):
             jump = (f"if (Math.abs(video.currentTime - {target}) > 1.5) {{ video.currentTime = {target}; seeked = true; }}"
@@ -864,7 +871,8 @@ class Tab:
           {" ".join(actions)}
           let seeked = false;
           {jump}
-          return {{...(() => {{ {video_report()} }})(), seeked}};
+          const captions = {NATIVE_TRACKS}.some(t => t.mode === 'showing');
+          return {{...(() => {{ {video_report()} }})(), seeked, captions}};
         }})()"""
 
         probe, seek_probe = media_probe(False), media_probe(True)
@@ -907,6 +915,8 @@ class Tab:
             if rate is not None and value["rate"] != rate:
                 return False
             if pause and not value["paused"]:
+                return False
+            if captions and not value["captions"]:
                 return False
             if play and not value["ended"]:
                 if value["paused"]:

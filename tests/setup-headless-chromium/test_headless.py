@@ -11,6 +11,8 @@ import unittest
 from pathlib import Path
 
 from support import LIVE, REPO, SESSION, Result, Site, copy_extension, find_browser
+from holder import handshake
+from live import extension_id
 import measure
 
 LAUNCH = REPO / ".agents/skills/setup-headless-chromium/scripts/launch.py"
@@ -24,16 +26,13 @@ class Headless(unittest.TestCase):
         self.root = Path(temporary.name).resolve()
         self.output = self.root / "run"
 
-    def command(self, browser, extension):
+    def command(self, browser, extension, *extra):
         return [sys.executable, str(LAUNCH), "--browser", str(browser),
-                "--extension", str(extension), "--output", str(self.output)]
+                "--extension", str(extension), "--output", str(self.output), *extra]
 
-    def test_launch_handoff_and_signal_cleanup(self):
-        browser = find_browser()
-        extension = copy_extension()
-        self.addCleanup(shutil.rmtree, extension)
+    def launch(self, extension, *extra):
         with (self.root / "launcher.log").open("w") as log:
-            launcher = subprocess.Popen(self.command(browser, extension), cwd=REPO,
+            launcher = subprocess.Popen(self.command(find_browser(), extension, *extra), cwd=REPO,
                                         stdout=log, stderr=log)
         self.addCleanup(self.stop_launcher, launcher)
         deadline = time.monotonic() + 40
@@ -48,6 +47,12 @@ class Headless(unittest.TestCase):
         if (self.output / "chromium.log").exists():
             diagnostics += (self.output / "chromium.log").read_text()
         self.assertEqual(record.get("state"), "ready", diagnostics)
+        return launcher, record
+
+    def test_launch_handoff_and_signal_cleanup(self):
+        extension = copy_extension()
+        self.addCleanup(shutil.rmtree, extension)
+        launcher, record = self.launch(extension)
         self.assertGreater(record["port"], 0)
         env = {**os.environ, "DEBUG_CHROMIUM_SESSION": SESSION}
         env.pop("DEBUG_CHROMIUM_PORT_FILE", None)
@@ -103,6 +108,48 @@ class Headless(unittest.TestCase):
         self.assertFalse((self.output / "endpoint").exists())
         with self.assertRaises(ProcessLookupError):
             os.kill(record["browser_pid"], 0)
+
+    def test_provider_url_grants_only_its_origin(self):
+        """Headless macOS never showed the native permission sheet, so saving Provider settings hung."""
+        extension = copy_extension()
+        self.addCleanup(shutil.rmtree, extension)
+        manifest = json.loads((extension / "manifest.json").read_text())
+        manifest["optional_host_permissions"] = ["https://*/*"]
+        (extension / "manifest.json").write_text(json.dumps(manifest))
+        _, record = self.launch(extension, "--provider-url", "https://example.com/v1")
+        self.assertEqual(record["provider_origin"], "https://example.com/*")
+        chrome = handshake(record["port"], record["endpoint_path"])
+        self.addCleanup(chrome.close)
+        page = chrome.call("Target.createTarget", {
+            "url": f"chrome-extension://{extension_id(extension)}/popup.html",
+        })["targetId"]
+        session = chrome.call("Target.attachToTarget", {"targetId": page, "flatten": True})["sessionId"]
+
+        def evaluate(expression):
+            return chrome.call("Runtime.evaluate", {
+                "expression": expression, "awaitPromise": True, "returnByValue": True, "userGesture": True,
+            }, session=session)["result"].get("value")
+
+        deadline = time.monotonic() + 10
+        while evaluate("typeof chrome.permissions") != "object" and time.monotonic() < deadline:
+            time.sleep(0.1)
+
+        def request(origin):
+            return evaluate(f"Promise.race([chrome.permissions.request({{origins: [{json.dumps(origin)}]}}), "
+                            "new Promise(done => setTimeout(() => done('pending'), 3000))])")
+
+        self.assertIs(request("https://example.com/*"), True)
+        self.assertIsNot(request("https://example.org/*"), True)
+
+    def test_provider_url_must_stay_on_https(self):
+        extension = self.root / "extension"
+        extension.mkdir()
+        (extension / "manifest.json").write_text('{"name":"Subline"}')
+        result = subprocess.run(self.command(sys.executable, extension, "--provider-url", "http://example.com"),
+                                cwd=REPO, capture_output=True, text=True, timeout=15)
+        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertIn("--provider-url", result.stderr)
+        self.assertFalse(self.output.exists())
 
     def stop_launcher(self, launcher):
         if launcher.poll() is None:

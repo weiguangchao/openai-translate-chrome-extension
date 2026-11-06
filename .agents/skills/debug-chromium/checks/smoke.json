@@ -1,4 +1,4 @@
 [
   {"name":"youtube","url":"https://www.youtube.com/watch?v=H14bBuluwB8","budget":50,"steps":[{"action":"media","play":true,"keep_playing":true,"skip_ads":true},{"action":"overlay","wait":true}]},
-  {"name":"x","url":"https://x.com/theo/status/2107935187825008691","budget":90,"steps":[{"action":"media","play":true,"keep_playing":true},{"action":"overlay","wait":true}]}
+  {"name":"x","url":"https://x.com/theo/status/2107935187825008691","budget":90,"steps":[{"action":"media","play":true,"keep_playing":true,"captions":true},{"action":"overlay","wait":true}]}
 ]

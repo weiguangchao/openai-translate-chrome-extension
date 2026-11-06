@@ -62,8 +62,8 @@ def load_plan(path):
         if 'start' in case and (not number(case['start']) or case['start'] < 0):
             raise ValueError(f'{name}: start needs a video position')
         media = case.get('media', {})
-        if not isinstance(media, dict) or set(media) - {'skip_ads', 'keep_playing'} or any(type(v) is not bool for v in media.values()):
-            raise ValueError(f'{name}: media accepts boolean skip_ads/keep_playing')
+        if not isinstance(media, dict) or set(media) - {'skip_ads', 'keep_playing', 'captions'} or any(type(v) is not bool for v in media.values()):
+            raise ValueError(f'{name}: media accepts boolean skip_ads/keep_playing/captions')
     thresholds = plan.get('thresholds', {})
     allowed = {'waitAfterOpening', 'waitAfterSeeking', 'loadingAfterSeeking', 'loadingWhilePlaying', 'providerP50', 'providerP90'}
     if not isinstance(thresholds, dict) or set(thresholds) - allowed or any(not number(n) or n < 0 for n in thresholds.values()):

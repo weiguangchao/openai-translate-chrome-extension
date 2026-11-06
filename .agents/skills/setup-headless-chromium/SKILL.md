@@ -10,12 +10,12 @@ From the repo root, use full Chromium/Chrome for Testing supporting unpacked ext
 ```bash
 npm run build
 node --input-type=module -e 'import { chromium } from "playwright"; console.log(chromium.executablePath())'
-python3 .agents/skills/setup-headless-chromium/scripts/launch.py --browser "/path/to/Chromium" --extension "$PWD/dist" --output "$PWD/.artifacts/headless-check"
+python3 .agents/skills/setup-headless-chromium/scripts/launch.py --browser "/path/to/Chromium" --extension "$PWD/dist" --output "$PWD/.artifacts/headless-check" --provider-url "https://edge.microsoft.com"
 ```
 
 Keep launcher running in a tool session/new task-owned directory. `session.json` state `ready` confirms endpoint/developer mode; it records PIDs/profile/configuration/fingerprint. Use this launcher for real sites: nonzero port, normal Chrome User-Agent, 1280×900 window. Override `--window-size WIDTH,HEIGHT`; verify geometry/screenshots. For Linux/failures read [diagnostics](references/startup.md), `chromium.log`/`session.json` before changes.
 
-Use authorized Providers through real settings/caption-sharing consent. Keys belong in private files/secret tools, never arguments/source/manifests/evidence. Headless macOS saving may await native origin approval, absent from DOM/screenshots. Inspect native UI, approve only authorized origin, verify saving/connection. Failed/unavailable approval blocks setup; preserve failure, never bypass consent/change production manifest.
+Use authorized Providers through real settings/caption-sharing consent. Keys belong in private files/secret tools, never arguments/source/manifests/evidence. Headless Chromium can leave the native origin approval out of every window, so saving waits forever. Pass the authorized Provider's URL as `--provider-url` (`https://edge.microsoft.com` for Microsoft, `OPENAI_BASE_URL` for OpenAI); the launcher grants only that origin through the `chrome://extensions` site access control and records it as `provider_origin`. Then accept consent and save in the settings page: saving must finish and the connection test must pass. A save that still waits or a failed test blocks setup; preserve the failure, never grant other origins, write storage or change the production manifest.
 
 Close bootstrap connections before handoff. Pass `--launch-session "$PWD/.artifacts/headless-check/session.json"` to every `live.py` command; follow [debug context rules](../debug-chromium/SKILL.md) to start/reload. The CLI derives endpoint/state paths and rejects stopped or mismatched sessions. Launcher bootstrap closes before ready; no later debugging calls.
 

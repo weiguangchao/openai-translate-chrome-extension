@@ -5,9 +5,9 @@
   {"name":"youtube-1p25","url":"https://www.youtube.com/watch?v=c0KYU2j0TM4","rate":1.25,"start":60,"seek":[600,300,900],"media":{"keep_playing":true,"skip_ads":true}},
   {"name":"youtube-1p5","url":"https://www.youtube.com/watch?v=D9Ihs241zeg","rate":1.5,"start":60,"seek":[600,300,900],"media":{"keep_playing":true,"skip_ads":true}},
   {"name":"youtube-2","url":"https://www.youtube.com/watch?v=qp0HIF3SfI4","rate":2,"start":60,"seek":[600,300,900],"media":{"keep_playing":true,"skip_ads":true}},
-  {"name":"x-1","url":"https://x.com/theo/status/2107935187825008691","rate":1,"seek":[300,600,900,1200],"media":{"keep_playing":true}},
-  {"name":"x-1p25","url":"https://x.com/theo/status/2107935187825008691","rate":1.25,"seek":[600,300,900,1200],"media":{"keep_playing":true}},
-  {"name":"x-1p5","url":"https://x.com/theo/status/2107935187825008691","rate":1.5,"seek":[900,300,600,1200],"media":{"keep_playing":true}},
-  {"name":"x-2","url":"https://x.com/theo/status/2107935187825008691","rate":2,"seek":[1200,300,600,900],"media":{"keep_playing":true}}
+  {"name":"x-1","url":"https://x.com/theo/status/2107935187825008691","rate":1,"seek":[300,600,900,1200],"media":{"keep_playing":true,"captions":true}},
+  {"name":"x-1p25","url":"https://x.com/theo/status/2107935187825008691","rate":1.25,"seek":[600,300,900,1200],"media":{"keep_playing":true,"captions":true}},
+  {"name":"x-1p5","url":"https://x.com/theo/status/2107935187825008691","rate":1.5,"seek":[900,300,600,1200],"media":{"keep_playing":true,"captions":true}},
+  {"name":"x-2","url":"https://x.com/theo/status/2107935187825008691","rate":2,"seek":[1200,300,600,900],"media":{"keep_playing":true,"captions":true}}
   ]
 }
