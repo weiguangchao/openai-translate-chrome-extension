@@ -105,6 +105,7 @@ describe('OpenAI-compatible provider contract', () => {
       result: '保留字幕中的变量。',
       instructions: /^You are a professional native Simplified Chinese translator\./,
       titled: false,
+      user: (text: string) => `Translate to Simplified Chinese:\n\n${text}`,
     },
     {
       name: 'translateCaptionBatch',
@@ -114,10 +115,11 @@ describe('OpenAI-compatible provider contract', () => {
       instructions:
         /^You are a professional native Simplified Chinese translator\.[\s\S]*Video title/,
       titled: true,
+      user: (text: string) => `Translate to Simplified Chinese:\n\n[[p0]]\n${text}\n[[source_end]]`,
     },
   ])(
     '$name sends one chat completion with the translation instructions and literal content',
-    async ({ send, reply, result, instructions, titled }) => {
+    async ({ send, reply, result, instructions, titled, user }) => {
       const fetch = vi
         .fn()
         .mockResolvedValue(Response.json({ choices: [{ message: { content: reply } }] }));
@@ -137,11 +139,7 @@ describe('OpenAI-compatible provider contract', () => {
         content: expect.stringMatching(instructions),
       });
       expect(body.messages[0].content.includes('titled')).toBe(titled);
-      expect(body.messages[1]).toEqual({
-        role: 'user',
-        content: expect.stringMatching(/^Translate to Simplified Chinese:\n\n/),
-      });
-      expect(body.messages[1].content).toContain(text);
+      expect(body.messages[1]).toEqual({ role: 'user', content: user(text) });
       expect(body).not.toHaveProperty('prompt');
       expect(body).not.toHaveProperty('response_format');
       expect(body.stream).toBe(false);
