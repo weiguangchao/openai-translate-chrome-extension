@@ -23,8 +23,12 @@ def trace_issues(result, seconds, rate, since=None, target=None):
     for key in ('sparse', 'truncated', 'clockTruncated', 'clockMissing', 'rateMismatch'):
         if stats.get(key):
             issues.append(key)
+    if stats.get('ad'):
+        issues.append('an ad played during the trace')
     if stats.get('clock') or stats.get('rateChanges'):
         issues.append('clock was throttled or the rate changed')
+    if not number(stats.get('firstCaptionAt')):
+        issues.append('no source caption showed')
     if since and stats.get('since') != since:
         issues.append('trace uses the wrong starting mark')
     played, before, counted = (stats.get(key, 0) for key in ('played', 'before', 'counted'))

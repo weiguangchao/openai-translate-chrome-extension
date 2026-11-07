@@ -48,11 +48,26 @@ class Validity(unittest.TestCase):
             self.assertIsNone(result['metrics'][metric])
         self.assertEqual(result['metrics']['loadingWhilePlaying'], 1)
 
+    def test_a_run_that_never_showed_a_source_caption_is_rejected(self):
+        """A fresh profile chose YouTube's Chinese track, and seven empty runs passed as valid.
+
+        An unsupported caption language shows only errors with no source caption, which is no better.
+        """
+        for states in ({'empty': 45}, {'error': 45}):
+            with self.subTest(states=states):
+                run = collected()
+                for trace in run['traces'].values():
+                    trace['stats'].update(firstCaptionAt=None, firstReadyAt=None, states=states,
+                                          batches={'measured': 0, 'results': {}})
+                result = verify.assess(run)
+                self.assertFalse(result['dataValid'])
+                self.assertEqual(set(result['issues']), set(verify.PHASES))
+
     def test_invalid_clocks_and_incomplete_windows_are_rejected(self):
         for changes in ({'playbackRate': 1}, {'clock': 'throttled'}, {'sparse': True},
                         {'truncated': True}, {'clockTruncated': True}, {'clockMissing': True},
                         {'rateMismatch': True}, {'rateChanges': [{'from': 2, 'to': 1}]},
-                        {'played': 40}, {'counted': 40}, {'complete': False}):
+                        {'played': 40}, {'counted': 40}, {'complete': False}, {'ad': True}):
             with self.subTest(changes=changes):
                 run = collected()
                 run['traces']['playing']['stats'].update(changes)
