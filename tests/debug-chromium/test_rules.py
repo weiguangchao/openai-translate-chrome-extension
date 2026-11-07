@@ -393,5 +393,14 @@ class TraceIsolation(unittest.TestCase):
         self.assertEqual(tab.trace_events(), own)
 
 
+class MissingOsascript(unittest.TestCase):
+
+    def test_a_missing_osascript_returns_the_error(self):
+        missing = FileNotFoundError(2, "No such file or directory", "osascript")
+        with patch.object(holder.subprocess, "run", side_effect=missing):
+            self.assertEqual(holder.activate_chrome(), str(missing)[:200])
+            self.assertEqual(holder.click_allow(), str(missing)[:200])
+
+
 if __name__ == "__main__":
     unittest.main()

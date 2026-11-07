@@ -167,3 +167,30 @@ it('requests host access for the selected Microsoft provider instead of the stor
   await allowApiHost({ ...DEFAULT_SETTINGS, baseUrl: 'https://unused.example/v1' });
   expect(request).toHaveBeenCalledExactlyOnceWith({ origins: ['https://edge.microsoft.com/*'] });
 });
+
+it('requests Microsoft host access when OpenAI uses it as a temporary translator', async () => {
+  const { allowApiHost } = await openStorage();
+  const request = vi.fn().mockResolvedValue(true);
+  vi.stubGlobal('chrome', { ...chrome, permissions: { request } });
+  await allowApiHost({
+    ...DEFAULT_SETTINGS,
+    provider: 'openai',
+    baseUrl: 'https://api.example.com/v1',
+    apiKey: 'key',
+    model: 'model',
+    providerConsent: 'https://api.example.com,https://edge.microsoft.com',
+  });
+  expect(request).toHaveBeenCalledExactlyOnceWith({
+    origins: ['https://api.example.com/*', 'https://edge.microsoft.com/*'],
+  });
+  request.mockClear();
+  await allowApiHost({
+    ...DEFAULT_SETTINGS,
+    provider: 'openai',
+    baseUrl: 'https://api.example.com/v1',
+    apiKey: 'key',
+    model: 'model',
+    providerConsent: 'https://api.example.com',
+  });
+  expect(request).toHaveBeenCalledExactlyOnceWith({ origins: ['https://api.example.com/*'] });
+});
