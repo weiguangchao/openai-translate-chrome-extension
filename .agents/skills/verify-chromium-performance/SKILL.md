@@ -13,7 +13,7 @@ Authorized MiMo: read `OPENAI_BASE_URL`, `OPENAI_MODEL`, `OPENAI_API_KEY` from t
 { git rev-parse --show-toplevel; git worktree list --porcelain | sed -n 's/^worktree //p'; } | while read -r d; do [ -f "$d/.env" ] && echo "$d/.env" && break; done
 ```
 
-Read that file where it is. Don't copy it, change it, or loosen its `0600` mode. Configure the values in real settings and keep keys out of builds and evidence.
+Read that file where it is. Don't copy it, print it, change it, or loosen its `0600` mode. Pass its path to the [launcher](../setup-headless-chromium/SKILL.md) as `--provider-env`, and keep keys out of builds and evidence.
 
 Each run: reload to clear translations, open/set rate; trace 45 video seconds `since: "open"`, seek once to uncached captions outside opening/prefetch, trace 45 seconds `since: "seek"`, then 180 continuous video seconds. YouTube needs first `media.time` in speech, not unreliable `&t=`. Keep headed Chrome in front; omit headless `focus`. For plans/comparisons/resume/saved checks read [measurement](references/measurement.md).
 

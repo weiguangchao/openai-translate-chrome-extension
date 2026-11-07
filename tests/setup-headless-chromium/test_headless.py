@@ -3,12 +3,16 @@ import json
 import os
 import shlex
 import shutil
+import signal
 import subprocess
+import threading
 import sys
 import tempfile
 import time
 import unittest
 from pathlib import Path
+
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from support import LIVE, REPO, SESSION, Result, Site, copy_extension, find_browser
 from holder import handshake
@@ -16,6 +20,38 @@ from live import extension_id
 import measure
 
 LAUNCH = REPO / ".agents/skills/setup-headless-chromium/scripts/launch.py"
+KEY = "sk-headless-test-key"
+
+
+class FakeOpenAI:
+    """An OpenAI-compatible Provider on 127.0.0.1 that records the chat completions it answers."""
+
+    def __init__(self):
+        self.requests = []
+        fake = self
+
+        class Handler(BaseHTTPRequestHandler):
+            def log_message(self, *_args):
+                pass
+
+            def do_POST(self):
+                body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))))
+                fake.requests.append({"model": body.get("model"),
+                                      "authorization": self.headers.get("Authorization")})
+                reply = json.dumps({"choices": [{"message": {"content": "世界充满了美好的事物。"}}]}).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(reply)))
+                self.end_headers()
+                self.wfile.write(reply)
+
+        self.server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        self.url = f"http://127.0.0.1:{self.server.server_port}/v1"
+        threading.Thread(target=self.server.serve_forever, daemon=True).start()
+
+    def close(self):
+        self.server.shutdown()
+        self.server.server_close()
 
 
 class Headless(unittest.TestCase):
@@ -109,47 +145,90 @@ class Headless(unittest.TestCase):
         with self.assertRaises(ProcessLookupError):
             os.kill(record["browser_pid"], 0)
 
-    def test_provider_url_grants_only_its_origin(self):
-        """Headless macOS never showed the native permission sheet, so saving Provider settings hung."""
-        extension = copy_extension()
-        self.addCleanup(shutil.rmtree, extension)
-        manifest = json.loads((extension / "manifest.json").read_text())
-        manifest["optional_host_permissions"] = ["https://*/*"]
-        (extension / "manifest.json").write_text(json.dumps(manifest))
-        _, record = self.launch(extension, "--provider-url", "https://example.com/v1")
-        self.assertEqual(record["provider_origin"], "https://example.com/*")
+    def test_openai_with_microsoft_fallback_saves_and_passes_its_connection_test(self):
+        """Saving OpenAI with Microsoft consent asks for two origins; one grant left the save waiting."""
+        if not (REPO / "dist/manifest.json").is_file():
+            self.fail("Build Subline first: npm run build:store")
+        extension = self.root / "dist"
+        shutil.copytree(REPO / "dist", extension)
+        provider = FakeOpenAI()
+        self.addCleanup(provider.close)
+        env = self.root / "provider.env"
+        env.write_text(f"OPENAI_BASE_URL={provider.url}\nOPENAI_MODEL=test-model\nOPENAI_API_KEY={KEY}\n")
+        env.chmod(0o600)
+        _, record = self.launch(extension, "--provider", "openai", "--provider-env", str(env),
+                                "--microsoft-fallback")
+        self.assertEqual(record["provider"], {
+            "kind": "openai", "origins": ["http://127.0.0.1/*", "https://edge.microsoft.com/*"],
+        })
+        self.assertEqual([(r["model"], r["authorization"]) for r in provider.requests],
+                         [("test-model", f"Bearer {KEY}")])
+        for evidence in (self.output / "session.json", self.root / "launcher.log"):
+            self.assertNotIn(KEY, evidence.read_text())
         chrome = handshake(record["port"], record["endpoint_path"])
         self.addCleanup(chrome.close)
         page = chrome.call("Target.createTarget", {
             "url": f"chrome-extension://{extension_id(extension)}/popup.html",
         })["targetId"]
         session = chrome.call("Target.attachToTarget", {"targetId": page, "flatten": True})["sessionId"]
-
-        def evaluate(expression):
-            return chrome.call("Runtime.evaluate", {
-                "expression": expression, "awaitPromise": True, "returnByValue": True, "userGesture": True,
-            }, session=session)["result"].get("value")
-
         deadline = time.monotonic() + 10
-        while evaluate("typeof chrome.permissions") != "object" and time.monotonic() < deadline:
+        reply = {}
+        while time.monotonic() < deadline:
+            reply = chrome.call("Runtime.evaluate", {
+                "expression": "Promise.race([chrome.permissions.request({origins: ['https://example.org/*']}), "
+                              "new Promise(done => setTimeout(() => done('pending'), 3000))])",
+                "awaitPromise": True, "returnByValue": True, "userGesture": True,
+            }, session=session)
+            if "exceptionDetails" not in reply:
+                break
             time.sleep(0.1)
+        self.assertEqual(reply["result"]["value"], "pending")
+        saved = chrome.call("Runtime.evaluate", {
+            "expression": "chrome.storage.local.get('subline.settings.v1').then(v => v['subline.settings.v1'])",
+            "awaitPromise": True, "returnByValue": True,
+        }, session=session)["result"]["value"]
+        self.assertEqual((saved["provider"], saved["baseUrl"], saved["model"]),
+                         ("openai", provider.url, "test-model"))
+        self.assertEqual(set(saved["providerConsent"].split(",")),
+                         {provider.url.removesuffix("/v1"), "https://edge.microsoft.com"})
 
-        def request(origin):
-            return evaluate(f"Promise.race([chrome.permissions.request({{origins: [{json.dumps(origin)}]}}), "
-                            "new Promise(done => setTimeout(() => done('pending'), 3000))])")
+    def test_background_returns_once_ready_and_refuses_a_used_output(self):
+        extension = copy_extension()
+        self.addCleanup(shutil.rmtree, extension)
+        started = subprocess.run(self.command(find_browser(), extension, "--background"), cwd=REPO,
+                                 capture_output=True, text=True, timeout=60)
+        self.assertEqual(started.returncode, 0, started.stderr)
+        record = json.loads(started.stdout)
+        self.addCleanup(self.stop_background, record["launcher_pid"])
+        self.assertEqual(record["state"], "ready")
+        os.kill(record["launcher_pid"], 0)
+        again = subprocess.run(self.command(find_browser(), extension), cwd=REPO,
+                               capture_output=True, text=True, timeout=15)
+        self.assertEqual(again.returncode, 2, again.stderr)
+        self.assertIn("already holds a launch", again.stderr)
 
-        self.assertIs(request("https://example.com/*"), True)
-        self.assertIsNot(request("https://example.org/*"), True)
-
-    def test_provider_url_must_stay_on_https(self):
+    def test_provider_settings_are_checked_before_launch(self):
         extension = self.root / "extension"
         extension.mkdir()
         (extension / "manifest.json").write_text('{"name":"Subline"}')
-        result = subprocess.run(self.command(sys.executable, extension, "--provider-url", "http://example.com"),
-                                cwd=REPO, capture_output=True, text=True, timeout=15)
-        self.assertEqual(result.returncode, 2, result.stderr)
-        self.assertIn("--provider-url", result.stderr)
-        self.assertFalse(self.output.exists())
+        env = self.root / "provider.env"
+        env.write_text("OPENAI_BASE_URL=http://example.com/v1\nOPENAI_MODEL=m\nOPENAI_API_KEY=k\n")
+        for extra, message in [(["--provider", "openai"], "--provider-env"),
+                               (["--provider", "openai", "--provider-env", str(env)], "OPENAI_BASE_URL"),
+                               (["--provider", "microsoft", "--microsoft-fallback"], "--provider openai")]:
+            with self.subTest(extra=extra):
+                result = subprocess.run(self.command(sys.executable, extension, *extra),
+                                        cwd=REPO, capture_output=True, text=True, timeout=15)
+                self.assertEqual(result.returncode, 2, result.stderr)
+                self.assertIn(message, result.stderr)
+                self.assertFalse(self.output.exists())
+
+    def stop_background(self, pid):
+        os.kill(pid, signal.SIGTERM)
+        deadline = time.monotonic() + 15
+        while json.loads((self.output / "session.json").read_text())["state"] == "ready":
+            self.assertLess(time.monotonic(), deadline, "Background launcher did not stop")
+            time.sleep(0.1)
 
     def stop_launcher(self, launcher):
         if launcher.poll() is None:
