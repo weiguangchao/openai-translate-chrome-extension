@@ -112,8 +112,9 @@ export class TranslationQueue {
     });
   }
 
-  hasPrefetch(consumer: string): boolean {
-    return (this.consumers.get(consumer)?.packs.length ?? 0) > 0;
+  prefetchWindow(consumer: string): object | undefined {
+    const state = this.consumers.get(consumer);
+    return state?.snapshot.length ? state : undefined;
   }
 
   async prefetch(
@@ -155,7 +156,7 @@ export class TranslationQueue {
         primary: fallback ? this.key(fallback, cue.text) : undefined,
       })),
     );
-    if (this.consumers.get(consumer) !== state) return cached;
+    if (this.consumers.get(consumer) !== state) return cues.map(() => null);
     const open = snapshot.filter(
       ({ key }, index) =>
         cached[index] === null && !this.failed.has(key) && !this.jobs.get(key)?.controller,
@@ -548,7 +549,7 @@ export class HybridTranslationQueue {
     const microsoftSettings = { ...settings, provider: 'microsoft' as const };
     const openai = this.openai.request(consumer, settings, text, {
       onProviderTranslation: () => {
-        if (!this.openai.hasPrefetch(consumer)) this.stopMicrosoft(consumer);
+        if (!this.openai.prefetchWindow(consumer)) this.stopMicrosoft(consumer);
       },
     });
     const microsoft =
@@ -569,6 +570,7 @@ export class HybridTranslationQueue {
       return this.microsoft.prefetch(consumer, settings, cues, time, rate);
     const microsoftSettings = { ...settings, provider: 'microsoft' as const };
     const openai = this.openai.prefetch(consumer, settings, cues, time, rate);
+    const window = this.openai.prefetchWindow(consumer);
     const microsoft =
       !cues.length || !this.microsoftAllowed() || this.microsoftStopped.has(consumer)
         ? Promise.resolve<(string | null)[]>([])
@@ -576,7 +578,12 @@ export class HybridTranslationQueue {
             fallback: settings,
           });
     return Promise.all([openai, microsoft]).then(([openaiResults, microsoftResults]) => {
-      if (openaiResults.length && openaiResults.every((translation) => translation !== null))
+      if (
+        window &&
+        this.openai.prefetchWindow(consumer) === window &&
+        openaiResults.length &&
+        openaiResults.every((translation) => translation !== null)
+      )
         this.stopMicrosoft(consumer);
       return cues.map((_, index) => openaiResults[index] ?? microsoftResults[index] ?? null);
     });

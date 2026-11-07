@@ -1,5 +1,10 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { DEFAULT_SETTINGS, MICROSOFT_ORIGIN, type Settings } from '../src/shared/settings';
+import {
+  DEFAULT_SETTINGS,
+  MICROSOFT_ORIGIN,
+  type CaptionTranslationSettings,
+  type Settings,
+} from '../src/shared/settings';
 import { extensionStorage, sessionStorage } from './fixtures/extension-storage';
 import { consentedSettings } from './fixtures/settings';
 import { packedCues, providerReply, requestedTexts, translationReply } from './fixtures/provider';
@@ -817,4 +822,106 @@ it('shows the Microsoft translation while the OpenAI send window is full', async
     ok: true,
     data: ['OpenAI Now', 'OpenAI Soon', 'OpenAI Later'],
   });
+});
+
+it.each(['OpenAI', 'Microsoft'])(
+  'keeps Microsoft enabled after an abandoned %s cache lookup finishes',
+  async (provider) => {
+    vi.useFakeTimers();
+    const session = sessionStorage();
+    vi.stubGlobal('chrome', { storage: { session } });
+    const { HybridTranslationQueue } = await import('../src/extension/queue');
+    const queue = new HybridTranslationQueue();
+    const settings: CaptionTranslationSettings = {
+      ...dualSettings,
+      captionLanguage: 'en',
+      pageTitle: 'Video title',
+    };
+    const { sent, answer } = dualProvider();
+    const opening = queue.prefetch('tab', settings, packedCues(batch('A')));
+    await vi.advanceTimersByTimeAsync(0);
+    answer(false);
+    answer(true);
+    await opening;
+    queue.hold('tab', 0);
+
+    const read = session.get.getMockImplementation()!;
+    let resume!: () => void;
+    const blocked = new Promise<void>((resolve) => {
+      resume = resolve;
+    });
+    let waiting = false;
+    session.get.mockImplementation(async (keys) => {
+      const stored = await read(keys);
+      if (
+        !waiting &&
+        Array.isArray(keys) &&
+        keys.some((key) => key.startsWith('subline.translation.v3:["microsoft",')) ===
+          (provider === 'Microsoft')
+      ) {
+        waiting = true;
+        await blocked;
+      }
+      return stored;
+    });
+    const abandoned = queue.prefetch('tab', settings, packedCues(batch('A')));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(waiting).toBe(true);
+    queue.hold('tab', 600);
+    const landing = queue.prefetch('tab', settings, packedCues(batch('X'), 605), 600);
+    await vi.advanceTimersByTimeAsync(providerSendWindowMs);
+    expect(sent(true)).toContain('X0');
+    resume();
+    await abandoned;
+    const following = queue.prefetch('tab', settings, packedCues(batch('Y'), 605), 600);
+    await vi.advanceTimersByTimeAsync(providerSendWindowMs);
+    expect(sent(true)).toContain('Y0');
+    answer(false);
+    answer(true);
+    await Promise.all([landing, following]);
+  },
+);
+
+it('keeps Microsoft enabled when a visible result finishes during a prefetch lookup', async () => {
+  vi.useFakeTimers();
+  const session = sessionStorage();
+  vi.stubGlobal('chrome', { storage: { session } });
+  const { HybridTranslationQueue } = await import('../src/extension/queue');
+  const queue = new HybridTranslationQueue();
+  const settings: CaptionTranslationSettings = {
+    ...dualSettings,
+    captionLanguage: 'en',
+    pageTitle: 'Video title',
+  };
+  const { sent, answer } = dualProvider();
+  const visible = { text: 'Visible', start: 0, end: 3 };
+  const opening = queue.prefetch('tab', settings, [visible]);
+  await vi.advanceTimersByTimeAsync(0);
+  const shown = queue.request('tab', settings, 'Visible');
+  await vi.advanceTimersByTimeAsync(0);
+
+  const read = session.get.getMockImplementation()!;
+  let resume!: () => void;
+  const blocked = new Promise<void>((resolve) => {
+    resume = resolve;
+  });
+  session.get.mockImplementation(async (keys) => {
+    const stored = await read(keys);
+    if (Array.isArray(keys)) await blocked;
+    return stored;
+  });
+  const refreshed = queue.prefetch('tab', settings, [
+    visible,
+    { text: 'Upcoming', start: 3, end: 7 },
+  ]);
+  await vi.advanceTimersByTimeAsync(0);
+  answer(false);
+  await expect(shown).resolves.toBe('OpenAI Visible');
+  resume();
+  await vi.advanceTimersByTimeAsync(0);
+  expect(sent(true)).toContain('Upcoming');
+  answer(false);
+  answer(true);
+  await expect(refreshed).resolves.toEqual(['OpenAI Visible', 'OpenAI Upcoming']);
+  await opening;
 });
