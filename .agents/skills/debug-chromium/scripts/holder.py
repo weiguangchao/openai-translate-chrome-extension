@@ -152,10 +152,15 @@ def set_rate(rate):
 
 
 NATIVE_TRACKS = "[...video.textTracks].filter(t => t.kind === 'subtitles' || t.kind === 'captions')"
+AD_SHOWING = "Boolean(document.querySelector('#movie_player.ad-showing'))"
+YOUTUBE_REFUSAL = """(() => {
+  const status = document.querySelector('#movie_player')?.getPlayerResponse?.()?.playabilityStatus;
+  return status && status.status !== 'OK' ? [status.status, status.reason].filter(Boolean).join(': ') : null;
+})()"""
 
 
 def video_report():
-    return """const ad = Boolean(document.querySelector('#movie_player.ad-showing'));
+    return "const ad = " + AD_SHOWING + """;
       return {time: Math.round(video.currentTime * 100) / 100, paused: video.paused,
         ended: video.ended, ad, rate: video.playbackRate, ready: video.readyState,
         visible: document.visibilityState};"""
@@ -356,7 +361,8 @@ def handshake(port, path):
     except OSError as error:
         raise SystemExit(f"Cannot reach Chrome on port {port} ({error}). Is Chrome running?")
     sock.sendall(request.encode())
-    log('Waiting for Chrome authorization.')
+    if os.environ.get("DEBUG_CHROMIUM_EXISTING_BROWSER") == "1":
+        log('Waiting for Chrome authorization.')
     buf = b""
     deadline = time.monotonic() + ALLOW_SECONDS
     next_click = time.monotonic() + 2
@@ -889,9 +895,11 @@ class Tab:
                            "if (native.length && !native.some(t => t.mode === 'showing')) native[0].mode = 'showing';")
 
         def media_probe(seek):
-            jump = (f"if (Math.abs(video.currentTime - {target}) > 1.5) {{ video.currentTime = {target}; seeked = true; }}"
-                    if seek else "")
+            jump = (f"if (!{AD_SHOWING} && Math.abs(video.currentTime - {target}) > 1.5) "
+                    f"{{ video.currentTime = {target}; seeked = true; }}" if seek else "")
             return f"""(() => {{
+          const refused = {YOUTUBE_REFUSAL};
+          if (refused) return {{refused}};
           const video = document.querySelector({json.dumps(selector)});
           if (!video || video.readyState < 1) return null;
           {" ".join(actions)}
@@ -908,7 +916,7 @@ class Tab:
             due = seeking["due"]
             stamp = time.time() * 1000
             value = self.sample(seek_probe if due else probe)
-            if due and isinstance(value, dict):
+            if due and isinstance(value, dict) and value.get("ad") is False:
                 seeking["due"] = False
                 seeking["at"] = time.monotonic()
                 seeking["count"] += value["seeked"]
@@ -928,6 +936,9 @@ class Tab:
         def passed(value):
             if not isinstance(value, dict):
                 return False
+            if value.get("refused"):
+                self.fail_reason = f"YouTube refused playback: {value['refused']}"
+                return FAIL
             if value.get("ad"):
                 return False
             if target is not None:
@@ -1082,7 +1093,7 @@ class Tab:
           {video_report()}
         }})()"""
         progress = {"played": 0.0, "mark": None, "before": None, "last": None, "last_at": None,
-                    "playing_since": None, "milestone": TRACE_MILESTONE}
+                    "playing_since": None, "milestone": TRACE_MILESTONE, "ad": False}
 
         def summary():
             before = progress["before"] or 0.0
@@ -1091,12 +1102,15 @@ class Tab:
             if count_from:
                 full["stats"]["since"] = count_from
             full['stats']['requested'] = step['seconds']
+            if progress["ad"]:
+                full['stats']['ad'] = True
             return full
 
         def passed(value):
             if not isinstance(value, dict):
                 return False
             self.remember(value)
+            progress["ad"] = progress["ad"] or value["ad"]
             moving = not value["paused"] and not value["ad"]
             if moving and count_from and progress["before"] is None:
                 now = time.time() * 1000

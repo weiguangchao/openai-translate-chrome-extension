@@ -17,6 +17,10 @@
   //   stuck=1          play() does nothing, so the video never advances
   //   unmute=1         unmute the video once it plays
   //   track=1          add an English subtitle track that starts disabled, as X does
+  //   refuse=STATUS    the player response refuses playback and the video never loads,
+  //                    as YouTube does when it asks the viewer to sign in
+  //   ad=SECONDS       the first SECONDS of playback are an ad in the same video element;
+  //                    then the video restarts at 0, as YouTube does after a pre-roll
   const params = new URLSearchParams(location.search);
   const video = document.querySelector('video');
   const player = document.querySelector('#movie_player');
@@ -63,6 +67,25 @@
   if (params.has('stuck')) HTMLMediaElement.prototype.play = () => Promise.resolve();
 
   if (params.has('track')) video.addTextTrack('subtitles', 'English', 'en').mode = 'disabled';
+
+  const refuse = params.get('refuse');
+  if (refuse) {
+    player.getPlayerResponse = () => ({ playabilityStatus: { status: refuse, reason: 'Sign in' } });
+    video.removeAttribute('src');
+    video.load();
+  }
+
+  const ad = Number(params.get('ad'));
+  if (ad) {
+    player.classList.add('ad-showing');
+    const end = () => {
+      if (video.currentTime < ad) return;
+      video.removeEventListener('timeupdate', end);
+      player.classList.remove('ad-showing');
+      video.currentTime = 0;
+    };
+    video.addEventListener('timeupdate', end);
+  }
 
   if (params.has('unmute'))
     video.addEventListener('playing', () => {

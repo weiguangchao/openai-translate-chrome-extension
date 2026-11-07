@@ -49,6 +49,26 @@ class Media(BrowserCase):
         self.assertEqual(media["seeks"], 3)
         self.assertLess(media["seconds"], 20)
 
+    def test_waits_out_an_ad_before_seeking(self):
+        """A seek during a YouTube pre-roll moved the ad, then the video started over at 0."""
+        tab = self.open("ad-seek", ad=2)
+        media = self.result(self.do(tab, action="media", time=30, play=True))
+        self.assertEqual(media["seeks"], 1)
+        self.assertGreaterEqual(media["video"]["time"], 28.5)
+
+    def test_trace_reports_an_ad(self):
+        tab = self.open("ad-trace", trace=True, ad=2)
+        self.result(self.do(tab, action="evaluate", expression="document.querySelector('video').play().then(() => true)"))
+        trace = self.result(self.do(tab, action="trace", seconds=2))
+        self.assertIs(trace["stats"].get("ad"), True)
+
+    def test_refused_playback_fails_with_youtubes_reason(self):
+        """YouTube asked a flagged network to sign in, and media spent its budget with video null."""
+        tab = self.open("refused", player="youtube", refuse="LOGIN_REQUIRED")
+        media = self.result(self.do(tab, action="media", play=True), ok=False)
+        self.assertEqual(media["value"]["fail"], "YouTube refused playback: LOGIN_REQUIRED: Sign in")
+        self.assertLess(media["seconds"], 10)
+
     def test_rate_holds_against_youtube_and_is_undone_on_close(self):
         """4ce2031: YouTube resets the element to its own rate every second."""
         tab = self.open("rate", player="youtube")
