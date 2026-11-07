@@ -2,6 +2,7 @@ import { t } from './i18n';
 import {
   DEFAULT_SETTINGS,
   applySettingsPatch,
+  MICROSOFT_ORIGIN,
   normalizeSettings,
   STORAGE_KEY,
   validateBaseUrl,
@@ -100,12 +101,24 @@ export async function saveCachedModels(settings: ModelProvider, models: string[]
   }
 }
 
+function hostPermission(origin: string): string {
+  const url = new URL(origin);
+  return `${url.protocol}//${url.hostname}/*`;
+}
+
 export async function allowApiHost(settings: Settings): Promise<void> {
-  const url = new URL(providerOrigin(settings) || validateBaseUrl(settings.baseUrl).origin);
+  const origins = [
+    hostPermission(providerOrigin(settings) || validateBaseUrl(settings.baseUrl).origin),
+  ];
+  if (
+    settings.provider === 'openai' &&
+    settings.providerConsent.split(',').includes(MICROSOFT_ORIGIN)
+  ) {
+    const microsoft = hostPermission(MICROSOFT_ORIGIN);
+    if (!origins.includes(microsoft)) origins.push(microsoft);
+  }
   if (!isExtension) return;
-  const granted = await chrome.permissions.request({
-    origins: [`${url.protocol}//${url.hostname}/*`],
-  });
+  const granted = await chrome.permissions.request({ origins });
   if (!granted)
     throw new Error(
       t(

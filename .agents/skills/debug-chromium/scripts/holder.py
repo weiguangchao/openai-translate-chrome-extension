@@ -332,6 +332,8 @@ def click_allow():
         )
     except subprocess.TimeoutExpired:
         return "osascript timed out"
+    except OSError as error:
+        return str(error)[:200]
     if result.returncode:
         return result.stderr.strip()[:200] or f"osascript exited {result.returncode}"
     if result.stdout.strip() == "clicked":
@@ -502,6 +504,8 @@ def activate_chrome():
         )
     except subprocess.TimeoutExpired:
         return "osascript timed out"
+    except OSError as error:
+        return str(error)[:200]
     if result.returncode:
         return result.stderr.strip()[:200] or f"osascript exited {result.returncode}"
     return None
@@ -731,6 +735,26 @@ class Tab:
         self.last_error = None
         return value
 
+    def trusted_skip(self):
+        value = self.sample(
+            "(() => { const node = document.querySelector("
+            + json.dumps(SKIP_AD)
+            + "); if (!node) return null; const rect = node.getBoundingClientRect();"
+            " if (rect.width < 2 || rect.height < 2) return null;"
+            " return {x: rect.x + rect.width / 2, y: rect.y + rect.height / 2}; })()"
+        )
+        if not isinstance(value, dict):
+            return
+        point = {"x": value["x"], "y": value["y"]}
+        try:
+            self.call("Input.dispatchMouseEvent", {"type": "mouseMoved", **point})
+            for kind in ("mousePressed", "mouseReleased"):
+                self.call("Input.dispatchMouseEvent", {
+                    "type": kind, **point, "button": "left", "clickCount": 1,
+                })
+        except CdpError:
+            return
+
     def until(self, probe, passed):
         beat = time.monotonic() + HEARTBEAT_SECONDS
         while True:
@@ -745,6 +769,8 @@ class Tab:
                 if isinstance(observed, dict):
                     self.media_events.extend(observed.pop('clockEvents', []))
                     self.clock_dropped |= observed.pop('clockDropped', False)
+                    if observed.get("ad") and self.skip_ads:
+                        self.trusted_skip()
             value = probe()
             if time.monotonic() >= self.deadline:
                 return False, value
@@ -901,6 +927,8 @@ class Tab:
 
         def passed(value):
             if not isinstance(value, dict):
+                return False
+            if value.get("ad"):
                 return False
             if target is not None:
                 played = (time.monotonic() - seeking["at"]) * max(value["rate"], rate or 0)

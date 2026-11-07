@@ -3,7 +3,11 @@ import { DEFAULT_SETTINGS, MICROSOFT_ORIGIN, type Settings } from '../src/shared
 import { extensionStorage } from './fixtures/extension-storage';
 import { consentedSettings } from './fixtures/settings';
 import { packedCues, providerReply, requestedTexts, translationReply } from './fixtures/provider';
-import { providerSendWindowMs, translationBatchLimit } from '../src/shared/tuning';
+import {
+  providerSendWindowMs,
+  translationBatchLimit,
+  translationSendsPerSecond,
+} from '../src/shared/tuning';
 
 afterEach(async () => {
   vi.useRealTimers();
@@ -564,6 +568,8 @@ function dualProvider() {
   vi.stubGlobal('fetch', fetch);
   const sent = (microsoft: boolean) =>
     pending.filter((request) => request.microsoft === microsoft).flatMap(({ texts }) => texts);
+  const posts = (microsoft: boolean) =>
+    pending.filter((request) => request.microsoft === microsoft).length;
   const answer = (microsoft: boolean) => {
     for (const request of pending.filter((item) => item.microsoft === microsoft))
       request.resolve(
@@ -576,7 +582,7 @@ function dualProvider() {
           : providerReply(request.texts, (text) => `OpenAI ${text}`),
       );
   };
-  return { sent, answer };
+  return { sent, posts, answer };
 }
 
 const dualSettings: Settings = {
@@ -763,4 +769,40 @@ it('caches a translation made while Microsoft is the selected provider', async (
     }),
   ).resolves.toEqual({ ok: true, data: '你好' });
   expect(fetch).toHaveBeenCalledTimes(1);
+});
+
+it('shows the Microsoft translation while the OpenAI send window is full', async () => {
+  const { sent, posts, answer } = dualProvider();
+  const send = await loadBackground(dualSettings);
+  const cues = [
+    { text: 'Now', start: 600.5, end: 602 },
+    { text: 'Soon', start: 605, end: 606 },
+    { text: 'Later', start: 615.1, end: 616 },
+  ];
+  const prefetched = send({
+    type: 'prefetch',
+    captionLanguage: 'en',
+    pageTitle: 'Video title',
+    time: 600,
+    rate: 1,
+    cues,
+  });
+  await vi.waitFor(() => expect(sent(false)).toEqual(['Now', 'Soon', 'Later']), wait);
+  expect(posts(false)).toBe(translationSendsPerSecond);
+  expect(posts(true)).toBe(translationSendsPerSecond);
+  expect(sent(true)).toEqual(['Now', 'Soon', 'Later']);
+  const shown = send({
+    type: 'translate',
+    captionLanguage: 'en',
+    pageTitle: 'Video title',
+    text: 'Now',
+  });
+  answer(true);
+  await expect(shown).resolves.toEqual({ ok: true, data: '微软 Now' });
+  expect(sent(false)).toEqual(['Now', 'Soon', 'Later']);
+  answer(false);
+  await expect(prefetched).resolves.toEqual({
+    ok: true,
+    data: ['OpenAI Now', 'OpenAI Soon', 'OpenAI Later'],
+  });
 });

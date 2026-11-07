@@ -7,6 +7,7 @@ export interface ProviderSendPolicy {
 }
 
 interface PendingSend {
+  origin: string;
   signal?: AbortSignal;
   policy?: ProviderSendPolicy;
   start: () => void;
@@ -14,11 +15,11 @@ interface PendingSend {
 }
 
 const pending: PendingSend[] = [];
-const sentAt: { at: number; policy?: ProviderSendPolicy }[] = [];
+const sentAt: { at: number; origin: string; policy?: ProviderSendPolicy }[] = [];
 let timer: ReturnType<typeof setTimeout> | undefined;
 
-function countedSends(): { at: number }[] {
-  return sentAt.filter((sent) => sent.policy?.counts() ?? true);
+function countedSends(origin: string): { at: number }[] {
+  return sentAt.filter((sent) => sent.origin === origin && (sent.policy?.counts() ?? true));
 }
 
 export function wakeProviderRequests(): void {
@@ -31,18 +32,19 @@ export function wakeProviderRequests(): void {
     (a, b) => (a.policy?.priority() ?? 0) - (b.policy?.priority() ?? 0),
   );
   for (const send of ordered) {
-    if (countedSends().length >= translationSendsPerSecond) break;
+    if (countedSends(send.origin).length >= translationSendsPerSecond) continue;
     if (send.policy && !send.policy.canSend()) continue;
     pending.splice(pending.indexOf(send), 1);
     send.signal?.removeEventListener('abort', send.cancel);
     send.start();
   }
-  const counted = countedSends();
-  if (pending.length && counted.length >= translationSendsPerSecond)
-    timer = setTimeout(
-      wakeProviderRequests,
-      Math.max(0, providerSendWindowMs - (Date.now() - counted[0].at)),
-    );
+  let delay = Infinity;
+  for (const send of pending) {
+    const counted = countedSends(send.origin);
+    if (counted.length < translationSendsPerSecond) continue;
+    delay = Math.min(delay, providerSendWindowMs - (now - counted[0].at));
+  }
+  if (Number.isFinite(delay)) timer = setTimeout(wakeProviderRequests, Math.max(0, delay));
 }
 
 export function providerFetch(
@@ -52,6 +54,7 @@ export function providerFetch(
   policy?: ProviderSendPolicy,
 ): Promise<{ response: Response; signal: AbortSignal }> {
   const post = init.method?.toUpperCase() === 'POST';
+  const origin = new URL(url).origin;
   return new Promise((resolve, reject) => {
     const start = () => {
       try {
@@ -59,7 +62,7 @@ export function providerFetch(
         const deadline = signal
           ? AbortSignal.any([signal, AbortSignal.timeout(providerTimeoutMs)])
           : AbortSignal.timeout(providerTimeoutMs);
-        if (post) sentAt.push({ at: Date.now(), policy });
+        if (post) sentAt.push({ at: Date.now(), origin, policy });
         void fetch(url, { ...init, signal: deadline }).then(
           (response) => resolve({ response, signal: deadline }),
           reject,
@@ -77,6 +80,7 @@ export function providerFetch(
       return;
     }
     const send: PendingSend = {
+      origin,
       signal,
       policy,
       start,
