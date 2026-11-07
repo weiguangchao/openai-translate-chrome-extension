@@ -27,7 +27,7 @@ def trace_issues(result, seconds, rate, since=None, target=None):
         issues.append('an ad played during the trace')
     if stats.get('clock') or stats.get('rateChanges'):
         issues.append('clock was throttled or the rate changed')
-    if not any(seconds > 0 for state, seconds in stats.get('states', {}).items() if state != 'empty'):
+    if not number(stats.get('firstCaptionAt')):
         issues.append('no source caption showed')
     if since and stats.get('since') != since:
         issues.append('trace uses the wrong starting mark')
