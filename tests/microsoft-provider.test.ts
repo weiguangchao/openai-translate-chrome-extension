@@ -1,3 +1,4 @@
+import { sessionStorage } from './fixtures/extension-storage';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { providerReply } from './fixtures/provider';
 import { DEFAULT_SETTINGS, type CaptionTranslationSettings } from '../src/shared/settings';
@@ -8,6 +9,7 @@ let translate: (typeof import('../src/shared/api'))['translate'];
 let TranslationQueue: (typeof import('../src/extension/queue'))['TranslationQueue'];
 
 beforeEach(async () => {
+  vi.stubGlobal('chrome', { storage: { session: sessionStorage() } });
   vi.resetModules();
   ({ translate, translateCaptionBatch } = await import('../src/shared/api'));
   ({ TranslationQueue } = await import('../src/extension/queue'));
