@@ -28,7 +28,11 @@ BROWSER_ARGS = []
 ACTIONS_HELP = """JSON action fields
 media: optional time, rate (0.25-4), play, pause, keep_playing, skip_ads, captions,
 selector (default video). Waits for readiness/motion; no fields only reports.
-captions turns on the first native subtitle track unless one already shows. Seeks at
+captions accepts true or en/zh-CN/zh-TW/ja/ko. A language selects that track;
+true keeps the selected track or enables the first. YouTube enables CC through
+its player. Traced media waits for a parsed caption in that language and rejects
+a source matching the translation target; use a build with language trace fields.
+Media failures include native error code/message and page context; buffering waits. Seeks at
 most 3 times if playback leaves reach. YouTube uses its player rate. Later steps
 enforce rate/keep_playing/skip_ads; pause disables keep_playing; close restores rate.
 wait: seconds (wall duration) OR time (video position/end); optional selector.

@@ -1,5 +1,7 @@
 import { t } from './i18n';
+import { supportedLanguage, type Language } from './languages';
 export const TRACE_ATTRIBUTE = 'data-subline-trace';
+export const TRACE_REFRESH_ATTRIBUTE = 'data-subline-trace-refresh';
 export const TRACE_WORKER_ATTRIBUTE = 'data-subline-trace-worker';
 export const TRACE_PREFIX = '[subline] ';
 export const TRACE_TEXT_LIMIT = 40;
@@ -19,6 +21,8 @@ export interface TraceRequest {
   end?: number;
   segment?: number;
   text?: string;
+  language?: Language;
+  targetLanguage?: string;
 }
 
 export type TraceEvent = Record<string, string | number | boolean | null>;
@@ -52,5 +56,13 @@ export function readTraceRequest(message: object): TraceEvent {
   if (finite(end)) event.end = end;
   if (Number.isSafeInteger(segment) && (segment as number) >= 0) event.seg = segment as number;
   if (typeof text === 'string' && text) event.text = text.slice(0, TRACE_TEXT_LIMIT);
+  if ('language' in message && typeof message.language === 'string') {
+    const language = supportedLanguage(message.language);
+    if (language) event.language = language;
+  }
+  if ('targetLanguage' in message && typeof message.targetLanguage === 'string') {
+    const language = supportedLanguage(message.targetLanguage);
+    if (language) event.targetLanguage = language;
+  }
   return event;
 }

@@ -99,6 +99,72 @@ class Media(BrowserCase):
         self.assertTrue(self.result(self.do(tab, action="media", captions=True))["video"]["captions"])
         self.assertEqual(self.result(self.do(tab, action="evaluate", expression=modes))["value"], "showing")
 
+    def test_youtube_selects_the_requested_language_and_enables_cc(self):
+        tab = self.open('caption-language', player='youtube', ccoff=1)
+        for _ in range(2):
+            media = self.result(self.do(tab, action='media', play=True, captions='en'))
+            self.assertEqual(media['video']['captionLanguage'], 'en')
+            self.assertTrue(media['video']['captions'])
+        self.assertEqual(len(self.site.log('caption-language', 'caption-selection')), 1)
+
+    def test_a_missing_caption_language_fails_without_waiting_out_the_budget(self):
+        tab = self.open('missing-language', player='youtube', languages='zh-CN')
+        media = self.result(self.do(tab, action='media', play=True, captions='en'), ok=False)
+        self.assertIn('en', media['value']['fail'])
+        self.assertIn('zh-CN', media['value']['fail'])
+        self.assertLess(media['seconds'], 10)
+
+    def test_traced_media_waits_for_a_parsed_caption_in_the_selected_language(self):
+        tab = self.open('caption-source', trace=True, player='youtube', ccoff=1)
+        media = self.result(self.do(tab, timeout=10, action='media', play=True, captions='en'))
+        self.assertEqual(media['captionSource'], {'ready': True, 'language': 'en'})
+
+    def test_paused_caption_readiness_can_be_requested_repeatedly(self):
+        tab = self.open('paused-caption-source', trace=True, player='youtube')
+        self.result(self.do(tab, action='media', play=True, captions='en'))
+        self.result(self.do(tab, action='media', pause=True, time=4))
+        for _ in range(2):
+            media = self.result(self.do(tab, timeout=5, action='media', captions='en'))
+            self.assertTrue(media['video']['paused'])
+            self.assertEqual(media['captionSource'], {'ready': True, 'language': 'en'})
+
+    def test_traced_media_rejects_a_track_in_the_target_language(self):
+        tab = self.open('same-language', trace=True, player='youtube', target='en')
+        media = self.result(self.do(tab, timeout=10, action='media', play=True, captions='en'), ok=False)
+        self.assertEqual(media['value']['fail'], 'Source and target language are both en; no translation task')
+
+    def test_a_selected_track_without_parsed_captions_does_not_pass(self):
+        tab = self.open('no-captions', trace=True, player='youtube', nocaptions=1)
+        media = self.result(self.do(tab, timeout=3, action='media', play=True, captions='en'), ok=False)
+        self.assertFalse(media['captionSource']['ready'])
+        self.assertEqual(media['video']['captionLanguage'], 'en')
+
+    def test_native_tracks_can_select_a_language(self):
+        tab = self.open('native-language', track=1)
+        media = self.result(self.do(tab, action='media', play=True, captions='en'))
+        self.assertEqual(media['video']['captionLanguage'], 'en')
+
+    def test_media_errors_fail_with_the_native_error_and_page_context(self):
+        tab = self.open('media-error', mediaerror=1)
+        media = self.result(self.do(tab, timeout=8, action='media', play=True), ok=False)
+        self.assertIn('Media error 4', media['value']['fail'])
+        self.assertEqual(media['video']['error']['code'], 4)
+        self.assertIn('/watch', media['page']['url'])
+        self.assertLess(media['seconds'], 10)
+
+    def test_a_shell_page_keeps_diagnostics_when_the_budget_expires(self):
+        tab = self.open('shell', shell=1)
+        media = self.result(self.do(tab, timeout=3, action='media', play=True), ok=False)
+        self.assertIsNone(media['video'])
+        self.assertFalse(media['page']['player'])
+        self.assertEqual(media['page']['ready'], 'complete')
+        self.assertEqual(media['page']['title'], 'debug-chromium fixture')
+
+    def test_normal_buffering_still_waits_for_playback(self):
+        tab = self.open('buffering', buffering=1)
+        media = self.result(self.do(tab, action='media', play=True))
+        self.assertGreater(media['video']['time'], 0)
+
     def test_media_stays_muted(self):
         """1a99823: check tabs stay muted from navigation until they close, even if the page unmutes."""
         tab = self.open("muted", unmute=1)

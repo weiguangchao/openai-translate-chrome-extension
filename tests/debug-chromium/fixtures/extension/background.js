@@ -23,6 +23,8 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
     if (message.end !== undefined) event.end = message.end;
     if (message.segment !== undefined) event.seg = message.segment;
     if (message.text) event.text = message.text;
+    if (message.language) event.language = message.language;
+    if (message.targetLanguage) event.targetLanguage = message.targetLanguage;
     trace(event);
     return false;
   }

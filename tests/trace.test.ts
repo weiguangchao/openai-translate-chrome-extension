@@ -1,9 +1,15 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { TraceReporter } from '../src/core/trace';
-import { readTraceRequest, TRACE_ATTRIBUTE, TRACE_WORKER_ATTRIBUTE } from '../src/shared/trace';
+import {
+  readTraceRequest,
+  TRACE_ATTRIBUTE,
+  TRACE_REFRESH_ATTRIBUTE,
+  TRACE_WORKER_ATTRIBUTE,
+} from '../src/shared/trace';
 
 afterEach(() => {
   document.documentElement.removeAttribute(TRACE_ATTRIBUTE);
+  document.documentElement.removeAttribute(TRACE_REFRESH_ATTRIBUTE);
   document.documentElement.removeAttribute(TRACE_WORKER_ATTRIBUTE);
   document.body.innerHTML = '';
   vi.useRealTimers();
@@ -92,4 +98,41 @@ it('keeps only the known fields of a trace event and rejects malformed ones', ()
   expect(() => readTraceRequest({ ...event, state: 'shown' })).toThrow();
   expect(() => readTraceRequest({ ...event, run: '' })).toThrow();
   expect(() => readTraceRequest({ ...event, time: Number.NaN })).toThrow();
+});
+
+it('reports the parsed caption language and translation target without admitting other settings', () => {
+  const send = vi.fn();
+  const reporter = new TraceReporter(send, () => 'subline-id');
+  document.documentElement.setAttribute(TRACE_ATTRIBUTE, 'language-run');
+  reporter.note(video(10), { text: 'Hello', language: 'en', targetLanguage: 'zh-CN' }, 'loading');
+  expect(send).toHaveBeenCalledWith(
+    expect.objectContaining({ language: 'en', targetLanguage: 'zh-CN' }),
+  );
+  const message = send.mock.calls.at(-1)?.[0];
+  expect(readTraceRequest({ ...message, apiKey: 'secret' })).toMatchObject({
+    language: 'en',
+    targetLanguage: 'zh-CN',
+  });
+  expect(
+    readTraceRequest({ ...message, language: 'invalid', targetLanguage: 'invalid' }),
+  ).not.toHaveProperty('language');
+  expect(
+    readTraceRequest({ ...message, language: 'invalid', targetLanguage: 'invalid' }),
+  ).not.toHaveProperty('targetLanguage');
+});
+
+it('answers a fresh caption observation request while paused without changing its run', () => {
+  const send = vi.fn();
+  const reporter = new TraceReporter(send, () => 'subline-id');
+  document.documentElement.setAttribute(TRACE_ATTRIBUTE, 'paused-run');
+  const caption = { text: 'Hello', language: 'en' as const, targetLanguage: 'zh-CN' };
+  reporter.note(video(10, true), caption, 'ready');
+  reporter.note(video(10, true), caption, 'ready');
+  expect(send).toHaveBeenCalledTimes(1);
+  document.documentElement.setAttribute(TRACE_REFRESH_ATTRIBUTE, 'request-2');
+  reporter.note(video(10, true), caption, 'ready');
+  expect(send).toHaveBeenCalledTimes(2);
+  expect(send).toHaveBeenLastCalledWith(
+    expect.objectContaining({ run: 'paused-run', text: 'Hello' }),
+  );
 });

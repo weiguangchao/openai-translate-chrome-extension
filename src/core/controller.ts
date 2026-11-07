@@ -263,6 +263,8 @@ export class CaptionController {
     }
     this.shown = {
       text: caption.text,
+      language,
+      targetLanguage: this.settings.targetLanguage,
       ...(cue && {
         cue: cueIndex,
         start: cue.startTime,

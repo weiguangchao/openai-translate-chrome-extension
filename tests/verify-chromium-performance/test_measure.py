@@ -28,6 +28,22 @@ def collected():
             'seek': {'seeks': 1}, 'seekTarget': 300, 'reloadVerified': True}
 
 
+class Plan(unittest.TestCase):
+    def test_youtube_requires_a_supported_source_language_before_starting(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / 'plan.json'
+            case = {'name': 'youtube', 'url': 'https://www.youtube.com/watch?v=test', 'rate': 1, 'seek': [300]}
+            for captions in (None, True, 'fr', 'en'):
+                with self.subTest(captions=captions):
+                    case['media'] = {} if captions is None else {'captions': captions}
+                    path.write_text(json.dumps({'cases': [case]}))
+                    if captions == 'en':
+                        self.assertEqual(measure.load_plan(path)['cases'][0]['media']['captions'], 'en')
+                    else:
+                        with self.assertRaises(ValueError):
+                            measure.load_plan(path)
+
+
 class Validity(unittest.TestCase):
     def test_valid_measurement_can_have_poor_performance(self):
         result = verify.assess(collected(), {'loadingWhilePlaying': 0.1})

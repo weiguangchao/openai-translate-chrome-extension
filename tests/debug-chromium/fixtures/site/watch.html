@@ -47,6 +47,22 @@
     setInterval(() => {
       if (video.playbackRate !== rate) video.playbackRate = rate;
     }, 1000);
+    const tracks = (params.get('languages') || 'zh-CN,en').split(',').map(languageCode => ({languageCode}));
+    let selected = tracks[0];
+    const cc = document.createElement('button');
+    cc.className = 'ytp-subtitles-button';
+    cc.style.position = 'absolute';
+    cc.setAttribute('aria-pressed', params.has('ccoff') ? 'false' : 'true');
+    cc.onclick = () => cc.setAttribute('aria-pressed', String(cc.getAttribute('aria-pressed') !== 'true'));
+    player.append(cc);
+    player.loadModule = () => {};
+    player.getOption = (_module, option) => option === 'tracklist' ? tracks : selected;
+    player.setOption = (_module, _option, track) => {
+      if (selected !== track) log('caption-selection');
+      selected = track;
+      player.dataset.language = track.languageCode;
+    };
+    player.dataset.language = selected.languageCode;
   }
 
   if (params.has('ratefight'))
@@ -73,6 +89,14 @@
     player.getPlayerResponse = () => ({ playabilityStatus: { status: refuse, reason: 'Sign in' } });
     video.removeAttribute('src');
     video.load();
+  }
+
+  if (params.has('mediaerror')) video.src = '/missing-video.webm';
+  if (params.has('shell')) player.remove();
+  if (params.has('buffering')) {
+    video.removeAttribute('src');
+    video.load();
+    setTimeout(() => { video.src = '/clip.webm'; }, 1500);
   }
 
   const ad = Number(params.get('ad'));
