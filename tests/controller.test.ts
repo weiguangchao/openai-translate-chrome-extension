@@ -441,6 +441,8 @@ it('reports what the viewer sees only while the page asks for a trace', async ()
       seeking: false,
       state: 'ready',
       text: 'Timed cue.',
+      language: 'en',
+      targetLanguage: 'zh-CN',
       cue: 0,
       start: 0,
       end: 10,

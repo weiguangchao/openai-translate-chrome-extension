@@ -1,5 +1,6 @@
 import {
   TRACE_ATTRIBUTE,
+  TRACE_REFRESH_ATTRIBUTE,
   TRACE_TEXT_LIMIT,
   TRACE_WORKER_ATTRIBUTE,
   type TraceRequest,
@@ -8,7 +9,7 @@ import {
 
 const HEARTBEAT_MS = 2000;
 
-export interface TraceCaption {
+export interface TraceCaption extends Pick<TraceRequest, 'language' | 'targetLanguage'> {
   readonly text: string;
   readonly cue?: number;
   readonly start?: number;
@@ -35,7 +36,14 @@ export class TraceReporter {
     const id = this.extensionId();
     if (root.getAttribute(TRACE_WORKER_ATTRIBUTE) !== id)
       root.setAttribute(TRACE_WORKER_ATTRIBUTE, id);
-    const key = JSON.stringify([run, caption, state, video.paused, video.seeking]);
+    const key = JSON.stringify([
+      run,
+      root.getAttribute(TRACE_REFRESH_ATTRIBUTE),
+      caption,
+      state,
+      video.paused,
+      video.seeking,
+    ]);
     const now = Date.now();
     if (key === this.last && (video.paused || now - this.sentAt < HEARTBEAT_MS)) return;
     this.last = key;

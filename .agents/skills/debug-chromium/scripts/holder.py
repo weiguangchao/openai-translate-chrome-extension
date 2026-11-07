@@ -16,7 +16,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from live import STATE, alive, load_state, read_endpoint, session_id
-from worker_trace import (MARK_SLACK_SECONDS, MAX_RATE, media_clock, continuous, settled,
+from worker_trace import (MARK_SLACK_SECONDS, MAX_RATE, media_clock, continuous, settled, caption_key,
                           summarize as summarize_worker, trace_line)
 
 IDLE_SECONDS = int(os.environ.get("DEBUG_CHROMIUM_IDLE", "3600"))
@@ -30,6 +30,7 @@ CAPTION_HINTS = ("/api/timedtext", ".vtt", "/subtitles/")
 SKIP_AD = ".ytp-skip-ad-button, .ytp-ad-skip-button-modern, .ytp-ad-skip-button"
 SUBLINE_NAME = "Subline"
 TRACE_ATTRIBUTE = "data-subline-trace"
+TRACE_REFRESH_ATTRIBUTE = "data-subline-trace-refresh"
 TRACE_WORKER_ATTRIBUTE = "data-subline-trace-worker"
 TRACE_PREFIX = "[subline] "
 WORKER_WAIT_SECONDS = 20
@@ -152,6 +153,14 @@ def set_rate(rate):
 
 
 NATIVE_TRACKS = "[...video.textTracks].filter(t => t.kind === 'subtitles' || t.kind === 'captions')"
+CAPTION_LANGUAGES = ('en', 'zh-CN', 'zh-TW', 'ja', 'ko')
+CAPTION_LANGUAGE = """(code => {
+  if (!code) return null;
+  const locale = new Intl.Locale(code.replaceAll('_', '-')).maximize();
+  return locale.language === 'zh' ? (locale.script === 'Hant' ? 'zh-TW' : 'zh-CN') : locale.language;
+})"""
+PAGE_REPORT = """({url: location.origin + location.pathname, title: document.title,
+  ready: document.readyState, player: Boolean(document.querySelector('#movie_player'))})"""
 AD_SHOWING = "Boolean(document.querySelector('#movie_player.ad-showing'))"
 YOUTUBE_REFUSAL = """(() => {
   const status = document.querySelector('#movie_player')?.getPlayerResponse?.()?.playabilityStatus;
@@ -163,7 +172,14 @@ def video_report():
     return "const ad = " + AD_SHOWING + """;
       return {time: Math.round(video.currentTime * 100) / 100, paused: video.paused,
         ended: video.ended, ad, rate: video.playbackRate, ready: video.readyState,
+        network: video.networkState,
+        error: video.error && {code: video.error.code, message: video.error.message},
         visible: document.visibilityState};"""
+
+
+def media_error(value):
+    error = value.get('error')
+    return f"Media error {error['code']}: {error['message']}" if error else None
 
 
 def log(message):
@@ -400,7 +416,7 @@ def handshake(port, path):
 NUMBER = (int, float)
 STEP_FIELDS = {
     "media": ({}, {"selector": str, "time": NUMBER, "rate": NUMBER, "play": bool, "pause": bool,
-                   "keep_playing": bool, "skip_ads": bool, "captions": bool}),
+                   "keep_playing": bool, "skip_ads": bool, "captions": (bool, str)}),
     "wait": ({}, {"seconds": NUMBER, "time": NUMBER, "selector": str}),
     "click": ({"selector": str}, {}),
     "overlay": ({}, {"wait": bool}),
@@ -429,6 +445,8 @@ def validate_step(step, where):
         ):
             problems.append(f"{where}: {field} has the wrong type")
     missing = set(required) - set(step)
+    if isinstance(step.get('captions'), str) and step['captions'] not in CAPTION_LANGUAGES:
+        problems.append(f"{where}: captions language must be one of {', '.join(CAPTION_LANGUAGES)}")
     extra = set(step) - set(required) - set(optional) - {"action"}
     if missing:
         problems.append(f"{where}: {action} needs {sorted(missing)}")
@@ -675,6 +693,10 @@ class Tab:
         if not isinstance(value, dict) or "ready" not in value:
             self.stall_since = None
             return None
+        problem = media_error(value)
+        if problem:
+            self.fail_reason = problem
+            return FAIL
         if value.get("ended") or value.get("ad"):
             self.stall_since = None
             return None
@@ -891,32 +913,76 @@ class Tab:
         if pause:
             actions.append("if (!video.paused) video.pause();")
         if captions:
-            actions.append(f"const native = {NATIVE_TRACKS}; "
-                           "if (native.length && !native.some(t => t.mode === 'showing')) native[0].mode = 'showing';")
+            actions.append(f"""
+              const requested = {json.dumps(captions if isinstance(captions, str) else None)};
+              const language = {CAPTION_LANGUAGE};
+              const player = document.querySelector('#movie_player');
+              if (player?.getOption) {{
+                const cc = player.querySelector('.ytp-subtitles-button');
+                if (cc?.getAttribute('aria-pressed') === 'false') cc.click();
+                player.loadModule?.('captions');
+                const tracks = player.getOption('captions', 'tracklist');
+                if (Array.isArray(tracks) && tracks.length) {{
+                  const selected = player.getOption('captions', 'track');
+                  const wanted = requested ? tracks.find(t => language(t.languageCode) === requested) : selected || tracks[0];
+                  if (!wanted) return {{page, ...(() => {{ {video_report()} }})(),
+                    captionError: 'Caption language ' + requested + ' unavailable; available: ' + tracks.map(t => t.languageCode).join(', ')}};
+                  if (!selected || language(selected.languageCode) !== language(wanted.languageCode))
+                    player.setOption('captions', 'track', wanted);
+                }}
+                const selected = player.getOption('captions', 'track');
+                captionLanguage = language(selected?.languageCode);
+                captionsOn = Boolean(selected && cc?.getAttribute('aria-pressed') === 'true');
+              }} else {{
+                const tracks = {NATIVE_TRACKS};
+                const wanted = requested ? tracks.find(t => language(t.language) === requested) : tracks.find(t => t.mode === 'showing') || tracks[0];
+                if (requested && tracks.length && !wanted) return {{page, ...(() => {{ {video_report()} }})(),
+                  captionError: 'Caption language ' + requested + ' unavailable; available: ' + tracks.map(t => t.language).join(', ')}};
+                if (wanted) {{
+                  for (const track of tracks) if (track !== wanted && track.mode === 'showing') track.mode = 'disabled';
+                  if (wanted.mode !== 'showing') wanted.mode = 'showing';
+                  captionLanguage = language(wanted.language);
+                  captionsOn = wanted.mode === 'showing';
+                }}
+              }}
+            """)
+
+        refresh = (f"document.documentElement.setAttribute({json.dumps(TRACE_REFRESH_ATTRIBUTE)}, "
+                   f"{json.dumps(secrets.token_hex(8))});" if captions and self.run_id else "")
 
         def media_probe(seek):
             jump = (f"if (!{AD_SHOWING} && Math.abs(video.currentTime - {target}) > 1.5) "
                     f"{{ video.currentTime = {target}; seeked = true; }}" if seek else "")
             return f"""(() => {{
           const refused = {YOUTUBE_REFUSAL};
-          if (refused) return {{refused}};
+          const page = {PAGE_REPORT};
+          if (refused) return {{refused, page}};
           const video = document.querySelector({json.dumps(selector)});
-          if (!video || video.readyState < 1) return null;
+          if (!video) return {{page}};
+          if (video.error || video.readyState < 1) return {{page, ...(() => {{ {video_report()} }})()}};
+          let captionLanguage = null, captionsOn = {NATIVE_TRACKS}.some(t => t.mode === 'showing');
           {" ".join(actions)}
           let seeked = false;
           {jump}
-          const captions = {NATIVE_TRACKS}.some(t => t.mode === 'showing');
-          return {{...(() => {{ {video_report()} }})(), seeked, captions}};
+          {refresh}
+          return {{...(() => {{ {video_report()} }})(), page, seeked,
+            captions: captionsOn, captionLanguage}};
         }})()"""
 
         probe, seek_probe = media_probe(False), media_probe(True)
         seeking = {"due": target is not None, "count": 0, "at": None}
+        last_sample = None
+        source = None
+        began = time.time() * 1000
 
         def sample():
+            nonlocal last_sample
             due = seeking["due"]
             stamp = time.time() * 1000
             value = self.sample(seek_probe if due else probe)
-            if due and isinstance(value, dict) and value.get("ad") is False:
+            if isinstance(value, dict):
+                last_sample = value
+            if due and isinstance(value, dict) and 'seeked' in value and value.get("ad") is False:
                 seeking["due"] = False
                 seeking["at"] = time.monotonic()
                 seeking["count"] += value["seeked"]
@@ -934,11 +1000,18 @@ class Tab:
         origin = [None]
 
         def passed(value):
+            nonlocal source
             if not isinstance(value, dict):
                 return False
             if value.get("refused"):
                 self.fail_reason = f"YouTube refused playback: {value['refused']}"
                 return FAIL
+            problem = media_error(value) or value.get('captionError')
+            if problem:
+                self.fail_reason = problem
+                return FAIL
+            if value.get('ready', 0) < 1 or 'seeked' not in value:
+                return False
             if value.get("ad"):
                 return False
             if target is not None:
@@ -957,6 +1030,16 @@ class Tab:
                 return False
             if captions and not value["captions"]:
                 return False
+            if captions and self.run_id:
+                source = next((event for stamp, event in reversed(self.worker_events)
+                               if stamp >= began and event.get('run') == self.run_id
+                               and event.get('e') == 'view' and caption_key(event)
+                               and event.get('language') == value['captionLanguage']), None)
+                if source and source.get('language') == source.get('targetLanguage'):
+                    self.fail_reason = f"Source and target language are both {source['language']}; no translation task"
+                    return FAIL
+                if not source:
+                    return False
             if play and not value["ended"]:
                 if value["paused"]:
                     return False
@@ -967,9 +1050,17 @@ class Tab:
             return True
 
         ok, value = self.until(sample, passed)
+        value = value or last_sample
         if isinstance(value, dict):
             value.pop("seeked", None)
-        result = {"ok": ok is True, "video": value}
+        result = {"ok": ok is True, "video": value if value and 'ready' in value else None}
+        if value:
+            result['page'] = value.pop('page', None)
+        if captions and self.run_id:
+            result['captionSource'] = {'ready': source is not None,
+                                       'language': source and source.get('language')}
+            if source is None:
+                result['captionSource']['reason'] = 'No parsed source caption for the selected language; check captions and the loaded trace build'
         if target is not None:
             result["seeks"] = seeking["count"]
         if self.fail_reason:

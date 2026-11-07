@@ -3,6 +3,7 @@
 // a segment shows the loading placeholder until the worker answers after
 // ?delay= milliseconds (default 600). ?hidden=1 hides the overlay host with CSS.
 const TRACE_ATTRIBUTE = 'data-subline-trace';
+const TRACE_REFRESH_ATTRIBUTE = 'data-subline-trace-refresh';
 const TRACE_WORKER_ATTRIBUTE = 'data-subline-trace-worker';
 const LOADING_TRANSLATION = '翻译中';
 const HEARTBEAT_MS = 2000;
@@ -74,7 +75,7 @@ function report(video, caption, state) {
   }
   if (root.getAttribute(TRACE_WORKER_ATTRIBUTE) !== chrome.runtime.id)
     root.setAttribute(TRACE_WORKER_ATTRIBUTE, chrome.runtime.id);
-  const key = JSON.stringify([run, caption, state, video.paused, video.seeking]);
+  const key = JSON.stringify([run, root.getAttribute(TRACE_REFRESH_ATTRIBUTE), caption, state, video.paused, video.seeking]);
   const now = Date.now();
   if (key === last && (video.paused || now - sentAt < HEARTBEAT_MS)) return;
   last = key;
@@ -96,7 +97,13 @@ function tick() {
   const video = document.querySelector('video');
   if (!video) return;
   overlay ??= mount(video);
-  const caption = captionAt(video.currentTime);
+  const language = document.querySelector('#movie_player')?.dataset.language || 'en';
+  const enabled = document.querySelector('.ytp-subtitles-button')?.getAttribute('aria-pressed') !== 'false';
+  const caption = enabled && !params.has('nocaptions') && captionAt(video.currentTime);
+  if (caption) {
+    caption.language = language;
+    caption.targetLanguage = params.get('target') || 'zh-CN';
+  }
   let state = 'empty';
   if (caption) {
     translate(caption.segment);

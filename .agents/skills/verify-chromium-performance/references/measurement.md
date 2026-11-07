@@ -1,6 +1,6 @@
 # Measurements
 
-Start a debug holder; the runner leaves its lifecycle to you. Copy the [plan](../checks/playback-plan.json) to a task-owned file. Keep requested cases, replace unavailable URLs/seeks. Cases have `name`, `url`, `rate`, candidate `seek`, optional `start`/`media`. YouTube needs speech `start`; landing must fit and avoid opening/all requested captions.
+Start a debug holder; the runner leaves its lifecycle to you. Copy the [plan](../checks/playback-plan.json) to a task-owned file. Keep requested cases, replace unavailable URLs/seeks. Cases have `name`, `url`, `rate`, candidate `seek`, optional `start`/`media`. YouTube needs speech `start` and an explicit source language in `media.captions`, such as `"en"`; the runner rejects a missing or unsupported language before opening a browser tab. Traced media confirms parsed source captions and rejects the translation target as source. Use builds with language trace fields. Landing must fit and avoid opening/all requested captions.
 
 ```bash
 python3 .agents/skills/debug-chromium/scripts/measure.py PLAN.json --build current=/path/to/dist --loaded /path/to/loaded/dist --output /path/to/results --session SESSION --launch-session /path/to/headless-check/session.json

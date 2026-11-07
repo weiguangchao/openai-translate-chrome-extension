@@ -58,6 +58,8 @@ class Validate(unittest.TestCase):
         self.assertRejected("steps must be a non-empty list")
 
     def test_step_fields(self):
+        self.assertEqual(self.problems({'action': 'media', 'captions': 'en'}), [])
+        self.assertRejected('captions language must be one of', {'action': 'media', 'captions': 'fr'})
         self.assertRejected("rate must be 0.25-4", {"action": "media", "rate": 8})
         self.assertRejected("rate has the wrong type", {"action": "media", "rate": True})
         self.assertRejected("cannot both play and pause", {"action": "media", "play": True, "pause": True})

@@ -14,8 +14,10 @@ import signal
 import subprocess
 import sys
 import time
+from urllib.parse import urlsplit
 
 import live
+from holder import validate_step
 from verify import PHASES, SCHEMA_VERSION, assess, number, trace_issues
 
 HERE = Path(__file__).resolve().parent
@@ -62,8 +64,12 @@ def load_plan(path):
         if 'start' in case and (not number(case['start']) or case['start'] < 0):
             raise ValueError(f'{name}: start needs a video position')
         media = case.get('media', {})
-        if not isinstance(media, dict) or set(media) - {'skip_ads', 'keep_playing', 'captions'} or any(type(v) is not bool for v in media.values()):
-            raise ValueError(f'{name}: media accepts boolean skip_ads/keep_playing/captions')
+        if (not isinstance(media, dict) or set(media) - {'skip_ads', 'keep_playing', 'captions'}
+                or validate_step({'action': 'media', **media}, name)):
+            raise ValueError(f'{name}: media accepts boolean skip_ads/keep_playing and boolean or supported language captions')
+        host = urlsplit(case['url']).hostname or ''
+        if (host == 'youtu.be' or host == 'youtube.com' or host.endswith('.youtube.com')) and not isinstance(media.get('captions'), str):
+            raise ValueError(f'{name}: YouTube measurements need an explicit media.captions language')
     thresholds = plan.get('thresholds', {})
     allowed = {'waitAfterOpening', 'waitAfterSeeking', 'loadingAfterSeeking', 'loadingWhilePlaying', 'providerP50', 'providerP90'}
     if not isinstance(thresholds, dict) or set(thresholds) - allowed or any(not number(n) or n < 0 for n in thresholds.values()):

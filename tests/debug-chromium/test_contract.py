@@ -34,6 +34,7 @@ class SublineContract(unittest.TestCase):
         trace = source("src/shared/trace.ts")
         self.assertEqual(constant(trace, "TRACE_PREFIX"), holder.TRACE_PREFIX)
         self.assertEqual(constant(trace, "TRACE_ATTRIBUTE"), holder.TRACE_ATTRIBUTE)
+        self.assertEqual(constant(trace, "TRACE_REFRESH_ATTRIBUTE"), holder.TRACE_REFRESH_ATTRIBUTE)
         self.assertEqual(constant(trace, "TRACE_WORKER_ATTRIBUTE"), holder.TRACE_WORKER_ATTRIBUTE)
 
     def test_view_event_fields(self):
