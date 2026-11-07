@@ -20,11 +20,12 @@ import {
 } from '../shared/settings';
 import { loadSettings } from '../shared/storage';
 import { printTrace, readTraceRequest } from '../shared/trace';
-import { HybridTranslationQueue, translationCacheLimit } from './queue';
-import { restoreTranslations } from './translation-store';
+import { HybridTranslationQueue } from './queue';
+import { TranslationStore } from './translation-store';
 
+const translations = new TranslationStore();
 const queue = new HybridTranslationQueue(
-  translationCacheLimit,
+  translations,
   printTrace,
   () =>
     settings.provider === 'microsoft' ||
@@ -37,7 +38,7 @@ const consumers = new Map<string, { platform: PlatformId; document?: string }>()
 const ready = (async () => {
   await chrome.storage.local.setAccessLevel({ accessLevel: 'TRUSTED_CONTEXTS' });
   settings = await loadSettings();
-  await restoreTranslations(queue);
+  await translations.retainPreview(new Set());
 })();
 
 function requireEnabled(platform: PlatformId): void {

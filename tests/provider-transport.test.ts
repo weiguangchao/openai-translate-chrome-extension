@@ -1,3 +1,4 @@
+import { sessionStorage } from './fixtures/extension-storage';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { DEFAULT_SETTINGS, type CaptionTranslationSettings } from '../src/shared/settings';
 import { prefetchItems, providerReply, requestedTexts } from './fixtures/provider';
@@ -19,6 +20,7 @@ const settings: CaptionTranslationSettings = {
 };
 
 beforeEach(async () => {
+  vi.stubGlobal('chrome', { storage: { session: sessionStorage() } });
   vi.useFakeTimers();
   vi.resetModules();
   api = await import('../src/shared/api');

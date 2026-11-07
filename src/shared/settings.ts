@@ -215,8 +215,6 @@ export type CaptionTranslationSettings = Settings & {
 
 const identityKeys = [...settingsIn('translation'), 'captionLanguage', 'pageTitle'] as const;
 
-export const translationIdentityLength = identityKeys.length;
-
 export function translationIdentity(settings: CaptionTranslationSettings): unknown[] {
   return identityKeys.map((key) => settings[key]);
 }

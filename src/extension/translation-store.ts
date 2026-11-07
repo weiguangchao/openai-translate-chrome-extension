@@ -1,67 +1,97 @@
 import { readStoredTranslation } from '../shared/caption-translation';
-import { translationIdentityLength } from '../shared/settings';
-import type { TranslationStore } from './queue';
+import type { Settings } from '../shared/settings';
 
-interface TranslationRestorer {
-  restore(entries: Iterable<readonly [string, string]>, store: TranslationStore): void;
-}
+export const translationCacheLimit = 5000;
 
 const PREFIX = 'subline.translation.v3:';
+const PREVIEW = 'subline.translation.preview:';
+const PREVIEW_KEYS = 'subline.translation.preview.keys';
+const ORDER = 'subline.translation.order:';
 
-function readEntry(key: string, value: unknown): [string, string] | null {
-  try {
-    const parsed: unknown = JSON.parse(key);
-    if (
-      !Array.isArray(parsed) ||
-      parsed.length !== translationIdentityLength + 1 ||
-      typeof parsed.at(-1) !== 'string'
-    )
-      return null;
-    const translation = readStoredTranslation(value);
-    return translation === null ? null : [key, translation];
-  } catch {
-    return null;
+function readKeys(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((key): key is string => typeof key === 'string') : [];
+}
+
+export class TranslationStore {
+  private writes: Promise<void> = Promise.resolve();
+
+  constructor(private limit = translationCacheLimit) {}
+
+  async get(entries: readonly { key: string; primary?: string }[]): Promise<(string | null)[]> {
+    try {
+      for (;;) {
+        const writes = this.writes;
+        await writes;
+        const stored: Record<string, unknown> = await chrome.storage.session.get(
+          entries.flatMap(({ key, primary }) =>
+            primary ? [PREFIX + primary, PREFIX + key, PREVIEW + key] : [PREFIX + key],
+          ),
+        );
+        if (writes !== this.writes) continue;
+        return entries.map(
+          ({ key, primary }) =>
+            (primary ? readStoredTranslation(stored[PREFIX + primary]) : null) ??
+            readStoredTranslation(stored[PREFIX + key]) ??
+            (primary ? readStoredTranslation(stored[PREVIEW + key]) : null),
+        );
+      }
+    } catch {
+      return entries.map(() => null);
+    }
   }
-}
 
-function sessionStore(): TranslationStore {
-  const saves = new Map<string, string>();
-  const removals = new Set<string>();
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const flush = () => {
-    timer = undefined;
-    const items = Object.fromEntries([...saves].map(([key, value]) => [PREFIX + key, value]));
-    const gone = [...removals].map((key) => PREFIX + key);
-    saves.clear();
-    removals.clear();
-    if (gone.length) void chrome.storage.session.remove(gone).catch(() => {});
-    if (Object.keys(items).length) void chrome.storage.session.set(items).catch(() => {});
-  };
-  const schedule = () => {
-    timer ??= setTimeout(flush, 0);
-  };
-  return {
-    save(key, translation) {
-      removals.delete(key);
-      saves.set(key, translation);
-      schedule();
-    },
-    remove(key) {
-      saves.delete(key);
-      removals.add(key);
-      schedule();
-    },
-  };
-}
+  save({
+    key,
+    translation,
+    provider,
+    temporary,
+  }: {
+    key: string;
+    translation: string;
+    provider: Settings['provider'];
+    temporary: boolean;
+  }): Promise<void> {
+    return this.write(async () => {
+      if (temporary) {
+        const stored: Record<string, unknown> = await chrome.storage.session.get(PREVIEW_KEYS);
+        const keys = readKeys(stored[PREVIEW_KEYS]);
+        await chrome.storage.session.set({
+          [PREVIEW + key]: translation,
+          [PREVIEW_KEYS]: [...keys.filter((item) => item !== key), key],
+        });
+        return;
+      }
+      const orderKey = ORDER + provider;
+      const stored: Record<string, unknown> = await chrome.storage.session.get(orderKey);
+      const order = readKeys(stored[orderKey]);
+      if (!Array.isArray(stored[orderKey])) {
+        const previous = await chrome.storage.session.get(null);
+        order.push(
+          ...Object.keys(previous)
+            .filter((item) => item.startsWith(`${PREFIX}["${provider}",`))
+            .map((item) => item.slice(PREFIX.length)),
+        );
+      }
+      const keys = [...order.filter((item) => item !== key), key];
+      const gone = keys.splice(0, Math.max(0, keys.length - this.limit));
+      if (gone.length) await chrome.storage.session.remove(gone.map((item) => PREFIX + item));
+      await chrome.storage.session.set({ [PREFIX + key]: translation, [orderKey]: keys });
+    });
+  }
 
-export async function restoreTranslations(queue: TranslationRestorer): Promise<void> {
-  let stored: Record<string, unknown> = {};
-  try {
-    stored = await chrome.storage.session.get(null);
-  } catch {}
-  const entries = Object.entries(stored).flatMap(([key, value]) => {
-    const entry = key.startsWith(PREFIX) ? readEntry(key.slice(PREFIX.length), value) : null;
-    return entry ? [entry] : [];
-  });
-  queue.restore(entries, sessionStore());
+  retainPreview(live: ReadonlySet<string>): Promise<void> {
+    return this.write(async () => {
+      const stored: Record<string, unknown> = await chrome.storage.session.get(PREVIEW_KEYS);
+      const keys = readKeys(stored[PREVIEW_KEYS]);
+      const gone = keys.filter((key) => !live.has(key));
+      if (!gone.length) return;
+      await chrome.storage.session.remove(gone.map((key) => PREVIEW + key));
+      await chrome.storage.session.set({ [PREVIEW_KEYS]: keys.filter((key) => live.has(key)) });
+    });
+  }
+
+  private write(work: () => Promise<void>): Promise<void> {
+    this.writes = this.writes.then(work).catch(() => {});
+    return this.writes;
+  }
 }

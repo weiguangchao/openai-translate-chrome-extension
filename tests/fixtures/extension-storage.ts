@@ -4,6 +4,27 @@ import { vi } from 'vitest';
 
 type Listener = (changes: Record<string, chrome.storage.StorageChange>, area: string) => void;
 
+export function sessionStorage(stored = new Map<string, unknown>()) {
+  return {
+    stored,
+    get: vi.fn(async (keys: string | string[] | null) => {
+      const selected =
+        keys === null ? [...stored.keys()] : typeof keys === 'string' ? [keys] : keys;
+      return Object.fromEntries(
+        selected
+          .filter((key) => stored.has(key))
+          .map((key) => [key, structuredClone(stored.get(key))]),
+      );
+    }),
+    set: vi.fn(async (items: Record<string, unknown>) => {
+      for (const [key, value] of Object.entries(items)) stored.set(key, structuredClone(value));
+    }),
+    remove: vi.fn(async (keys: string[]) => {
+      for (const key of keys) stored.delete(key);
+    }),
+  };
+}
+
 export function extensionStorage(stored = new Map<string, unknown>()) {
   const listeners: Listener[] = [];
   vi.stubGlobal('indexedDB', new IDBFactory());

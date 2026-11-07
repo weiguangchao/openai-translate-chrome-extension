@@ -4,7 +4,7 @@ import type { TimedCue } from '../src/core/cues';
 import { seekSettleMs, translationSendsPerSecond } from '../src/shared/tuning';
 import { createTestPlatform } from './fixtures/platform';
 import { publicSettings } from '../src/shared/settings';
-import { extensionStorage } from './fixtures/extension-storage';
+import { extensionStorage, sessionStorage } from './fixtures/extension-storage';
 import { consentedSettings } from './fixtures/settings';
 import { providerReply, requestedTexts } from './fixtures/provider';
 import { longCaption, longCaptionParts, longTranslations } from './fixtures/long-caption';
@@ -70,11 +70,7 @@ beforeEach(async () => {
     },
     storage: {
       local,
-      session: {
-        get: vi.fn().mockResolvedValue({}),
-        set: vi.fn().mockResolvedValue(undefined),
-        remove: vi.fn().mockResolvedValue(undefined),
-      },
+      session: sessionStorage(),
       onChanged,
     },
   });

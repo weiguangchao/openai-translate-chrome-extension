@@ -1,3 +1,4 @@
+import { sessionStorage } from './fixtures/extension-storage';
 import type { Language } from '../src/shared/languages';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { CaptionController } from '../src/core/controller';
@@ -154,6 +155,7 @@ beforeEach(async () => {
   );
   queue = new TranslationQueue();
   vi.stubGlobal('chrome', {
+    storage: { session: sessionStorage() },
     runtime: {
       id: 'extension-id',
       sendMessage: async (message: {

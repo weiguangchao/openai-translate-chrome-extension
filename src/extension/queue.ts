@@ -11,13 +11,7 @@ import { ProviderTimeoutError, RepeatedSourceError } from '../shared/provider-er
 import { wakeProviderRequests } from '../shared/provider/transport';
 import { translationIdentity, type CaptionTranslationSettings } from '../shared/settings';
 import type { TraceEvent } from '../shared/trace';
-
-export const translationCacheLimit = 5000;
-
-export interface TranslationStore {
-  save(key: string, translation: string): void;
-  remove(key: string): void;
-}
+import { TranslationStore } from './translation-store';
 
 interface Job {
   key: string;
@@ -31,7 +25,8 @@ interface Job {
   controller?: AbortController;
   batch?: Job[];
   sent?: boolean;
-  cache: boolean;
+  ready: boolean;
+  fallback?: CaptionTranslationSettings;
 }
 
 interface Pack {
@@ -57,8 +52,6 @@ interface Consumer {
 
 export class TranslationQueue {
   private jobs = new Map<string, Job>();
-  private finished = new Map<string, string>();
-  private preview = new Map<string, string>();
   private consumers = new Map<string, Consumer>();
   private backoff: { until: number; error: Error } | undefined;
   private failed = new Map<string, Error>();
@@ -66,10 +59,10 @@ export class TranslationQueue {
   private samples: number[] = [];
   private sendTimer: ReturnType<typeof setTimeout> | undefined;
   private batches = 0;
-  private store: TranslationStore | undefined;
+  private usesPreview = false;
 
   constructor(
-    private cacheLimit = translationCacheLimit,
+    private store = new TranslationStore(),
     private trace: (event: TraceEvent) => void = () => {},
   ) {}
 
@@ -77,17 +70,15 @@ export class TranslationQueue {
     return JSON.stringify([...translationIdentity(settings), text]);
   }
 
-  restore(entries: Iterable<readonly [string, string]>, store: TranslationStore): void {
-    for (const [key, translation] of entries)
-      if (!this.finished.has(key)) this.finished.set(key, translation);
-    this.store = store;
-    this.evict();
-  }
-
-  lookup(settings: CaptionTranslationSettings, text: string): Promise<string | null> {
+  async lookup(settings: CaptionTranslationSettings, text: string): Promise<string | null> {
     const key = this.key(settings, text);
-    return Promise.resolve(
-      this.finished.get(key) ?? this.jobs.get(key)?.promise.catch(() => null) ?? null,
+    const pending = this.jobs.get(key)?.promise;
+    const [translation] = await this.store.get([{ key }]);
+    return (
+      translation ??
+      pending?.catch(() => null) ??
+      this.jobs.get(key)?.promise.catch(() => null) ??
+      null
     );
   }
 
@@ -95,7 +86,7 @@ export class TranslationQueue {
     consumer: string,
     settings: CaptionTranslationSettings,
     text: string,
-    options?: { cache?: boolean },
+    options?: { fallback?: CaptionTranslationSettings; onProviderTranslation?: () => void },
   ): Promise<string> {
     const key = this.key(settings, text);
     const state: Consumer = this.consumers.get(consumer) ?? {
@@ -108,56 +99,67 @@ export class TranslationQueue {
     state.held = false;
     this.consumers.set(consumer, state);
     this.prune('keep');
-    this.retainFailed();
-    const finished = this.finished.get(key) ?? this.preview.get(key);
-    if (finished !== undefined) return Promise.resolve(finished);
+    this.retainWindow();
     const failure = this.failed.get(key);
     if (failure) return Promise.reject(failure);
-    try {
-      const job = this.enqueue(key, settings, text, consumer, { cache: options?.cache });
-      this.drain();
-      return job.promise;
-    } catch (error) {
-      return Promise.reject(
-        error instanceof Error ? error : new Error(t('翻译失败。', 'Translation failed.')),
-      );
-    }
+    const job = this.enqueue(key, settings, text, consumer, { fallback: options?.fallback });
+    this.drain();
+    const onProviderTranslation = options?.onProviderTranslation;
+    if (!onProviderTranslation) return job.promise;
+    return job.promise.then((translation) => {
+      if (job.ready) onProviderTranslation();
+      return translation;
+    });
   }
 
-  cached(settings: CaptionTranslationSettings, text: string): boolean {
-    return this.finished.has(this.key(settings, text));
+  prefetchWindow(consumer: string): object | undefined {
+    const state = this.consumers.get(consumer);
+    return state?.snapshot.length ? state : undefined;
   }
 
-  hasPrefetch(consumer: string): boolean {
-    return (this.consumers.get(consumer)?.packs.length ?? 0) > 0;
-  }
-
-  prefetch(
+  async prefetch(
     consumer: string,
     settings: CaptionTranslationSettings,
     cues: readonly PlaybackCue[],
     time = 0,
     rate = 1,
-    options?: { cache?: boolean },
+    options?: { fallback?: CaptionTranslationSettings },
   ): Promise<(string | null)[]> {
     if (!cues.length) {
       this.consumers.delete(consumer);
       this.prune('abort');
-      this.retainFailed();
+      this.retainWindow();
       this.drain();
       return Promise.resolve([]);
     }
-    const state = this.consumers.get(consumer);
-    const snapshot = cues.map((cue) => ({
-      key: this.key(settings, cue.text),
-      cue,
-    }));
+    const previous = this.consumers.get(consumer);
+    const snapshot = cues.map((cue) => ({ key: this.key(settings, cue.text), cue }));
+    const state: Consumer = {
+      current: snapshot.some(
+        ({ key, cue }) => cue.start <= time && time < cue.end && key === previous?.current,
+      )
+        ? previous?.current
+        : undefined,
+      packs: [],
+      snapshot,
+      paused: previous?.paused,
+      time,
+      rate,
+    };
+    this.consumers.set(consumer, state);
+    this.prune('abort');
+    this.retainWindow();
+    const fallback = options?.fallback;
+    const cached = await this.store.get(
+      snapshot.map(({ key, cue }) => ({
+        key,
+        primary: fallback ? this.key(fallback, cue.text) : undefined,
+      })),
+    );
+    if (this.consumers.get(consumer) !== state) return cues.map(() => null);
     const open = snapshot.filter(
-      ({ key }) =>
-        !this.finished.has(key) &&
-        !this.preview.has(key) &&
-        !this.failed.has(key) &&
-        !this.jobs.get(key)?.controller,
+      ({ key }, index) =>
+        cached[index] === null && !this.failed.has(key) && !this.jobs.get(key)?.controller,
     );
     const planned = planPlayback({
       time,
@@ -170,58 +172,50 @@ export class TranslationQueue {
       keys: request.cues.map((cue) => this.key(settings, cue.text)),
       cues: request.cues,
     }));
-    const current = cues.some(
-      (cue) =>
-        cue.start <= time && time < cue.end && this.key(settings, cue.text) === state?.current,
-    )
-      ? state?.current
-      : undefined;
-    this.consumers.set(consumer, {
-      current,
-      packs,
-      snapshot,
-      paused: state?.paused,
-      time,
-      rate,
-    });
-    this.prune('abort');
-    this.retainFailed();
+    state.packs = packs;
     if (Date.now() >= (this.backoff?.until ?? 0))
       planned.forEach((request, index) => {
         const pack = packs[index];
         request.cues.forEach((cue, cueIndex) => {
           const key = pack.keys[cueIndex];
-          if (this.finished.has(key) || this.preview.has(key) || this.failed.has(key)) return;
+          if (this.failed.has(key)) return;
           const job = this.enqueue(key, settings, cue.text, consumer, {
             pack: pack.id,
-            cache: options?.cache,
+            fallback: options?.fallback,
           });
           if (!job.controller) job.pack = pack.id;
         });
       });
     this.drain();
-    return this.results(snapshot.map(({ key }) => key));
+    return Promise.all(
+      snapshot.map(
+        ({ key }, index) => cached[index] ?? this.jobs.get(key)?.promise.catch(() => null) ?? null,
+      ),
+    );
   }
 
   hold(consumer: string, time: number): void {
     const state = this.consumers.get(consumer);
     if (!state) return;
-    state.time = time;
-    state.current = undefined;
-    state.held = true;
-    state.packs = [];
-    state.snapshot = state.snapshot.filter(
-      ({ key, cue }) => cue.start <= time && time < cue.end && this.jobs.get(key)?.sent,
-    );
+    this.consumers.set(consumer, {
+      ...state,
+      time,
+      current: undefined,
+      held: true,
+      packs: [],
+      snapshot: state.snapshot.filter(
+        ({ key, cue }) => cue.start <= time && time < cue.end && this.jobs.get(key)?.sent,
+      ),
+    });
     this.prune('detach');
-    this.retainFailed();
+    this.retainWindow();
     this.drain();
   }
 
   release(consumers: readonly string[]): void {
     for (const consumer of consumers) this.consumers.delete(consumer);
     this.prune('abort');
-    this.retainFailed();
+    this.retainWindow();
     this.drain();
   }
 
@@ -245,50 +239,30 @@ export class TranslationQueue {
     this.prune('abort');
     this.backoff = undefined;
     this.failed.clear();
-    this.preview.clear();
+    if (this.usesPreview) void this.store.retainPreview(new Set());
     clearTimeout(this.sendTimer);
     this.sendTimer = undefined;
   }
 
-  private results(keys: string[]): Promise<(string | null)[]> {
-    return Promise.all(
-      keys.map(
-        (key) =>
-          this.finished.get(key) ??
-          this.preview.get(key) ??
-          this.jobs.get(key)?.promise.catch(() => null) ??
-          null,
-      ),
-    );
-  }
-
-  private retainFailed(): void {
+  private retainWindow(): void {
     const live = new Set<string>();
     for (const state of this.consumers.values()) {
       if (state.current) live.add(state.current);
       for (const { key } of state.snapshot) live.add(key);
     }
     for (const key of this.failed.keys()) if (!live.has(key)) this.failed.delete(key);
-    for (const key of this.preview.keys()) if (!live.has(key)) this.preview.delete(key);
+    if (this.usesPreview) void this.store.retainPreview(live);
   }
 
-  private remember(job: Job, translation: string): void {
-    if (!job.cache) {
-      this.preview.set(job.key, translation);
-      return;
-    }
-    this.finished.delete(job.key);
-    this.finished.set(job.key, translation);
-    this.store?.save(job.key, translation);
-    this.evict();
-  }
-
-  private evict(): void {
-    while (this.finished.size > this.cacheLimit) {
-      const [oldest] = this.finished.keys();
-      this.finished.delete(oldest);
-      this.store?.remove(oldest);
-    }
+  private async remember(job: Job, translation: string): Promise<void> {
+    if (job.fallback && !this.wanted().has(job.key)) return;
+    await this.store.save({
+      key: job.key,
+      translation,
+      provider: job.settings.provider,
+      temporary: !!job.fallback,
+    });
+    if (job.fallback) await this.store.retainPreview(this.wanted());
   }
 
   private noteSample(ms: number): void {
@@ -302,16 +276,18 @@ export class TranslationQueue {
     settings: CaptionTranslationSettings,
     text: string,
     consumer: string,
-    options?: { pack?: string; cache?: boolean },
+    options?: { pack?: string; fallback?: CaptionTranslationSettings },
   ): Job {
     const existing = this.jobs.get(key);
     if (existing) {
       if (!existing.controller) {
-        if (options?.pack) existing.pack = options.pack;
+        if (options?.pack) {
+          existing.pack = options.pack;
+          existing.ready = true;
+        }
       }
       return existing;
     }
-    if (this.backoff && Date.now() < this.backoff.until) throw this.backoff.error;
     let resolve!: Job['resolve'], reject!: Job['reject'];
     const promise = new Promise<string>((yes, no) => {
       resolve = yes;
@@ -327,9 +303,27 @@ export class TranslationQueue {
       promise,
       resolve,
       reject,
-      cache: options?.cache !== false,
+      ready: !!options?.pack,
+      fallback: options?.fallback,
     };
     this.jobs.set(key, job);
+    this.usesPreview ||= !!options?.fallback;
+    if (job.ready) return job;
+    void this.store
+      .get([{ key, primary: options?.fallback ? this.key(options.fallback, text) : undefined }])
+      .then(([translation]) => {
+        if (this.jobs.get(key) !== job || job.ready) return;
+        if (translation !== null) {
+          this.jobs.delete(key);
+          job.resolve(translation);
+        } else if (this.backoff && Date.now() < this.backoff.until) {
+          this.jobs.delete(key);
+          job.reject(this.backoff.error);
+        } else {
+          job.ready = true;
+        }
+        this.drain();
+      });
     return job;
   }
 
@@ -367,7 +361,8 @@ export class TranslationQueue {
     for (const state of consumers) for (const pack of state.packs) ordered.push(...pack.keys);
     const waiting = [...new Set(ordered)].flatMap((key) => {
       const job = this.jobs.get(key);
-      return job && !job.controller ? [job] : [];
+      if (!job?.ready || job.controller) return [];
+      return [job];
     });
     const now = Date.now();
     while (waiting.length && now >= (this.backoff?.until ?? 0)) {
@@ -401,7 +396,7 @@ export class TranslationQueue {
     const id = ++this.batches;
     const created = Date.now();
     let sentAt: number | undefined;
-    let delivered = false;
+    const delivered = new Set<number>();
     const state = this.consumers.get(first.consumer);
     const time = state?.time ?? 0;
     const rate = state?.rate ?? 1;
@@ -443,17 +438,19 @@ export class TranslationQueue {
     });
     const deliver = (index: number, translation: string) => {
       if (controller.signal.aborted) return;
-      if (!delivered) {
-        delivered = true;
+      if (delivered.has(index)) return;
+      if (!delivered.size) {
         this.trace({ e: 'first', id, ms: elapsed() });
       }
       const job = batch[index];
       if (!job) return;
-      this.remember(job, translation);
-      if (this.jobs.get(job.key) !== job) return;
-      this.jobs.delete(job.key);
-      job.resolve(translation);
-      this.drain();
+      delivered.add(index);
+      void this.remember(job, translation).then(() => {
+        if (this.jobs.get(job.key) !== job) return;
+        this.jobs.delete(job.key);
+        job.resolve(translation);
+        this.drain();
+      });
     };
     const work = translateCaptionBatch(
       first.settings,
@@ -505,13 +502,7 @@ export class TranslationQueue {
           );
           return;
         }
-        batch.forEach((job, index) => {
-          const result = results[index];
-          this.remember(job, result);
-          if (this.jobs.get(job.key) !== job) return;
-          this.jobs.delete(job.key);
-          job.resolve(result);
-        });
+        results.forEach((translation, index) => deliver(index, translation));
         this.drain();
       },
       (error) => {
@@ -540,24 +531,12 @@ export class HybridTranslationQueue {
   private readonly microsoftStopped = new Set<string>();
 
   constructor(
-    cacheLimit = translationCacheLimit,
+    store = new TranslationStore(),
     trace: (event: TraceEvent) => void = () => {},
     private readonly microsoftAllowed: () => boolean = () => true,
   ) {
-    this.microsoft = new TranslationQueue(cacheLimit, trace);
-    this.openai = new TranslationQueue(cacheLimit, trace);
-  }
-
-  restore(entries: Iterable<readonly [string, string]>, store: TranslationStore): void {
-    const microsoft: (readonly [string, string])[] = [];
-    const openai: (readonly [string, string])[] = [];
-    for (const entry of entries) {
-      const provider = translationProvider(entry[0]);
-      if (provider === 'microsoft') microsoft.push(entry);
-      if (provider === 'openai') openai.push(entry);
-    }
-    this.microsoft.restore(microsoft, store);
-    this.openai.restore(openai, store);
+    this.microsoft = new TranslationQueue(store, trace);
+    this.openai = new TranslationQueue(store, trace);
   }
 
   lookup(settings: CaptionTranslationSettings, text: string): Promise<string | null> {
@@ -567,15 +546,15 @@ export class HybridTranslationQueue {
 
   request(consumer: string, settings: CaptionTranslationSettings, text: string): Promise<string> {
     if (settings.provider === 'microsoft') return this.microsoft.request(consumer, settings, text);
-    if (this.openai.cached(settings, text)) return this.openai.request(consumer, settings, text);
     const microsoftSettings = { ...settings, provider: 'microsoft' as const };
-    const openai = this.openai.request(consumer, settings, text).then((translation) => {
-      if (!this.openai.hasPrefetch(consumer)) this.stopMicrosoft(consumer);
-      return translation;
+    const openai = this.openai.request(consumer, settings, text, {
+      onProviderTranslation: () => {
+        if (!this.openai.prefetchWindow(consumer)) this.stopMicrosoft(consumer);
+      },
     });
     const microsoft =
       this.microsoftAllowed() && !this.microsoftStopped.has(consumer)
-        ? this.microsoft.request(consumer, microsoftSettings, text, { cache: false })
+        ? this.microsoft.request(consumer, microsoftSettings, text, { fallback: settings })
         : Promise.reject(new Error('Microsoft fallback is not authorized.'));
     return firstTranslation(openai, microsoft);
   }
@@ -590,19 +569,23 @@ export class HybridTranslationQueue {
     if (settings.provider === 'microsoft')
       return this.microsoft.prefetch(consumer, settings, cues, time, rate);
     const microsoftSettings = { ...settings, provider: 'microsoft' as const };
-    const uncached = cues.filter((cue) => !this.openai.cached(settings, cue.text));
     const openai = this.openai.prefetch(consumer, settings, cues, time, rate);
+    const window = this.openai.prefetchWindow(consumer);
     const microsoft =
-      !uncached.length || !this.microsoftAllowed() || this.microsoftStopped.has(consumer)
+      !cues.length || !this.microsoftAllowed() || this.microsoftStopped.has(consumer)
         ? Promise.resolve<(string | null)[]>([])
-        : this.microsoft.prefetch(consumer, microsoftSettings, uncached, time, rate, {
-            cache: false,
+        : this.microsoft.prefetch(consumer, microsoftSettings, cues, time, rate, {
+            fallback: settings,
           });
     return Promise.all([openai, microsoft]).then(([openaiResults, microsoftResults]) => {
-      if (openaiResults.length && openaiResults.every((translation) => translation !== null))
+      if (
+        window &&
+        this.openai.prefetchWindow(consumer) === window &&
+        openaiResults.length &&
+        openaiResults.every((translation) => translation !== null)
+      )
         this.stopMicrosoft(consumer);
-      const fallback = new Map(uncached.map((cue, index) => [cue, microsoftResults[index]]));
-      return cues.map((cue, index) => openaiResults[index] ?? fallback.get(cue) ?? null);
+      return cues.map((_, index) => openaiResults[index] ?? microsoftResults[index] ?? null);
     });
   }
 
@@ -661,14 +644,4 @@ function firstTranslation(first: Promise<string>, second: Promise<string>): Prom
     });
     settle(second, () => {});
   });
-}
-
-function translationProvider(key: string): 'microsoft' | 'openai' | null {
-  try {
-    const parsed: unknown = JSON.parse(key);
-    if (!Array.isArray(parsed)) return null;
-    return parsed[0] === 'microsoft' || parsed[0] === 'openai' ? parsed[0] : null;
-  } catch {
-    return null;
-  }
 }

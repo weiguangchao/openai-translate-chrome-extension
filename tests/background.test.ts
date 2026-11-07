@@ -1,6 +1,11 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { DEFAULT_SETTINGS, MICROSOFT_ORIGIN, type Settings } from '../src/shared/settings';
-import { extensionStorage } from './fixtures/extension-storage';
+import {
+  DEFAULT_SETTINGS,
+  MICROSOFT_ORIGIN,
+  type CaptionTranslationSettings,
+  type Settings,
+} from '../src/shared/settings';
+import { extensionStorage, sessionStorage } from './fixtures/extension-storage';
 import { consentedSettings } from './fixtures/settings';
 import { packedCues, providerReply, requestedTexts, translationReply } from './fixtures/provider';
 import {
@@ -144,15 +149,7 @@ async function loadBackground(saved: Settings, session = new Map<string, unknown
     },
     storage: {
       local,
-      session: {
-        get: vi.fn(async () => Object.fromEntries(session)),
-        set: vi.fn(async (items: Record<string, unknown>) => {
-          for (const [key, value] of Object.entries(items)) session.set(key, value);
-        }),
-        remove: vi.fn(async (keys: string[]) => {
-          for (const key of keys) session.delete(key);
-        }),
-      },
+      session: sessionStorage(session),
       onChanged,
     },
   });
@@ -626,7 +623,12 @@ it('runs Microsoft beside OpenAI again after a seek until OpenAI covers the new 
   await vi.waitFor(() => expect(sent(true)).toEqual([...batch('A'), ...batch('X')]), wait);
   answer(true);
   await vi.advanceTimersByTimeAsync(0);
-  expect([...session.values()]).not.toContain('微软 X0');
+  expect(
+    [...session]
+      .filter(([key]) => key.startsWith('subline.translation.v3:'))
+      .map(([, value]) => value),
+  ).not.toContain('微软 X0');
+  expect([...session.values()]).toContain('微软 X0');
   await vi.waitFor(
     () => expect(sent(false)).toEqual([...batch('A'), ...batch('B'), ...batch('X')]),
     wait,
@@ -684,7 +686,7 @@ it('takes OpenAI translations from the cache after a seek and asks Microsoft onl
   expect(sent(true)).toEqual([...batch('A'), ...batch('C')]);
 });
 
-it('shows a Microsoft translation for the current request and leaves it out of the cache', async () => {
+it('keeps a Microsoft translation only in temporary session entries until OpenAI finishes', async () => {
   const session = new Map<string, unknown>();
   const { sent, answer } = dualProvider();
   const send = await loadBackground(dualSettings, session);
@@ -698,7 +700,12 @@ it('shows a Microsoft translation for the current request and leaves it out of t
   answer(true);
   await expect(pending).resolves.toEqual({ ok: true, data: '微软 Hello' });
   await vi.advanceTimersByTimeAsync(0);
-  expect([...session.values()]).not.toContain('微软 Hello');
+  expect(
+    [...session]
+      .filter(([key]) => key.startsWith('subline.translation.v3:'))
+      .map(([, value]) => value),
+  ).not.toContain('微软 Hello');
+  expect([...session.values()]).toContain('微软 Hello');
   let cached: Reply | undefined;
   const lookup = send({
     type: 'translate',
@@ -720,7 +727,7 @@ it('shows a Microsoft translation for the current request and leaves it out of t
   expect(sent(true)).toEqual(['Hello']);
 });
 
-it('reuses a Microsoft fallback for the current window and leaves it out of storage', async () => {
+it('reuses a Microsoft fallback from session storage only within the current window', async () => {
   const session = new Map<string, unknown>();
   const { sent, answer } = dualProvider();
   const send = await loadBackground(dualSettings, session);
@@ -728,13 +735,22 @@ it('reuses a Microsoft fallback for the current window and leaves it out of stor
   await vi.waitFor(() => expect(sent(true)).toEqual(batch('A')), wait);
   answer(true);
   await vi.advanceTimersByTimeAsync(0);
-  expect([...session.values()]).not.toContain('微软 A0');
+  expect(
+    [...session]
+      .filter(([key]) => key.startsWith('subline.translation.v3:'))
+      .map(([, value]) => value),
+  ).not.toContain('微软 A0');
+  expect([...session.values()]).toContain('微软 A0');
   const again = send(window(0, batch('A')));
   await vi.advanceTimersByTimeAsync(providerSendWindowMs);
   expect(sent(true)).toEqual(batch('A'));
+  const previewKey = [...session.keys()].find(
+    (key) => key.startsWith('subline.translation.preview:') && session.get(key) === '微软 A0',
+  )!;
+  session.set(previewKey, '会话中的临时译文');
   await expect(
     send({ type: 'translate', captionLanguage: 'en', pageTitle: 'Video title', text: 'A0' }),
-  ).resolves.toEqual({ ok: true, data: '微软 A0' });
+  ).resolves.toEqual({ ok: true, data: '会话中的临时译文' });
   expect(sent(true)).toEqual(batch('A'));
   answer(false);
   await expect(first).resolves.toEqual({ ok: true, data: openai(batch('A')) });
@@ -742,6 +758,7 @@ it('reuses a Microsoft fallback for the current window and leaves it out of stor
   await vi.advanceTimersByTimeAsync(0);
   expect([...session.values()]).toContain('OpenAI A0');
   expect([...session.values()]).not.toContain('微软 A0');
+  expect([...session.values()]).not.toContain('会话中的临时译文');
 });
 
 it('caches a translation made while Microsoft is the selected provider', async () => {
@@ -805,4 +822,106 @@ it('shows the Microsoft translation while the OpenAI send window is full', async
     ok: true,
     data: ['OpenAI Now', 'OpenAI Soon', 'OpenAI Later'],
   });
+});
+
+it.each(['OpenAI', 'Microsoft'])(
+  'keeps Microsoft enabled after an abandoned %s cache lookup finishes',
+  async (provider) => {
+    vi.useFakeTimers();
+    const session = sessionStorage();
+    vi.stubGlobal('chrome', { storage: { session } });
+    const { HybridTranslationQueue } = await import('../src/extension/queue');
+    const queue = new HybridTranslationQueue();
+    const settings: CaptionTranslationSettings = {
+      ...dualSettings,
+      captionLanguage: 'en',
+      pageTitle: 'Video title',
+    };
+    const { sent, answer } = dualProvider();
+    const opening = queue.prefetch('tab', settings, packedCues(batch('A')));
+    await vi.advanceTimersByTimeAsync(0);
+    answer(false);
+    answer(true);
+    await opening;
+    queue.hold('tab', 0);
+
+    const read = session.get.getMockImplementation()!;
+    let resume!: () => void;
+    const blocked = new Promise<void>((resolve) => {
+      resume = resolve;
+    });
+    let waiting = false;
+    session.get.mockImplementation(async (keys) => {
+      const stored = await read(keys);
+      if (
+        !waiting &&
+        Array.isArray(keys) &&
+        keys.some((key) => key.startsWith('subline.translation.v3:["microsoft",')) ===
+          (provider === 'Microsoft')
+      ) {
+        waiting = true;
+        await blocked;
+      }
+      return stored;
+    });
+    const abandoned = queue.prefetch('tab', settings, packedCues(batch('A')));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(waiting).toBe(true);
+    queue.hold('tab', 600);
+    const landing = queue.prefetch('tab', settings, packedCues(batch('X'), 605), 600);
+    await vi.advanceTimersByTimeAsync(providerSendWindowMs);
+    expect(sent(true)).toContain('X0');
+    resume();
+    await abandoned;
+    const following = queue.prefetch('tab', settings, packedCues(batch('Y'), 605), 600);
+    await vi.advanceTimersByTimeAsync(providerSendWindowMs);
+    expect(sent(true)).toContain('Y0');
+    answer(false);
+    answer(true);
+    await Promise.all([landing, following]);
+  },
+);
+
+it('keeps Microsoft enabled when a visible result finishes during a prefetch lookup', async () => {
+  vi.useFakeTimers();
+  const session = sessionStorage();
+  vi.stubGlobal('chrome', { storage: { session } });
+  const { HybridTranslationQueue } = await import('../src/extension/queue');
+  const queue = new HybridTranslationQueue();
+  const settings: CaptionTranslationSettings = {
+    ...dualSettings,
+    captionLanguage: 'en',
+    pageTitle: 'Video title',
+  };
+  const { sent, answer } = dualProvider();
+  const visible = { text: 'Visible', start: 0, end: 3 };
+  const opening = queue.prefetch('tab', settings, [visible]);
+  await vi.advanceTimersByTimeAsync(0);
+  const shown = queue.request('tab', settings, 'Visible');
+  await vi.advanceTimersByTimeAsync(0);
+
+  const read = session.get.getMockImplementation()!;
+  let resume!: () => void;
+  const blocked = new Promise<void>((resolve) => {
+    resume = resolve;
+  });
+  session.get.mockImplementation(async (keys) => {
+    const stored = await read(keys);
+    if (Array.isArray(keys)) await blocked;
+    return stored;
+  });
+  const refreshed = queue.prefetch('tab', settings, [
+    visible,
+    { text: 'Upcoming', start: 3, end: 7 },
+  ]);
+  await vi.advanceTimersByTimeAsync(0);
+  answer(false);
+  await expect(shown).resolves.toBe('OpenAI Visible');
+  resume();
+  await vi.advanceTimersByTimeAsync(0);
+  expect(sent(true)).toContain('Upcoming');
+  answer(false);
+  answer(true);
+  await expect(refreshed).resolves.toEqual(['OpenAI Visible', 'OpenAI Upcoming']);
+  await opening;
 });
