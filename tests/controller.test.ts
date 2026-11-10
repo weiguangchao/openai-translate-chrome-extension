@@ -10,7 +10,7 @@ let controller: CaptionController | undefined;
 let source: CaptionSource;
 let platform: Platform;
 const sendMessage = vi.fn(
-  (message: { type: string; text?: string }): Promise<Reply<string | null>> =>
+  (message: { type: string; text?: string; pageTitle?: string }): Promise<Reply<string | null>> =>
     Promise.resolve({
       ok: true,
       data: message.type === 'translate' ? `译文 ${message.text}` : null,
@@ -136,6 +136,41 @@ it('replaces a live translation when its language changes but its text stays the
   source = { ...source, language: 'ja' };
   await vi.advanceTimersByTimeAsync(450);
   expect(lines()).toEqual(['Same text', '日语译文']);
+});
+
+it('replaces the visible caption when only the page title changes', async () => {
+  let title = 'Old title';
+  platform.title = () => title;
+  source = {
+    kind: 'live',
+    language: 'en',
+    mode: 'model',
+    read: () => ({ text: 'Same text', layers: [], nativeTrack: false }),
+  };
+  sendMessage.mockImplementation(async (message) => {
+    if (message.type !== 'translate') return { ok: true, data: null };
+    if (message.pageTitle === 'Old title')
+      return { ok: false, failure: { kind: 'error', message: 'Subtitles have changed.' } };
+    return { ok: true, data: `译文 ${message.pageTitle}` };
+  });
+  controller = new CaptionController(
+    () => platform,
+    publicSettings({ ...consentedSettings, apiKey: 'key', model: 'model' }),
+  );
+  await vi.advanceTimersByTimeAsync(450);
+  expect(lines()).toEqual([null, 'Subtitles have changed.']);
+  title = 'New title';
+  await vi.advanceTimersByTimeAsync(450);
+  expect(sendMessage).toHaveBeenCalledWith({
+    type: 'translate',
+    text: 'Same text',
+    captionLanguage: 'en',
+    pageTitle: 'New title',
+  });
+  expect(lines()).toEqual(['Same text', '译文 New title']);
+  title = 'Final title';
+  await vi.advanceTimersByTimeAsync(450);
+  expect(lines()).toEqual(['Same text', '译文 Final title']);
 });
 
 it('drives any platform through the waiting, live and timeline caption sources', async () => {
@@ -372,7 +407,7 @@ it('retries a paused cache lookup invalidated by a later seek event', async () =
 
 it('keeps a displayed translation when playback resumes through a rebuffer seek', async () => {
   let translated = false;
-  sendMessage.mockImplementation((message: { type: string; text?: string }) => {
+  sendMessage.mockImplementation((message: { type: string; text?: string; pageTitle?: string }) => {
     if (message.type !== 'translate') return Promise.resolve({ ok: true, data: null });
     if (!translated) {
       translated = true;
