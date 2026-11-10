@@ -152,6 +152,13 @@ def set_rate(rate):
             "if (video.playbackRate !== %s) video.playbackRate = %s; }") % ((rate,) * 4)
 
 
+PLAY_MEDIA = """if (video.paused && !video.ended) {
+  const player = document.querySelector('#movie_player');
+  const playing = player && typeof player.playVideo === 'function' ? player.playVideo() : video.play();
+  if (playing && playing.catch) playing.catch(() => {});
+}"""
+
+
 NATIVE_TRACKS = "[...video.textTracks].filter(t => t.kind === 'subtitles' || t.kind === 'captions')"
 CAPTION_LANGUAGES = ('en', 'zh-CN', 'zh-TW', 'ja', 'ko')
 CAPTION_LANGUAGE = """(code => {
@@ -873,8 +880,7 @@ class Tab:
         if self.rate is not None:
             keep.append(set_rate(self.rate))
         if self.keep_playing:
-            keep.append("if (video.paused && !video.ended) { const playing = video.play(); "
-                        "if (playing && playing.catch) playing.catch(() => {}); }")
+            keep.append(PLAY_MEDIA)
         probe = probe.replace("if (!video) return null;", "if (!video) return null;\n" + MEDIA_CLOCK + " ".join(keep))
         return probe.replace("return {time:", "return {clockEvents, clockDropped, time:")
 
@@ -898,6 +904,11 @@ class Tab:
         captions = step.get("captions", False)
         self.keep_playing = step.get("keep_playing", self.keep_playing and not pause)
         self.skip_ads = step.get("skip_ads", self.skip_ads)
+        if captions and (play or self.keep_playing):
+            started = self.do_media({key: value for key, value in step.items()
+                                     if key not in ("captions", "time")} | {"play": True})
+            if not started["ok"]:
+                return started
         if rate is not None and self.original_rate is None:
             current = self.sample(f"document.querySelector({json.dumps(selector)})?.playbackRate")
             if isinstance(current, (int, float)) and not isinstance(current, bool):
@@ -908,19 +919,17 @@ class Tab:
         if rate is not None:
             actions.append(set_rate(rate))
         if play:
-            actions.append("if (video.paused && !video.ended) { const playing = video.play(); "
-                           "if (playing && playing.catch) playing.catch(() => {}); }")
+            actions.append(PLAY_MEDIA)
         if pause:
             actions.append("if (!video.paused) video.pause();")
         if captions:
             actions.append(f"""
+              if (video.readyState < 3 || {AD_SHOWING}) return {{page, ...(() => {{ {video_report()} }})()}};
               const requested = {json.dumps(captions if isinstance(captions, str) else None)};
               const language = {CAPTION_LANGUAGE};
               const player = document.querySelector('#movie_player');
               if (player?.getOption) {{
                 const cc = player.querySelector('.ytp-subtitles-button');
-                if (cc?.getAttribute('aria-pressed') === 'false') cc.click();
-                player.loadModule?.('captions');
                 const tracks = player.getOption('captions', 'tracklist');
                 if (Array.isArray(tracks) && tracks.length) {{
                   const selected = player.getOption('captions', 'track');
@@ -952,7 +961,9 @@ class Tab:
 
         def media_probe(seek):
             jump = (f"if (!{AD_SHOWING} && Math.abs(video.currentTime - {target}) > 1.5) "
-                    f"{{ video.currentTime = {target}; seeked = true; }}" if seek else "")
+                    "{ const player = document.querySelector('#movie_player'); "
+                    f"if (player && typeof player.seekTo === 'function') player.seekTo({target}, true); "
+                    f"else video.currentTime = {target}; seeked = true; }}" if seek else "")
             return f"""(() => {{
           const refused = {YOUTUBE_REFUSAL};
           const page = {PAGE_REPORT};
@@ -978,6 +989,12 @@ class Tab:
         def sample():
             nonlocal last_sample
             due = seeking["due"]
+            if captions and self.sample(f"""(() => {{
+              const video = document.querySelector({json.dumps(selector)});
+              return Boolean(video && video.readyState >= 3 && !{AD_SHOWING} &&
+                document.querySelector('#movie_player .ytp-subtitles-button')?.getAttribute('aria-pressed') === 'false');
+            }})()"""):
+                self.do_click({"selector": "#movie_player .ytp-subtitles-button"})
             stamp = time.time() * 1000
             value = self.sample(seek_probe if due else probe)
             if isinstance(value, dict):
