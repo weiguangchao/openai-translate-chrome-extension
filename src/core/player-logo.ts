@@ -1,4 +1,4 @@
-import logo from '../../public/logo.svg?raw';
+import logo from '../../public/logo-ui.svg?raw';
 import type { PlayerToolbar } from './platform';
 
 export class PlayerLogo {
