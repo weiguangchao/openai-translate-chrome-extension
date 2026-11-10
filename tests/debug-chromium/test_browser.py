@@ -107,6 +107,53 @@ class Media(BrowserCase):
             self.assertTrue(media['video']['captions'])
         self.assertEqual(len(self.site.log('caption-language', 'caption-selection')), 1)
 
+    def test_hidden_cc_keeps_timeout_diagnostics_and_can_be_enabled_later(self):
+        tab = self.open('hidden-cc', player='youtube', ccoff=1, trustedcc=1)
+        self.result(self.do(tab, action='evaluate', expression=
+            "(document.querySelector('.ytp-subtitles-button').style.display = 'none') && true"))
+        media = self.result(self.do(tab, timeout=6, action='media', play=True, captions='en'), ok=False)
+        self.assertEqual(media['reason'], 'budget spent')
+        self.assertIsNotNone(media['video'], media)
+        self.assertFalse(media['video']['captions'])
+        self.assertIn('network', media['video'])
+        self.assertEqual(media['page']['url'], self.site.origin + '/watch')
+        self.assertEqual(media['page']['title'], 'debug-chromium fixture')
+        self.assertEqual(media['page']['ready'], 'complete')
+        self.assertTrue(media['page']['player'])
+        self.assertNotIn('page_error', media)
+        self.result(self.do(tab, action='evaluate', expression="""(() => {
+          setTimeout(() => { document.querySelector('.ytp-subtitles-button').style.display = ''; }, 1500);
+          return true;
+        })()"""))
+        enabled = self.result(self.do(tab, timeout=6, action='media', play=True, captions='en'))
+        self.assertTrue(enabled['video']['captions'])
+        self.assertEqual(enabled['video']['captionLanguage'], 'en')
+
+    def test_captions_are_selected_after_playback_starts_and_before_the_seek(self):
+        tab = self.open('caption-startup', player='youtube', ccoff=1)
+        self.result(self.do(tab, action='evaluate',
+                            expression="document.querySelector('video').readyState >= 3"))
+        media = self.result(self.do(tab, action='media', play=True, time=40, captions='en'))
+        self.assertGreaterEqual(media['video']['time'], 40)
+        [selection] = self.site.log('caption-startup', 'caption-selection')
+        self.assertGreater(selection['time'], 0)
+        self.assertLess(selection['time'], 40)
+
+    def test_youtube_play_and_seek_use_the_player_api(self):
+        tab = self.open('player-commands', player='youtube')
+        media = self.result(self.do(tab, action='media', play=True, time=40))
+        self.assertGreaterEqual(media['video']['time'], 40)
+        self.assertTrue(self.site.log('player-commands', 'player-play'))
+        self.assertEqual(len(self.site.log('player-commands', 'player-seek')), 1)
+
+    def test_youtube_cc_uses_a_trusted_click_before_waiting_for_subtitles(self):
+        tab = self.open('trusted-cc', player='youtube', ccoff=1, trustedcc=1)
+        media = self.result(self.do(tab, timeout=6, action='media', play=True, captions='en'))
+        self.assertTrue(media['video']['captions'])
+        overlay = self.result(self.do(tab, timeout=6, action='overlay', wait=True))['overlay']
+        self.assertTrue(overlay['original']['visible'])
+        self.assertTrue(overlay['translation']['visible'])
+
     def test_a_missing_caption_language_fails_without_waiting_out_the_budget(self):
         tab = self.open('missing-language', player='youtube', languages='zh-CN')
         media = self.result(self.do(tab, action='media', play=True, captions='en'), ok=False)

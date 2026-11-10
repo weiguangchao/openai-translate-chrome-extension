@@ -44,6 +44,14 @@
       rate = value;
       video.playbackRate = value;
     };
+    player.playVideo = () => {
+      log('player-play');
+      return video.play();
+    };
+    player.seekTo = (value) => {
+      log('player-seek');
+      video.currentTime = value;
+    };
     setInterval(() => {
       if (video.playbackRate !== rate) video.playbackRate = rate;
     }, 1000);
@@ -53,9 +61,11 @@
     cc.className = 'ytp-subtitles-button';
     cc.style.position = 'absolute';
     cc.setAttribute('aria-pressed', params.has('ccoff') ? 'false' : 'true');
-    cc.onclick = () => cc.setAttribute('aria-pressed', String(cc.getAttribute('aria-pressed') !== 'true'));
+    cc.onclick = (event) => {
+      if (params.has('trustedcc') && !event.isTrusted) return;
+      cc.setAttribute('aria-pressed', String(cc.getAttribute('aria-pressed') !== 'true'));
+    };
     player.append(cc);
-    player.loadModule = () => {};
     player.getOption = (_module, option) => option === 'tracklist' ? tracks : selected;
     player.setOption = (_module, _option, track) => {
       if (selected !== track) log('caption-selection');
