@@ -991,8 +991,10 @@ class Tab:
             due = seeking["due"]
             if captions and self.sample(f"""(() => {{
               const video = document.querySelector({json.dumps(selector)});
+              const cc = document.querySelector('#movie_player .ytp-subtitles-button');
+              const rect = cc?.getBoundingClientRect();
               return Boolean(video && video.readyState >= 3 && !{AD_SHOWING} &&
-                document.querySelector('#movie_player .ytp-subtitles-button')?.getAttribute('aria-pressed') === 'false');
+                cc?.getAttribute('aria-pressed') === 'false' && rect.width && rect.height);
             }})()"""):
                 self.do_click({"selector": "#movie_player .ytp-subtitles-button"})
             stamp = time.time() * 1000

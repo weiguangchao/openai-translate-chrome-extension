@@ -107,6 +107,28 @@ class Media(BrowserCase):
             self.assertTrue(media['video']['captions'])
         self.assertEqual(len(self.site.log('caption-language', 'caption-selection')), 1)
 
+    def test_hidden_cc_keeps_timeout_diagnostics_and_can_be_enabled_later(self):
+        tab = self.open('hidden-cc', player='youtube', ccoff=1, trustedcc=1)
+        self.result(self.do(tab, action='evaluate', expression=
+            "(document.querySelector('.ytp-subtitles-button').style.display = 'none') && true"))
+        media = self.result(self.do(tab, timeout=6, action='media', play=True, captions='en'), ok=False)
+        self.assertEqual(media['reason'], 'budget spent')
+        self.assertIsNotNone(media['video'], media)
+        self.assertFalse(media['video']['captions'])
+        self.assertIn('network', media['video'])
+        self.assertEqual(media['page']['url'], self.site.origin + '/watch')
+        self.assertEqual(media['page']['title'], 'debug-chromium fixture')
+        self.assertEqual(media['page']['ready'], 'complete')
+        self.assertTrue(media['page']['player'])
+        self.assertNotIn('page_error', media)
+        self.result(self.do(tab, action='evaluate', expression="""(() => {
+          setTimeout(() => { document.querySelector('.ytp-subtitles-button').style.display = ''; }, 1500);
+          return true;
+        })()"""))
+        enabled = self.result(self.do(tab, timeout=6, action='media', play=True, captions='en'))
+        self.assertTrue(enabled['video']['captions'])
+        self.assertEqual(enabled['video']['captionLanguage'], 'en')
+
     def test_captions_are_selected_after_playback_starts_and_before_the_seek(self):
         tab = self.open('caption-startup', player='youtube', ccoff=1)
         self.result(self.do(tab, action='evaluate',
