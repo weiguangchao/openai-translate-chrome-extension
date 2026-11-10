@@ -350,7 +350,6 @@ export default [
         [
           'cueLimit',
           'cueTextLimit',
-          'SEEK_JUMP_TOLERANCE',
           'HEARTBEAT_MS',
           'translationCacheLimit',
           'minClauseColumns',

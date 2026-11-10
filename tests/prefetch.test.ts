@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { CaptionController } from '../src/core/controller';
 import type { TimedCue } from '../src/core/cues';
-import { seekSettleMs, translationSendsPerSecond } from '../src/shared/tuning';
+import { translationSendsPerSecond } from '../src/shared/tuning';
 import { createTestPlatform } from './fixtures/platform';
 import { publicSettings } from '../src/shared/settings';
 import { extensionStorage, sessionStorage } from './fixtures/extension-storage';
@@ -230,6 +230,20 @@ it('preloads in the background and queries it at caption boundaries without anot
   expect(messages).toContain('translate');
 });
 
+it('keeps prefetch running when ordinary playback advances by more than one second', async () => {
+  controller = new CaptionController(createTestPlatform, publicSettings(saved));
+  await vi.advanceTimersByTimeAsync(0);
+  expect(messages).toContain('prefetch');
+  video.playbackRate = 2;
+  await vi.advanceTimersByTimeAsync(1000);
+  video.currentTime = 2;
+  video.dispatchEvent(new Event('timeupdate'));
+  await vi.advanceTimersByTimeAsync(0);
+  expect(messages).not.toContain('prefetch-hold');
+  await finish({ 'First cue.': '第一句' });
+  expect(translated()?.textContent).toBe('第一句');
+});
+
 it('lets the opening window finish during a scrub and requests only the cues at the new position', async () => {
   const dense = Array.from({ length: 30 }, (_, index) => ({
     startTime: 2 + index * 2,
@@ -316,23 +330,27 @@ it('keeps requests sent before a seek running, sends the landing at once and cac
   await vi.advanceTimersByTimeAsync(0);
   const started = requested.length;
   expect(started).toBe(translationSendsPerSecond);
+  Object.defineProperty(video, 'seeking', { configurable: true, value: true });
   video.currentTime = 42;
-  video.dispatchEvent(new Event('timeupdate'));
-  await vi.advanceTimersByTimeAsync(seekSettleMs - 1);
+  video.dispatchEvent(new Event('seeking'));
+  await vi.advanceTimersByTimeAsync(150);
   expect(requested).toHaveLength(started);
-  await vi.advanceTimersByTimeAsync(1);
-  expect(requested.slice(started)).toEqual([
-    ['Cue 21.'],
-    ['Cue 22.', 'Cue 23.', 'Cue 24.', 'Cue 25.', 'Cue 26.'],
-    ['Cue 27.', 'Cue 28.', 'Cue 29.', 'Cue 30.'],
-  ]);
+  expect(messages.filter((type) => type === 'prefetch-hold')).toHaveLength(1);
+  Object.defineProperty(video, 'seeking', { value: false });
+  video.dispatchEvent(new Event('seeked'));
+  await vi.advanceTimersByTimeAsync(0);
+  expect(requested[started]).toEqual(['Cue 21.']);
+  expect(requested.slice(started + 1).flat()).toContain('Cue 22.');
   expect(requested.length).toBeGreaterThan(translationSendsPerSecond);
   expect(pending.slice(0, started).some((request) => request.signal.aborted)).toBe(false);
   await finish({ 'Cue 1.': '第一句' });
   const sent = requested.length;
+  Object.defineProperty(video, 'seeking', { value: true });
   video.currentTime = 2.5;
-  video.dispatchEvent(new Event('timeupdate'));
-  await vi.advanceTimersByTimeAsync(seekSettleMs);
+  video.dispatchEvent(new Event('seeking'));
+  Object.defineProperty(video, 'seeking', { value: false });
+  video.dispatchEvent(new Event('seeked'));
+  await vi.advanceTimersByTimeAsync(0);
   expect(translated()?.textContent).toBe('第一句');
   expect(requested.slice(sent).flat()).not.toContain('Cue 1.');
 });
