@@ -9,7 +9,7 @@ import { copy } from './copy';
 export function Logo({ small = false }: { small?: boolean }) {
   return (
     <div className={`brand ${small ? 'brand-small' : ''}`}>
-      <img src="./logo.svg" alt="" />
+      <img src="./logo-ui.svg" alt="" />
       <div>
         <strong>
           Subline<span className="brand-period">.</span>
