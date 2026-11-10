@@ -6,7 +6,6 @@ import { visible } from './dom';
 import { selectedTrack } from './native';
 import { SubtitleOverlay } from './overlay';
 import type { CaptionSource, LiveCaption, Platform, PlatformFactory } from './platform';
-import { PlaybackGate } from './playback';
 import { PlayerLogo } from './player-logo';
 import { captionAt, playbackCues, timedCaptions } from './timeline';
 import { TraceReporter, type TraceCaption } from './trace';
@@ -57,7 +56,6 @@ export class CaptionController {
   private translator: CaptionTranslator;
   private trace: TraceReporter;
   private shown: TraceCaption | null = null;
-  private gate: PlaybackGate;
   private style: HTMLStyleElement;
   private interval: ReturnType<typeof setInterval>;
   private video: HTMLVideoElement | null = null;
@@ -67,12 +65,12 @@ export class CaptionController {
   private nativeTrack: TextTrack | undefined;
   private destroyed = false;
   private onMediaChange = (event: Event) => {
-    if (event.type === 'seeking') this.gate.hold();
-    const completedSeek = event.type === 'seeked';
-    if (completedSeek) {
+    if (event.type === 'seeking') {
+      this.translator.hold(this.video?.currentTime ?? 0);
       this.translator.cancel();
-      this.gate.complete(this.video?.currentTime ?? 0);
     }
+    const completedSeek = event.type === 'seeked';
+    if (completedSeek) this.translator.cancel();
     this.tick(completedSeek);
   };
 
@@ -96,13 +94,6 @@ export class CaptionController {
       (message) => void this.connection.sendMessage(message).catch(() => {}),
       () => chrome.runtime.id,
     );
-    this.gate = new PlaybackGate({
-      hold: () => {
-        this.translator.hold(this.video?.currentTime ?? 0);
-        this.translator.cancel();
-      },
-      changed: () => this.tick(),
-    });
     this.style = document.createElement('style');
     this.style.textContent = STYLE + this.platform.style;
     document.documentElement.append(this.style);
@@ -145,7 +136,6 @@ export class CaptionController {
     this.source = '';
     this.nativeTrack = undefined;
     this.translator.reset();
-    this.gate.reset();
   }
 
   private mount(video: HTMLVideoElement, player: HTMLElement): void {
@@ -206,12 +196,9 @@ export class CaptionController {
     }
     const time = video.currentTime;
     if (video.seeking) {
-      this.gate.observe(time);
-      this.gate.hold();
       if (!this.hasReadyCaption(source, time)) this.translator.clear();
       return;
     }
-    this.gate.observe(time);
     const track = selectedTrack(video);
     const sourceId = source.id ?? video.currentSrc;
     if (sourceId !== this.source || track !== this.nativeTrack) {
@@ -240,11 +227,11 @@ export class CaptionController {
       text: caption.text,
       captionLanguage: language,
       pageTitle,
-      cacheOnly: video.paused || this.gate.settling,
+      cacheOnly: video.paused,
       debounce: captions ? 0 : 300,
     };
     if (completedSeek && caption.text && usesModel) this.translator.show(frame);
-    if (usesModel && !video.paused && !this.gate.settling && captions)
+    if (usesModel && !video.paused && captions)
       this.translator.plan(
         time,
         video.playbackRate || 1,

@@ -22,7 +22,7 @@ interface Request {
 
 interface Caption {
   readonly text: string;
-  readonly captionLanguage: Language | null;
+  readonly identity: string;
   since: number;
   line: TranslationLine;
   request: Request | null;
@@ -113,10 +113,11 @@ export class CaptionTranslator {
   }
 
   show(frame: CaptionFrame): void {
-    if (frame.text !== this.caption?.text || frame.captionLanguage !== this.caption.captionLanguage)
+    const identity = JSON.stringify([frame.text, frame.captionLanguage, frame.pageTitle]);
+    if (identity !== this.caption?.identity)
       this.caption = {
         text: frame.text,
-        captionLanguage: frame.captionLanguage,
+        identity,
         since: Date.now(),
         line: { kind: 'none' },
         request: null,
@@ -130,7 +131,7 @@ export class CaptionTranslator {
     this.release();
     this.caption = {
       text: '',
-      captionLanguage: null,
+      identity: '',
       since: Date.now(),
       line: { kind: 'unsupported-language' },
       request: null,
