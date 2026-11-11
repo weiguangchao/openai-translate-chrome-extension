@@ -15,6 +15,8 @@ vi.mock('../src/shared/storage', () => ({
 let root: Root;
 let stored: Settings;
 const openOptionsPage = vi.fn();
+const queryTabs = vi.fn();
+const readPageStatus = vi.fn();
 const getManifest = () => ({ version: '0.1.1' });
 const pageValues = new Map<string, string>();
 
@@ -41,14 +43,20 @@ beforeEach(() => {
       return structuredClone(stored);
     });
   openOptionsPage.mockReset().mockResolvedValue(undefined);
+  queryTabs.mockReset().mockResolvedValue([{ id: 7, url: 'https://x.com/user/status/1' }]);
+  readPageStatus.mockReset().mockResolvedValue('bilingual');
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
-  vi.stubGlobal('chrome', { runtime: { openOptionsPage, getManifest } });
+  vi.stubGlobal('chrome', {
+    runtime: { openOptionsPage, getManifest },
+    tabs: { query: queryTabs, sendMessage: readPageStatus },
+  });
   document.body.innerHTML = '<div id="root"></div>';
   root = createRoot(document.getElementById('root')!);
 });
 
 afterEach(async () => {
   await act(async () => root.unmount());
+  vi.useRealTimers();
   vi.unstubAllGlobals();
   document.body.innerHTML = '';
 });
@@ -95,6 +103,7 @@ it.each([
   stored.providerConsent = row.providerConsent;
   await render();
   expect(document.querySelector('.popup-setup-hint')?.textContent).toBe(row.hint);
+  expect(document.querySelector('.popup-setup-hint')?.closest('details')).toBeFalsy();
 });
 
 it('offers one translation-language control with all supported languages', async () => {
@@ -183,6 +192,7 @@ it('updates the popup total when recorded tokens change', async () => {
   const removeListener = vi.fn();
   vi.stubGlobal('chrome', {
     runtime: { id: 'extension-id', openOptionsPage, getManifest },
+    tabs: { query: queryTabs, sendMessage: readPageStatus },
     storage: {
       local: {
         get: vi.fn(async (key: string) =>
@@ -223,4 +233,45 @@ it('keeps controls disabled after a load failure and leaves settings accessible'
   await click('.popup-settings');
   expect(openOptionsPage).toHaveBeenCalledOnce();
   expect(saveSettings).not.toHaveBeenCalled();
+});
+
+it('keeps model and token details collapsed while settings and page status stay visible', async () => {
+  await render();
+  expect(document.querySelector<HTMLDetailsElement>('details')!.open).toBe(false);
+  expect(document.querySelector('summary')?.textContent).toBe('Model and usage');
+  expect(document.querySelector('details .popup-model-id')?.textContent).toBe('provider/model-id');
+  expect(document.querySelector('details .popup-usage-total')).not.toBeNull();
+  expect(document.querySelector('.popup-settings')?.textContent).toBe('Settings');
+  expect(document.querySelector('[aria-label="Page status"]')?.textContent).toBe(
+    'Showing bilingual subtitles',
+  );
+  expect(readPageStatus).toHaveBeenCalledWith(7, { type: 'page-status' }, { frameId: 0 });
+});
+
+it.each([undefined, { enabled: true }, 'ready'])(
+  'does not infer a working page from an invalid status reply: %s',
+  async (response) => {
+    readPageStatus.mockResolvedValue(response);
+    await render();
+    expect(document.querySelector('[aria-label="Page status"]')?.textContent).toBe(
+      "Could not read this page's status",
+    );
+  },
+);
+
+it('refreshes the current tab status and distinguishes unsupported pages from an unreachable content script', async () => {
+  vi.useFakeTimers();
+  await render();
+  readPageStatus.mockRejectedValueOnce(new Error('No receiving end'));
+  await act(async () => vi.advanceTimersByTimeAsync(1000));
+  expect(document.querySelector('[aria-label="Page status"]')?.textContent).toBe(
+    "Could not read this page's status",
+  );
+  queryTabs.mockResolvedValue([{ id: 9, url: 'https://example.org/' }]);
+  readPageStatus.mockClear();
+  await act(async () => vi.advanceTimersByTimeAsync(1000));
+  expect(document.querySelector('[aria-label="Page status"]')?.textContent).toBe(
+    'Subtitles are not supported on this page',
+  );
+  expect(readPageStatus).not.toHaveBeenCalled();
 });

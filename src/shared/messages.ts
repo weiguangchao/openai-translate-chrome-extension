@@ -7,6 +7,21 @@ import type { TranslateFailure } from './provider-error';
 import type { PublicSettings } from './settings';
 import type { TraceRequest } from './trace';
 
+export const PAGE_STATUSES = [
+  'disabled',
+  'site-disabled',
+  'not-configured',
+  'no-video',
+  'waiting',
+  'loading',
+  'bilingual',
+  'translation-only',
+  'original',
+  'error',
+  'unsupported-language',
+] as const;
+export type PageStatus = (typeof PAGE_STATUSES)[number];
+
 export type Reply<T> =
   | { readonly ok: true; readonly data: T }
   | { readonly ok: false; readonly failure: TranslateFailure };

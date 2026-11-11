@@ -486,6 +486,14 @@ button:hover:not(:disabled) {
 .connection-badge.connected i {
   background: #4b9d76;
 }
+.connection-badge.failed {
+  color: #ad5147;
+  background: #fff1ee;
+  border-color: #f2d8d3;
+}
+.connection-badge.failed i {
+  background: currentColor;
+}
 .api-section .section-heading {
   padding-right: 53px;
   margin-bottom: 24px;
@@ -1109,11 +1117,13 @@ button:hover:not(:disabled) {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
+  gap: 5px;
   height: 32px;
   padding: 0;
-  border: 1px solid var(--line);
-  border-radius: 8px;
+  border: 0;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  font-size: 12px;
   color: #62677b;
   transition:
     background 0.15s,
@@ -1122,6 +1132,22 @@ button:hover:not(:disabled) {
 .popup-settings:hover {
   background: #f6f5fb;
   color: var(--accent);
+}
+.popup-page-status {
+  margin: 12px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #62677b;
+}
+.popup-details {
+  margin-top: 16px;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+.popup-details summary {
+  cursor: pointer;
+  color: #62677b;
+  font-size: 12px;
 }
 .popup-power,
 .enable-panel {

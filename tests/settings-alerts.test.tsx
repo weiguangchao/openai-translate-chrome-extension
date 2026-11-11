@@ -217,3 +217,43 @@ it('uses the same dismissible error alert for provider and save failures', async
   expect(document.querySelector('.settings-alert')).toBeNull();
   expect(document.querySelector<HTMLButtonElement>('.save-button')!.disabled).toBe(false);
 });
+
+it('keeps saving independent of connection tests and retains a failed result after the alert closes', async () => {
+  let finish!: () => void;
+  vi.mocked(apiAction).mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = () => resolve('测试译文');
+      }),
+  );
+  await render();
+  expect(document.querySelector('.save-button')?.textContent).toContain('Settings saved');
+  expect(document.querySelector('[aria-label="Connection test"]')?.textContent).toBe(
+    'Not tested this session',
+  );
+  await click('.test-button');
+  expect(document.querySelector('[aria-label="Connection test"]')?.textContent).toBe('Testing…');
+  await act(async () => finish());
+  expect(document.querySelector('[aria-label="Connection test"]')?.textContent).toBe('Test passed');
+  await click('[aria-label="Enable bilingual subtitles"]');
+  await click('.save-button');
+  expect(document.querySelector('[aria-label="Connection test"]')?.textContent).toBe('Test passed');
+  vi.mocked(apiAction).mockRejectedValueOnce(new Error('Provider unavailable'));
+  await click('.test-button');
+  await advance(5000);
+  await advance(180);
+  expect(document.querySelector('.settings-alert')).toBeNull();
+  expect(document.querySelector('[aria-label="Connection test"]')?.textContent).toBe('Test failed');
+  expect(document.querySelector('.save-button')?.textContent).toContain('Settings saved');
+  await act(async () => {
+    const input = document.querySelector<HTMLInputElement>('#base-url')!;
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(
+      input,
+      'https://other.example/v1',
+    );
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  expect(document.querySelector('[aria-label="Connection test"]')?.textContent).toBe(
+    'Not tested this session',
+  );
+});
