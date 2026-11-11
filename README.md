@@ -64,3 +64,5 @@ npm run verify
 ```
 
 `npm test` 运行单元测试。完整检查前需安装 Playwright 的 Chromium。`npm run verify` 运行 lint、类型检查、测试、上架版构建和浏览器回归。`npm run build:store` 可单独构建上架版，输出目录同为 `dist/`。
+
+人工浏览器验收的用例、每次运行记录和截图见 [docs/qa/README.md](docs/qa/README.md)。
