@@ -103,5 +103,23 @@ it('discards settings replies from before pagehide and loads current settings on
   const original = document
     .querySelector('[data-subline-overlay]')!
     .shadowRoot!.querySelector<HTMLElement>('.original')!;
-  expect(original.style.fontSize).toBe('24px');
+  expect(original.style.fontSize).toBe('clamp(14px, 3.75cqw, 24px)');
+});
+
+it('reports the displayed caption state without issuing a provider request', async () => {
+  const { startContentScript } = await import('../src/core/content');
+  startContentScript(createTestPlatform);
+  await vi.advanceTimersByTimeAsync(450);
+  const respond = vi.fn();
+  const listener = runtime.onMessage.addListener.mock.calls[0][0];
+  runtime.sendMessage.mockClear();
+  listener({ type: 'page-status' }, {}, respond);
+  expect(respond).toHaveBeenLastCalledWith('bilingual');
+  expect(runtime.sendMessage).not.toHaveBeenCalled();
+  listener({ type: 'settings-updated', settings: { ...settings, translationOnly: true } });
+  listener({ type: 'page-status' }, {}, respond);
+  expect(respond).toHaveBeenLastCalledWith('translation-only');
+  listener({ type: 'settings-updated', settings: { ...settings, enabled: false } });
+  listener({ type: 'page-status' }, {}, respond);
+  expect(respond).toHaveBeenLastCalledWith('disabled');
 });

@@ -7,6 +7,7 @@ import type { ViewState } from '../shared/trace';
 import { loadingDelayMs, planRefreshSeconds } from '../shared/tuning';
 import type { ExtensionConnection } from './connection';
 import type { CaptionView, SubtitleOverlay, TranslationLine } from './overlay';
+import type { PageStatus } from '../shared/messages';
 
 export interface CaptionFrame {
   readonly text: string;
@@ -82,6 +83,29 @@ export class CaptionTranslator {
 
   get state(): ViewState {
     return VIEW_STATES[this.caption?.line.kind ?? 'none'];
+  }
+
+  get pageStatus(): PageStatus {
+    const kind = this.caption?.line.kind ?? 'none';
+    switch (kind) {
+      case 'none':
+        return 'waiting';
+      case 'loading':
+        return 'loading';
+      case 'ready':
+        return this.translationOnly() ? 'translation-only' : 'bilingual';
+      case 'repeated':
+        return 'original';
+      case 'unsupported-language':
+        return 'unsupported-language';
+      case 'failed':
+      case 'timedOut':
+        return 'error';
+      default: {
+        const exhaustive: never = kind;
+        return exhaustive;
+      }
+    }
   }
 
   hasTranslation(text: string): boolean {

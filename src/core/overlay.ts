@@ -1,6 +1,7 @@
 import { t } from '../shared/i18n';
 import { failureText } from '../shared/provider-error';
 import type { PublicSettings } from '../shared/settings';
+import { subtitleMinSize, subtitleReferenceWidth } from '../shared/tuning';
 
 const LOADING_TRANSLATION = t('翻译中', 'Translating');
 const TIMEOUT_TRANSLATION = t('接口调用超时', 'Request timed out');
@@ -71,7 +72,7 @@ export class SubtitleOverlay {
     this.host = document.createElement('div');
     this.host.dataset.sublineOverlay = '';
     this.host.style.cssText =
-      'position:absolute;inset:0;z-index:2147483646;pointer-events:none;overflow:hidden;';
+      'position:absolute;inset:0;z-index:2147483646;pointer-events:none;overflow:hidden;container-type:inline-size;';
     const shadow = this.host.attachShadow({ mode: 'open' });
     const css = document.createElement('style');
     css.textContent = OVERLAY_STYLE;
@@ -99,12 +100,12 @@ export class SubtitleOverlay {
     ] as const) {
       if (!node) continue;
       node.style.color = style.color;
-      node.style.fontSize = `${style.size}px`;
+      node.style.fontSize = `clamp(${Math.min(subtitleMinSize, style.size)}px, ${(style.size * 100) / subtitleReferenceWidth}cqw, ${style.size}px)`;
     }
     const stack = this.host?.shadowRoot?.querySelector<HTMLElement>('.stack');
     if (stack) {
       stack.style.backgroundColor = `rgba(0,0,0,${settings.backgroundOpacity / 100})`;
-      stack.style.gap = `${settings.subtitleGap}px`;
+      stack.style.gap = `min(${settings.subtitleGap}px, ${(settings.subtitleGap * 100) / subtitleReferenceWidth}cqw)`;
     }
   }
 

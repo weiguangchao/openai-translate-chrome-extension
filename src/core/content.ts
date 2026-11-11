@@ -1,4 +1,4 @@
-import type { SettingsUpdated } from '../shared/messages';
+import type { PageStatus, SettingsUpdated } from '../shared/messages';
 import type { PublicSettings } from '../shared/settings';
 import { ExtensionConnection } from './connection';
 import { CaptionController } from './controller';
@@ -19,8 +19,16 @@ export function startContentScript(createPlatform: PlatformFactory): void {
     controller = new CaptionController(createPlatform, settings, connection);
   }
 
-  function onMessage(message: Partial<SettingsUpdated>): void {
+  function onMessage(
+    message: Partial<SettingsUpdated> | { type: 'page-status' },
+    _sender: chrome.runtime.MessageSender,
+    respond: (status: PageStatus) => void,
+  ): void {
     if (!pageActive || !connection.active) return;
+    if (message.type === 'page-status') {
+      respond(controller?.pageStatus ?? 'waiting');
+      return;
+    }
     if (message.type === 'settings-updated' && message.settings) {
       if (controller) controller.update(message.settings);
       else start(message.settings);

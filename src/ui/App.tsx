@@ -55,6 +55,8 @@ import { useAlert } from './Alert';
 import { copy } from './copy';
 
 type Page = 'general' | 'appearance' | 'about';
+type ConnectionTest =
+  { kind: 'untested' } | { kind: 'testing' | 'passed' | 'failed'; fingerprint: string };
 const REPOSITORY_URL = 'https://github.com/weiguangchao/openai-translate-chrome-extension';
 const PAGES = [
   {
@@ -115,7 +117,7 @@ export function App() {
   const modelsVersion = useRef(0);
   const [manualModel, setManualModel] = useState(false);
   const [showKey, setShowKey] = useState(false);
-  const [connection, setConnection] = useState('');
+  const [connection, setConnection] = useState<ConnectionTest>({ kind: 'untested' });
   const dirty = ready && JSON.stringify(settings) !== JSON.stringify(saved);
   const current = PAGES.find((item) => item.id === page)!;
   const fingerprint = JSON.stringify([
@@ -124,7 +126,16 @@ export function App() {
     settings.apiKey,
     settings.model,
   ]);
-  const connected = connection === fingerprint;
+  const testKind =
+    connection.kind !== 'untested' && connection.fingerprint === fingerprint
+      ? connection.kind
+      : 'untested';
+  const testText = {
+    untested: t('本次尚未测试', 'Not tested this session'),
+    testing: t('测试中…', 'Testing…'),
+    passed: t('测试通过', 'Test passed'),
+    failed: t('测试失败', 'Test failed'),
+  };
   const origin = providerOrigin(settings);
   const provider = origin ? new URL(origin).host : t('你填写的 Provider', 'your provider');
   const consented = hasProviderConsent(settings);
@@ -176,6 +187,8 @@ export function App() {
 
   function update<K extends keyof Settings>(key: K, value: Settings[K]) {
     setSettings((previous) => ({ ...previous, [key]: value }));
+    if (key === 'provider' || key === 'baseUrl' || key === 'apiKey' || key === 'model')
+      setConnection({ kind: 'untested' });
     if (key === 'baseUrl' || key === 'apiKey') setModels([]);
   }
   function navigate(next: Page) {
@@ -234,6 +247,7 @@ export function App() {
     }
   }
   async function runApi(kind: 'models' | 'test') {
+    if (kind === 'test') setConnection({ kind: 'testing', fingerprint });
     try {
       if (settings.provider === 'openai' && !settings.apiKey.trim())
         throw new Error(
@@ -263,21 +277,14 @@ export function App() {
           ),
         });
       } else {
-        setConnection(
-          JSON.stringify([
-            requestSettings.provider,
-            requestSettings.baseUrl,
-            requestSettings.apiKey,
-            requestSettings.model,
-          ]),
-        );
+        setConnection({ kind: 'passed', fingerprint });
         showAlert({
           kind: 'success',
           text: t('连接测试成功', 'Connection test passed'),
         });
       }
     } catch (error) {
-      if (kind === 'test') setConnection('');
+      if (kind === 'test') setConnection({ kind: 'failed', fingerprint });
       showAlert({
         kind: 'error',
         text: error instanceof Error ? error.message : t('接口请求失败。', 'API request failed.'),
@@ -331,7 +338,7 @@ export function App() {
                 ) : (
                   <Check size={17} />
                 )}{' '}
-                {dirty ? t('保存更改', 'Save changes') : t('已保存', 'Saved')}
+                {dirty ? t('保存更改', 'Save changes') : t('设置已保存', 'Settings saved')}
               </button>
             )}
           </div>
@@ -371,13 +378,15 @@ export function App() {
                     </div>
                   </Section>
                   <Section icon={<PlugZap size={19} />} title="Provider" className="api-section">
-                    <div className={`connection-badge ${connected ? 'connected' : ''}`}>
+                    <div
+                      className={`connection-badge ${testKind === 'passed' ? 'connected' : testKind}`}
+                      role="status"
+                      aria-label={t('连接测试', 'Connection test')}
+                    >
                       <i />
-                      {connected
-                        ? t('连接正常', 'Connected')
-                        : isProviderConfigured(settings)
-                          ? t('等待测试', 'Not tested')
-                          : t('待配置', 'Not configured')}
+                      {isProviderConfigured(settings)
+                        ? testText[testKind]
+                        : t('待配置', 'Not configured')}
                     </div>
                     <fieldset disabled={Boolean(busy)}>
                       <div className="field">

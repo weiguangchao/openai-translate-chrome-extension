@@ -284,7 +284,9 @@ it('updates styles in place while a translation is pending and shows its origina
   );
   expect(document.querySelector('[data-subline-overlay]')).toBe(host);
   expect(sendMessage).toHaveBeenCalledTimes(calls);
-  expect(host?.shadowRoot?.querySelector<HTMLElement>('.original')?.style.fontSize).toBe('36px');
+  expect(host?.shadowRoot?.querySelector<HTMLElement>('.original')?.style.fontSize).toBe(
+    'clamp(14px, 5.625cqw, 36px)',
+  );
   finish({ ok: true, data: '等待后的译文' });
   await vi.advanceTimersByTimeAsync(0);
   expect(lines()).toEqual(['Still waiting.', '等待后的译文']);

@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { source, translation, withPlayer } from './harness';
+import { longCaptionParts, longTranslations } from '../tests/fixtures/long-caption';
 
 test('youtube: bilingual captions share one fitted background', async ({}, info) => {
   await withPlayer('youtube', info, async (p) => {
@@ -35,4 +36,50 @@ test('youtube: bilingual captions share one fitted background', async ({}, info)
     await expect(p.translated).toBeHidden();
     await expect(background).toBeHidden();
   });
+});
+
+test('x: captions resize with a small player without losing text or changing timing', async ({}, info) => {
+  await withPlayer(
+    'x',
+    info,
+    async (p) => {
+      await p.seek(36);
+      await p.play();
+      await p.pair(longCaptionParts[0], longTranslations[0]);
+      await p.pause();
+      const posts = p.posts.length;
+      const background = p.overlay.locator('.stack');
+      await expect(p.original).toHaveCSS('font-size', '24px');
+      await p.page.locator('#player').evaluate((node) => {
+        node.style.width = '400px';
+        node.style.height = '225px';
+      });
+      await expect(p.original).toHaveCSS('font-size', '15px');
+      await expect(p.translated).toHaveCSS('font-size', '14px');
+      await expect(background).toHaveCSS('gap', '3.75px');
+      await p.pair(longCaptionParts[0], longTranslations[0]);
+      const player = (await p.page.locator('#player').boundingBox())!;
+      const box = (await background.boundingBox())!;
+      expect(box.height).toBeLessThan(player.height / 2);
+      expect(box.x).toBeGreaterThanOrEqual(player.x);
+      expect(box.x + box.width).toBeLessThanOrEqual(player.x + player.width);
+      await p.page
+        .locator('#player')
+        .screenshot({ path: '.artifacts/product-feedback/subtitles-after.png' });
+      await p.page.getByRole('button', { name: 'Fullscreen fixture', exact: true }).click();
+      await expect(p.original).toHaveCSS('font-size', '24px');
+      await expect(p.translated).toHaveCSS('font-size', '22px');
+      await expect(background).toHaveCSS('gap', '6px');
+      await p.pair(longCaptionParts[0], longTranslations[0]);
+      await p.page.evaluate(() => document.exitFullscreen());
+      await expect(p.original).toHaveCSS('font-size', '15px');
+      await p.settings({ translation: { size: 12, color: '#FFFFFF' } });
+      await expect(p.translated).toHaveCSS('font-size', '12px');
+      expect(p.posts).toHaveLength(posts);
+      await p.seek(39.1);
+      await p.play();
+      await p.pair(longCaptionParts[1], longTranslations[1]);
+    },
+    { long: true },
+  );
 });

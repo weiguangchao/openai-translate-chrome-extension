@@ -1,4 +1,5 @@
 import { supportedLanguage } from '../shared/languages';
+import type { PageStatus } from '../shared/messages';
 import { classifySettingsChange, type PublicSettings } from '../shared/settings';
 import type { SourceMode } from './bridge/protocol';
 import { ExtensionConnection } from './connection';
@@ -108,6 +109,14 @@ export class CaptionController {
     if (change.translation) this.unmount();
     else if (change.style) this.overlay.updateStyle(settings);
     this.tick();
+  }
+
+  get pageStatus(): PageStatus {
+    if (!this.settings.enabled) return 'disabled';
+    if (!this.settings[this.platform.id]) return 'site-disabled';
+    if (!this.settings.configured) return 'not-configured';
+    if (!this.video) return 'no-video';
+    return this.translator.pageStatus;
   }
 
   destroy(): void {

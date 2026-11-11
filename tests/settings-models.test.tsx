@@ -167,7 +167,7 @@ it('shows Microsoft by default and tests without an API key or model', async () 
   await act(async () => document.querySelector<HTMLButtonElement>('.test-button')!.click());
   expect(allowApiHost).toHaveBeenCalledWith(settings);
   expect(apiAction).toHaveBeenCalledWith('test', settings);
-  expect(document.querySelector('.connection-badge')!.textContent).toContain('Connected');
+  expect(document.querySelector('.connection-badge')!.textContent).toContain('Test passed');
 });
 
 it('restores the OpenAI fields after switching away and back', async () => {
@@ -179,4 +179,17 @@ it('restores the OpenAI fields after switching away and back', async () => {
   expect(document.querySelector<HTMLInputElement>('#api-key')!.value).toBe('test-key');
   expect(document.querySelector<HTMLSelectElement>('#model')!.value).toBe('chosen-model');
   expect(document.querySelector<HTMLInputElement>('#base-url')!.value).toBe(settings.baseUrl);
+});
+
+it('requires a fresh connection test after switching providers away and back', async () => {
+  vi.mocked(apiAction).mockResolvedValue('译文');
+  await render();
+  await act(async () => document.querySelector<HTMLButtonElement>('.test-button')!.click());
+  expect(document.querySelector('[aria-label="Connection test"]')?.textContent).toBe('Test passed');
+  await chooseProvider('microsoft');
+  await chooseProvider('openai');
+  expect(document.querySelector('[aria-label="Connection test"]')?.textContent).toBe(
+    'Not tested this session',
+  );
+  expect(apiAction).toHaveBeenCalledTimes(1);
 });
