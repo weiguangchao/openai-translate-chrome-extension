@@ -31,7 +31,7 @@
 | --- | --- | --- |
 | SL-BUG-001 | TC-159-state-yt-off、TC-159-state-yt-on、TC-159-state-x-on；重开观察是 TC-159-state-reopen | 失败 |
 
-### 历史回归（25）
+### 历史回归（31）
 
 | ID | 状态 | 来源 |
 | --- | --- | --- |
@@ -60,6 +60,12 @@
 | SL-REG-023 | 历史来源待实测 | [#105](https://github.com/weiguangchao/openai-translate-chrome-extension/pull/105) |
 | SL-REG-024 | 历史来源待实测 | [#133](https://github.com/weiguangchao/openai-translate-chrome-extension/pull/133) |
 | SL-REG-025 | 历史来源待实测 | [#114](https://github.com/weiguangchao/openai-translate-chrome-extension/pull/114)、[#120](https://github.com/weiguangchao/openai-translate-chrome-extension/pull/120) |
+| SL-REG-026 | 历史来源待实测 | [#85](https://github.com/weiguangchao/openai-translate-chrome-extension/pull/85)、[#94](https://github.com/weiguangchao/openai-translate-chrome-extension/pull/94) |
+| SL-REG-027 | 历史来源待实测 | [#126](https://github.com/weiguangchao/openai-translate-chrome-extension/pull/126) |
+| SL-REG-028 | 历史来源待实测 | [#92](https://github.com/weiguangchao/openai-translate-chrome-extension/pull/92) |
+| SL-REG-029 | 历史来源待实测 | [#92](https://github.com/weiguangchao/openai-translate-chrome-extension/pull/92) |
+| SL-REG-030 | 历史来源待实测 | [#157](https://github.com/weiguangchao/openai-translate-chrome-extension/pull/157) |
+| SL-REG-031 | 历史来源待实测 | [#105](https://github.com/weiguangchao/openai-translate-chrome-extension/pull/105) |
 
 ## SL-BUG-001 同一 popup 展开期间，状态提示与开关和画面不一致
 
@@ -1113,7 +1119,7 @@ Provider 超时后，整条翻译队列暂停约 15 秒再重试该批，此时�
 
 **来源**
 
-[#13](https://github.com/weiguangchao/openai-translate-chrome-extension/pull/13)，[`2f2b63c9a50a7619eab11d94916f043560c62ab6`](https://github.com/weiguangchao/openai-translate-chrome-extension/commit/2f2b63c9a50a7619eab11d94916f043560c62ab6)。同一验收的后续收紧：[`cd21051dce1e960eb86c27a3fb5ebf036720adc2`](https://github.com/weiguangchao/openai-translate-chrome-extension/commit/cd21051dce1e960eb86c27a3fb5ebf036720adc2)。当前测试：`tests/prefetch.test.ts` 的 “shows timeout/500 without its source, skips that batch, and translates the later segment”。
+[#13](https://github.com/weiguangchao/openai-translate-chrome-extension/pull/13)，[`2f2b63c9a50a7619eab11d94916f043560c62ab6`](https://github.com/weiguangchao/openai-translate-chrome-extension/commit/2f2b63c9a50a7619eab11d94916f043560c62ab6)。同一验收的后续收紧：[`cd21051dce1e960eb86c27a3fb5ebf036720adc2`](https://github.com/weiguangchao/openai-translate-chrome-extension/commit/cd21051dce1e960eb86c27a3fb5ebf036720adc2)，以及 [#92](https://github.com/weiguangchao/openai-translate-chrome-extension/pull/92) 的 [`313e44377d91f7f0c1dd4fad9eeb2ec3b0f4687d`](https://github.com/weiguangchao/openai-translate-chrome-extension/commit/313e44377d91f7f0c1dd4fad9eeb2ec3b0f4687d)。当前测试：`tests/prefetch.test.ts` 的 “shows timeout/500 without its source, skips that batch, and translates the later segment”；`tests/queue.test.ts` 的 “fails one caption without retrying and keeps its neighbors cached”（空回复的中间句为失败，前后句仍缓存，不再请求中间句）。失败句的黄色呈现见 SL-REG-026，不在本条重复编号。
 
 **步骤完整度**
 
@@ -1292,7 +1298,7 @@ OpenAI 模式下，Microsoft 的临时译文被写进长期翻译缓存。OpenAI
 
 **来源**
 
-[`1c792b3619bdb93f5df34036370046962ff0f8ed`](https://github.com/weiguangchao/openai-translate-chrome-extension/commit/1c792b3619bdb93f5df34036370046962ff0f8ed)，[`0c11f358ae2b223f6a6940d51539c51aa0b70da1`](https://github.com/weiguangchao/openai-translate-chrome-extension/commit/0c11f358ae2b223f6a6940d51539c51aa0b70da1)。当前测试：`tests/background.test.ts` 的 “keeps a Microsoft translation only in temporary session entries until OpenAI finishes” 与 “keeps Microsoft enabled when a visible result finishes during a prefetch lookup”。
+[`1c792b3619bdb93f5df34036370046962ff0f8ed`](https://github.com/weiguangchao/openai-translate-chrome-extension/commit/1c792b3619bdb93f5df34036370046962ff0f8ed)，[`0c11f358ae2b223f6a6940d51539c51aa0b70da1`](https://github.com/weiguangchao/openai-translate-chrome-extension/commit/0c11f358ae2b223f6a6940d51539c51aa0b70da1)。当前测试：`tests/background.test.ts` 的 “keeps a Microsoft translation only in temporary session entries until OpenAI finishes”、“keeps Microsoft enabled when a visible result finishes during a prefetch lookup”，以及 “keeps Microsoft enabled after an abandoned OpenAI/Microsoft cache lookup finishes”。
 
 **步骤完整度**
 
@@ -1440,6 +1446,223 @@ PR 记录用抓到的 154 条 cue 做了打包回放，并写明隔离环境里�
 
 历史来源推导、待补充。PR 写了现象，并称当时的真实请求没有多加省略号。那不是本轮人工浏览，也不能只凭提示词测试把本条标成通过。
 
+## SL-REG-026 失败时字幕带上前缀或仍露出原文
+
+- 优先级：未在来源中单列
+- 类型：功能缺陷
+- 发现版本：[`8d5caac2`](https://github.com/weiguangchao/openai-translate-chrome-extension/commit/8d5caac23e6e7ebd1cfa9bd61e4316dcb1c1c682) 之前。引入版本未单独立档。
+- 最近实测结果：未测。[2026-11-11 运行](runs/2026-11-11-dba68d08.md) 没有制造 Provider 失败。
+- 状态：历史来源待实测
+
+**问题**
+
+Provider 失败时，译文位置的样式和原文不一致：可能带上 Subline 前缀，或继续露出原文。现行呈现是只显示失败文本，藏起原文，文字为黄色，字号仍用译文设置。
+
+**前提**
+
+可以让当前句的翻译超时、返回 HTTP 错误，或返回非法内容。
+
+**步骤**
+
+1. 播放到一句会失败的字幕。
+2. 看译文位置的文字、颜色，以及原文行是否还在。
+3. 把译文颜色和字号改成别的值，再看失败行。
+
+**验收**
+
+- [ ] 译文位置只有失败文本，没有 Subline 前缀
+- [ ] 原文行不显示
+- [ ] 失败文字为黄色 `rgb(255, 204, 0)`，改译文颜色不会把它改掉
+- [ ] 字号跟随译文设置
+
+**来源**
+
+[#85](https://github.com/weiguangchao/openai-translate-chrome-extension/pull/85)，[`8d5caac23e6e7ebd1cfa9bd61e4316dcb1c1c682`](https://github.com/weiguangchao/openai-translate-chrome-extension/commit/8d5caac23e6e7ebd1cfa9bd61e4316dcb1c1c682)。浏览器锁定是 [#94](https://github.com/weiguangchao/openai-translate-chrome-extension/pull/94)，[`bd28ef5ec3a014b5abfbdf85cad122437ed531fe`](https://github.com/weiguangchao/openai-translate-chrome-extension/commit/bd28ef5ec3a014b5abfbdf85cad122437ed531fe)，与 #85 是同一呈现，不另编号。当前测试：`tests/controller.test.ts` 的 “shows only the error text for $failure without its source or a prefix”；`e2e/provider.spec.ts` 的 “youtube: an upstream 500 uses the subtitle error presentation”。队列是否继续见 SL-REG-016。
+
+**步骤完整度**
+
+端到端测试覆盖了 YouTube 上的 HTTP 500 和空回复。超时、401、429 的「只显示错误文本、藏起原文」来自控制器测试。
+
+## SL-REG-027 seek 结束后落点还要再等一会儿才请求
+
+- 优先级：未在来源中单列
+- 类型：功能缺陷
+- 发现版本：[`f29fb5c7`](https://github.com/weiguangchao/openai-translate-chrome-extension/commit/f29fb5c70a8deaf6ac653d7229ca3ee510365a55) 之前。引入版本未单独立档。
+- 最近实测结果：未测。TC-YT-playback 的 seek 没有测量落点请求是否立刻发出。
+- 状态：历史来源待实测
+
+**问题**
+
+`seeked` 之后，落点句子还要再空等一截才开始翻译。迟到的旧句译文还可能盖住落点。
+
+**前提**
+
+视频有较后面的字幕。可以在已有请求在途时拖动进度。
+
+**步骤**
+
+1. 开始播放，等到已经发出前面几句的请求。
+2. 拖到后面的一句并松开。
+3. 看落点是否马上出现译文，以及随后返回的旧句译文会不会替换它。
+
+**验收**
+
+- [ ] `seeked` 之后马上请求落点，不再额外空等
+- [ ] 落点译文显示后，迟到的旧句译文不替换它
+
+**来源**
+
+[#126](https://github.com/weiguangchao/openai-translate-chrome-extension/pull/126)，[`f29fb5c70a8deaf6ac653d7229ca3ee510365a55`](https://github.com/weiguangchao/openai-translate-chrome-extension/commit/f29fb5c70a8deaf6ac653d7229ca3ee510365a55)。当前测试：`tests/prefetch.test.ts` 的 “lets the opening window finish during a scrub and requests only the cues at the new position”。已发出的请求不被取消是 SL-REG-013。普通 timeupdate 被当成 seek 是 SL-REG-014。
+
+**步骤完整度**
+
+历史来源推导。测试在 `seeked` 后的 0 毫秒断言落点请求已经发出，并断言迟到的 “Cue 1.” 译文不替换 “After seeking.”。
+
+## SL-REG-028 暂停或继续的消息丢失后，预取不再恢复
+
+- 优先级：未在来源中单列
+- 类型：功能缺陷
+- 发现版本：[`2f57af52`](https://github.com/weiguangchao/openai-translate-chrome-extension/commit/2f57af527557fdaae455b18fedd5bd32b8000d43) 之前。引入版本未单独立档。
+- 最近实测结果：未测。
+- 状态：历史来源待实测
+
+**问题**
+
+暂停或继续播放时，发给后台的 `prefetch-pause` / `prefetch-resume` 如果丢掉、没有回复，或回复失败，预取就停在错误状态。暂停期间已经发出的请求也不该被取消。
+
+**前提**
+
+播放中已有在途翻译。可以暂停再继续。
+
+**步骤**
+
+1. 在有字幕的视频上开始播放。
+2. 暂停。若能模拟这一次暂停消息失败，用那种方式暂停。
+3. 看已经发出的请求是否仍会返回译文，以及暂停期间是否不再发新请求。
+4. 继续播放，看后面的句子是否重新开始翻译。
+
+**验收**
+
+- [ ] 暂停消息失败时，已经发出的请求不被取消，当前句仍能显示译文
+- [ ] 暂停期间不再为后面的句子发新请求
+- [ ] 继续播放后，即使继续消息第一次失败，后面的句子仍会开始翻译
+
+**来源**
+
+[#92](https://github.com/weiguangchao/openai-translate-chrome-extension/pull/92)，[`2f57af527557fdaae455b18fedd5bd32b8000d43`](https://github.com/weiguangchao/openai-translate-chrome-extension/commit/2f57af527557fdaae455b18fedd5bd32b8000d43)。当前测试：`tests/prefetch.test.ts` 的 “finishes in-flight prefetch while paused and recovers pause and resume, control fault=%s”。故障包括消息丢掉、端口在回复前关闭、空回复和失败回复。
+
+**步骤完整度**
+
+历史来源推导。人工环境里不容易稳定制造「消息端口关闭」。可观察的部分是：暂停时当前句的在途译文仍出现，继续后后面的句子会译出。
+
+## SL-REG-029 存坏的字幕样式把其他设置一起丢掉
+
+- 优先级：未在来源中单列
+- 类型：功能缺陷
+- 发现版本：[`2e77981b`](https://github.com/weiguangchao/openai-translate-chrome-extension/commit/2e77981b325ce3c540c0a845ca3e33358fb6824c) 之前。引入版本未单独立档。
+- 最近实测结果：未测。TC-160-style 只改过合法颜色，没有写入损坏的样式。
+- 状态：历史来源待实测
+
+**问题**
+
+存储里的原文或译文样式如果不是合法的颜色和字号，读取时会把模型等其他设置一起弄丢，或把坏值当成有效样式。
+
+**前提**
+
+扩展存储里该侧样式是数组、空对象、字符串字号，或整个样式为 null。模型字段另有值。
+
+**步骤**
+
+1. 在存储里放一份损坏的原文或译文样式，并保留一个已知模型名。
+2. 重新打开设置页和 popup。
+3. 再写入一份合法的颜色和字号，重新打开。
+
+**验收**
+
+- [ ] 损坏样式读出来使用默认样式
+- [ ] 模型等其他字段仍在
+- [ ] 合法的颜色和数字字号会按原值读回
+
+**来源**
+
+[#92](https://github.com/weiguangchao/openai-translate-chrome-extension/pull/92)，[`2e77981b325ce3c540c0a845ca3e33358fb6824c`](https://github.com/weiguangchao/openai-translate-chrome-extension/commit/2e77981b325ce3c540c0a845ca3e33358fb6824c)。当前测试：`tests/settings-storage.test.ts` 的 “reads malformed original/translation styles using defaults without losing other settings”。
+
+**步骤完整度**
+
+历史来源推导、待补充。怎样在不手改扩展存储的情况下制造损坏样式，测试没有给出点击路径。
+
+## SL-REG-030 popup 把无效状态回复或不支持的页面显示错
+
+- 优先级：未在来源中单列
+- 类型：功能缺陷
+- 发现版本：[`c271817f`](https://github.com/weiguangchao/openai-translate-chrome-extension/commit/c271817f3da76422213bde6c939d4b33600a173d) 之前。该提交已包含在本轮测试的 `dba68d08` 里。引入版本未单独立档。
+- 最近实测结果：未测。[2026-11-11 运行](runs/2026-11-11-dba68d08.md) 的 popup 都是有效状态，不能把本条标成通过。
+- 状态：历史来源待实测
+
+**问题**
+
+页面状态回复不是合法结构时，popup 仍可能显示成正在显示双语。打不开内容脚本的视频页，和根本不支持字幕的网页，也会共用一句读失败。本条不是 SL-BUG-001：那里的开关和画面是对的，只是提示没跟上。
+
+**前提**
+
+能打开 popup。准备一个 YouTube 或 X 视频页，以及一个扩展不支持的页面，例如 `https://example.org/`。
+
+**步骤**
+
+1. 在视频页打开 popup，确认能看到与画面一致的状态。这一步只是对照。
+2. 让页面状态回复变成空、只有 `{ enabled: true }`，或字符串 `ready`。看 popup 文案。
+3. 打开 `https://example.org/`，再看 popup。
+4. 回到视频页，在内容脚本不可达时再看 popup。
+
+**验收**
+
+- [ ] 无效回复显示 Could not read this page's status，而不是 Showing bilingual subtitles
+- [ ] 不支持的网页显示 Subtitles are not supported on this page，并且不再向该页要状态
+- [ ] 支持的网页但内容脚本不可达时，显示 Could not read this page's status
+
+**来源**
+
+[#157](https://github.com/weiguangchao/openai-translate-chrome-extension/pull/157)，[`c271817f3da76422213bde6c939d4b33600a173d`](https://github.com/weiguangchao/openai-translate-chrome-extension/commit/c271817f3da76422213bde6c939d4b33600a173d)。当前测试：`tests/popup.test.tsx` 的 “does not infer a working page from an invalid status reply” 与 “refreshes the current tab status and distinguishes unsupported pages from an unreachable content script”。
+
+**步骤完整度**
+
+不支持页面和不可达内容脚本可以人工做。无效回复的三种形状来自测试，人工步骤待补充。
+
+## SL-REG-031 X 在没有时间轴时翻译了未选中的字幕轨
+
+- 优先级：未在来源中单列
+- 类型：功能缺陷
+- 发现版本：[#105](https://github.com/weiguangchao/openai-translate-chrome-extension/pull/105) 之前。引入版本未单独立档。
+- 最近实测结果：未测。TC-158-X-small 没有核对选中的语言轨。
+- 状态：历史来源待实测
+
+**问题**
+
+X 的播放列表给不出字幕时间轴时，隐藏的另一条语言轨会被拿去翻译。应使用选中的语言。没有 HLS 控制器时预取后面的原生字幕是 SL-REG-023，不在本条重复。
+
+**前提**
+
+X 视频有多条字幕轨，其中一条正在使用，另一条是隐藏的其他语言。播放列表不能提供时间轴。
+
+**步骤**
+
+1. 打开该视频，选中英文字幕，并留下一条隐藏的中文轨。
+2. 开启双语。
+3. 看请求和画面用的是英文还是隐藏的中文。
+
+**验收**
+
+- [ ] 只翻译选中的英文，不翻译隐藏的中文
+- [ ] 画面原文是选中的那句
+
+**来源**
+
+[#105](https://github.com/weiguangchao/openai-translate-chrome-extension/pull/105)，[`3c536242d336ae5e2cadec20351dc360604c6a91`](https://github.com/weiguangchao/openai-translate-chrome-extension/commit/3c536242d336ae5e2cadec20351dc360604c6a91)。当前测试：`tests/x.test.ts` 的 “uses the selected HLS language for hidden live cues when the playlist cannot provide a timeline”。
+
+**步骤完整度**
+
+历史来源推导。测试构造了隐藏的「其他字幕」和选中的 “Live cue”，并断言只请求后者。人工上如何确认播放列表没有时间轴，待补充。
+
 ## 审阅后未单立
 
 下面这些看过标题、PR 正文或测试，但没有另立用例。
@@ -1449,4 +1672,7 @@ PR 记录用抓到的 154 条 cue 做了打包回放，并写明隔离环境里�
 - 倍速下保留已译字幕的测试来自覆盖整合 `0dee9523`，没有找到单独的缺陷修复说明。SL-REG-014 只覆盖「时间跳动被当成 seek」。
 - 已中止的请求仍占用发送名额（`37f8dbb`）：传输层测试，没有人工步骤。
 - `d16c44e` 曾让一批里的坏结果单独重试、邻居照常公布。现行规则是坏回复整批失败且不重试。旧验收已不适用，不立为当前回归。
-- 日语分句的 PR 标题见过（[#115](https://github.com/weiguangchao/openai-translate-chrome-extension/pull/115)、[#117](https://github.com/weiguangchao/openai-translate-chrome-extension/pull/117)）。这次没有读到可复跑步骤，不凭标题编号。
+- 日语分句见过 [#115](https://github.com/weiguangchao/openai-translate-chrome-extension/pull/115) 和 [#117](https://github.com/weiguangchao/openai-translate-chrome-extension/pull/117)。当前 `tests/segmenter.test.ts` 与 `tests/subtitle-sentences.test.ts` 里已经没有日语断言，不凭旧标题编号。
+- [#118](https://github.com/weiguangchao/openai-translate-chrome-extension/pull/118) 只断言提示词里禁止自行添加破折号，没有画面步骤，不单立。省略号仍是 SL-REG-025，并标明待补充。
+- [#111](https://github.com/weiguangchao/openai-translate-chrome-extension/pull/111) 把每秒发送次数从 2 调到 3，没有单独的失败画面。
+- [#108](https://github.com/weiguangchao/openai-translate-chrome-extension/pull/108) 调整的是在途请求还能不能继续发送。当前测试没有写出用户看见的停顿，不单立。
