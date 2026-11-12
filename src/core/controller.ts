@@ -79,6 +79,7 @@ export class CaptionController {
     createPlatform: PlatformFactory,
     settings: PublicSettings,
     connection?: ExtensionConnection,
+    private onStatus?: (status: PageStatus) => void,
   ) {
     this.settings = settings;
     this.connection = connection ?? new ExtensionConnection(() => this.destroy());
@@ -165,6 +166,7 @@ export class CaptionController {
     this.advance(completedSeek);
     if (!this.destroyed && this.video)
       this.trace.note(this.video, this.shown, this.translator.state);
+    if (!this.destroyed) this.onStatus?.(this.pageStatus);
   }
 
   private advance(completedSeek: boolean): void {

@@ -1,40 +1,63 @@
 import { expect, test } from '@playwright/test';
 import { source, translation, withPlayer } from './harness';
 
-test('x: popup shows the live page state and keeps model details secondary', async ({}, info) => {
-  await withPlayer('x', info, async (p) => {
-    await p.play();
-    await p.pair(source, translation);
-    await p.pause();
-    await p.settingsPage.reload();
-    const status = p.settingsPage.getByRole('status', { name: 'Page status' });
-    await expect(status).toHaveText('Showing bilingual subtitles');
-    await expect(p.settingsPage.getByRole('button', { name: 'Settings', exact: true })).toHaveText(
-      'Settings',
-    );
-    await expect(p.settingsPage.locator('.popup-model')).toBeHidden();
-    await expect(p.settingsPage.locator('.popup-usage')).toBeHidden();
-    await p.settingsPage
-      .locator('.popup')
-      .screenshot({ path: '.artifacts/product-feedback/popup-after.png' });
-    await p.settingsPage.getByText('Model and usage', { exact: true }).click();
-    await expect(p.settingsPage.locator('.popup-model-id')).toHaveText('e2e-fixed-model');
-    await expect(p.settingsPage.locator('.popup-usage')).toBeVisible();
-    await p.settings({ translationOnly: true });
-    await expect(status).toHaveText('Showing translated subtitles');
-    await p.settings({ enabled: false });
-    await expect(status).toHaveText('Subtitles are off');
-    await p.settings({ enabled: true, translationOnly: false });
-    await expect(status).toHaveText('Showing bilingual subtitles');
-    const posts = p.posts.length;
-    await p.seek(20);
-    await expect(status).toHaveText('Waiting for captions');
-    expect(p.posts).toHaveLength(posts);
-    await p.page.goto('https://example.org/');
-    await expect(status).toHaveText('Subtitles are not supported on this page');
-    await p.page.goto(p.url);
+for (const platform of ['youtube', 'x'] as const) {
+  test(`${platform}: popup follows captions, quick controls, and active tabs without reopening`, async ({}, info) => {
+    await withPlayer(platform, info, async (p) => {
+      await p.play();
+      await p.pair(source, translation);
+      await p.pause();
+      await p.settingsPage.reload();
+      const status = p.settingsPage.getByRole('status', { name: 'Page status' });
+      await expect(status).toHaveText('Showing bilingual subtitles');
+      await expect(
+        p.settingsPage.getByRole('button', { name: 'Settings', exact: true }),
+      ).toHaveText('Settings');
+      await expect(p.settingsPage.locator('.popup-model')).toBeHidden();
+      await expect(p.settingsPage.locator('.popup-usage')).toBeHidden();
+      await p.settingsPage
+        .locator('.popup')
+        .screenshot({ path: `.artifacts/product-feedback/popup-${platform}-after.png` });
+      await p.settingsPage.getByText('Model and usage', { exact: true }).click();
+      await expect(p.settingsPage.locator('.popup-model-id')).toHaveText('e2e-fixed-model');
+      await expect(p.settingsPage.locator('.popup-usage')).toBeVisible();
+      const translationOnly = p.settingsPage.getByRole('checkbox', {
+        name: 'Show translation only',
+      });
+      const enabled = p.settingsPage.getByRole('switch', { name: 'Enable bilingual subtitles' });
+      await translationOnly.click();
+      await expect(translationOnly).toBeChecked();
+      await expect(p.original).toBeHidden();
+      await expect(p.translated).toHaveText(translation);
+      await expect(status).toHaveText('Showing translated subtitles');
+      await enabled.click();
+      await expect(p.overlay).toHaveCount(0);
+      await expect(status).toHaveText('Subtitles are off');
+      await enabled.click();
+      await expect(p.translated).toHaveText(translation);
+      await expect(status).toHaveText('Showing translated subtitles');
+      await translationOnly.click();
+      await expect(translationOnly).not.toBeChecked();
+      await p.pair(source, translation);
+      await expect(status).toHaveText('Showing bilingual subtitles');
+      const elsewhere = await p.context.newPage();
+      await elsewhere.goto('https://example.org/');
+      await expect(status).toHaveText('Subtitles are not supported on this page');
+      await p.page.bringToFront();
+      await expect(status).toHaveText('Showing bilingual subtitles');
+      await elsewhere.close();
+      const posts = p.posts.length;
+      await p.seek(20);
+      await expect(status).toHaveText('Waiting for captions');
+      expect(p.posts).toHaveLength(posts);
+      await p.page.goto('https://example.org/');
+      await expect(status).toHaveText('Subtitles are not supported on this page');
+      await p.page.goto(p.url);
+      await p.pair(source, translation);
+      await expect(status).toHaveText('Showing bilingual subtitles');
+    });
   });
-});
+}
 
 test('settings: connection results describe real tests independently of saving', async ({}, info) => {
   await withPlayer('x', info, async (p) => {
