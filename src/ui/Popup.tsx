@@ -121,34 +121,55 @@ export function Popup() {
       return;
     }
     let active = true;
-    let timer: ReturnType<typeof setTimeout> | undefined;
+    let revision = 0;
+    let tabId: number | undefined;
+    let port: chrome.runtime.Port | undefined;
     async function refresh() {
-      let next: PopupStatus;
+      const requested = ++revision;
+      const previous = port;
+      port = undefined;
+      previous?.disconnect();
+      setPageStatus('checking');
       try {
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-        if (!platformForUrl(tab?.url)) next = 'unsupported-page';
-        else if (tab.id === undefined) next = 'unavailable';
+        if (!active || requested !== revision) return;
+        tabId = tab?.id;
+        if (!platformForUrl(tab?.url)) setPageStatus('unsupported-page');
+        else if (tab.id === undefined) setPageStatus('unavailable');
         else {
-          const response: unknown = await chrome.tabs.sendMessage(
-            tab.id,
-            { type: 'page-status' },
-            { frameId: 0 },
-          );
-          next = PAGE_STATUSES.find((status) => status === response) ?? 'unavailable';
+          const subscription = chrome.tabs.connect(tab.id, { name: 'page-status', frameId: 0 });
+          port = subscription;
+          subscription.onMessage.addListener((response: unknown) => {
+            if (active && port === subscription)
+              setPageStatus(PAGE_STATUSES.find((status) => status === response) ?? 'unavailable');
+          });
+          subscription.onDisconnect.addListener(() => {
+            void chrome.runtime.lastError;
+            if (active && port === subscription) {
+              port = undefined;
+              setPageStatus('unavailable');
+            }
+          });
         }
       } catch {
-        next = 'unavailable';
+        if (active && requested === revision) setPageStatus('unavailable');
       }
-      if (!active) return;
-      setPageStatus(next);
-      timer = setTimeout(() => void refresh(), 1000);
     }
+    const onActivated = () => void refresh();
+    function onUpdated(id: number, changes: chrome.tabs.TabChangeInfo) {
+      if (id === tabId && (changes.url !== undefined || changes.status === 'complete'))
+        void refresh();
+    }
+    chrome.tabs.onActivated.addListener(onActivated);
+    chrome.tabs.onUpdated.addListener(onUpdated);
     void refresh();
     return () => {
       active = false;
-      clearTimeout(timer);
+      chrome.tabs.onActivated.removeListener(onActivated);
+      chrome.tabs.onUpdated.removeListener(onUpdated);
+      port?.disconnect();
     };
-  }, [settings]);
+  }, []);
 
   useEffect(() => {
     let active = true;

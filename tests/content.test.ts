@@ -2,12 +2,14 @@ import { afterEach, beforeEach, expect, it, vi, type Mock } from 'vitest';
 import { createTestPlatform } from './fixtures/platform';
 import { publicSettings } from '../src/shared/settings';
 import { consentedSettings } from './fixtures/settings';
+import { createChromeEvent } from './fixtures/chrome-event';
 
 const settings = publicSettings({ ...consentedSettings, apiKey: 'key', model: 'model' });
 let runtime: {
   id: string | undefined;
   sendMessage: Mock<(message: { type: string }) => Promise<unknown>>;
   onMessage: { addListener: ReturnType<typeof vi.fn> };
+  onConnect: { addListener: ReturnType<typeof vi.fn> };
 };
 
 beforeEach(() => {
@@ -29,6 +31,7 @@ beforeEach(() => {
       }),
     ),
     onMessage: { addListener: vi.fn() },
+    onConnect: { addListener: vi.fn() },
   };
   vi.stubGlobal('chrome', { runtime });
 });
@@ -106,20 +109,34 @@ it('discards settings replies from before pagehide and loads current settings on
   expect(original.style.fontSize).toBe('clamp(14px, 3.75cqw, 24px)');
 });
 
-it('reports the displayed caption state without issuing a provider request', async () => {
+it('streams the displayed caption state while the popup stays connected', async () => {
   const { startContentScript } = await import('../src/core/content');
   startContentScript(createTestPlatform);
+  const port = {
+    name: 'page-status',
+    postMessage: vi.fn(),
+    onDisconnect: createChromeEvent<[]>(),
+  };
+  runtime.onConnect.addListener.mock.calls[0][0](port);
+  expect(port.postMessage).toHaveBeenLastCalledWith('waiting');
   await vi.advanceTimersByTimeAsync(450);
-  const respond = vi.fn();
+  expect(translated()).toBe('第一句译文');
+  expect(port.postMessage).toHaveBeenLastCalledWith('bilingual');
   const listener = runtime.onMessage.addListener.mock.calls[0][0];
-  runtime.sendMessage.mockClear();
-  listener({ type: 'page-status' }, {}, respond);
-  expect(respond).toHaveBeenLastCalledWith('bilingual');
-  expect(runtime.sendMessage).not.toHaveBeenCalled();
   listener({ type: 'settings-updated', settings: { ...settings, translationOnly: true } });
-  listener({ type: 'page-status' }, {}, respond);
-  expect(respond).toHaveBeenLastCalledWith('translation-only');
+  expect(port.postMessage).toHaveBeenLastCalledWith('translation-only');
+  expect(translated()).toBe('第一句译文');
   listener({ type: 'settings-updated', settings: { ...settings, enabled: false } });
-  listener({ type: 'page-status' }, {}, respond);
-  expect(respond).toHaveBeenLastCalledWith('disabled');
+  expect(port.postMessage).toHaveBeenLastCalledWith('disabled');
+  expect(document.querySelector('[data-subline-overlay]')).toBeNull();
+  listener({ type: 'settings-updated', settings });
+  expect(port.postMessage).toHaveBeenLastCalledWith('waiting');
+  await vi.advanceTimersByTimeAsync(450);
+  expect(translated()).toBe('第一句译文');
+  expect(port.postMessage).toHaveBeenLastCalledWith('bilingual');
+  port.onDisconnect.emit();
+  port.postMessage.mockClear();
+  listener({ type: 'settings-updated', settings: { ...settings, enabled: false } });
+  await vi.advanceTimersByTimeAsync(150);
+  expect(port.postMessage).not.toHaveBeenCalled();
 });
