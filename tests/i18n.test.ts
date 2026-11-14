@@ -25,16 +25,16 @@ it.each([
 it.each([
   {
     language: 'zh',
-    settingsText: ['常规设置', '测试连接'],
+    settingsText: ['常规设置', '正在读取设置…'],
     popupText: ['启用双语字幕', '简体中文'],
   },
   {
     language: 'en-US',
-    settingsText: ['General', 'Test connection'],
+    settingsText: ['General', 'Loading settings…'],
     popupText: ['Enable bilingual subtitles', 'Simplified Chinese'],
   },
 ])(
-  'renders the settings page and popup in the $language UI language',
+  'renders the initial settings page and popup in the $language UI language',
   async ({ language, settingsText, popupText }) => {
     vi.stubGlobal('navigator', { language });
     const { renderToStaticMarkup } = await import('react-dom/server');

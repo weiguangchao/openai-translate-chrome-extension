@@ -3,7 +3,7 @@ import { LANGUAGES } from '../shared/languages';
 import { PAGE_STATUSES, type PageStatus } from '../shared/messages';
 import { platformForUrl } from '../shared/platforms';
 import { useEffect, useState } from 'react';
-import { Settings2, Subtitles } from 'lucide-react';
+import { ChevronDown, CircleAlert, Settings2, Subtitles } from 'lucide-react';
 import {
   DEFAULT_SETTINGS,
   hasProviderConsent,
@@ -46,18 +46,20 @@ function PopupLanguage({
   value,
   onChange,
   ready,
+  placeholder,
 }: {
   id: string;
   label: string;
   value: string;
   onChange: (value: string) => void;
   ready: boolean;
+  placeholder: string;
 }) {
   return (
     <div className="popup-language">
       <label htmlFor={id}>{label}</label>
       <Select id={id} value={ready ? value : ''} onChange={onChange}>
-        {!ready && <option value="">{t('读取中…', 'Loading…')}</option>}
+        {!ready && <option value="">{placeholder}</option>}
         {LANGUAGES.map((language) => (
           <option key={language.value} value={language.value}>
             {language.label}
@@ -68,7 +70,15 @@ function PopupLanguage({
   );
 }
 
-function PopupTokens({ usage, ready }: { usage: TokenUsage; ready: boolean }) {
+function PopupTokens({
+  usage,
+  ready,
+  placeholder,
+}: {
+  usage: TokenUsage;
+  ready: boolean;
+  placeholder: string;
+}) {
   const total = tokenTotal(usage);
   const parts = [
     [t('输入', 'Input'), usage.input, 'popup-usage-input'],
@@ -84,10 +94,10 @@ function PopupTokens({ usage, ready }: { usage: TokenUsage; ready: boolean }) {
         aria-label={
           ready
             ? t(`总共 ${formatExactTokens(total)}`, `Total ${formatExactTokens(total)}`)
-            : t('读取中', 'Loading')
+            : placeholder
         }
       >
-        {ready ? formatTokenCount(total) : t('读取中…', 'Loading…')}
+        {ready ? formatTokenCount(total) : placeholder}
       </p>
       <dl className="popup-usage-parts">
         {parts.map(([label, value, className]) => (
@@ -96,7 +106,7 @@ function PopupTokens({ usage, ready }: { usage: TokenUsage; ready: boolean }) {
             <dd
               className={className}
               title={ready ? formatExactTokens(value) : undefined}
-              aria-label={ready ? formatExactTokens(value) : t('读取中', 'Loading')}
+              aria-label={ready ? formatExactTokens(value) : placeholder}
             >
               {ready ? formatTokenCount(value) : '—'}
             </dd>
@@ -110,7 +120,8 @@ function PopupTokens({ usage, ready }: { usage: TokenUsage; ready: boolean }) {
 export function Popup() {
   const [settings, setSettings] = useState<Settings>(structuredClone(DEFAULT_SETTINGS));
   const [usage, setUsage] = useState<TokenUsage>({ input: 0, output: 0, cache: 0 });
-  const [ready, setReady] = useState(false);
+  const [loadState, setLoadState] = useState<'loading' | 'ready' | 'error'>('loading');
+  const ready = loadState === 'ready';
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [pageStatus, setPageStatus] = useState<PopupStatus>('checking');
@@ -185,13 +196,15 @@ export function Popup() {
         if (!active) return;
         setSettings(value);
         if (!seen) setUsage(tokens);
-        setReady(true);
+        setLoadState('ready');
       })
       .catch(() => {
-        if (active)
+        if (active) {
+          setLoadState('error');
           setError(
             t('无法读取设置，请重新打开扩展。', 'Could not load settings. Reopen the extension.'),
           );
+        }
       });
     return () => {
       active = false;
@@ -226,12 +239,14 @@ export function Popup() {
   }
 
   const configured = isProviderConfigured(settings);
+  const placeholder =
+    loadState === 'error' ? t('读取失败', 'Could not load') : t('读取中…', 'Loading…');
 
   return (
     <main
       className="popup"
       aria-label={t('Subline 控制面板', 'Subline controls')}
-      aria-busy={!ready || busy}
+      aria-busy={loadState === 'loading' || busy}
     >
       <header className="popup-header">
         <Logo small />
@@ -246,15 +261,22 @@ export function Popup() {
         </button>
       </header>
 
-      <p className="popup-page-status" role="status" aria-label={t('本页状态', 'Page status')}>
-        {STATUS_TEXT[pageStatus]}
-      </p>
-
       <section className={`popup-power ${ready && settings.enabled ? 'is-enabled' : ''}`}>
         <span className="popup-power-icon">
           <Subtitles size={20} aria-hidden />
         </span>
-        <h1>{t('双语字幕', 'Bilingual subtitles')}</h1>
+        <div className="popup-power-text">
+          <h1>{t('双语字幕', 'Bilingual subtitles')}</h1>
+          <p
+            className="popup-page-status"
+            data-status={pageStatus}
+            role="status"
+            aria-label={t('本页状态', 'Page status')}
+          >
+            {pageStatus === 'error' && <CircleAlert size={13} aria-hidden />}
+            {STATUS_TEXT[pageStatus]}
+          </p>
+        </div>
         <fieldset disabled={!ready || busy}>
           <Toggle
             label={copy.enableSubtitles}
@@ -267,14 +289,15 @@ export function Popup() {
       <fieldset
         className="popup-languages"
         disabled={!ready || busy}
-        aria-label={t('翻译语言', 'Translation language')}
+        aria-label={copy.translationLanguage}
       >
         <PopupLanguage
           id="popup-target-language"
-          label={copy.target}
+          label={copy.translationLanguage}
           value={settings.targetLanguage}
           onChange={(targetLanguage) => void update({ targetLanguage })}
           ready={ready}
+          placeholder={placeholder}
         />
         <label className="popup-translation-only">
           <input
@@ -297,18 +320,21 @@ export function Popup() {
       {ready && configured && !hasProviderConsent(settings) && (
         <p className="popup-setup-hint">
           {t(
-            '请在设置中同意将字幕发送给 Provider。',
+            '请在设置中同意将字幕发送给翻译服务。',
             'Allow subtitles to be sent to your provider in settings.',
           )}
         </p>
       )}
 
       <details className="popup-details">
-        <summary>{t('模型与用量', 'Model and usage')}</summary>
+        <summary>
+          {t('模型与用量', 'Model and usage')}
+          <ChevronDown size={15} aria-hidden />
+        </summary>
         <section className="popup-model" aria-labelledby="popup-model-label">
           <div className="popup-model-row">
             <h2 id="popup-model-label">
-              {settings.provider === 'microsoft' ? 'Provider' : 'Model'}
+              {settings.provider === 'microsoft' ? copy.translationService : t('模型', 'Model')}
             </h2>
             {ready && settings.provider === 'microsoft' ? (
               <span className="popup-model-id">Microsoft Translate</span>
@@ -318,13 +344,13 @@ export function Popup() {
               </code>
             ) : (
               <p className="popup-model-empty">
-                {ready ? t('未配置', 'Not configured') : t('读取中…', 'Loading…')}
+                {ready ? t('未配置', 'Not configured') : placeholder}
               </p>
             )}
           </div>
         </section>
 
-        <PopupTokens usage={usage} ready={ready} />
+        <PopupTokens usage={usage} ready={ready} placeholder={placeholder} />
       </details>
 
       {error && (

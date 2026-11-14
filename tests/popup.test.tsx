@@ -259,7 +259,11 @@ it('updates the popup total when recorded tokens change', async () => {
 it('keeps controls disabled after a load failure and leaves settings accessible', async () => {
   vi.mocked(loadSettings).mockRejectedValueOnce(new Error('Storage unavailable'));
   await render();
+  expect(document.querySelector('.popup')?.getAttribute('aria-busy')).toBe('false');
   expect(select('target').matches(':disabled')).toBe(true);
+  expect(select('target').selectedOptions[0].textContent).toBe('Could not load');
+  expect(document.querySelector('.popup-model-empty')?.textContent).toBe('Could not load');
+  expect(document.querySelector('.popup-usage-total')?.textContent).toBe('Could not load');
   expect(document.querySelector('[role="switch"]')?.matches(':disabled')).toBe(true);
   expect(document.querySelector('[role="alert"]')?.textContent).toBe(
     'Could not load settings. Reopen the extension.',

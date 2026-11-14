@@ -96,12 +96,10 @@ it('keeps edits made while saving as an unsaved draft', async () => {
   expect(document.querySelector<HTMLButtonElement>('.save-button')!.disabled).toBe(false);
 });
 
-it.each(['preview', 'load-error', 'save'] as const)(
+it.each(['preview', 'save'] as const)(
   'shows %s feedback outside the scrolling page and dismisses it automatically',
   async (source) => {
     if (source === 'preview') environment.extension = false;
-    if (source === 'load-error')
-      vi.mocked(loadSettings).mockRejectedValue(new Error('Unavailable'));
     await render();
     if (source === 'save') {
       await click('[aria-label="Enable bilingual subtitles"]');
@@ -109,13 +107,9 @@ it.each(['preview', 'load-error', 'save'] as const)(
       expect(saveSettings).toHaveBeenCalledOnce();
     }
     const notice = document.querySelector('.settings-alert')!;
-    expect(notice.getAttribute('role')).toBe(source === 'load-error' ? 'alert' : 'status');
+    expect(notice.getAttribute('role')).toBe('status');
     expect(notice.textContent).toContain(
-      source === 'preview'
-        ? 'Browser preview'
-        : source === 'load-error'
-          ? 'Could not load local settings'
-          : 'Settings saved',
+      source === 'preview' ? 'Browser preview' : 'Settings saved',
     );
     expect(document.querySelector('.alert-layer')?.parentElement).toBe(document.body);
     expect(document.querySelector('.workspace .settings-alert')).toBeNull();
@@ -127,6 +121,47 @@ it.each(['preview', 'load-error', 'save'] as const)(
     expect(document.querySelector('.alert-layer')).toBeNull();
   },
 );
+
+it('keeps a failed settings load visible and retries without presenting unsaved defaults', async () => {
+  let finish!: (settings: Settings) => void;
+  vi.mocked(loadSettings)
+    .mockRejectedValueOnce(new Error('Storage unavailable'))
+    .mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+  await render();
+  expect(document.querySelector('.workspace')?.getAttribute('aria-busy')).toBe('false');
+  expect(document.querySelector('.save-button')).toBeNull();
+  expect(document.querySelector('#provider')).toBeNull();
+  expect(document.querySelector('[role="alert"]')?.textContent).toContain(
+    'Could not load local settings',
+  );
+  await advance(6000);
+  expect(document.querySelector('[role="alert"]')?.textContent).toContain(
+    'Could not load local settings',
+  );
+  await click('.settings-state button');
+  expect(document.querySelector('.workspace')?.getAttribute('aria-busy')).toBe('true');
+  expect(document.querySelector('.settings-state')?.textContent).toBe('Loading settings…');
+  expect(document.querySelector('[role="alert"]')).toBeNull();
+  const recovered = { ...stored, targetLanguage: 'ko', enabled: false };
+  await act(async () => finish(recovered));
+  expect(loadSettings).toHaveBeenCalledTimes(2);
+  expect(document.querySelector('.workspace')?.getAttribute('aria-busy')).toBe('false');
+  expect(document.querySelector('.settings-state')).toBeNull();
+  expect(document.querySelector<HTMLSelectElement>('#target-language')?.value).toBe('ko');
+  expect(
+    document
+      .querySelector('[aria-label="Enable bilingual subtitles"]')
+      ?.getAttribute('aria-checked'),
+  ).toBe('false');
+  expect(document.querySelector('.save-button')?.textContent).toContain('Settings saved');
+  expect(document.querySelector<HTMLButtonElement>('.save-button')?.disabled).toBe(true);
+  expect(saveSettings).not.toHaveBeenCalled();
+});
 
 it('records consent for the Provider host only when the viewer ticks it and asks again for a new host', async () => {
   await render();

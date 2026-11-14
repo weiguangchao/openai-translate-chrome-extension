@@ -222,6 +222,26 @@ When you name a gap you could close, such as failing tests or a check you skippe
 
 This is a manual workflow requirement.
 
+### Subtitle previews clipping allowed styles
+
+Both the inline and expanded subtitle previews must contain the complete sample at the maximum allowed font sizes and spacing in a narrow window. Keep captions in the preview's layout so their content can increase its height. Checking that the preview opens does not check whether its text fits.
+
+Enforced by the maximum-size caption bounds assertions in `e2e/product-controls.spec.ts`.
+
+### Failed settings loads presented as saved
+
+Distinguish loading, failure, and successfully loaded settings. A failed read must leave a persistent explanation and a retry action without showing default values as saved settings.
+
+The popup also ends its busy state after a failed read and replaces loading placeholders with failure text, while keeping editing disabled and settings accessible.
+
+Enforced by the failed-load recovery case in `tests/settings-alerts.test.tsx` and the load-failure case in `tests/popup.test.tsx`.
+
+### Selected colors masking keyboard focus
+
+The selected color and keyboard focus must have distinct visible indicators. Verify the selected swatch while navigating with the keyboard, not only the unselected controls.
+
+Enforced by the selected-color focus check in `e2e/product-controls.spec.ts`.
+
 ### Chromium commands targeting the wrong session
 
 Chromium debug commands require an explicit launch session or existing-browser endpoint. Headless sessions never fall back to personal Chrome or activate its native UI. Mismatched or stopped launches cannot receive page operations.
