@@ -11,9 +11,13 @@ Subline is a Chrome Manifest V3 extension that shows bilingual subtitles on YouT
 - Upload PR evidence to GitHub. Never commit PR-only screenshots or other PR-only assets into the repo.
 - When babysitting: call `watch_pull_request` and end your turn. T3 Code wakes you on checks, comments, or conflicts. Do not poll or sleep. Verify each bot finding against the source, fix real ones, dismiss false positives with a written reason. Stay quiet when nothing is new. Stop when the bots are green on the latest commit.
 
-## Rules
+## Lessons
 
-Before changing or reviewing code, read [the project rules](docs/internals/rules.md) for required behavior and the checks that enforce it.
+Before changing code, read [LESSONS.md](docs/LESSONS.md): what recent merged work got wrong and the rule that would have caught it.
+
+## Product features
+
+Read [the product feature documentation](docs/feature/README.md) for current user-facing behavior, settings, translation services, and data handling. Update it when a change alters that behavior.
 
 ## Real browser verifying
 

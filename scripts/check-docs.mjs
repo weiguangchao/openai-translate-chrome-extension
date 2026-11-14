@@ -2,7 +2,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 
 const agents = readFileSync('AGENTS.md', 'utf8');
-const documents = [agents, readFileSync('docs/internals/rules.md', 'utf8')].join('\n');
+const documents = [agents, readFileSync('docs/LESSONS.md', 'utf8')].join('\n');
 const problems = [];
 
 const headings = new Set(
