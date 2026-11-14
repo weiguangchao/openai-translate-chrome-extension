@@ -122,6 +122,10 @@ export function GithubMark() {
 }
 function PreviewDialog({ children, onClose }: { children: ReactNode; onClose: () => void }) {
   const ref = useRef<HTMLDialogElement>(null);
+  function close() {
+    ref.current?.close();
+    onClose();
+  }
   useEffect(() => {
     const dialog = ref.current!;
     dialog.showModal();
@@ -132,14 +136,17 @@ function PreviewDialog({ children, onClose }: { children: ReactNode; onClose: ()
       ref={ref}
       className="preview-dialog"
       aria-label={t('放大的字幕预览', 'Expanded subtitle preview')}
-      onCancel={onClose}
+      onCancel={(event) => {
+        event.preventDefault();
+        close();
+      }}
     >
       <div>
         <button
           autoFocus
           className="dialog-close"
           aria-label={t('关闭字幕预览', 'Close subtitle preview')}
-          onClick={onClose}
+          onClick={close}
         >
           <X size={21} />
         </button>
@@ -157,6 +164,7 @@ const SAMPLES: Record<string, [string, string]> = {
 };
 export function SubtitlePreview({ settings }: { settings: Settings }) {
   const [expanded, setExpanded] = useState(false);
+  const expandButton = useRef<HTMLButtonElement>(null);
   const [sample, setSample] = useState(0);
   const sampleText = (language: string) => (SAMPLES[language] ?? SAMPLES.en)[sample];
   const style = (kind: 'original' | 'translation'): CSSProperties => ({
@@ -177,6 +185,7 @@ export function SubtitlePreview({ settings }: { settings: Settings }) {
       <div className="scene-top">
         {!large && (
           <button
+            ref={expandButton}
             className="scene-button"
             aria-label={t('放大字幕预览', 'Expand subtitle preview')}
             onClick={() => setExpanded(true)}
@@ -185,19 +194,21 @@ export function SubtitlePreview({ settings }: { settings: Settings }) {
           </button>
         )}
       </div>
-      <div
-        className="sample-subtitles"
-        style={{
-          gap: settings.subtitleGap,
-          backgroundColor: `rgba(0,0,0,${settings.backgroundOpacity / 100})`,
-        }}
-        aria-label={t('字幕样式预览', 'Subtitle style preview')}
-      >
-        <div style={style('original')} dir="auto">
-          {sampleText('en')}
-        </div>
-        <div style={style('translation')} dir="auto">
-          {sampleText(settings.targetLanguage)}
+      <div className="preview-captions">
+        <div
+          className="sample-subtitles"
+          style={{
+            gap: settings.subtitleGap,
+            backgroundColor: `rgba(0,0,0,${settings.backgroundOpacity / 100})`,
+          }}
+          aria-label={t('字幕样式预览', 'Subtitle style preview')}
+        >
+          <div style={style('original')} dir="auto">
+            {sampleText('en')}
+          </div>
+          <div style={style('translation')} dir="auto">
+            {sampleText(settings.targetLanguage)}
+          </div>
         </div>
       </div>
       <div className="scene-bottom">
@@ -229,7 +240,16 @@ export function SubtitlePreview({ settings }: { settings: Settings }) {
           </div>
         </div>
       </section>
-      {expanded && <PreviewDialog onClose={() => setExpanded(false)}>{scene(true)}</PreviewDialog>}
+      {expanded && (
+        <PreviewDialog
+          onClose={() => {
+            setExpanded(false);
+            expandButton.current?.focus({ preventScroll: true });
+          }}
+        >
+          {scene(true)}
+        </PreviewDialog>
+      )}
     </>
   );
 }

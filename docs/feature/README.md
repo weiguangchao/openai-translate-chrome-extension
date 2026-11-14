@@ -132,6 +132,8 @@ The extension popup provides controls to:
 
 Popup changes are saved immediately. The global caption switch applies to all supported sites. Separate YouTube and X switches are available on the full settings page and apply to pages on the corresponding site.
 
+Quick controls stay disabled while popup settings load. A read failure ends the loading state and keeps editing disabled, shows an error asking the user to reopen the extension, and leaves the settings button available.
+
 The popup tracks the active tab's caption status, including disabled, awaiting configuration, no active video, waiting for captions, translating, bilingual, translation-only, original, failed, and unsupported language. When it cannot connect to the page, it reports that the page is unsupported or its status is unavailable.
 
 Source references: [popup controls and page status](../../src/ui/Popup.tsx), [page status definitions](../../src/shared/messages.ts), and [status notifications](../../src/core/content.ts).
@@ -142,11 +144,15 @@ The full settings page provides separate source and translation colors and font 
 
 Both text colors default to white. The source font size defaults to 24 px, the translation font size to 22 px, line spacing to 6 px, and background opacity to 45%. During playback, font sizes also scale with the player's width.
 
-The style preview follows the current edits and supports switching samples and an expanded view. "Reset style" restores colors, font sizes, spacing, and background without resetting the translation service or language. Previewed and reset styles must be saved before they apply to video pages.
+The style preview follows the current edits and supports switching samples and an expanded view. Both previews grow to keep the sample captions complete at large font sizes. The expanded view scrolls when needed in a short window. "Reset style" restores colors, font sizes, spacing, and background without resetting the translation service or language. Previewed and reset styles must be saved before they apply to video pages.
 
 Source references: [style controls](../../src/ui/App.tsx), [style defaults](../../src/shared/settings.ts), [preview components](../../src/ui/components.tsx), and [player subtitle styling](../../src/core/overlay.ts).
 
 ## Saving settings
+
+Settings use three top navigation items: General, Subtitle style, and About. General groups caption controls, the translation service, and per-site switches. The save button stays visible while scrolling. The subtitle preview precedes the style controls in keyboard navigation and appears above them on narrow windows.
+
+While settings load, the page shows a loading indicator. If loading fails, it keeps an error message and a Retry button visible. Controls appear after settings are successfully read, so failed reads do not present default values as saved settings.
 
 Changes on the full settings page require "Save changes". Leaving with unsaved edits triggers the browser's leave confirmation. Saved settings are stored locally and sent to open video pages.
 
