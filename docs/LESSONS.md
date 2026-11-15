@@ -232,9 +232,9 @@ Enforced by the maximum-size caption bounds assertions in `e2e/product-controls.
 
 Distinguish loading, failure, and successfully loaded settings. A failed read must leave a persistent explanation and a retry action without showing default values as saved settings.
 
-The popup also ends its busy state after a failed read and replaces loading placeholders with failure text, while keeping editing disabled and settings accessible.
+The popup also ends its busy state after a failed read and replaces loading placeholders with failure text, while keeping editing disabled and settings accessible. Display-mode radios must have no selection until settings load successfully.
 
-Enforced by the failed-load recovery case in `tests/settings-alerts.test.tsx` and the load-failure case in `tests/popup.test.tsx`.
+Enforced by the failed-load recovery case in `tests/settings-alerts.test.tsx` and the loading and load-failure cases in `tests/popup.test.tsx`.
 
 ### Selected colors masking keyboard focus
 

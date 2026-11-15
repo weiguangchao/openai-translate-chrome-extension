@@ -26,12 +26,12 @@ it.each([
   {
     language: 'zh',
     settingsText: ['常规设置', '正在读取设置…'],
-    popupText: ['启用双语字幕', '简体中文'],
+    popupText: ['启用字幕', '简体中文'],
   },
   {
     language: 'en-US',
     settingsText: ['General', 'Loading settings…'],
-    popupText: ['Enable bilingual subtitles', 'Simplified Chinese'],
+    popupText: ['Enable subtitles', 'Simplified Chinese'],
   },
 ])(
   'renders the initial settings page and popup in the $language UI language',

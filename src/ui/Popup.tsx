@@ -2,8 +2,8 @@ import { t } from '../shared/i18n';
 import { LANGUAGES } from '../shared/languages';
 import { PAGE_STATUSES, type PageStatus } from '../shared/messages';
 import { platformForUrl } from '../shared/platforms';
-import { useEffect, useState } from 'react';
-import { ChevronDown, CircleAlert, Settings2, Subtitles } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Check, ChevronDown, CircleAlert, Settings2, Subtitles } from 'lucide-react';
 import {
   DEFAULT_SETTINGS,
   hasProviderConsent,
@@ -19,7 +19,7 @@ import {
   watchTokenUsage,
   type TokenUsage,
 } from '../shared/token-usage';
-import { Logo, Select, Toggle } from './components';
+import { CaptionMode, Logo, Select, Toggle } from './components';
 import { copy } from './copy';
 
 type PopupStatus = PageStatus | 'checking' | 'unsupported-page' | 'unavailable';
@@ -124,7 +124,16 @@ export function Popup() {
   const ready = loadState === 'ready';
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const focusAfterSave = useRef<HTMLElement | null>(null);
   const [pageStatus, setPageStatus] = useState<PopupStatus>('checking');
+
+  useEffect(() => {
+    if (busy) return;
+    const control = focusAfterSave.current;
+    focusAfterSave.current = null;
+    if (control?.isConnected && document.activeElement === document.body) control.focus();
+  }, [busy]);
 
   useEffect(() => {
     if (!isExtension) {
@@ -217,11 +226,15 @@ export function Popup() {
     changes: Partial<Pick<Settings, 'enabled' | 'targetLanguage' | 'translationOnly'>>,
   ) {
     if (!ready || busy) return;
+    focusAfterSave.current =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
     setBusy(true);
+    setSaved(false);
     setError('');
     try {
       const next = await saveSettings(changes);
       setSettings(next);
+      setSaved(true);
     } catch {
       setError(copy.saveFailed);
     } finally {
@@ -266,16 +279,8 @@ export function Popup() {
           <Subtitles size={20} aria-hidden />
         </span>
         <div className="popup-power-text">
-          <h1>{t('双语字幕', 'Bilingual subtitles')}</h1>
-          <p
-            className="popup-page-status"
-            data-status={pageStatus}
-            role="status"
-            aria-label={t('本页状态', 'Page status')}
-          >
-            {pageStatus === 'error' && <CircleAlert size={13} aria-hidden />}
-            {STATUS_TEXT[pageStatus]}
-          </p>
+          <h1>{copy.subtitles}</h1>
+          <span className="popup-power-scope">{t('所有支持的网站', 'All supported sites')}</span>
         </div>
         <fieldset disabled={!ready || busy}>
           <Toggle
@@ -285,12 +290,17 @@ export function Popup() {
           />
         </fieldset>
       </section>
-
-      <fieldset
-        className="popup-languages"
-        disabled={!ready || busy}
-        aria-label={copy.translationLanguage}
+      <p
+        className="popup-page-status"
+        data-status={pageStatus}
+        role="status"
+        aria-label={t('本页状态', 'Page status')}
       >
+        {pageStatus === 'error' ? <CircleAlert size={14} aria-hidden /> : <i aria-hidden />}
+        {STATUS_TEXT[pageStatus]}
+      </p>
+
+      <fieldset className="popup-languages" disabled={!ready || busy}>
         <PopupLanguage
           id="popup-target-language"
           label={copy.translationLanguage}
@@ -299,15 +309,11 @@ export function Popup() {
           ready={ready}
           placeholder={placeholder}
         />
-        <label className="popup-translation-only">
-          <input
-            type="checkbox"
-            checked={ready && settings.translationOnly}
-            disabled={!ready || busy}
-            onChange={(event) => void update({ translationOnly: event.target.checked })}
-          />
-          {t('只显示译文', 'Show translation only')}
-        </label>
+        <CaptionMode
+          name="popup-display-mode"
+          value={ready ? settings.translationOnly : null}
+          onChange={(translationOnly) => void update({ translationOnly })}
+        />
       </fieldset>
 
       {ready && !configured && (
@@ -324,6 +330,11 @@ export function Popup() {
             'Allow subtitles to be sent to your provider in settings.',
           )}
         </p>
+      )}
+      {ready && (!configured || !hasProviderConsent(settings)) && (
+        <button className="text-button popup-setup-action" onClick={() => void options()}>
+          {t('前往设置', 'Open settings')}
+        </button>
       )}
 
       <details className="popup-details">
@@ -358,6 +369,10 @@ export function Popup() {
           {error}
         </p>
       )}
+      <p className="popup-save-state" role="status">
+        {saved && !busy && <Check size={12} aria-hidden />}
+        {busy ? t('正在保存…', 'Saving…') : saved ? t('已保存', 'Saved') : ''}
+      </p>
     </main>
   );
 }

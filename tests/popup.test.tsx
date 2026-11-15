@@ -159,12 +159,12 @@ it('toggles the extension without requiring a configured provider and keeps lang
   expect(stored.enabled).toBe(true);
 });
 
-it('saves translation-only from an unchecked default without touching other settings', async () => {
+it('saves the selected display mode without touching other settings', async () => {
   await render();
   const checkbox = () =>
-    document.querySelector<HTMLInputElement>('.popup-translation-only input[type="checkbox"]')!;
+    document.querySelector<HTMLInputElement>('input[name="popup-display-mode"][value="true"]')!;
   expect(checkbox().checked).toBe(false);
-  await click('.popup-translation-only input[type="checkbox"]');
+  await click('input[name="popup-display-mode"][value="true"]');
   expect(stored).toMatchObject({ translationOnly: true, enabled: true, targetLanguage: 'zh-CN' });
   expect(checkbox().checked).toBe(true);
 });
@@ -256,6 +256,25 @@ it('updates the popup total when recorded tokens change', async () => {
   expect(document.querySelector('.popup-usage-cache')?.textContent).toBe('1M');
 });
 
+it('shows no selected display mode while settings are loading', async () => {
+  let finish!: (value: Settings) => void;
+  vi.mocked(loadSettings).mockImplementationOnce(
+    () =>
+      new Promise<Settings>((resolve) => {
+        finish = resolve;
+      }),
+  );
+  await render();
+  expect(
+    [...document.querySelectorAll<HTMLInputElement>('input[type="radio"]')].every(
+      (radio) => !radio.checked && radio.matches(':disabled'),
+    ),
+  ).toBe(true);
+  expect(document.querySelector('.popup-save-state')?.textContent).toBe('');
+  await act(async () => finish({ ...stored, translationOnly: true }));
+  expect(document.querySelector<HTMLInputElement>('input[value="true"]')?.checked).toBe(true);
+});
+
 it('keeps controls disabled after a load failure and leaves settings accessible', async () => {
   vi.mocked(loadSettings).mockRejectedValueOnce(new Error('Storage unavailable'));
   await render();
@@ -264,6 +283,11 @@ it('keeps controls disabled after a load failure and leaves settings accessible'
   expect(select('target').selectedOptions[0].textContent).toBe('Could not load');
   expect(document.querySelector('.popup-model-empty')?.textContent).toBe('Could not load');
   expect(document.querySelector('.popup-usage-total')?.textContent).toBe('Could not load');
+  expect(
+    [...document.querySelectorAll<HTMLInputElement>('input[type="radio"]')].every(
+      (radio) => !radio.checked && radio.matches(':disabled'),
+    ),
+  ).toBe(true);
   expect(document.querySelector('[role="switch"]')?.matches(':disabled')).toBe(true);
   expect(document.querySelector('[role="alert"]')?.textContent).toBe(
     'Could not load settings. Reopen the extension.',
@@ -301,7 +325,7 @@ it('updates the open popup as captions are disabled, enabled, and shown in trans
   expect(status()).toBe('Translating the current caption');
   await act(async () => ports[0].onMessage.emit('bilingual'));
   expect(status()).toBe('Showing bilingual subtitles');
-  await click('.popup-translation-only input[type="checkbox"]');
+  await click('input[name="popup-display-mode"][value="true"]');
   await act(async () => ports[0].onMessage.emit('translation-only'));
   expect(status()).toBe('Showing translated subtitles');
 });

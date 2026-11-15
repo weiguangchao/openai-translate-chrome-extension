@@ -83,44 +83,83 @@ it('keeps edits made while saving as an unsaved draft', async () => {
       }),
   );
   await render();
-  await click('[aria-label="Enable bilingual subtitles"]');
+  await click('[aria-label="Enable subtitles"]');
   await click('.save-button');
-  await click('[aria-label="Enable bilingual subtitles"]');
+  await click('[aria-label="Enable subtitles"]');
   await act(async () => finish());
   expect(
-    document
-      .querySelector('[aria-label="Enable bilingual subtitles"]')
-      ?.getAttribute('aria-checked'),
+    document.querySelector('[aria-label="Enable subtitles"]')?.getAttribute('aria-checked'),
   ).toBe('true');
   expect(document.querySelector('.save-button')?.textContent).toContain('Save changes');
   expect(document.querySelector<HTMLButtonElement>('.save-button')!.disabled).toBe(false);
 });
 
-it.each(['preview', 'save'] as const)(
-  'shows %s feedback outside the scrolling page and dismisses it automatically',
-  async (source) => {
-    if (source === 'preview') environment.extension = false;
-    await render();
-    if (source === 'save') {
-      await click('[aria-label="Enable bilingual subtitles"]');
-      await click('.save-button');
-      expect(saveSettings).toHaveBeenCalledOnce();
-    }
-    const notice = document.querySelector('.settings-alert')!;
-    expect(notice.getAttribute('role')).toBe('status');
-    expect(notice.textContent).toContain(
-      source === 'preview' ? 'Browser preview' : 'Settings saved',
+it('keeps the browser preview notice inline without covering settings', async () => {
+  environment.extension = false;
+  await render();
+  expect(document.querySelector('.browser-preview-note')?.textContent).toContain('Browser preview');
+  expect(document.querySelector('.settings-alert')).toBeNull();
+});
+
+it('shows save feedback outside the scrolling page and dismisses it automatically', async () => {
+  await render();
+  await click('[aria-label="Enable subtitles"]');
+  await click('.save-button');
+  expect(saveSettings).toHaveBeenCalledOnce();
+  const notice = document.querySelector('.settings-alert')!;
+  expect(notice.getAttribute('role')).toBe('status');
+  expect(notice.textContent).toContain('Settings saved');
+  expect(document.querySelector('.alert-layer')?.parentElement).toBe(document.body);
+  expect(document.querySelector('.workspace .settings-alert')).toBeNull();
+  await advance(4999);
+  expect(document.querySelector('.settings-alert')).toBe(notice);
+  await advance(1);
+  expect(notice.classList.contains('is-closing')).toBe(true);
+  await advance(180);
+  expect(document.querySelector('.alert-layer')).toBeNull();
+});
+
+it('discards edits across pages while keeping the persisted settings intact', async () => {
+  await render();
+  document.querySelector<HTMLElement>('.workspace')!.scrollTo = vi.fn();
+  await click('[aria-label="Enable subtitles"]');
+  await click('input[name="settings-display-mode"][value="true"]');
+  const navigate = async (name: string) => {
+    await act(async () =>
+      [...document.querySelectorAll('nav button')]
+        .find((button) => button.textContent === name)
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true })),
     );
-    expect(document.querySelector('.alert-layer')?.parentElement).toBe(document.body);
-    expect(document.querySelector('.workspace .settings-alert')).toBeNull();
-    await advance(4999);
-    expect(document.querySelector('.settings-alert')).toBe(notice);
-    await advance(1);
-    expect(notice.classList.contains('is-closing')).toBe(true);
-    await advance(180);
-    expect(document.querySelector('.alert-layer')).toBeNull();
-  },
-);
+  };
+  await navigate('About');
+  expect(document.querySelector('.save-button')?.textContent).toContain('Save changes');
+  expect(document.activeElement?.tagName).toBe('H1');
+  await click('.discard-button');
+  await navigate('General');
+  expect(
+    document.querySelector('[aria-label="Enable subtitles"]')?.getAttribute('aria-checked'),
+  ).toBe(String(stored.enabled));
+  expect(
+    document.querySelector<HTMLInputElement>('input[name="settings-display-mode"][value="false"]')
+      ?.checked,
+  ).toBe(true);
+  expect(document.querySelector('.discard-button')).toBeNull();
+  expect(document.querySelector<HTMLButtonElement>('.save-button')?.disabled).toBe(true);
+  expect(saveSettings).not.toHaveBeenCalled();
+});
+
+it('keeps Microsoft consent when the OpenAI caption consent changes', async () => {
+  stored.providerConsent = 'https://api.openai.com,https://edge.microsoft.com';
+  await render();
+  await click('.consent-check input');
+  await click('.save-button');
+  expect(stored.providerConsent).toBe('https://edge.microsoft.com');
+  await click('.consent-check input');
+  await click('.save-button');
+  expect(new Set(stored.providerConsent.split(','))).toEqual(
+    new Set(['https://edge.microsoft.com', 'https://api.openai.com']),
+  );
+});
 
 it('keeps a failed settings load visible and retries without presenting unsaved defaults', async () => {
   let finish!: (settings: Settings) => void;
@@ -154,9 +193,7 @@ it('keeps a failed settings load visible and retries without presenting unsaved 
   expect(document.querySelector('.settings-state')).toBeNull();
   expect(document.querySelector<HTMLSelectElement>('#target-language')?.value).toBe('ko');
   expect(
-    document
-      .querySelector('[aria-label="Enable bilingual subtitles"]')
-      ?.getAttribute('aria-checked'),
+    document.querySelector('[aria-label="Enable subtitles"]')?.getAttribute('aria-checked'),
   ).toBe('false');
   expect(document.querySelector('.save-button')?.textContent).toContain('Settings saved');
   expect(document.querySelector<HTMLButtonElement>('.save-button')?.disabled).toBe(true);
@@ -168,7 +205,7 @@ it('records consent for the Provider host only when the viewer ticks it and asks
   const consent = () => document.querySelector<HTMLInputElement>('.consent-check input')!;
   expect(consent().checked).toBe(false);
   expect(document.querySelector('.consent-check')?.textContent).toContain('api.openai.com');
-  await click('[aria-label="Enable bilingual subtitles"]');
+  await click('[aria-label="Enable subtitles"]');
   await click('.save-button');
   expect(stored.providerConsent).toBe('');
   expect(document.querySelector('.settings-alert')?.textContent).toContain(
@@ -241,7 +278,7 @@ it('uses the same dismissible error alert for provider and save failures', async
   expect(document.querySelector('[role="alert"]')?.textContent).toContain(
     'The API Key is invalid or expired',
   );
-  await click('[aria-label="Enable bilingual subtitles"]');
+  await click('[aria-label="Enable subtitles"]');
   await click('.save-button');
   expect(document.querySelectorAll('.settings-alert')).toHaveLength(1);
   expect(document.querySelector('[role="alert"]')?.textContent).toContain(
@@ -270,7 +307,7 @@ it('keeps saving independent of connection tests and retains a failed result aft
   expect(document.querySelector('[aria-label="Connection test"]')?.textContent).toBe('Testing…');
   await act(async () => finish());
   expect(document.querySelector('[aria-label="Connection test"]')?.textContent).toBe('Test passed');
-  await click('[aria-label="Enable bilingual subtitles"]');
+  await click('[aria-label="Enable subtitles"]');
   await click('.save-button');
   expect(document.querySelector('[aria-label="Connection test"]')?.textContent).toBe('Test passed');
   vi.mocked(apiAction).mockRejectedValueOnce(new Error('Provider unavailable'));
