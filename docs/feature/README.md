@@ -44,7 +44,7 @@ Source references: [language definitions](../../src/shared/languages.ts), [capti
 
 ### Bilingual and translation-only display
 
-Bilingual mode places the source text above its translation. Selecting "Show translation only" in the popup hides the source text. When the source and target languages match, the source text is still shown.
+Bilingual mode places the source text above its translation. Selecting "Translation only" in the popup or settings hides the source text. When the source and target languages match, the source text is still shown.
 
 For captions that need translation, the source appears together with the completed translation. While waiting, Subline may show "Translating" instead of showing the source alone. Captions appear near the bottom of the player, with font sizes and spacing scaled to the player's width.
 
@@ -124,13 +124,13 @@ Source references: [cache identity](../../src/shared/settings.ts), [translation 
 
 The extension popup provides controls to:
 
-- Enable or disable bilingual subtitles.
+- Enable or disable subtitles.
 - Change the target language.
-- Toggle "Show translation only".
+- Choose Bilingual or Translation only display.
 - Open the full settings page.
 - Expand the current service or model and token usage details.
 
-Popup changes are saved immediately. The global caption switch applies to all supported sites. Separate YouTube and X switches are available on the full settings page and apply to pages on the corresponding site.
+Popup changes are saved immediately, with saving and saved feedback below the controls. Keyboard focus returns to the edited control after saving unless the user has focused another control. Setup and consent guidance includes a direct link to settings. The global caption switch applies to all supported sites. Separate YouTube and X switches are available on the full settings page and apply to pages on the corresponding site.
 
 Quick controls stay disabled while popup settings load. A read failure ends the loading state and keeps editing disabled, shows an error asking the user to reopen the extension, and leaves the settings button available.
 
@@ -150,7 +150,7 @@ Source references: [style controls](../../src/ui/App.tsx), [style defaults](../.
 
 ## Saving settings
 
-Settings use three top navigation items: General, Subtitle style, and About. General groups caption controls, the translation service, and per-site switches. The save button stays visible while scrolling. The subtitle preview precedes the style controls in keyboard navigation and appears above them on narrow windows.
+Settings use a sidebar with General, Subtitle style, and About; navigation moves above the content in smaller windows. General groups caption controls, display mode, the translation service, and per-site switches. The save button and draft actions stay visible while scrolling, including on About when there are unsaved edits. Discard changes restores the last saved settings across all sections. The subtitle preview precedes the style controls in keyboard navigation and appears above them on narrow windows.
 
 While settings load, the page shows a loading indicator. If loading fails, it keeps an error message and a Retry button visible. Controls appear after settings are successfully read, so failed reads do not present default values as saved settings.
 
@@ -194,6 +194,6 @@ Source references: [service consent](../../src/shared/settings.ts), [caption req
 
 The interface uses Simplified Chinese when the browser language starts with `zh`, and English otherwise. The About page describes the extension and links to its GitHub repository and the author's X profile. The installed extension also shows its version.
 
-The browser preview supports editing settings and testing services. Its API key stays only on the current page and must be entered again after a refresh. The style preview uses built-in sample captions. Captions on video pages run through the installed extension.
+The browser preview supports editing settings and testing services. An inline notice on General explains API-key handling. Its API key stays only on the current page and must be entered again after a refresh. The style preview uses built-in sample captions. Captions on video pages run through the installed extension.
 
 Source references: [interface language](../../src/shared/i18n.ts), [About page](../../src/ui/App.tsx), [version and caption preview](../../src/ui/components.tsx), and [browser preview persistence](../../src/shared/storage.ts).

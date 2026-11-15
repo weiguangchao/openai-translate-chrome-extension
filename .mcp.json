@@ -5,9 +5,9 @@
       "args": [
         "-y",
         "chrome-devtools-mcp@latest",
-        "--autoConnect",
-        "--categoryExtensions",
-        "--experimentalIncludeAllPages"
+        "--isolated",
+        "--headless",
+        "--categoryExtensions"
       ]
     }
   }

@@ -12,7 +12,9 @@ export function Logo({ small = false }: { small?: boolean }) {
       <img src="./logo-ui.svg" alt="" />
       <div>
         <strong>
-          Subline<span className="brand-period">.</span>
+          <span className="brand-wordmark">
+            Subline<span className="brand-period">.</span>
+          </span>
           {isExtension && (
             <span className="brand-version">v{chrome.runtime.getManifest().version}</span>
           )}
@@ -87,10 +89,43 @@ export function LanguageSelect({
       {LANGUAGES.map((language) => (
         <option key={language.value} value={language.value}>
           {language.label}
-          {language.native !== language.label ? ` / ${language.native}` : ''}
         </option>
       ))}
     </Select>
+  );
+}
+export function CaptionMode({
+  value,
+  onChange,
+  name,
+}: {
+  value: boolean | null;
+  onChange: (value: boolean) => void;
+  name: string;
+}) {
+  return (
+    <fieldset className="caption-mode">
+      <legend>{copy.displayMode}</legend>
+      <div className="caption-mode-options">
+        {[false, true].map((translationOnly) => (
+          <label key={String(translationOnly)} className="caption-mode-option">
+            <input
+              type="radio"
+              name={name}
+              value={String(translationOnly)}
+              checked={value === translationOnly}
+              onChange={() => onChange(translationOnly)}
+            />
+            <span className="mode-lines" aria-hidden>
+              {!translationOnly && <i />}
+              <i />
+            </span>
+            <span>{translationOnly ? copy.translationOnly : copy.bilingual}</span>
+            <Check size={14} className="mode-check" aria-hidden />
+          </label>
+        ))}
+      </div>
+    </fieldset>
   );
 }
 export function YoutubeMark() {

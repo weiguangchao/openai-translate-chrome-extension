@@ -1,6 +1,7 @@
 import { t } from '../shared/i18n';
 export const copy = {
-  enableSubtitles: t('启用双语字幕', 'Enable bilingual subtitles'),
+  enableSubtitles: t('启用字幕', 'Enable subtitles'),
+  subtitles: t('字幕', 'Subtitles'),
   source: t('原文', 'Source'),
   target: t('译文', 'Translation'),
   translationLanguage: t('翻译语言', 'Translation language'),
@@ -11,4 +12,7 @@ export const copy = {
     'Could not load local settings. Check browser storage permissions.',
   ),
   subtitlePreview: t('字幕预览', 'Subtitle preview'),
+  displayMode: t('显示模式', 'Display mode'),
+  bilingual: t('双语', 'Bilingual'),
+  translationOnly: t('仅译文', 'Translation only'),
 } as const;

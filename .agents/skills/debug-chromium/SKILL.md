@@ -5,6 +5,13 @@ description: Debug Subline pages/traces through one Chromium session.
 
 # Debug Chromium
 
+For delegated browser work, put the browser-selection rules and chosen
+launch-session path or explicitly authorized existing-browser endpoint directly
+in the task brief; do not assume parent instructions are inherited. Default to
+isolated headless Chromium with a temporary profile. Connect to personal Chrome
+only when the user explicitly requests it; if isolated setup fails, report the
+failure without falling back to personal Chrome.
+
 Use [setup](../setup-headless-chromium/SKILL.md). Pass its `session.json` to every command. In the loaded extension's repo:
 
 ```bash

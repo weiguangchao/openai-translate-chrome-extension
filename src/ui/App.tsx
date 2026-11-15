@@ -43,6 +43,7 @@ import {
 } from '../shared/storage';
 import {
   GithubMark,
+  CaptionMode,
   LanguageSelect,
   Logo,
   Select,
@@ -108,6 +109,8 @@ function Section({
 
 export function App() {
   const [page, setPage] = useState<Page>('general');
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  const navigating = useRef(false);
   const [settings, setSettings] = useState<Settings>(structuredClone(DEFAULT_SETTINGS));
   const [saved, setSaved] = useState<Settings>(structuredClone(DEFAULT_SETTINGS));
   const [loadState, setLoadState] = useState<'loading' | 'ready' | 'error'>('loading');
@@ -152,14 +155,6 @@ export function App() {
         setSettings(value);
         setSaved(value);
         setLoadState('ready');
-        if (!isExtension)
-          showAlert({
-            kind: 'info',
-            text: t(
-              '浏览器预览：API Key 刷新后需重新填写。',
-              'Browser preview: re-enter your API Key after refreshing.',
-            ),
-          });
       })
       .catch(() => {
         if (!active) return;
@@ -169,6 +164,12 @@ export function App() {
       active = false;
     };
   }, [showAlert, loadAttempt]);
+  useEffect(() => {
+    if (navigating.current) {
+      headingRef.current?.focus({ preventScroll: true });
+      navigating.current = false;
+    }
+  }, [page]);
   useEffect(() => {
     if (!ready) return;
     const version = ++modelsVersion.current;
@@ -195,6 +196,7 @@ export function App() {
     if (key === 'baseUrl' || key === 'apiKey') setModels([]);
   }
   function navigate(next: Page) {
+    navigating.current = next !== page;
     setPage(next);
     document.querySelector('.workspace')?.scrollTo({ top: 0 });
   }
@@ -321,26 +323,59 @@ export function App() {
       <main className="workspace" aria-busy={loadState === 'loading'}>
         <div className="page-content">
           <div className="page-heading">
-            <h1>{current.name}</h1>
-            {page !== 'about' && ready && (
-              <button
-                className="button primary save-button"
-                onClick={() => void save()}
-                disabled={!dirty || Boolean(busy)}
-              >
-                {busy === 'save' ? (
-                  <LoaderCircle size={16} className="spinning" />
-                ) : (
-                  <Check size={17} />
-                )}{' '}
-                {busy === 'save'
-                  ? t('保存中…', 'Saving…')
-                  : dirty
-                    ? t('保存更改', 'Save changes')
-                    : t('设置已保存', 'Settings saved')}
-              </button>
+            <h1 ref={headingRef} tabIndex={-1}>
+              {current.name}
+            </h1>
+            {(page !== 'about' || dirty) && ready && (
+              <div className="save-actions">
+                <span className="save-state" role="status">
+                  {dirty && (
+                    <>
+                      <i aria-hidden />
+                      {t('有未保存的更改', 'Unsaved changes')}
+                    </>
+                  )}
+                </span>
+                {dirty && (
+                  <button
+                    className="discard-button"
+                    disabled={Boolean(busy)}
+                    onClick={() => {
+                      setSettings(structuredClone(saved));
+                      setConnection({ kind: 'untested' });
+                      setShowKey(false);
+                    }}
+                  >
+                    {t('撤销更改', 'Discard changes')}
+                  </button>
+                )}
+                <button
+                  className="button primary save-button"
+                  onClick={() => void save()}
+                  disabled={!dirty || Boolean(busy)}
+                >
+                  {busy === 'save' ? (
+                    <LoaderCircle size={16} className="spinning" />
+                  ) : (
+                    <Check size={17} />
+                  )}{' '}
+                  {busy === 'save'
+                    ? t('保存中…', 'Saving…')
+                    : dirty
+                      ? t('保存更改', 'Save changes')
+                      : t('设置已保存', 'Settings saved')}
+                </button>
+              </div>
             )}
           </div>
+          {!isExtension && ready && page === 'general' && (
+            <p className="browser-preview-note">
+              {t(
+                '浏览器预览：API Key 刷新后需重新填写。',
+                'Browser preview: re-enter your API Key after refreshing.',
+              )}
+            </p>
+          )}
           {loadState !== 'ready' && (
             <div
               className={`settings-state ${loadState}`}
@@ -377,7 +412,7 @@ export function App() {
               <div className="settings-column">
                 {page === 'general' && (
                   <>
-                    <Section icon={<Subtitles size={19} />} title={t('字幕', 'Subtitles')}>
+                    <Section icon={<Subtitles size={19} />} title={copy.subtitles}>
                       <div className="enable-panel">
                         <div>
                           <label htmlFor="settings-enabled">{copy.enableSubtitles} </label>
@@ -397,6 +432,11 @@ export function App() {
                           onChange={(value) => update('targetLanguage', value)}
                         />
                       </div>
+                      <CaptionMode
+                        name="settings-display-mode"
+                        value={settings.translationOnly}
+                        onChange={(value) => update('translationOnly', value)}
+                      />
                     </Section>
                     <Section
                       icon={<PlugZap size={19} />}
@@ -559,9 +599,14 @@ export function App() {
                             type="checkbox"
                             checked={consented}
                             disabled={!origin}
-                            onChange={(event) =>
-                              update('providerConsent', event.target.checked ? origin : '')
-                            }
+                            onChange={(event) => {
+                              const origins = new Set(
+                                settings.providerConsent.split(',').filter(Boolean),
+                              );
+                              if (event.target.checked) origins.add(origin);
+                              else origins.delete(origin);
+                              update('providerConsent', [...origins].join(','));
+                            }}
                           />
                           {settings.provider === 'openai'
                             ? t(
