@@ -217,15 +217,15 @@ test('youtube: Microsoft translates captions without OpenAI credentials', async 
       model: '',
       providerConsent: 'https://edge.microsoft.com',
     });
-    await p.settingsPage.goto(`chrome-extension://${p.extensionId}/index.html`);
-    await expect(p.settingsPage.locator('#provider')).toHaveValue('microsoft');
+    await p.settingsPage.goto(`chrome-extension://${p.extensionId}/index.html#service`);
+    await expect(p.settingsPage.getByRole('radio', { name: 'Microsoft Translate' })).toBeChecked();
     await expect(p.settingsPage.locator('#api-key')).toHaveCount(0);
     await p.play();
     await p.pair(source, translation);
     expect(microsoftPosts.flat()).toContain(source);
     expect(p.posts).toHaveLength(0);
     await p.settingsPage.reload();
-    await expect(p.settingsPage.locator('#provider')).toHaveValue('microsoft');
+    await expect(p.settingsPage.getByRole('radio', { name: 'Microsoft Translate' })).toBeChecked();
     await expect(p.settingsPage.locator('.consent-check input')).toBeChecked();
   });
 });

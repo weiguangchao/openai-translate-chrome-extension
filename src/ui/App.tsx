@@ -2,6 +2,7 @@ import { t } from '../shared/i18n';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   Check,
+  ChevronRight,
   CircleAlert,
   CircleHelp,
   Eye,
@@ -55,7 +56,7 @@ import {
 import { useAlert } from './Alert';
 import { copy } from './copy';
 
-type Page = 'general' | 'appearance' | 'about';
+type Page = 'general' | 'service' | 'appearance' | 'about';
 type ConnectionTest =
   { kind: 'untested' } | { kind: 'testing' | 'passed' | 'failed'; fingerprint: string };
 const REPOSITORY_URL = 'https://github.com/weiguangchao/openai-translate-chrome-extension';
@@ -64,6 +65,11 @@ const PAGES = [
     id: 'general' as const,
     name: t('常规设置', 'General'),
     icon: Settings2,
+  },
+  {
+    id: 'service' as const,
+    name: copy.translationService,
+    icon: PlugZap,
   },
   {
     id: 'appearance' as const,
@@ -76,6 +82,18 @@ const PAGES = [
     icon: Info,
   },
 ];
+
+function pageFromHash(): Page {
+  const hash = typeof window === 'undefined' ? '' : window.location.hash;
+  return PAGES.find((item) => `#${item.id}` === hash)?.id ?? 'general';
+}
+
+function scrollWorkspace() {
+  const shell = document.querySelector<HTMLElement>('.app-shell');
+  const workspace = document.querySelector<HTMLElement>('.workspace');
+  const scroller = shell && getComputedStyle(shell).overflowY === 'auto' ? shell : workspace;
+  scroller?.scrollTo?.({ top: 0 });
+}
 
 function Section({
   icon,
@@ -108,9 +126,13 @@ function Section({
 }
 
 export function App() {
-  const [page, setPage] = useState<Page>('general');
+  const [page, setPage] = useState<Page>(pageFromHash);
+  const pageRef = useRef(page);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const navigating = useRef(false);
+  const baseUrlRef = useRef<HTMLInputElement>(null);
+  const focusInvalidUrl = useRef(false);
+  const [baseUrlError, setBaseUrlError] = useState('');
   const [settings, setSettings] = useState<Settings>(structuredClone(DEFAULT_SETTINGS));
   const [saved, setSaved] = useState<Settings>(structuredClone(DEFAULT_SETTINGS));
   const [loadState, setLoadState] = useState<'loading' | 'ready' | 'error'>('loading');
@@ -142,10 +164,22 @@ export function App() {
     failed: t('测试失败', 'Test failed'),
   };
   const origin = providerOrigin(settings);
-  const provider = origin ? new URL(origin).host : t('你填写的 Provider', 'your provider');
+  const provider = origin ? new URL(origin).host : t('所选翻译服务', 'the selected service');
   const consented = hasProviderConsent(settings);
   const microsoftConsented = settings.providerConsent.split(',').includes(MICROSOFT_ORIGIN);
 
+  useEffect(() => {
+    const syncPage = () => {
+      const next = pageFromHash();
+      if (next === pageRef.current) return;
+      pageRef.current = next;
+      navigating.current = true;
+      setPage(next);
+      scrollWorkspace();
+    };
+    window.addEventListener('hashchange', syncPage);
+    return () => window.removeEventListener('hashchange', syncPage);
+  }, []);
   useEffect(() => {
     let active = true;
     setLoadState('loading');
@@ -165,11 +199,15 @@ export function App() {
     };
   }, [showAlert, loadAttempt]);
   useEffect(() => {
-    if (navigating.current) {
+    if (focusInvalidUrl.current && page === 'service') {
+      revealBaseUrl();
+      focusInvalidUrl.current = false;
+      navigating.current = false;
+    } else if (navigating.current) {
       headingRef.current?.focus({ preventScroll: true });
       navigating.current = false;
     }
-  }, [page]);
+  }, [page, baseUrlError]);
   useEffect(() => {
     if (!ready) return;
     const version = ++modelsVersion.current;
@@ -191,18 +229,40 @@ export function App() {
 
   function update<K extends keyof Settings>(key: K, value: Settings[K]) {
     setSettings((previous) => ({ ...previous, [key]: value }));
+    if (key === 'baseUrl' || key === 'provider') setBaseUrlError('');
     if (key === 'provider' || key === 'baseUrl' || key === 'apiKey' || key === 'model')
       setConnection({ kind: 'untested' });
     if (key === 'baseUrl' || key === 'apiKey') setModels([]);
   }
   function navigate(next: Page) {
+    pageRef.current = next;
     navigating.current = next !== page;
+    window.location.hash = next;
     setPage(next);
-    document.querySelector('.workspace')?.scrollTo({ top: 0 });
+    scrollWorkspace();
   }
-  async function save() {
+  function revealBaseUrl() {
+    baseUrlRef.current?.focus({ preventScroll: true });
+    baseUrlRef.current?.closest('.field')?.scrollIntoView?.({ block: 'center' });
+  }
+  function validateServiceUrl() {
     try {
       validateSettings(settings);
+      return true;
+    } catch (error) {
+      const text = error instanceof Error ? error.message : copy.saveFailed;
+      setBaseUrlError(text);
+      if (page === 'service' && baseUrlError === text) revealBaseUrl();
+      else {
+        focusInvalidUrl.current = true;
+        navigate('service');
+      }
+      return false;
+    }
+  }
+  async function save() {
+    if (!validateServiceUrl()) return;
+    try {
       const permission =
         settings.provider === 'microsoft' || settings.apiKey.trim()
           ? allowApiHost(settings)
@@ -252,6 +312,10 @@ export function App() {
     }
   }
   async function runApi(kind: 'models' | 'test') {
+    if (!validateServiceUrl()) {
+      if (kind === 'test') setConnection({ kind: 'failed', fingerprint });
+      return;
+    }
     if (kind === 'test') setConnection({ kind: 'testing', fingerprint });
     try {
       if (settings.provider === 'openai' && !settings.apiKey.trim())
@@ -299,6 +363,43 @@ export function App() {
     }
   }
 
+  const setupNeeded = !isProviderConfigured(settings) || !consented;
+  const serviceShortcut = (
+    <button
+      className={`service-shortcut ${setupNeeded ? 'needs-setup' : ''}`}
+      onClick={() => navigate('service')}
+    >
+      <PlugZap size={18} aria-hidden />
+      <span className="service-shortcut-label">
+        {setupNeeded
+          ? isProviderConfigured(settings)
+            ? copy.reviewConsent
+            : t('完成翻译设置', 'Finish translation setup')
+          : copy.translationService}
+      </span>
+      <span className="service-shortcut-meta">
+        <span className="service-shortcut-value">
+          <span>
+            {settings.provider === 'microsoft' ? 'Microsoft Translate' : copy.openaiCompatible}
+          </span>
+          {settings.provider === 'openai' && settings.model.trim() && (
+            <span className="service-shortcut-model" title={settings.model}>
+              {settings.model}
+            </span>
+          )}
+        </span>
+        {setupNeeded && (
+          <span className="setup-badge">
+            {isProviderConfigured(settings)
+              ? t('待授权', 'Consent needed')
+              : t('待设置', 'Setup needed')}
+          </span>
+        )}
+      </span>
+      <ChevronRight size={18} aria-hidden />
+    </button>
+  );
+
   return (
     <div className="app-shell">
       {alert}
@@ -318,6 +419,11 @@ export function App() {
               </button>
             ))}
           </nav>
+          <div className="sidebar-platforms" aria-hidden="true">
+            <YoutubeMark />
+            <XMark />
+            <span>{t('为视频配上双语字幕', 'Bilingual subtitles for videos')}</span>
+          </div>
         </div>
       </header>
       <main className="workspace" aria-busy={loadState === 'loading'}>
@@ -342,6 +448,7 @@ export function App() {
                     disabled={Boolean(busy)}
                     onClick={() => {
                       setSettings(structuredClone(saved));
+                      setBaseUrlError('');
                       setConnection({ kind: 'untested' });
                       setShowKey(false);
                     }}
@@ -368,7 +475,7 @@ export function App() {
               </div>
             )}
           </div>
-          {!isExtension && ready && page === 'general' && (
+          {!isExtension && ready && page === 'service' && (
             <p className="browser-preview-note">
               {t(
                 '浏览器预览：API Key 刷新后需重新填写。',
@@ -412,6 +519,7 @@ export function App() {
               <div className="settings-column">
                 {page === 'general' && (
                   <>
+                    {setupNeeded && serviceShortcut}
                     <Section icon={<Subtitles size={19} />} title={copy.subtitles}>
                       <div className="enable-panel">
                         <div>
@@ -438,26 +546,67 @@ export function App() {
                         onChange={(value) => update('translationOnly', value)}
                       />
                     </Section>
+                    {!setupNeeded && serviceShortcut}
+                    <Section
+                      icon={<MonitorPlay size={19} />}
+                      title={t('支持的网站', 'Supported sites')}
+                    >
+                      <div className="site-options">
+                        <div>
+                          <YoutubeMark />
+                          <span>YouTube</span>
+                          <Toggle
+                            label={t('在 YouTube 启用', 'Enable on YouTube')}
+                            checked={settings.youtube}
+                            onChange={(value) => update('youtube', value)}
+                          />
+                        </div>
+                        <div>
+                          <XMark />
+                          <span>{t('X（推特）', 'X (Twitter)')}</span>
+                          <Toggle
+                            label={t('在 X（推特）启用', 'Enable on X (Twitter)')}
+                            checked={settings.x}
+                            onChange={(value) => update('x', value)}
+                          />
+                        </div>
+                      </div>
+                    </Section>
+                  </>
+                )}
+                {page === 'service' && (
+                  <>
                     <Section
                       icon={<PlugZap size={19} />}
-                      title={copy.translationService}
+                      title={t('翻译方式', 'Translation method')}
                       className="api-section"
                     >
                       <fieldset disabled={Boolean(busy)}>
-                        <div className="field">
-                          <label htmlFor="provider">{t('服务', 'Service')}</label>
-                          <Select
-                            id="provider"
-                            value={settings.provider}
-                            onChange={(value) => {
-                              if (value === 'microsoft' || value === 'openai')
-                                update('provider', value);
-                            }}
-                          >
-                            <option value="microsoft">Microsoft Translate</option>
-                            <option value="openai">OpenAI Chat Completions</option>
-                          </Select>
-                        </div>
+                        <fieldset className="provider-options">
+                          <legend className="sr-only">{copy.translationService}</legend>
+                          {(['microsoft', 'openai'] as const).map((value) => (
+                            <label className="provider-option" key={value}>
+                              <input
+                                type="radio"
+                                name="provider"
+                                value={value}
+                                checked={settings.provider === value}
+                                onChange={() => update('provider', value)}
+                              />
+                              <span className="provider-option-title">
+                                {value === 'microsoft'
+                                  ? 'Microsoft Translate'
+                                  : copy.openaiCompatible}
+                                <Check size={16} aria-hidden />
+                              </span>
+                              <span className="provider-option-detail">
+                                {value === 'microsoft'
+                                  ? t('无需 API Key', 'No API key needed')
+                                  : t('使用自己的兼容接口', 'Your compatible API')}
+                              </span>
+                            </label>
+                          ))}
+                        </fieldset>
                         {settings.provider === 'openai' && (
                           <>
                             <div className="field">
@@ -477,14 +626,24 @@ export function App() {
                                 <Globe2 size={16} />
                                 <input
                                   id="base-url"
+                                  ref={baseUrlRef}
                                   type="url"
+                                  aria-invalid={Boolean(baseUrlError)}
+                                  aria-describedby={
+                                    baseUrlError ? 'base-url-error' : 'base-url-hint'
+                                  }
                                   value={settings.baseUrl}
                                   onChange={(event) => update('baseUrl', event.target.value)}
                                   placeholder="https://api.openai.com/v1"
                                   spellCheck={false}
                                 />
                               </div>
-                              <p className="field-hint">
+                              {baseUrlError && (
+                                <p className="field-error" id="base-url-error" role="alert">
+                                  {baseUrlError}
+                                </p>
+                              )}
+                              <p className="field-hint" id="base-url-hint">
                                 {t(
                                   '填写接口根地址，无需添加 /chat/completions',
                                   'Enter the API base URL without /chat/completions',
@@ -590,8 +749,8 @@ export function App() {
                                 `Subtitle text and the video title are sent to ${provider} under its privacy policy. Charges may apply.`,
                               )
                             : t(
-                                `字幕原文将发送到 ${provider}，按 Microsoft 的隐私政策处理。无需 API Key。`,
-                                `Subtitle text is sent to ${provider} under Microsoft's privacy policy. No API key is needed.`,
+                                `字幕原文将发送到 ${provider}，按 Microsoft 的隐私政策处理。`,
+                                `Subtitle text is sent to ${provider} under Microsoft's privacy policy.`,
                               )}
                         </p>
                         <label className="consent-check">
@@ -659,31 +818,6 @@ export function App() {
                             ? t('连接中…', 'Connecting…')
                             : t('测试连接', 'Test connection')}
                         </button>
-                      </div>
-                    </Section>
-                    <Section
-                      icon={<MonitorPlay size={19} />}
-                      title={t('支持的网站', 'Supported sites')}
-                    >
-                      <div className="site-options">
-                        <div>
-                          <YoutubeMark />
-                          <span>YouTube</span>
-                          <Toggle
-                            label={t('在 YouTube 启用', 'Enable on YouTube')}
-                            checked={settings.youtube}
-                            onChange={(value) => update('youtube', value)}
-                          />
-                        </div>
-                        <div>
-                          <XMark />
-                          <span>{t('X（推特）', 'X (Twitter)')}</span>
-                          <Toggle
-                            label={t('在 X（推特）启用', 'Enable on X (Twitter)')}
-                            checked={settings.x}
-                            onChange={(value) => update('x', value)}
-                          />
-                        </div>
                       </div>
                     </Section>
                   </>

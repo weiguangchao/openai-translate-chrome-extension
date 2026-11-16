@@ -130,7 +130,7 @@ The extension popup provides controls to:
 - Open the full settings page.
 - Expand the current service or model and token usage details.
 
-Popup changes are saved immediately, with saving and saved feedback below the controls. Keyboard focus returns to the edited control after saving unless the user has focused another control. Setup and consent guidance includes a direct link to settings. The global caption switch applies to all supported sites. Separate YouTube and X switches are available on the full settings page and apply to pages on the corresponding site.
+Popup changes are saved immediately, with saving and saved feedback in the header. Keyboard focus returns to the edited control after saving unless the user has focused another control. Setup and consent guidance appears with the page status and opens Translation service. It reuses an existing settings tab, preserves its unsaved draft, and brings that window forward. The global caption switch applies to all supported sites. Separate YouTube and X switches are available on the full settings page and apply to pages on the corresponding site.
 
 Quick controls stay disabled while popup settings load. A read failure ends the loading state and keeps editing disabled, shows an error asking the user to reopen the extension, and leaves the settings button available.
 
@@ -150,11 +150,11 @@ Source references: [style controls](../../src/ui/App.tsx), [style defaults](../.
 
 ## Saving settings
 
-Settings use a sidebar with General, Subtitle style, and About; navigation moves above the content in smaller windows. General groups caption controls, display mode, the translation service, and per-site switches. The save button and draft actions stay visible while scrolling, including on About when there are unsaved edits. Discard changes restores the last saved settings across all sections. The subtitle preview precedes the style controls in keyboard navigation and appears above them on narrow windows.
+Settings use a sidebar with General, Translation service, Subtitle style, and About; navigation moves above the content in smaller windows and scrolls away at phone widths while the heading and save actions stay visible. General groups caption controls, display mode, and per-site switches, with a shortcut showing the selected translation service and whether setup is needed. Incomplete setup appears first with a highlighted action. Translation service has direct choices for Microsoft Translate and an OpenAI-compatible API, alongside configuration, data consent, and connection testing. Navigation supports URL fragments and browser Back and Forward without discarding edits. The popup setup action opens Translation service directly. Display-mode choices include a visual example of the source and translation lines. The save button and draft actions stay visible while scrolling, including on About when there are unsaved edits. Discard changes restores the last saved settings across all sections. The subtitle preview precedes the style controls in keyboard navigation and appears above them on narrow windows.
 
 While settings load, the page shows a loading indicator. If loading fails, it keeps an error message and a Retry button visible. Controls appear after settings are successfully read, so failed reads do not present default values as saved settings.
 
-Changes on the full settings page require "Save changes". Leaving with unsaved edits triggers the browser's leave confirmation. Saved settings are stored locally and sent to open video pages.
+Changes on the full settings page require "Save changes". If saving or a service action finds an invalid Base URL, the page opens Translation service, focuses the field, and keeps the draft and its inline error visible for correction without a duplicate notification. Leaving with unsaved edits triggers the browser's leave confirmation. Saved settings are stored locally and sent to open video pages.
 
 Style changes preserve ongoing translations. Changing the service, endpoint, model, key, or target language recreates translation tasks. Disabling captions, disabling a site, or withdrawing consent for the current service stops the corresponding translation work.
 
@@ -176,7 +176,7 @@ While waiting for a response, the subtitle area may show "Translating". A timeou
 
 Visible errors use yellow text with the configured translation font size, subtitle background, and position. The source text is hidden. Failed captions are not automatically retried within the same prefetch window. They can be requested again when encountered after leaving the window. Some service errors also delay subsequent requests.
 
-The popup provides setup guidance when configuration or caption consent is missing. Settings saves, model fetches, and connection tests report their results through settings page notifications.
+The popup provides setup guidance when configuration or caption consent is missing. Settings saves, model fetches, and connection tests report their results through notifications at the bottom of the settings window. Invalid Base URLs use the persistent inline field error.
 
 Source references: [caption state](../../src/core/translator.ts), [error rendering](../../src/core/overlay.ts), [failure tracking and subsequent requests](../../src/extension/queue.ts), and [settings notifications](../../src/ui/Alert.tsx).
 
@@ -194,6 +194,6 @@ Source references: [service consent](../../src/shared/settings.ts), [caption req
 
 The interface uses Simplified Chinese when the browser language starts with `zh`, and English otherwise. The About page describes the extension and links to its GitHub repository and the author's X profile. The installed extension also shows its version.
 
-The browser preview supports editing settings and testing services. An inline notice on General explains API-key handling. Its API key stays only on the current page and must be entered again after a refresh. The style preview uses built-in sample captions. Captions on video pages run through the installed extension.
+The browser preview supports editing settings and testing services. An inline notice on Translation service explains API-key handling. Its API key stays only on the current page and must be entered again after a refresh. The style preview uses built-in sample captions. Captions on video pages run through the installed extension.
 
 Source references: [interface language](../../src/shared/i18n.ts), [About page](../../src/ui/App.tsx), [version and caption preview](../../src/ui/components.tsx), and [browser preview persistence](../../src/shared/storage.ts).

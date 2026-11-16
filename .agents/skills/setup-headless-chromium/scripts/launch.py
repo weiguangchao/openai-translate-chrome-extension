@@ -127,8 +127,8 @@ CONSENT = """(index => {
   if (box && !box.checked) box.click();
   return Boolean(box && box.checked);
 })"""
-ALERT = "document.querySelector('.settings-alert.error')?.innerText.trim()"
-SAVED = ("(() => { const error = document.querySelector('.settings-alert:not(.success)')?.innerText.trim(); "
+ALERT = "document.querySelector('.settings-alert.error, .field-error')?.innerText.trim()"
+SAVED = ("(() => { const error = document.querySelector('.settings-alert:not(.success), .field-error')?.innerText.trim(); "
          "if (error) return {error}; "
          "return Boolean(document.querySelector('.settings-alert.success')); })()")
 CONNECTED = (f"(() => {{ const error = {ALERT}; if (error) return {{error}}; "
@@ -136,8 +136,8 @@ CONNECTED = (f"(() => {{ const error = {ALERT}; if (error) return {{error}}; "
 
 
 def configure_provider(page, setup):
-    page.until("Boolean(document.getElementById('provider'))", 15, "Settings page did not load")
-    page.evaluate(f"{SET_FIELD}('provider', {json.dumps(setup['kind'])})")
+    page.until("Boolean(document.querySelector('input[name=provider]'))", 15, "Settings page did not load")
+    page.evaluate(f"document.querySelector('input[name=provider][value={setup['kind']}]').click()")
     fields = setup["fields"]
     if fields:
         page.until("Boolean(document.getElementById('base-url'))", 5, "OpenAI fields did not appear")
@@ -173,7 +173,7 @@ def prepare_extensions(port, path, extension, setup):
                           f"{json.dumps(extension_id(extension))}, {json.dumps(origin)})")
         page.close()
         if setup:
-            page = Page(chrome, f"chrome-extension://{extension_id(extension)}/index.html")
+            page = Page(chrome, f"chrome-extension://{extension_id(extension)}/index.html#service")
             configure_provider(page, setup)
             page.close()
     finally:

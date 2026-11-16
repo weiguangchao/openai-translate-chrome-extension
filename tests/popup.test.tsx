@@ -16,6 +16,10 @@ vi.mock('../src/shared/storage', () => ({
 let root: Root;
 let stored: Settings;
 const openOptionsPage = vi.fn();
+const createTab = vi.fn();
+const updateTab = vi.fn();
+const updateWindow = vi.fn();
+const getContexts = vi.fn();
 const queryTabs = vi.fn();
 const connectTab = vi.fn();
 let initialPageStatus: unknown;
@@ -59,6 +63,10 @@ beforeEach(() => {
       return structuredClone(stored);
     });
   openOptionsPage.mockReset().mockResolvedValue(undefined);
+  createTab.mockReset().mockResolvedValue({});
+  updateTab.mockReset().mockResolvedValue({});
+  updateWindow.mockReset().mockResolvedValue({});
+  getContexts.mockReset().mockResolvedValue([]);
   queryTabs.mockReset().mockResolvedValue([{ id: 7, url: 'https://x.com/user/status/1' }]);
   initialPageStatus = 'bilingual';
   tabActivated = createChromeEvent<[]>();
@@ -71,13 +79,21 @@ beforeEach(() => {
   });
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   vi.stubGlobal('chrome', {
-    runtime: { openOptionsPage, getManifest },
+    runtime: {
+      openOptionsPage,
+      getManifest,
+      getContexts,
+      getURL: (path: string) => `chrome-extension://test/${path}`,
+    },
     tabs: {
+      create: createTab,
+      update: updateTab,
       query: queryTabs,
       connect: connectTab,
       onActivated: tabActivated,
       onUpdated: tabUpdated,
     },
+    windows: { update: updateWindow },
   });
   document.body.innerHTML = '<div id="root"></div>';
   root = createRoot(document.getElementById('root')!);
@@ -126,13 +142,51 @@ it('saves each language immediately and retains the latest provider and style se
 });
 
 it.each([
-  { providerConsent: '', hint: 'Allow subtitles to be sent to your provider in settings.' },
+  { providerConsent: '', hint: 'Review caption data consent' },
   { providerConsent: 'https://api.openai.com', hint: undefined },
 ])('asks for consent when the configured Provider has none: $providerConsent', async (row) => {
   stored.providerConsent = row.providerConsent;
   await render();
-  expect(document.querySelector('.popup-setup-hint')?.textContent).toBe(row.hint);
-  expect(document.querySelector('.popup-setup-hint')?.closest('details')).toBeFalsy();
+  expect(document.querySelector('.popup-setup-action')?.textContent).toBe(row.hint);
+  expect(
+    document.querySelector('.popup-control .popup-setup-action')?.closest('details'),
+  ).toBeFalsy();
+});
+
+it('opens the translation service section directly when consent is missing', async () => {
+  stored.providerConsent = '';
+  await render();
+  await click('.popup-setup-action');
+  expect(createTab).toHaveBeenCalledWith({ url: 'chrome-extension://test/index.html#service' });
+  expect(openOptionsPage).not.toHaveBeenCalled();
+});
+
+it('gives consent as the only setup step when credentials are already configured', async () => {
+  initialPageStatus = 'not-configured';
+  await render();
+  expect(document.querySelector('.popup-page-status')?.textContent).toBe(
+    'Caption data consent needed',
+  );
+  expect(document.querySelector('.popup-setup-action')?.textContent).toBe(
+    'Review caption data consent',
+  );
+  expect(document.querySelector('.popup-setup-hint')).toBeNull();
+  expect(document.querySelector('.popup-model-id')?.textContent).toBe('provider/model-id');
+});
+
+it('reuses an existing settings tab and focuses its window when opening setup', async () => {
+  getContexts.mockResolvedValue([
+    { tabId: 12, windowId: 3, documentUrl: 'chrome-extension://test/index.html?ui=en#appearance' },
+  ]);
+  await render();
+  await click('.popup-setup-action');
+  expect(updateTab).toHaveBeenCalledWith(12, {
+    url: 'chrome-extension://test/index.html?ui=en#service',
+    active: true,
+  });
+  expect(updateWindow).toHaveBeenCalledWith(3, { focused: true });
+  expect(createTab).not.toHaveBeenCalled();
+  expect(openOptionsPage).not.toHaveBeenCalled();
 });
 
 it('offers one translation-language control with all supported languages', async () => {

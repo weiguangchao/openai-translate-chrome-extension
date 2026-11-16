@@ -228,6 +228,12 @@ Both the inline and expanded subtitle previews must contain the complete sample 
 
 Enforced by the maximum-size caption bounds assertions in `e2e/product-controls.spec.ts`.
 
+### Installed settings inheriting Chromium's small UI font
+
+Extension pages must explicitly inherit the root font on the body. Chromium's extension-page styles can otherwise override the family and reduce inherited text size, so a development-server screenshot does not establish the installed appearance.
+
+Enforced by the installed-page typography assertions in `e2e/product-controls.spec.ts`. Capture review screenshots from the built extension after checking its computed fonts.
+
 ### Failed settings loads presented as saved
 
 Distinguish loading, failure, and successfully loaded settings. A failed read must leave a persistent explanation and a retry action without showing default values as saved settings.
@@ -235,6 +241,12 @@ Distinguish loading, failure, and successfully loaded settings. A failed read mu
 The popup also ends its busy state after a failed read and replaces loading placeholders with failure text, while keeping editing disabled and settings accessible. Display-mode radios must have no selection until settings load successfully.
 
 Enforced by the failed-load recovery case in `tests/settings-alerts.test.tsx` and the loading and load-failure cases in `tests/popup.test.tsx`.
+
+### Settings navigation undoing validation focus
+
+Ignore a hashchange when its section is already current. An in-app navigation updates the hash before focusing an invalid field; processing that same navigation twice can scroll the field out of view after focus. Validate recovery in short windows after pending navigation events settle, with the complete inline error below the sticky actions.
+
+Enforced by the delayed-hash unit case in `tests/settings-alerts.test.tsx` and the short-viewport URL-recovery bounds checks in `e2e/product-controls.spec.ts`. Those checks require the complete heading and save button inside the viewport, no desktop document scroll, and no document movement from scrolling the sidebar. Desktop grid rows must fit the shell height and let the sidebar scroll internally. Phone layouts let the logo and section navigation scroll away so only the heading and draft actions remain sticky.
 
 ### Selected colors masking keyboard focus
 

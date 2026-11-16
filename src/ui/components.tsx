@@ -116,12 +116,14 @@ export function CaptionMode({
               checked={value === translationOnly}
               onChange={() => onChange(translationOnly)}
             />
-            <span className="mode-lines" aria-hidden>
-              {!translationOnly && <i />}
-              <i />
+            <span className="caption-mode-label">
+              <span>{translationOnly ? copy.translationOnly : copy.bilingual}</span>
+              <Check size={14} className="mode-check" aria-hidden />
             </span>
-            <span>{translationOnly ? copy.translationOnly : copy.bilingual}</span>
-            <Check size={14} className="mode-check" aria-hidden />
+            <span className="mode-lines" aria-hidden>
+              {!translationOnly && <span>{copy.source}</span>}
+              <span>{copy.target}</span>
+            </span>
           </label>
         ))}
       </div>

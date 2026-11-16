@@ -27,6 +27,7 @@ let settings: Settings;
 
 beforeEach(() => {
   vi.resetAllMocks();
+  window.history.replaceState(null, '', '#service');
   settings = {
     ...structuredClone(DEFAULT_SETTINGS),
     provider: 'openai',
@@ -150,9 +151,7 @@ it('keeps fetched models usable but reports that persistence failed', async () =
 
 async function chooseProvider(value: string) {
   await act(async () => {
-    const select = document.querySelector<HTMLSelectElement>('#provider')!;
-    select.value = value;
-    select.dispatchEvent(new Event('change', { bubbles: true }));
+    document.querySelector<HTMLInputElement>(`input[name="provider"][value="${value}"]`)!.click();
   });
 }
 
@@ -160,7 +159,9 @@ it('shows Microsoft by default and tests without an API key or model', async () 
   settings = structuredClone(DEFAULT_SETTINGS);
   vi.mocked(apiAction).mockResolvedValue('译文');
   await render();
-  expect(document.querySelector<HTMLSelectElement>('#provider')!.value).toBe('microsoft');
+  expect(document.querySelector<HTMLInputElement>('input[name="provider"]:checked')!.value).toBe(
+    'microsoft',
+  );
   expect(document.querySelector('#api-key')).toBeNull();
   expect(document.querySelector('#model')).toBeNull();
   expect(document.querySelector('#base-url')).toBeNull();

@@ -6,6 +6,8 @@ export const copy = {
   target: t('译文', 'Translation'),
   translationLanguage: t('翻译语言', 'Translation language'),
   translationService: t('翻译服务', 'Translation service'),
+  openaiCompatible: t('OpenAI 兼容接口', 'OpenAI-compatible'),
+  reviewConsent: t('查看字幕数据授权', 'Review caption data consent'),
   saveFailed: t('保存失败，请重试。', 'Could not save. Try again.'),
   loadFailed: t(
     '无法读取本地设置，请检查浏览器存储权限。',
