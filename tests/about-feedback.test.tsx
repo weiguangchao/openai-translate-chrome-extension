@@ -30,6 +30,7 @@ let root: Root;
 beforeEach(() => {
   vi.useFakeTimers();
   vi.resetAllMocks();
+  window.history.replaceState(null, '', location.pathname);
   environment.extension = false;
   vi.mocked(loadSettings).mockResolvedValue(structuredClone(DEFAULT_SETTINGS));
   vi.mocked(allowApiHost).mockResolvedValue(undefined);

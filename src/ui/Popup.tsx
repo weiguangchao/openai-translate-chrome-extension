@@ -3,7 +3,7 @@ import { LANGUAGES } from '../shared/languages';
 import { PAGE_STATUSES, type PageStatus } from '../shared/messages';
 import { platformForUrl } from '../shared/platforms';
 import { useEffect, useRef, useState } from 'react';
-import { Check, ChevronDown, CircleAlert, Settings2, Subtitles } from 'lucide-react';
+import { Check, ChevronDown, ChevronRight, CircleAlert, Settings2, Subtitles } from 'lucide-react';
 import {
   DEFAULT_SETTINGS,
   hasProviderConsent,
@@ -27,7 +27,7 @@ const STATUS_TEXT: Record<PopupStatus, string> = {
   checking: t('正在读取本页状态…', 'Checking this page…'),
   disabled: t('字幕已关闭', 'Subtitles are off'),
   'site-disabled': t('此网站字幕已关闭', 'Subtitles are off for this site'),
-  'not-configured': t('请先配置翻译服务', 'Set up translation in settings'),
+  'not-configured': t('翻译服务尚未就绪', 'Translation service is not ready'),
   'no-video': t('未检测到可用视频', 'No active video found'),
   waiting: t('等待字幕', 'Waiting for captions'),
   loading: t('正在翻译当前字幕', 'Translating the current caption'),
@@ -242,16 +242,32 @@ export function Popup() {
     }
   }
 
-  async function options() {
+  async function options(page?: 'service') {
     try {
-      if (isExtension) await chrome.runtime.openOptionsPage();
-      else window.open('./index.html', '_blank', 'noopener');
+      if (isExtension) {
+        if (page) {
+          const base = chrome.runtime.getURL('index.html');
+          const existing = (await chrome.runtime.getContexts({})).find(
+            (context) => context.tabId >= 0 && context.documentUrl?.split(/[?#]/, 1)[0] === base,
+          );
+          if (existing) {
+            const url = new URL(existing.documentUrl!);
+            url.hash = page;
+            await chrome.tabs.update(existing.tabId, { url: url.href, active: true });
+            await chrome.windows.update(existing.windowId, { focused: true });
+          } else await chrome.tabs.create({ url: `${base}#${page}` });
+        } else await chrome.runtime.openOptionsPage();
+      } else window.open(`./index.html${page ? `#${page}` : ''}`, '_blank', 'noopener');
     } catch {
       setError(t('无法打开设置，请重试。', 'Could not open settings. Try again.'));
     }
   }
 
   const configured = isProviderConfigured(settings);
+  const statusText =
+    pageStatus === 'not-configured' && ready && configured && !hasProviderConsent(settings)
+      ? t('等待字幕数据授权', 'Caption data consent needed')
+      : STATUS_TEXT[pageStatus];
   const placeholder =
     loadState === 'error' ? t('读取失败', 'Could not load') : t('读取中…', 'Loading…');
 
@@ -263,6 +279,10 @@ export function Popup() {
     >
       <header className="popup-header">
         <Logo small />
+        <p className="popup-save-state" role="status">
+          {saved && !busy && <Check size={12} aria-hidden />}
+          {busy ? t('正在保存…', 'Saving…') : saved ? t('已保存', 'Saved') : ''}
+        </p>
         <button
           className="popup-settings"
           aria-label={t('设置', 'Settings')}
@@ -274,31 +294,43 @@ export function Popup() {
         </button>
       </header>
 
-      <section className={`popup-power ${ready && settings.enabled ? 'is-enabled' : ''}`}>
-        <span className="popup-power-icon">
-          <Subtitles size={20} aria-hidden />
-        </span>
-        <div className="popup-power-text">
-          <h1>{copy.subtitles}</h1>
-          <span className="popup-power-scope">{t('所有支持的网站', 'All supported sites')}</span>
+      <section className={`popup-control ${ready && settings.enabled ? 'is-enabled' : ''}`}>
+        <div className="popup-power">
+          <span className="popup-power-icon">
+            <Subtitles size={20} aria-hidden />
+          </span>
+          <div className="popup-power-text">
+            <h1>{copy.subtitles}</h1>
+            <span className="popup-power-scope">{t('所有支持的网站', 'All supported sites')}</span>
+          </div>
+          <fieldset disabled={!ready || busy}>
+            <Toggle
+              label={copy.enableSubtitles}
+              checked={ready && settings.enabled}
+              onChange={(enabled) => void update({ enabled })}
+            />
+          </fieldset>
         </div>
-        <fieldset disabled={!ready || busy}>
-          <Toggle
-            label={copy.enableSubtitles}
-            checked={ready && settings.enabled}
-            onChange={(enabled) => void update({ enabled })}
-          />
-        </fieldset>
+        <p
+          className="popup-page-status"
+          data-status={pageStatus}
+          role="status"
+          aria-atomic="true"
+          aria-label={t('本页状态', 'Page status')}
+        >
+          {pageStatus === 'error' ? <CircleAlert size={14} aria-hidden /> : <i aria-hidden />}
+          {statusText}
+        </p>
+        {ready && (!configured || !hasProviderConsent(settings)) && (
+          <button
+            className="text-button popup-setup-action"
+            onClick={() => void options('service')}
+          >
+            {configured ? copy.reviewConsent : t('配置翻译服务', 'Set up translation service')}
+            <ChevronRight size={14} aria-hidden />
+          </button>
+        )}
       </section>
-      <p
-        className="popup-page-status"
-        data-status={pageStatus}
-        role="status"
-        aria-label={t('本页状态', 'Page status')}
-      >
-        {pageStatus === 'error' ? <CircleAlert size={14} aria-hidden /> : <i aria-hidden />}
-        {STATUS_TEXT[pageStatus]}
-      </p>
 
       <fieldset className="popup-languages" disabled={!ready || busy}>
         <PopupLanguage
@@ -315,27 +347,6 @@ export function Popup() {
           onChange={(translationOnly) => void update({ translationOnly })}
         />
       </fieldset>
-
-      {ready && !configured && (
-        <p className="popup-setup-hint">
-          {settings.model.trim()
-            ? t('请在设置中配置 API Key。', 'Configure your API Key in settings.')
-            : t('请在设置中配置翻译服务。', 'Configure your translation service in settings.')}
-        </p>
-      )}
-      {ready && configured && !hasProviderConsent(settings) && (
-        <p className="popup-setup-hint">
-          {t(
-            '请在设置中同意将字幕发送给翻译服务。',
-            'Allow subtitles to be sent to your provider in settings.',
-          )}
-        </p>
-      )}
-      {ready && (!configured || !hasProviderConsent(settings)) && (
-        <button className="text-button popup-setup-action" onClick={() => void options()}>
-          {t('前往设置', 'Open settings')}
-        </button>
-      )}
 
       <details className="popup-details">
         <summary>
@@ -369,10 +380,6 @@ export function Popup() {
           {error}
         </p>
       )}
-      <p className="popup-save-state" role="status">
-        {saved && !busy && <Check size={12} aria-hidden />}
-        {busy ? t('正在保存…', 'Saving…') : saved ? t('已保存', 'Saved') : ''}
-      </p>
     </main>
   );
 }
