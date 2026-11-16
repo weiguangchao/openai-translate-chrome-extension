@@ -91,6 +91,7 @@ export class CaptionController {
       () => this.tick(),
       () => this.settings.translationOnly,
       () => this.settings.targetLanguage,
+      () => this.settings,
     );
     this.trace = new TraceReporter(
       (message) => void this.connection.sendMessage(message).catch(() => {}),
@@ -171,6 +172,7 @@ export class CaptionController {
 
   private advance(completedSeek: boolean): void {
     if (this.destroyed) return;
+    if (this.video) this.translator.notePlayback(this.video.paused);
     if (!this.connection.active) {
       this.destroy();
       return;

@@ -5,8 +5,14 @@ import {
   type CaptionTranslationSettings,
   type Settings,
 } from '../src/shared/settings';
-import { extensionStorage, sessionStorage } from './fixtures/extension-storage';
+import {
+  extensionStorage,
+  sessionStorage,
+  extensionPermissions,
+} from './fixtures/extension-storage';
 import { consentedSettings } from './fixtures/settings';
+import { portPair } from './fixtures/ports';
+import { RECOVERY_PORT } from '../src/shared/recovery';
 import { packedCues, providerReply, requestedTexts, translationReply } from './fixtures/provider';
 import {
   providerSendWindowMs,
@@ -136,6 +142,7 @@ async function loadBackground(saved: Settings, session = new Map<string, unknown
   vi.stubGlobal('chrome', {
     runtime: {
       id: 'extension-id',
+      onConnect: { addListener: vi.fn() },
       getURL: (path: string) => `chrome-extension://extension-id/${path}`,
       onMessage: {
         addListener: (callback: typeof listener) => {
@@ -147,6 +154,7 @@ async function loadBackground(saved: Settings, session = new Map<string, unknown
       query: vi.fn().mockResolvedValue([{ id: 1 }]),
       sendMessage: vi.fn().mockResolvedValue(undefined),
     },
+    permissions: extensionPermissions(),
     storage: {
       local,
       session: sessionStorage(session),
@@ -600,6 +608,78 @@ const batch = (prefix: string) =>
   Array.from({ length: translationBatchLimit }, (_, index) => `${prefix}${index}`);
 const openai = (texts: string[]) => texts.map((text) => `OpenAI ${text}`);
 const wait = { timeout: 3000 };
+
+it.each([false, true])(
+  'recovers the stopped current caption while its old cacheOnly=%s request waits',
+  async (cacheOnly) => {
+    const { sent, answer } = dualProvider();
+    const send = await loadBackground(dualSettings);
+    const opening = send(window(0, batch('A')));
+    await vi.waitFor(() => expect(sent(true)).toEqual(batch('A')), wait);
+    answer(false);
+    answer(true);
+    await opening;
+    let original: Reply | undefined;
+    const work = send({
+      type: 'translate',
+      captionLanguage: 'en',
+      pageTitle: 'Video title',
+      text: 'Current',
+    });
+    await vi.waitFor(() => expect(sent(false)).toContain('Current'), wait);
+    const lookup = cacheOnly
+      ? send({
+          type: 'translate',
+          captionLanguage: 'en',
+          pageTitle: 'Video title',
+          text: 'Current',
+          cacheOnly: true,
+        })
+      : work;
+    void lookup.then((result) => {
+      original = result;
+    });
+    const state = await send({ type: 'settings' });
+    const revision = (state.data as { translationRevision: string }).translationRevision;
+    const pair = portPair(
+      RECOVERY_PORT +
+        JSON.stringify({
+          type: 'translate',
+          text: 'Current',
+          captionLanguage: 'en',
+          pageTitle: 'Video title',
+          revision,
+          paused: false,
+        }),
+      {
+        id: 'extension-id',
+        url: 'https://www.youtube.com/watch?v=example',
+        frameId: 0,
+        tab: { id: 1 } as chrome.tabs.Tab,
+      },
+    );
+    const received: unknown[] = [];
+    pair.client.onMessage.addListener((message) => {
+      received.push(message);
+      if (message.type === 'sync') pair.client.postMessage({ type: 'sync-state', paused: false });
+    });
+    vi.mocked(chrome.runtime.onConnect.addListener).mock.calls[0][0](pair.server);
+    await vi.waitFor(() => expect(sent(true)).toContain('Current'), wait);
+    answer(true);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(received).toContainEqual({ type: 'translation', translation: '微软 Current' });
+    expect(original).toBeUndefined();
+    answer(false);
+    await Promise.all([work, lookup]);
+    expect(original).toEqual({ ok: true, data: 'OpenAI Current' });
+    const next = send(window(10, batch('B')));
+    await vi.waitFor(() => expect(sent(false)).toContain('B0'), wait);
+    expect(sent(true)).toEqual([...batch('A'), 'Current']);
+    expect(sent(false).filter((text) => text === 'Current')).toHaveLength(1);
+    answer(false);
+    await next;
+  },
+);
 
 it('runs Microsoft beside OpenAI again after a seek until OpenAI covers the new window', async () => {
   const session = new Map<string, unknown>();

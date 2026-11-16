@@ -298,7 +298,7 @@ it('finishes an in-flight translation while paused and does not start another un
   });
   await setPaused(true);
   expect(sendMessage).toHaveBeenLastCalledWith({ type: 'prefetch-pause' });
-  expect(translationNode()?.textContent).toBe('Translating');
+  expect(translationNode()?.hidden).toBe(true);
   replies[0]({ ok: true, data: '第一句译文' });
   await vi.advanceTimersByTimeAsync(1);
   expect(translationNode()?.textContent).toBe('第一句译文');

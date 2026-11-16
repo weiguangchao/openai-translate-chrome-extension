@@ -22,6 +22,8 @@ import { loadSettings } from '../shared/storage';
 import { printTrace, readTraceRequest } from '../shared/trace';
 import { HybridTranslationQueue } from './queue';
 import { TranslationStore } from './translation-store';
+import { MicrosoftAccess } from './microsoft-access';
+import { RecoveryPorts } from './recovery';
 
 const translations = new TranslationStore();
 const queue = new HybridTranslationQueue(
@@ -29,8 +31,12 @@ const queue = new HybridTranslationQueue(
   printTrace,
   () =>
     settings.provider === 'microsoft' ||
-    settings.providerConsent.split(',').includes(MICROSOFT_ORIGIN),
+    (access.allowed && settings.providerConsent.split(',').includes(MICROSOFT_ORIGIN)),
 );
+const access = new MicrosoftAccess(() => {
+  queue.cancelFallback();
+  recovery.closeAll();
+});
 let settings: Settings;
 let translationRevision = crypto.randomUUID();
 let updateSequence = 0;
@@ -38,8 +44,22 @@ const consumers = new Map<string, { platform: PlatformId; document?: string }>()
 const ready = (async () => {
   await chrome.storage.local.setAccessLevel({ accessLevel: 'TRUSTED_CONTEXTS' });
   settings = await loadSettings();
+  await access.refresh();
   await translations.retainPreview(new Set());
 })();
+const recovery = new RecoveryPorts(
+  queue,
+  ready,
+  () => settings,
+  () => translationRevision,
+  (platform) =>
+    settings.enabled &&
+    settings[platform] &&
+    hasProviderConsent(settings) &&
+    access.allowed &&
+    settings.providerConsent.split(',').includes(MICROSOFT_ORIGIN),
+);
+chrome.runtime.onConnect.addListener(recovery.connect);
 
 function requireEnabled(platform: PlatformId): void {
   if (!settings.enabled || !settings[platform])
@@ -60,6 +80,7 @@ async function contentRequest(
   consumer: string,
   document?: string,
 ): Promise<unknown> {
+  recovery.closeDocument(consumer, document);
   const previous = consumers.get(consumer);
   if (previous && previous.document !== document) queue.release([consumer]);
   consumers.set(consumer, { platform, document });
@@ -69,12 +90,14 @@ async function contentRequest(
     return;
   }
   if (type === 'prefetch-hold') {
+    recovery.closeParent(consumer);
     queue.hold(consumer, readHoldRequest(message).time);
     return;
   }
   if (type === 'prefetch') {
     const snapshot = readPrefetchRequest(message);
     if (!snapshot.cues.length) {
+      recovery.closeParent(consumer);
       consumers.delete(consumer);
       queue.release([consumer]);
       return;
@@ -142,16 +165,21 @@ chrome.storage.onChanged.addListener((changes, area) => {
     if (change.translation) translationRevision = crypto.randomUUID();
     if (change.translation || !settings.enabled || !hasProviderConsent(settings)) {
       queue.reset();
+      recovery.closeAll();
       consumers.clear();
     } else if (change.availability) {
       const microsoftAllowed =
         settings.provider === 'microsoft' ||
         settings.providerConsent.split(',').includes(MICROSOFT_ORIGIN);
-      if (microsoftWasAllowed && !microsoftAllowed) queue.disableMicrosoft();
+      if (microsoftWasAllowed && !microsoftAllowed) {
+        queue.disableMicrosoft();
+        recovery.closeAll();
+      }
       const disabled = [...consumers]
         .filter(([, { platform }]) => !settings[platform])
         .map(([consumer]) => consumer);
       for (const consumer of disabled) consumers.delete(consumer);
+      for (const consumer of disabled) recovery.closeParent(consumer);
       queue.release(disabled);
     }
     const update: SettingsUpdated = {

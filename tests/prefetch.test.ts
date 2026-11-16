@@ -4,7 +4,11 @@ import type { TimedCue } from '../src/core/cues';
 import { translationSendsPerSecond } from '../src/shared/tuning';
 import { createTestPlatform } from './fixtures/platform';
 import { publicSettings } from '../src/shared/settings';
-import { extensionStorage, sessionStorage } from './fixtures/extension-storage';
+import {
+  extensionStorage,
+  sessionStorage,
+  extensionPermissions,
+} from './fixtures/extension-storage';
 import { consentedSettings } from './fixtures/settings';
 import { providerReply, requestedTexts } from './fixtures/provider';
 import { longCaption, longCaptionParts, longTranslations } from './fixtures/long-caption';
@@ -57,6 +61,7 @@ beforeEach(async () => {
   vi.stubGlobal('chrome', {
     runtime: {
       id: 'extension-id',
+      onConnect: { addListener: vi.fn() },
       getURL: (path: string) => `chrome-extension://extension-id/${path}`,
       onMessage: {
         addListener: (callback: typeof listener) => {
@@ -73,6 +78,7 @@ beforeEach(async () => {
       session: sessionStorage(),
       onChanged,
     },
+    permissions: extensionPermissions(),
   });
   vi.stubGlobal(
     'fetch',

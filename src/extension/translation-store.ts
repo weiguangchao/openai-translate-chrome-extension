@@ -17,7 +17,10 @@ export class TranslationStore {
 
   constructor(private limit = translationCacheLimit) {}
 
-  async get(entries: readonly { key: string; primary?: string }[]): Promise<(string | null)[]> {
+  async get(
+    entries: readonly { key: string; primary?: string }[],
+    includePreview = true,
+  ): Promise<(string | null)[]> {
     try {
       for (;;) {
         const writes = this.writes;
@@ -32,7 +35,7 @@ export class TranslationStore {
           ({ key, primary }) =>
             (primary ? readStoredTranslation(stored[PREFIX + primary]) : null) ??
             readStoredTranslation(stored[PREFIX + key]) ??
-            (primary ? readStoredTranslation(stored[PREVIEW + key]) : null),
+            (primary && includePreview ? readStoredTranslation(stored[PREVIEW + key]) : null),
         );
       }
     } catch {
@@ -76,10 +79,10 @@ export class TranslationStore {
       const gone = keys.splice(0, Math.max(0, keys.length - this.limit));
       if (gone.length) await chrome.storage.session.remove(gone.map((item) => PREFIX + item));
       await chrome.storage.session.set({ [PREFIX + key]: translation, [orderKey]: keys });
-    });
+    }).then(() => {});
   }
 
-  retainPreview(live: ReadonlySet<string>): Promise<void> {
+  retainPreview(live: ReadonlySet<string>): Promise<boolean> {
     return this.write(async () => {
       const stored: Record<string, unknown> = await chrome.storage.session.get(PREVIEW_KEYS);
       const keys = readKeys(stored[PREVIEW_KEYS]);
@@ -90,8 +93,12 @@ export class TranslationStore {
     });
   }
 
-  private write(work: () => Promise<void>): Promise<void> {
-    this.writes = this.writes.then(work).catch(() => {});
-    return this.writes;
+  private write(work: () => Promise<void>): Promise<boolean> {
+    const result = this.writes.then(work).then(
+      () => true,
+      () => false,
+    );
+    this.writes = result.then(() => {});
+    return result;
   }
 }

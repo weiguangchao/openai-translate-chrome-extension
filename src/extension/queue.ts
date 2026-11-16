@@ -27,6 +27,8 @@ interface Job {
   sent?: boolean;
   ready: boolean;
   fallback?: CaptionTranslationSettings;
+  deadline?: AbortSignal;
+  observers: Set<(signal: AbortSignal) => void>;
 }
 
 interface Pack {
@@ -46,6 +48,9 @@ interface Consumer {
   snapshot: readonly SnapshotCue[];
   paused?: boolean;
   held?: boolean;
+  recovery?: boolean;
+  checked?: boolean;
+  synced?: boolean;
   time: number;
   rate: number;
 }
@@ -64,6 +69,7 @@ export class TranslationQueue {
   constructor(
     private store = new TranslationStore(),
     private trace: (event: TraceEvent) => void = () => {},
+    private fallbackAllowed: () => boolean = () => true,
   ) {}
 
   private key(settings: CaptionTranslationSettings, text: string): string {
@@ -88,6 +94,7 @@ export class TranslationQueue {
     text: string,
     options?: { fallback?: CaptionTranslationSettings; onProviderTranslation?: () => void },
   ): Promise<string> {
+    if (options?.fallback && !this.fallbackAllowed()) return Promise.reject(this.cancelled());
     const key = this.key(settings, text);
     const state: Consumer = this.consumers.get(consumer) ?? {
       packs: [],
@@ -179,6 +186,7 @@ export class TranslationQueue {
         request.cues.forEach((cue, cueIndex) => {
           const key = pack.keys[cueIndex];
           if (this.failed.has(key)) return;
+          if (options?.fallback && !this.fallbackAllowed()) return;
           const job = this.enqueue(key, settings, cue.text, consumer, {
             pack: pack.id,
             fallback: options?.fallback,
@@ -233,6 +241,93 @@ export class TranslationQueue {
     this.drain();
   }
 
+  recoveryState(consumer: string, paused: boolean, synced: boolean): void {
+    const state = this.consumers.get(consumer);
+    if (!state?.recovery) return;
+    state.paused = paused;
+    state.synced = synced;
+    state.held = !synced || !state.checked;
+    this.drain();
+  }
+
+  async recover(
+    consumer: string,
+    settings: CaptionTranslationSettings,
+    text: string,
+    fallback: CaptionTranslationSettings,
+    paused: boolean,
+    synced: boolean,
+    onStart: (signal: AbortSignal) => void,
+    valid: () => boolean = () => true,
+  ): Promise<string | null> {
+    const key = this.key(settings, text);
+    const previous = this.consumers.get(consumer);
+    const state: Consumer =
+      previous?.recovery && previous.current === key
+        ? previous
+        : {
+            packs: [],
+            snapshot: [],
+            time: 0,
+            rate: 1,
+            paused,
+            held: !synced,
+            recovery: true,
+          };
+    state.paused = paused;
+    state.synced = synced;
+    state.held = true;
+    state.checked = false;
+    const cleaned = this.store.retainPreview(this.wanted());
+    this.consumers.set(consumer, state);
+    const includePreview = await cleaned;
+    const [translation] = await this.store.get(
+      [{ key, primary: this.key(fallback, text) }],
+      includePreview,
+    );
+    if (this.consumers.get(consumer) !== state || !valid() || !this.fallbackAllowed()) return null;
+    if (translation !== null) return translation;
+    if (!includePreview) return null;
+    const failure = this.failed.get(key);
+    if (failure) throw failure;
+    state.current = key;
+    state.checked = true;
+    state.held = !state.synced;
+    this.retainWindow();
+    const job = this.enqueue(key, settings, text, consumer, { fallback, checked: true });
+    job.observers.add(onStart);
+    if (job.deadline) onStart(job.deadline);
+    this.drain();
+    try {
+      return await job.promise;
+    } finally {
+      job.observers.delete(onStart);
+    }
+  }
+
+  releaseRecovery(consumer: string): void {
+    this.consumers.delete(consumer);
+    this.prune('detach');
+    this.retainWindow();
+    this.drain();
+  }
+
+  cancelFallback(): void {
+    const controllers = new Set<AbortController>();
+    for (const [key, job] of this.jobs) {
+      if (!job.fallback || job.sent) continue;
+      this.jobs.delete(key);
+      job.reject(this.cancelled());
+      if (job.controller) controllers.add(job.controller);
+    }
+    for (const controller of controllers) controller.abort();
+    this.drain();
+  }
+
+  private cancelled(): Error {
+    return new Error(t('字幕已更新。', 'Subtitles have changed.'));
+  }
+
   reset(): void {
     this.consumers.clear();
     this.samples = [];
@@ -276,7 +371,7 @@ export class TranslationQueue {
     settings: CaptionTranslationSettings,
     text: string,
     consumer: string,
-    options?: { pack?: string; fallback?: CaptionTranslationSettings },
+    options?: { pack?: string; fallback?: CaptionTranslationSettings; checked?: boolean },
   ): Job {
     const existing = this.jobs.get(key);
     if (existing) {
@@ -303,8 +398,9 @@ export class TranslationQueue {
       promise,
       resolve,
       reject,
-      ready: !!options?.pack,
+      ready: !!options?.pack || !!options?.checked,
       fallback: options?.fallback,
+      observers: new Set(),
     };
     this.jobs.set(key, job);
     this.usesPreview ||= !!options?.fallback;
@@ -357,6 +453,34 @@ export class TranslationQueue {
 
   private drain(): void {
     const consumers = [...this.consumers.values()].filter((state) => !state.paused && !state.held);
+    const split = new Set<AbortController>();
+    for (const job of this.jobs.values()) {
+      const controller = job.controller;
+      const batch = job.batch;
+      if (!controller || job.sent || !batch || batch.length < 2 || split.has(controller)) continue;
+      const recovering = consumers.filter((state) => state.recovery && state.current === job.key);
+      if (!recovering.length) continue;
+      if (
+        consumers.some(
+          (state) =>
+            !state.recovery &&
+            batch.some(
+              (item) =>
+                state.current === item.key || state.snapshot.some(({ key }) => key === item.key),
+            ),
+        )
+      )
+        continue;
+      split.add(controller);
+      for (const item of batch) {
+        if (this.jobs.get(item.key) !== item || item.controller !== controller) continue;
+        item.controller = undefined;
+        item.batch = undefined;
+        if (consumers.some((state) => state.recovery && state.current === item.key))
+          item.pack = undefined;
+      }
+      controller.abort();
+    }
     const ordered = consumers.flatMap((state) => (state.current ? [state.current] : []));
     for (const state of consumers) for (const pack of state.packs) ordered.push(...pack.keys);
     const waiting = [...new Set(ordered)].flatMap((key) => {
@@ -459,25 +583,30 @@ export class TranslationQueue {
       deliver,
       {
         canSend: () => {
-          if (batch.some((job) => job.sent)) return true;
+          const current = batch.filter(
+            (job) => this.jobs.get(job.key) === job && job.controller === controller,
+          );
+          if (controller.signal.aborted || !current.length) return false;
+          if (current.some((job) => job.sent)) return true;
           if (this.backoff && Date.now() < this.backoff.until) return false;
           const live = [...this.consumers.values()].some(
             (item) =>
               !item.paused &&
               !item.held &&
-              batch.some(
+              (!item.recovery || batch.length === 1) &&
+              current.some(
                 (job) =>
                   item.current === job.key || item.snapshot.some(({ key }) => key === job.key),
               ),
           );
           if (live) {
-            batch.forEach((job) => {
+            current.forEach((job) => {
               job.sent = true;
             });
             sentAt = Date.now();
             this.trace({ e: 'sent', id });
           }
-          return batch.some((job) => job.sent);
+          return live;
         },
         priority: () => {
           const consumers = [...this.consumers.values()].filter((item) => !item.paused);
@@ -485,6 +614,12 @@ export class TranslationQueue {
           return 1;
         },
         counts: () => !this.detached.has(controller),
+        onStart: (signal) => {
+          for (const job of batch) {
+            job.deadline = signal;
+            for (const observer of job.observers) observer(signal);
+          }
+        },
       },
     );
     void work.then(
@@ -535,13 +670,47 @@ export class HybridTranslationQueue {
     trace: (event: TraceEvent) => void = () => {},
     private readonly microsoftAllowed: () => boolean = () => true,
   ) {
-    this.microsoft = new TranslationQueue(store, trace);
+    this.microsoft = new TranslationQueue(store, trace, microsoftAllowed);
     this.openai = new TranslationQueue(store, trace);
   }
 
   lookup(settings: CaptionTranslationSettings, text: string): Promise<string | null> {
     const queue = settings.provider === 'microsoft' ? this.microsoft : this.openai;
     return queue.lookup(settings, text);
+  }
+
+  recover(
+    consumer: string,
+    settings: CaptionTranslationSettings,
+    text: string,
+    paused: boolean,
+    synced: boolean,
+    onStart: (signal: AbortSignal) => void,
+    valid: () => boolean = () => true,
+  ): Promise<string | null> {
+    if (settings.provider !== 'openai' || !this.microsoftAllowed()) return Promise.resolve(null);
+    return this.microsoft.recover(
+      consumer,
+      { ...settings, provider: 'microsoft' },
+      text,
+      settings,
+      paused,
+      synced,
+      onStart,
+      valid,
+    );
+  }
+
+  recoveryState(consumer: string, paused: boolean, synced: boolean): void {
+    this.microsoft.recoveryState(consumer, paused, synced);
+  }
+
+  releaseRecovery(consumer: string): void {
+    this.microsoft.releaseRecovery(consumer);
+  }
+
+  cancelFallback(): void {
+    this.microsoft.cancelFallback();
   }
 
   request(consumer: string, settings: CaptionTranslationSettings, text: string): Promise<string> {

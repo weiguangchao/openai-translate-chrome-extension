@@ -118,6 +118,12 @@ A failed caption is not automatically retried. Its failure is retained while it 
 
 Enforced by `src/extension/queue.ts`, `tests/queue.test.ts`, `tests/captions.test.ts`, and `e2e/provider.spec.ts`.
 
+### Pause time triggering the translation placeholder
+
+Count only non-paused waiting toward the loading placeholder. Keep that clock separate from DOM-caption debounce so captions appearing during a pause can still query the cache. A supplemental translation must not be overwritten by a late failure from the original request. Bind recovery to the caption present at resume; a blank interval must not authorize the next caption. Pruning one member of an unsent shared batch must leave its surviving jobs sendable.
+
+Enforced by `src/core/translator.ts`, `tests/translator-recovery.test.ts`, and `tests/captions.test.ts`. Recovery queue ownership and cache checks are covered by `tests/recovery.test.ts` and `tests/background.test.ts`.
+
 ### Insecure Provider origins
 
 Provider requests leave the computer only over HTTPS. Plain HTTP goes only to `localhost` or `127.0.0.1`.
