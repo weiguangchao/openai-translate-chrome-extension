@@ -8,6 +8,7 @@ import { loadingDelayMs, planRefreshSeconds } from '../shared/tuning';
 import type { ExtensionConnection } from './connection';
 import type { CaptionView, SubtitleOverlay, TranslationLine } from './overlay';
 import type { PageStatus } from '../shared/messages';
+import { RECOVERY_PORT, recoveryEvent } from '../shared/recovery';
 
 export interface CaptionFrame {
   readonly text: string;
@@ -28,6 +29,12 @@ interface Caption {
   line: TranslationLine;
   request: Request | null;
   checked: boolean;
+  playedMs: number;
+  sampledAt: number;
+  wasPlaying: boolean;
+  recoveryTried: boolean;
+  supplement: { port: chrome.runtime.Port; sent: boolean } | null;
+  failure: TranslateFailure | null;
 }
 
 const VIEW_STATES: Record<TranslationLine['kind'], ViewState> = {
@@ -67,6 +74,9 @@ export class CaptionTranslator {
   private windowKey = '';
   private holdKey = '';
   private active = false;
+  private paused = false;
+  private hasPlayed = false;
+  private resumed: Caption | null = null;
   private playback: { desired: boolean; confirmed: boolean | undefined; sending: boolean } = {
     desired: false,
     confirmed: false,
@@ -79,6 +89,10 @@ export class CaptionTranslator {
     private changed: () => void,
     private translationOnly: () => boolean,
     private targetLanguage: () => string,
+    private recoverySettings: () => { provider: string; translationRevision: string } = () => ({
+      provider: 'microsoft',
+      translationRevision: '',
+    }),
   ) {}
 
   get state(): ViewState {
@@ -113,6 +127,7 @@ export class CaptionTranslator {
   }
 
   cancel(): void {
+    this.closeSupplement();
     const { caption } = this;
     if (!caption) return;
     if (caption.line.kind === 'loading') caption.line = { kind: 'none' };
@@ -124,21 +139,28 @@ export class CaptionTranslator {
   }
 
   clear(): void {
+    this.closeSupplement();
     this.caption = null;
+    this.resumed = null;
     this.render();
   }
 
   reset(): void {
+    this.closeSupplement();
     this.caption = null;
     this.playback = { desired: false, confirmed: false, sending: false };
     this.windowKey = '';
     this.holdKey = '';
     this.active = false;
+    this.paused = false;
+    this.hasPlayed = false;
+    this.resumed = null;
   }
 
   show(frame: CaptionFrame): void {
     const identity = JSON.stringify([frame.text, frame.captionLanguage, frame.pageTitle]);
-    if (identity !== this.caption?.identity)
+    if (identity !== this.caption?.identity) {
+      this.closeSupplement();
       this.caption = {
         text: frame.text,
         identity,
@@ -146,7 +168,16 @@ export class CaptionTranslator {
         line: { kind: 'none' },
         request: null,
         checked: false,
+        playedMs: 0,
+        sampledAt: Date.now(),
+        wasPlaying: !frame.cacheOnly,
+        recoveryTried: false,
+        supplement: null,
+        failure: null,
       };
+    }
+    if (this.resumed === this.caption && !frame.cacheOnly) this.openSupplement(this.caption, frame);
+    this.resumed = null;
     this.update(this.caption, frame);
     this.render();
   }
@@ -160,11 +191,36 @@ export class CaptionTranslator {
       line: { kind: 'unsupported-language' },
       request: null,
       checked: true,
+      playedMs: 0,
+      sampledAt: Date.now(),
+      wasPlaying: !this.paused,
+      recoveryTried: true,
+      supplement: null,
+      failure: null,
     };
     this.render();
   }
 
   notePlayback(paused: boolean): void {
+    const now = Date.now();
+    const caption = this.caption;
+    if (caption) {
+      if (caption.wasPlaying && (caption.line.kind === 'none' || caption.line.kind === 'loading'))
+        caption.playedMs += Math.max(0, now - caption.sampledAt);
+      caption.sampledAt = now;
+      caption.wasPlaying = !paused;
+    }
+    if (this.hasPlayed && this.paused && !paused) this.resumed = caption;
+    this.hasPlayed ||= !paused;
+    const changed = this.paused !== paused;
+    this.paused = paused;
+    if (changed && caption?.supplement) {
+      try {
+        caption.supplement.port.postMessage({ type: 'state', paused });
+      } catch {
+        this.closeSupplement();
+      }
+    }
     if (paused && !this.active) return;
     const playback = this.playback;
     playback.desired = paused;
@@ -232,6 +288,8 @@ export class CaptionTranslator {
   }
 
   release(): void {
+    this.closeSupplement();
+    this.resumed = null;
     if (!this.active) return;
     this.active = false;
     this.windowKey = '';
@@ -260,16 +318,22 @@ export class CaptionTranslator {
       return;
     }
     const pending = caption.request !== null;
+    if (caption.failure) {
+      if (!frame.cacheOnly && caption.playedMs >= loadingDelayMs)
+        caption.line = { kind: 'loading' };
+      return;
+    }
     if (frame.cacheOnly && (caption.checked || pending)) return;
     const waited = Date.now() - caption.since;
     if (pending || waited < frame.debounce) {
-      if (!frame.cacheOnly && waited >= loadingDelayMs) caption.line = { kind: 'loading' };
+      if (!frame.cacheOnly && caption.playedMs >= loadingDelayMs)
+        caption.line = { kind: 'loading' };
       return;
     }
-    this.request(caption, waited, frame);
+    this.request(caption, frame);
   }
 
-  private request(caption: Caption, waited: number, frame: CaptionFrame): void {
+  private request(caption: Caption, frame: CaptionFrame): void {
     const { cacheOnly, captionLanguage, pageTitle } = frame;
     const request: Request = { cacheOnly };
     const current = () => this.caption === caption && caption.request === request;
@@ -277,7 +341,7 @@ export class CaptionTranslator {
     if (cacheOnly) caption.checked = true;
     else {
       this.active = true;
-      if (waited >= loadingDelayMs) caption.line = { kind: 'loading' };
+      if (caption.playedMs >= loadingDelayMs) caption.line = { kind: 'loading' };
     }
     void this.connection
       .sendMessage<unknown>({
@@ -292,9 +356,13 @@ export class CaptionTranslator {
         caption.request = null;
         if (response?.ok && cacheOnly && response.data === null) return;
         const translation = response?.ok ? readStoredTranslation(response.data) : null;
-        if (translation !== null) caption.line = { kind: 'ready', translation };
-        else
-          caption.line = failedLine(
+        if (caption.line.kind !== 'none' && caption.line.kind !== 'loading') return;
+        if (translation !== null) {
+          caption.line = { kind: 'ready', translation };
+          this.closeSupplement();
+        } else
+          this.fail(
+            caption,
             response?.ok === false
               ? response.failure
               : {
@@ -309,10 +377,87 @@ export class CaptionTranslator {
       .catch((error) => {
         if (!current()) return;
         caption.request = null;
-        caption.line = failedLine(
+        this.fail(
+          caption,
           failureOf(error, t('翻译失败，请检查配置。', 'Translation failed. Check your settings.')),
         );
       })
       .finally(() => this.changed());
+  }
+
+  private fail(caption: Caption, failure: TranslateFailure): void {
+    if (
+      this.caption !== caption ||
+      (caption.line.kind !== 'none' && caption.line.kind !== 'loading')
+    )
+      return;
+    caption.failure = failure;
+    if (caption.supplement?.sent) return;
+    this.closeSupplement();
+    caption.line = failedLine(failure);
+  }
+
+  private closeSupplement(): void {
+    const caption = this.caption;
+    const supplement = caption?.supplement;
+    if (!caption || !supplement) return;
+    caption.supplement = null;
+    try {
+      supplement.port.disconnect();
+    } catch {}
+    if (caption.failure && (caption.line.kind === 'none' || caption.line.kind === 'loading'))
+      caption.line = failedLine(caption.failure);
+  }
+
+  private openSupplement(caption: Caption, frame: CaptionFrame): void {
+    const settings = this.recoverySettings();
+    if (
+      caption.recoveryTried ||
+      settings.provider !== 'openai' ||
+      (caption.line.kind !== 'none' && caption.line.kind !== 'loading')
+    )
+      return;
+    caption.recoveryTried = true;
+    try {
+      const port = this.connection.connect(
+        RECOVERY_PORT +
+          JSON.stringify({
+            type: 'translate',
+            text: caption.text,
+            captionLanguage: frame.captionLanguage,
+            pageTitle: frame.pageTitle,
+            revision: settings.translationRevision,
+            paused: frame.cacheOnly,
+          }),
+      );
+      const supplement = { port, sent: false };
+      caption.supplement = supplement;
+      port.onDisconnect.addListener(() => {
+        if (this.caption !== caption || caption.supplement !== supplement) return;
+        this.closeSupplement();
+        this.changed();
+      });
+      port.onMessage.addListener((value: unknown) => {
+        if (this.caption !== caption || caption.supplement !== supplement) return;
+        const event = recoveryEvent(value);
+        if (!event) return;
+        if (event.type === 'sync') {
+          try {
+            port.postMessage({ type: 'sync-state', paused: this.paused });
+          } catch {
+            this.closeSupplement();
+          }
+        } else if (event.type === 'sent') supplement.sent = true;
+        else {
+          if (
+            event.type === 'translation' &&
+            (caption.line.kind === 'none' || caption.line.kind === 'loading')
+          )
+            caption.line = { kind: 'ready', translation: event.translation };
+          this.closeSupplement();
+        }
+        this.changed();
+      });
+    } catch {}
   }
 }

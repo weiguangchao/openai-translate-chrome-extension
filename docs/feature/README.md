@@ -64,6 +64,8 @@ During playback, Subline translates upcoming captions in advance and prioritizes
 
 Pausing lets requests already sent finish, while new caption translation requests wait. Caption display checks for existing results during a pause. If no result is available, a new request waits until playback resumes.
 
+The delay before showing "Translating" counts only time when the video is not paused. Resuming continues the remaining delay; a pause does not add another delay once it has already elapsed. Buffering while the player is not paused still counts. Existing translations remain displayed, and captions that arrive during a pause can still be checked against the cache.
+
 Seeking cancels obsolete work that has not been sent. Requests already sent can finish, while the extension prioritizes the caption at the landing position after the seek. Results for old captions do not replace the caption displayed at the new position.
 
 Changing the video, caption source, source language, or translation configuration makes Subline match the current captions to their translation tasks again. Saved settings are sent to supported video pages that are already open.
@@ -94,11 +96,15 @@ Source references: [endpoint and settings validation](../../src/shared/settings.
 
 When OpenAI is selected, the user can also enable "I agree to send subtitle text to Microsoft for temporary translations". Saving this setting requests site access for Microsoft as well.
 
-Subline can then request translations from OpenAI and Microsoft at the same time. The first valid result can supply the current caption. OpenAI continues its work. Once OpenAI has translated every caption in the current prefetch window, further Microsoft requests for that window stop. Seeking allows temporary translations again for the new position.
+Subline can then request translations from OpenAI and Microsoft at the same time. The first valid result can supply the current caption. OpenAI continues its work. Once OpenAI has translated every caption in the current prefetch window, further Microsoft prefetch requests stop until seeking allows them again for the new position.
+
+Resuming playback can request one temporary Microsoft translation for the current caption when it still lacks a result, even if Microsoft prefetch has stopped. This first checks the cache and reuses pending work. It leaves the OpenAI request running and does not restart Microsoft prefetch for upcoming captions. Each displayed caption attempts this recovery once; pauses suspend unsent recovery work. Leaving the caption, changing its source or configuration, or finishing the caption closes the recovery subscription. A later failure cannot replace an already displayed translation.
+
+Temporary Microsoft requests require the additional consent and current host access. Revoking access cancels unsent temporary requests without stopping OpenAI. If the supplemental channel ends, the original request can still complete. An original failure waits for supplemental work only after that work has actually been sent, and the existing Provider deadline also bounds its remaining storage wait.
 
 Temporary Microsoft translations are reused only within the current prefetch window and are removed when that window leaves. OpenAI results enter its session cache. Without the additional Microsoft consent, only the selected OpenAI service is used.
 
-Source references: [temporary translation consent](../../src/ui/App.tsx), [consent checks](../../src/extension/background.ts), [parallel requests and stop conditions](../../src/extension/queue.ts), and [temporary storage](../../src/extension/translation-store.ts).
+Source references: [temporary translation consent](../../src/ui/App.tsx), [consent checks](../../src/extension/background.ts), [recovery subscriptions](../../src/extension/recovery.ts), [Microsoft host access](../../src/extension/microsoft-access.ts), [parallel requests and stop conditions](../../src/extension/queue.ts), and [temporary storage](../../src/extension/translation-store.ts).
 
 ## Model lists and connection tests
 

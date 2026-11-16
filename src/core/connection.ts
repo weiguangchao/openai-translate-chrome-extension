@@ -10,6 +10,11 @@ export class ExtensionConnection {
     return !this.invalidated;
   }
 
+  connect(name: string): chrome.runtime.Port {
+    if (!this.active) throw new Error('Extension context invalidated.');
+    return chrome.runtime.connect({ name });
+  }
+
   async sendMessage<T = unknown>(message: ContentRequest): Promise<Reply<T> | undefined> {
     try {
       const response = await Promise.resolve().then(() => {

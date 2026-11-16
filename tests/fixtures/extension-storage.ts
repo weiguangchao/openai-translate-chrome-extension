@@ -4,6 +4,14 @@ import { vi } from 'vitest';
 
 type Listener = (changes: Record<string, chrome.storage.StorageChange>, area: string) => void;
 
+export function extensionPermissions() {
+  return {
+    contains: vi.fn().mockResolvedValue(true),
+    onAdded: { addListener: vi.fn() },
+    onRemoved: { addListener: vi.fn() },
+  };
+}
+
 export function sessionStorage(stored = new Map<string, unknown>()) {
   return {
     stored,

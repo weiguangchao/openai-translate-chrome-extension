@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { translationBatchLimit, translationSendsPerSecond } from '../src/shared/tuning';
+import { MICROSOFT_ORIGIN } from '../src/shared/settings';
 import { longCaption, longCaptionParts, longTranslations } from '../tests/fixtures/long-caption';
 import {
   denseCue,
@@ -8,8 +9,65 @@ import {
   source,
   translation,
   withPlayer,
+  providerUrl,
   preloadNext,
 } from './harness';
+
+test('youtube: resuming a missing caption can display Microsoft without waiting for OpenAI', async ({}, info) => {
+  await withPlayer(
+    'youtube',
+    info,
+    async (p) => {
+      const microsoftPosts: string[][] = [];
+      await p.context.route(`${MICROSOFT_ORIGIN}/translate/translatetext?*`, async (route) => {
+        if (route.request().method() === 'OPTIONS') {
+          await route.fulfill({
+            status: 204,
+            headers: {
+              'Access-Control-Allow-Origin': '*',
+              'Access-Control-Allow-Methods': 'POST',
+              'Access-Control-Allow-Headers': 'Content-Type',
+            },
+          });
+          return;
+        }
+        const texts: string[] = route.request().postDataJSON();
+        microsoftPosts.push(texts);
+        await route.fulfill({
+          json: texts.map(() => ({ translations: [{ text: translation, to: 'zh-Hans' }] })),
+          headers: { 'Access-Control-Allow-Origin': '*' },
+        });
+      });
+      await expect
+        .poll(() =>
+          p.settingsPage.evaluate(
+            (origin) =>
+              chrome.permissions.contains({
+                origins: [`${origin}/*`],
+              }),
+            MICROSOFT_ORIGIN,
+          ),
+        )
+        .toBe(true);
+      await p.play();
+      await expect.poll(() => p.posts.length).toBeGreaterThan(0);
+      await expect(p.translated).toHaveText('Translating');
+      await p.pause();
+      await p.settings({ providerConsent: `${new URL(providerUrl).origin},${MICROSOFT_ORIGIN}` });
+      await p.page.screenshot({ path: info.outputPath('before-resume.png') });
+      await p.play();
+      await p.pair(source, translation);
+      await p.pause();
+      await p.page.screenshot({ path: info.outputPath('after-resume.png') });
+      expect(microsoftPosts).toContainEqual([source]);
+      expect(
+        p.posts.filter((post) => post.inputs.some((input) => input.text === source)),
+      ).toHaveLength(1);
+      expect(p.posts.every((post) => !post.released)).toBe(true);
+    },
+    { hold: true, microsoftHost: true },
+  );
+});
 
 for (const platform of ['youtube', 'x'] as const) {
   test(

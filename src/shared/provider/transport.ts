@@ -4,6 +4,7 @@ export interface ProviderSendPolicy {
   canSend(): boolean;
   priority(): number;
   counts(): boolean;
+  onStart?(signal: AbortSignal): void;
 }
 
 interface PendingSend {
@@ -32,6 +33,7 @@ export function wakeProviderRequests(): void {
     (a, b) => (a.policy?.priority() ?? 0) - (b.policy?.priority() ?? 0),
   );
   for (const send of ordered) {
+    if (!pending.includes(send)) continue;
     if (countedSends(send.origin).length >= translationSendsPerSecond) continue;
     if (send.policy && !send.policy.canSend()) continue;
     pending.splice(pending.indexOf(send), 1);
@@ -63,6 +65,9 @@ export function providerFetch(
           ? AbortSignal.any([signal, AbortSignal.timeout(providerTimeoutMs)])
           : AbortSignal.timeout(providerTimeoutMs);
         if (post) sentAt.push({ at: Date.now(), origin, policy });
+        try {
+          policy?.onStart?.(deadline);
+        } catch {}
         void fetch(url, { ...init, signal: deadline }).then(
           (response) => resolve({ response, signal: deadline }),
           reject,

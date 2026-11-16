@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
+import { cp, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import {
@@ -12,7 +12,7 @@ import {
   type TestInfo,
 } from '@playwright/test';
 import { planSentenceCap, translationBatchLimit } from '../src/shared/tuning';
-import type { Settings } from '../src/shared/settings';
+import { MICROSOFT_ORIGIN, type Settings } from '../src/shared/settings';
 import { TRACE_PREFIX, type TraceEvent } from '../src/shared/trace';
 import { longCaption, longCaptionParts, longTranslations } from '../tests/fixtures/long-caption';
 
@@ -82,6 +82,7 @@ interface Cue {
   text: string;
 }
 interface Options {
+  microsoftHost?: boolean;
   long?: boolean;
   dense?: boolean;
   stallFirst?: boolean;
@@ -423,7 +424,7 @@ export async function withPlayer(
   options: Options = {},
 ) {
   const profile = await mkdtemp(path.join(tmpdir(), 'subline-e2e-'));
-  const extensionPath = path.resolve(process.env.SUBLINE_EXTENSION_PATH ?? 'dist');
+  let extensionPath = path.resolve(process.env.SUBLINE_EXTENSION_PATH ?? 'dist');
   let context: BrowserContext | undefined;
   let player: Player | undefined;
   let succeeded = false;
@@ -433,6 +434,16 @@ export async function withPlayer(
     expect(JSON.parse(await readFile(path.join(extensionPath, 'manifest.json'), 'utf8'))).toEqual(
       JSON.parse(await readFile('public/manifest.json', 'utf8')),
     );
+    if (options.microsoftHost) {
+      const fixturePath = path.join(profile, 'fixture-extension');
+      await cp(extensionPath, fixturePath, { recursive: true });
+      extensionPath = fixturePath;
+      const manifest = JSON.parse(
+        await readFile(path.join(extensionPath, 'manifest.json'), 'utf8'),
+      );
+      manifest.host_permissions.push(`${MICROSOFT_ORIGIN}/*`);
+      await writeFile(path.join(extensionPath, 'manifest.json'), JSON.stringify(manifest));
+    }
     const files = (await readdir(extensionPath, { recursive: true, withFileTypes: true }))
       .filter((e) => e.isFile())
       .map((e) => path.join(e.parentPath, e.name))
@@ -465,6 +476,7 @@ export async function withPlayer(
       browser: context.browser()?.version(),
       extensionId: player.extensionId,
       buildSha256: digest.digest('hex'),
+      fixtureMicrosoftHost: Boolean(options.microsoftHost),
     });
     await run(player);
     expect(player.unexpected, 'Every HTTP request must have an explicit fixture').toEqual([]);
