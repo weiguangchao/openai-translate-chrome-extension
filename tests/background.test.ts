@@ -962,6 +962,33 @@ it.each(['OpenAI', 'Microsoft'])(
   },
 );
 
+it('keeps the DOM landing fallback queued when a pre-seek OpenAI result finishes', async () => {
+  vi.useFakeTimers();
+  vi.stubGlobal('chrome', { storage: { session: sessionStorage() } });
+  const { HybridTranslationQueue } = await import('../src/extension/queue');
+  const queue = new HybridTranslationQueue();
+  const settings: CaptionTranslationSettings = {
+    ...dualSettings,
+    captionLanguage: 'en',
+    pageTitle: 'Video title',
+  };
+  const { sent, answer } = dualProvider();
+  for (const consumer of ['busy-1', 'busy-2', 'tab']) {
+    void queue.request(consumer, settings, consumer);
+    await vi.advanceTimersByTimeAsync(0);
+  }
+  expect(sent(true)).toEqual(['busy-1', 'busy-2', 'tab']);
+  queue.hold('tab', 50);
+  const landing = queue.request('tab', settings, 'Landing');
+  await vi.advanceTimersByTimeAsync(0);
+  answer(false);
+  await vi.advanceTimersByTimeAsync(providerSendWindowMs);
+  expect(sent(true)).toContain('Landing');
+  answer(true);
+  await expect(landing).resolves.toBe('微软 Landing');
+  queue.reset();
+});
+
 it('keeps Microsoft enabled when a visible result finishes during a prefetch lookup', async () => {
   vi.useFakeTimers();
   const session = sessionStorage();

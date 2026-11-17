@@ -3,7 +3,6 @@ import { providerSendWindowMs, providerTimeoutMs, translationSendsPerSecond } fr
 export interface ProviderSendPolicy {
   canSend(): boolean;
   priority(): number;
-  counts(): boolean;
   onStart?(signal: AbortSignal): void;
 }
 
@@ -16,11 +15,11 @@ interface PendingSend {
 }
 
 const pending: PendingSend[] = [];
-const sentAt: { at: number; origin: string; policy?: ProviderSendPolicy }[] = [];
+const sentAt: { at: number; origin: string }[] = [];
 let timer: ReturnType<typeof setTimeout> | undefined;
 
 function countedSends(origin: string): { at: number }[] {
-  return sentAt.filter((sent) => sent.origin === origin && (sent.policy?.counts() ?? true));
+  return sentAt.filter((sent) => sent.origin === origin);
 }
 
 export function wakeProviderRequests(): void {
@@ -64,7 +63,7 @@ export function providerFetch(
         const deadline = signal
           ? AbortSignal.any([signal, AbortSignal.timeout(providerTimeoutMs)])
           : AbortSignal.timeout(providerTimeoutMs);
-        if (post) sentAt.push({ at: Date.now(), origin, policy });
+        if (post) sentAt.push({ at: Date.now(), origin });
         try {
           policy?.onStart?.(deadline);
         } catch {}

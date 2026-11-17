@@ -92,7 +92,7 @@ Enforced by `src/shared/provider/openai.ts` and `tests/api.test.ts`.
 
 ### Rate slots released by aborts
 
-A sent Provider POST is recorded for `providerSendWindowMs`. Aborting it does not remove that record. Requests detached by a seek stop contributing to the send count through their request policy, even while their HTTP requests finish.
+A sent Provider POST counts toward its origin's `translationSendsPerSecond` budget for the full `providerSendWindowMs`. Seeking, leaving the prefetch window, completing, or aborting the request cannot release that send slot. Landing captions take priority when the next slot opens.
 
 Implemented in `src/shared/provider/transport.ts` and `src/extension/queue.ts`. Covered by `tests/provider-transport.test.ts`, `tests/queue.test.ts`, and `tests/prefetch.test.ts`.
 
@@ -106,7 +106,7 @@ Enforced by `src/shared/provider/transport.ts`, `tests/provider-transport.test.t
 
 ### Sent work discarded after seeking
 
-A seek drops unsent work and detaches obsolete sent work. Detached requests finish without counting toward `translationSendsPerSecond`. OpenAI results and translations made while Microsoft is the selected provider enter the cache.
+A seek drops obsolete unsent work but keeps every caption in each sent batch indexed until completion. New windows, including a return to an earlier position, reuse that in-flight work. Removing the old display subscription must not remove another caption in the same batch from deduplication. Results for old captions cannot replace the current display or stop Microsoft fallback for the new DOM caption. OpenAI results and translations made while Microsoft is the selected provider enter the cache.
 
 Microsoft results produced as fallback while OpenAI is selected use temporary session entries. They are reused only within the current prefetch window and removed when that window leaves. Results arriving after their window has left are not retained.
 

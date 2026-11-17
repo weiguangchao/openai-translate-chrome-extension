@@ -276,6 +276,8 @@ it('lets the opening window finish during a scrub and requests only the cues at 
   Object.defineProperty(video, 'seeking', { value: false });
   video.dispatchEvent(new Event('seeked'));
   await vi.advanceTimersByTimeAsync(0);
+  expect(requested).toEqual(opening);
+  await vi.advanceTimersByTimeAsync(800);
   expect(requested.slice(opening.length)).toEqual([['After seeking.']]);
   await finish({ 'After seeking.': '跳转后的字幕' });
   expect(translated()?.textContent).toBe('跳转后的字幕');
@@ -325,7 +327,7 @@ it.each(['timeout', '500'] as const)(
   },
 );
 
-it('keeps requests sent before a seek running, sends the landing at once and caches their replies', async () => {
+it('keeps sent requests running and prioritizes the landing when the send window opens', async () => {
   const dense = Array.from({ length: 30 }, (_, index) => ({
     startTime: 2 + index * 2,
     endTime: 4 + index * 2,
@@ -345,9 +347,11 @@ it('keeps requests sent before a seek running, sends the landing at once and cac
   Object.defineProperty(video, 'seeking', { value: false });
   video.dispatchEvent(new Event('seeked'));
   await vi.advanceTimersByTimeAsync(0);
+  expect(requested).toHaveLength(started);
+  await vi.advanceTimersByTimeAsync(850);
   expect(requested[started]).toEqual(['Cue 21.']);
   expect(requested.slice(started + 1).flat()).toContain('Cue 22.');
-  expect(requested.length).toBeGreaterThan(translationSendsPerSecond);
+  expect(requested.length).toBe(translationSendsPerSecond * 2);
   expect(pending.slice(0, started).some((request) => request.signal.aborted)).toBe(false);
   await finish({ 'Cue 1.': '第一句' });
   const sent = requested.length;
