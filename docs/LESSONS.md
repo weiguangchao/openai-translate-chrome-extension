@@ -54,6 +54,12 @@ English, Simplified Chinese, Traditional Chinese, Japanese, and Korean are suppo
 
 Enforced by `src/shared/languages.ts`, `tests/youtube.test.ts`, `tests/controller.test.ts`, and `e2e/caption-sources.spec.ts`.
 
+### Japanese captions joined without splitting
+
+The Japanese X track was joined into long captions because its segmenter returned no sentence ends and left long text whole. A language-specific segmenter must cover sentence punctuation and long unpunctuated text in every script used by that language. Check the complete source-track organization and display path, not only word segmentation in isolation.
+
+Japanese handling is enforced by `src/shared/segmenter/echogarden.ts`, `tests/segmenter.test.ts`, the recorded X track in `tests/subtitle-sentences.test.ts`, and `e2e/caption-sources.spec.ts`. Korean still has no language-specific splitting.
+
 ### Unclear setting invalidation
 
 Every setting has one scope. That scope decides what changing it invalidates and whether it belongs in the translation cache key.

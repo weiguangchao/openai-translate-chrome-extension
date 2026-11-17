@@ -33,12 +33,12 @@ it('keeps line breaks inside a sentence without shifting its original offsets', 
   expect(await segmenterFor('en').sentenceEnds(text)).toEqual([text.indexOf('.') + 1, text.length]);
 });
 
-it('leaves unsupported languages unsplit, even over the display limit', async () => {
+it('leaves languages without a segmenter unsplit, even over the display limit', async () => {
   const long = '甲'.repeat(captionDisplayLimit);
   expect(subtitleDisplayLength(long)).toBeGreaterThan(captionDisplayLimit);
-  expect(await segmenterFor('ja').sentenceEnds('こんにちは。さようなら。')).toEqual([]);
-  expect(await captions('ja', '短句。')).toEqual(['短句。']);
-  expect(await captions('ja', long)).toEqual([long]);
+  expect(await segmenterFor('ko').sentenceEnds('안녕하세요. 안녕히 가세요.')).toEqual([]);
+  expect(await captions('ko', '짧은 문장.')).toEqual(['짧은 문장.']);
+  expect(await captions('ko', long)).toEqual([long]);
 });
 
 it('splits long English sentences only after the caller chooses the long path', async () => {
@@ -99,5 +99,53 @@ it('keeps a Chinese word intact when a source cue ends inside it', async () => {
   const pieces = await captions('zh-CN', first + second, [first.length]);
   expect(pieces.join('')).toBe(first + second);
   expect(pieces.some((piece) => piece.includes('气氛'))).toBe(true);
+  expect(pieces.every((piece) => subtitleDisplayLength(piece) <= captionDisplayLimit)).toBe(true);
+});
+
+it.each(['ja', 'ja-JP'])(
+  'finds Japanese sentence ends and trailing quotes for %s',
+  async (language) => {
+    const first = '😀彼は「本当！？」';
+    const second = '続けて「こんにちは。」';
+    const text = `${first}\r\n${second}まだ続く話`;
+    expect(await segmenterFor(language).sentenceEnds(text)).toEqual([
+      first.length,
+      first.length + 2 + second.length,
+    ]);
+    expect(await captions(language, '短い文。')).toEqual(['短い文。']);
+  },
+);
+
+it.each([
+  'お前ホントおかしいってこれで着ろよいやこいつホントおかしい違う違うここまではNTT東日本NTT西日本とご覧のスポンサーの提供で小五郎ちゃんとやってたやつもあとはあれのそうだよ',
+  'きょうはとてもいいてんきなのでみんなでこうえんにいってあそんでからおいしいごはんをたべておうちにかえろうとおもっています',
+  'スーパーマーケットデショッピングシテカラレストランデディナーヲタベテミンナデコンサートニイッテタノシミマショウ',
+])('splits Japanese scripts without punctuation into complete captions: %s', async (text) => {
+  const pieces = await captions('ja', text);
+  expect(pieces.length).toBeGreaterThan(1);
+  expect(pieces.join('')).toBe(text);
+  expect(pieces.every((piece) => subtitleDisplayLength(piece) <= captionDisplayLimit)).toBe(true);
+});
+
+it('keeps Japanese punctuation, Latin tokens and decimals intact', async () => {
+  const phrase = '「NTT東日本のAPIで3.14を計算して、その結果をみんなに説明します。」';
+  const text = phrase.repeat(4);
+  const pieces = await captions('ja', text);
+  expect(pieces.length).toBeGreaterThan(1);
+  expect(pieces.join('')).toBe(text);
+  expect(pieces.every((piece) => subtitleDisplayLength(piece) <= captionDisplayLimit)).toBe(true);
+  expect(pieces.flatMap((piece) => piece.match(/NTT/g) ?? [])).toHaveLength(4);
+  expect(pieces.flatMap((piece) => piece.match(/API/g) ?? [])).toHaveLength(4);
+  expect(pieces.flatMap((piece) => piece.match(/3\.14/g) ?? [])).toHaveLength(4);
+  expect(pieces.every((piece) => !/^[、。！？；：」』”）]/u.test(piece))).toBe(true);
+  expect(pieces.every((piece) => !/[「『“（]$/u.test(piece))).toBe(true);
+});
+
+it('keeps a Japanese word intact when a source cue ends inside it', async () => {
+  const first = '今日はみんなで近所のスーパー';
+  const second = 'マーケットに行ってからおいしいご飯を食べてゆっくり家に帰ろうと思っています';
+  const pieces = await captions('ja', first + second, [first.length]);
+  expect(pieces.join('')).toBe(first + second);
+  expect(pieces.some((piece) => piece.includes('スーパーマーケット'))).toBe(true);
   expect(pieces.every((piece) => subtitleDisplayLength(piece) <= captionDisplayLimit)).toBe(true);
 });

@@ -1,6 +1,10 @@
+import { readFileSync } from 'node:fs';
 import { expect, it } from 'vitest';
 import { authoredSubtitleCaptions } from '../src/core/sentences';
 import { captionAt } from '../src/core/timeline';
+import { parseWebVtt } from '../src/core/webvtt';
+import { subtitleDisplayLength } from '../src/shared/segmenter';
+import { captionDisplayLimit } from '../src/shared/tuning';
 
 it('splits multiline authored subtitles into timed sentences', async () => {
   const text = "Oh, thank you.\nI've got to talk to that\nmailman.";
@@ -171,4 +175,37 @@ it('keeps an oversized URL whole and accepts the segmenter result without anothe
   expect(captions.map((caption) => caption.text)).toEqual(['Open', url, 'now please.']);
   expect(captions[0].startTime).toBe(0);
   expect(captions.at(-1)?.endTime).toBe(10);
+});
+
+it('splits the X Japanese track into timed captions without losing or repeating its dialogue', async () => {
+  const raw = parseWebVtt(
+    readFileSync(new URL('./fixtures/japanese-captions.vtt', import.meta.url), 'utf8'),
+  );
+  const captions = await authoredSubtitleCaptions(raw, 'ja');
+  expect(raw).toHaveLength(32);
+  expect(captions.every((cue) => subtitleDisplayLength(cue.text) <= captionDisplayLimit)).toBe(
+    true,
+  );
+  expect(
+    captions
+      .map((cue) => cue.text)
+      .join('')
+      .replace(/\s/g, ''),
+  ).toBe(
+    raw
+      .map((cue) => cue.text)
+      .join('')
+      .replace(/\s/g, ''),
+  );
+  expect(captionAt(captions, 7)).toBe('なんか男の子の部屋なんて来たことないからさ触るなよぉ!!');
+  expect(captionAt(captions, 31)).toContain('小五郎ちゃん');
+  expect(captionAt(captions, 49)).toBe('');
+  expect(captions[0].startTime).toBe(raw[0].startTime);
+  expect(captions.at(-1)?.endTime).toBe(raw.at(-1)?.endTime);
+  expect(
+    captions.every(
+      (cue, index) =>
+        cue.endTime > cue.startTime && (!index || cue.startTime >= captions[index - 1].endTime),
+    ),
+  ).toBe(true);
 });

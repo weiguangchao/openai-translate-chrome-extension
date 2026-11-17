@@ -50,9 +50,9 @@ For captions that need translation, the source appears together with the complet
 
 ### Caption boundaries
 
-Downloaded captions and loaded native text-track captions are organized into display units using language boundaries, pauses, and source timing. Longer English and Chinese sentences are split at phrase boundaries. Lyrics and sound tags can stand alone, while overlapping source cues stay whole.
+Downloaded captions and loaded native text-track captions are organized into display units using language boundaries, pauses, and source timing. Longer English, Chinese, and Japanese sentences are split using phrase and source cue boundaries, with word boundaries used within longer spans. Japanese word splitting covers mixed kanji, hiragana, and katakana text, including captions without punctuation. Lyrics and sound tags can stand alone, while overlapping source cues stay whole.
 
-Japanese and Korean captions can be translated, but do not use the English or Chinese sentence and long-sentence splitting logic. In X's live caption fallback, the currently active text is read and kept whole.
+Korean captions can be translated, but do not use language-specific sentence and long-sentence splitting logic. In X's live caption fallback, the currently active text is read and kept whole.
 
 Each display unit is sent as an independent translation input. The extension chooses the caption boundaries.
 

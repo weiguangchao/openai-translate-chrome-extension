@@ -1,8 +1,8 @@
 import { segmentText } from '@echogarden/text-segmentation';
 import { fitCaptions, type LanguageSegmenter } from './lines';
 
-function echogarden(language: 'en' | 'zh'): LanguageSegmenter {
-  const words = language === 'zh' ? new Intl.Segmenter('zh', { granularity: 'word' }) : null;
+function echogarden(language: 'en' | 'zh' | 'ja'): LanguageSegmenter {
+  const words = language === 'en' ? null : new Intl.Segmenter(language, { granularity: 'word' });
   const segmentation = (text: string) =>
     segmentText(text.replace(/[\r\n]/g, ' '), {
       language,
@@ -29,8 +29,11 @@ function echogarden(language: 'en' | 'zh'): LanguageSegmenter {
       const wordBreaks = result.words.entries
         .filter((entry) => !entry.isPunctuation)
         .flatMap((entry) => {
-          const chineseWord = words !== null && /\p{Script=Han}/u.test(entry.text);
-          const offsets = chineseWord
+          const nativeWord =
+            words !== null &&
+            (/\p{Script=Han}/u.test(entry.text) ||
+              (language === 'ja' && /[\p{Script=Hiragana}\p{Script=Katakana}]/u.test(entry.text)));
+          const offsets = nativeWord
             ? [...words.segment(entry.text)]
                 .filter((word) => word.isWordLike)
                 .map((word) => entry.startOffset + word.index)
@@ -38,7 +41,7 @@ function echogarden(language: 'en' | 'zh'): LanguageSegmenter {
           return offsets.flatMap((startOffset) => {
             let at = startOffset;
             while (at > 0 && /[\p{Ps}\p{Pi}"'¿¡]/u.test(text[at - 1])) at--;
-            return at > 0 && (chineseWord || /\s/.test(text[at - 1])) ? [{ at, cost: 1 }] : [];
+            return at > 0 && (nativeWord || /\s/.test(text[at - 1])) ? [{ at, cost: 1 }] : [];
           });
         });
       const wordStarts = new Set(wordBreaks.map(({ at }) => at));
@@ -59,6 +62,7 @@ function echogarden(language: 'en' | 'zh'): LanguageSegmenter {
 
 export const english = echogarden('en');
 export const chinese = echogarden('zh');
+export const japanese = echogarden('ja');
 
 export const noop: LanguageSegmenter = {
   async sentenceEnds() {
