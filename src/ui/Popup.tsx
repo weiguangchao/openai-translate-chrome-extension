@@ -30,6 +30,14 @@ const STATUS_TEXT: Record<PopupStatus, string> = {
   'not-configured': t('翻译服务尚未就绪', 'Translation service is not ready'),
   'no-video': t('未检测到可用视频', 'No active video found'),
   waiting: t('等待字幕', 'Waiting for captions'),
+  'source-error': t(
+    '字幕轨加载失败，已恢复网站字幕',
+    'Caption track failed to load; website captions restored',
+  ),
+  'source-unavailable': t(
+    '无法读取字幕轨，已恢复网站字幕',
+    'Caption track unavailable; website captions restored',
+  ),
   loading: t('正在翻译当前字幕', 'Translating the current caption'),
   bilingual: t('正在显示双语字幕', 'Showing bilingual subtitles'),
   'translation-only': t('正在显示译文', 'Showing translated subtitles'),

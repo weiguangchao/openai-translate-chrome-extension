@@ -13,6 +13,8 @@ export const PAGE_STATUSES = [
   'not-configured',
   'no-video',
   'waiting',
+  'source-error',
+  'source-unavailable',
   'loading',
   'bilingual',
   'translation-only',

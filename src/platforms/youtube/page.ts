@@ -26,6 +26,8 @@ interface CaptionResource {
 
 const contextParameters = ['pot', 'potc', 'c', 'cver'] as const;
 const requestContexts = new Map<string, { startedAt: number; parameters: URLSearchParams }>();
+let refresh: (() => void) | undefined;
+let currentVideo = '';
 
 function timedtextUrl(value: string): URL | undefined {
   try {
@@ -48,7 +50,8 @@ function observeRequests(entries: PerformanceEntry[]): void {
     const url = timedtextUrl(entry.name);
     if (!url?.searchParams.get('v') || !url.searchParams.get('pot')) continue;
     const key = contextKey(url);
-    if ((requestContexts.get(key)?.startedAt ?? -1) >= entry.startTime) continue;
+    const previous = requestContexts.get(key);
+    if ((previous?.startedAt ?? -1) >= entry.startTime) continue;
     const parameters = new URLSearchParams();
     for (const name of contextParameters) {
       const value = url.searchParams.get(name);
@@ -56,6 +59,7 @@ function observeRequests(entries: PerformanceEntry[]): void {
     }
     requestContexts.set(key, { startedAt: entry.startTime, parameters });
     if (requestContexts.size > 8) requestContexts.delete(requestContexts.keys().next().value!);
+    if (previous?.parameters.toString() !== parameters.toString()) refresh?.();
   }
 }
 
@@ -94,7 +98,7 @@ function captionKind(track: Track | undefined): YoutubeCaptionKind | null {
     : null;
 }
 
-function select(videoId: string): CaptionResource | undefined {
+function select(videoId: string): CaptionResource | null | undefined {
   const player = document.querySelector<YoutubePlayer>(PLAYER);
   const response = player?.getPlayerResponse?.();
   const tracks = response?.captions?.playerCaptionsTracklistRenderer?.captionTracks;
@@ -115,18 +119,33 @@ function select(videoId: string): CaptionResource | undefined {
         selected?.languageCode === track.languageCode &&
         selected?.kind === track.kind,
     );
+  if (!active && tracks.length && (selectedId || selected?.languageCode)) return null;
   return trackResource(active);
 }
 
-servePageTimeline('youtube', {
+refresh = servePageTimeline('youtube', {
   videoId: youtubeVideoId,
   update({ videoId }, cache) {
-    let selected: CaptionResource | undefined;
+    if (currentVideo !== videoId) {
+      cache.clear();
+      currentVideo = videoId;
+    }
+    const player = document.querySelector(PLAYER);
+    if (player && subtitlesHidden(player)) return;
+    let selected: CaptionResource | null | undefined;
     try {
       selected = select(videoId);
     } catch {}
     const source = selected;
     cache.select(videoId, source?.id ?? '', source?.language ?? null);
+    if (
+      selected === null ||
+      (source && !source.url && !cache.state.source && supportedLanguage(source.language))
+    ) {
+      if (cache.state.failure !== 'unavailable') cache.update({ failure: 'unavailable' });
+      return;
+    }
+    if (cache.state.failure === 'unavailable') cache.update({ failure: undefined });
     if (source && !supportedLanguage(source.language)) {
       if (cache.state.mode !== 'model') cache.update({ mode: 'model', source: [] });
       return;
@@ -151,4 +170,7 @@ servePageTimeline('youtube', {
   },
 });
 
-window.addEventListener('pagehide', () => requestContexts.clear());
+window.addEventListener('pagehide', () => {
+  requestContexts.clear();
+  currentVideo = '';
+});

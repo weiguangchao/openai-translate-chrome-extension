@@ -349,7 +349,7 @@ it('uses the current video session to load source subtitles', async () => {
   token = 'ready';
   request(videoId, session, token, 3);
   request(videoId, session, 'expired', 2);
-  await vi.advanceTimersByTimeAsync(1100);
+  await vi.advanceTimersByTimeAsync(0);
   expect(lines()[0].textContent).toBe('This field behind me');
   expect(lines()[1].textContent).toBe('译文：This field behind me');
   expect(lines()[1].hidden).toBe(false);
@@ -497,6 +497,7 @@ it.each([
     video.currentTime = 1;
     await vi.advanceTimersByTimeAsync(1500);
     expect(lines()[0].textContent).toBe('');
+    expect(fetch).toHaveBeenCalledTimes(availableUrl ? 1 : 0);
     expect(lines()[0].hidden).toBe(true);
     expect(lines()[1].textContent).toBe('');
     expect(
@@ -505,7 +506,9 @@ it.each([
         .map(([message]) => message.text),
     ).toEqual([]);
     const root = document.querySelector<HTMLElement>('.ytp-caption-window-container')!;
-    expect(getComputedStyle(root).opacity).toBe('0');
+    expect(getComputedStyle(root).opacity).not.toBe('0');
+    expect(controller.pageStatus).toBe(availableUrl ? 'source-error' : 'source-unavailable');
+    expect(video.classList.contains('subline-native')).toBe(false);
     root.innerHTML =
       '<div class="caption-window"><span class="ytp-caption-segment">We are ready.</span></div>';
     await vi.advanceTimersByTimeAsync(450);
@@ -517,8 +520,11 @@ it.each([
     document.querySelector('button')!.setAttribute('aria-pressed', 'true');
     await vi.advanceTimersByTimeAsync(1500);
     expect(lines()[0].textContent).toBe('');
+    expect(fetch).toHaveBeenCalledTimes(availableUrl ? 1 : 0);
     recovered = true;
     await vi.advanceTimersByTimeAsync(16000);
+    expect(controller.pageStatus).toBe('bilingual');
+    expect(getComputedStyle(root).opacity).toBe('0');
     expect([...lines()].map((line) => line.textContent)).toEqual([
       'We are ready.',
       '译文：We are ready.',
@@ -697,4 +703,264 @@ it('keeps the YouTube source across target/provider/style changes, seeks, blob r
   history.replaceState(null, '', '/watch?v=video-2');
   await vi.advanceTimersByTimeAsync(1200);
   expect(fetch).toHaveBeenCalledTimes(4);
+});
+
+function recoverableTrack() {
+  const context = setup();
+  let language = 'en';
+  let videoId = 'video-1';
+  Object.assign(context.player, {
+    getOption: () => ({ vssId: `.${language}` }),
+    getPlayerResponse: () => ({
+      videoDetails: { videoId },
+      captions: {
+        playerCaptionsTracklistRenderer: {
+          captionTracks: ['en', 'zh-Hant'].map((languageCode) => ({
+            languageCode,
+            vssId: `.${languageCode}`,
+            baseUrl: `https://www.youtube.com/api/timedtext?v=${videoId}&lang=${languageCode}`,
+          })),
+        },
+      },
+    }),
+  });
+  const read = vi.fn(async (value: string) =>
+    Response.json({
+      events: [
+        {
+          tStartMs: 0,
+          dDurationMs: 10000,
+          segs: [
+            {
+              utf8:
+                new URL(value).searchParams.get('lang') === 'en' ? 'Current source.' : '新的字幕。',
+            },
+          ],
+        },
+      ],
+    }),
+  );
+  vi.stubGlobal('fetch', read);
+  context.video.currentTime = 1;
+  return {
+    ...context,
+    read,
+    select: (next: string) => {
+      language = next;
+    },
+    navigate: (next: string) => {
+      videoId = next;
+      history.replaceState(null, '', `/watch?v=${next}`);
+    },
+  };
+}
+
+it.each(['ad', 'cc'] as const)(
+  'retains the downloaded track through %s and checks the selected track on return',
+  async (reason) => {
+    const { player, video, read, sendMessage, lines, select } = recoverableTrack();
+    await import('../src/platforms/youtube/page');
+    controller = new CaptionController(
+      createYoutubePlatform,
+      publicSettings({ ...consentedSettings, apiKey: 'key', model: 'model' }),
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    expect(read).toHaveBeenCalledTimes(1);
+    const hidden = (value: boolean) => {
+      if (reason === 'ad') player.classList.toggle('ad-showing', value);
+      else document.querySelector('button')!.setAttribute('aria-pressed', String(!value));
+    };
+    hidden(true);
+    sendMessage.mockClear();
+    await vi.advanceTimersByTimeAsync(2200);
+    expect([...lines()].every((line) => line.hidden)).toBe(true);
+    expect(sendMessage.mock.calls.filter(([message]) => message.type === 'translate')).toEqual([]);
+    hidden(false);
+    await vi.advanceTimersByTimeAsync(1100);
+    expect(read).toHaveBeenCalledTimes(1);
+    expect(lines()[0].textContent).toBe('Current source.');
+    hidden(true);
+    select('zh-Hant');
+    await vi.advanceTimersByTimeAsync(1100);
+    sendMessage.mockClear();
+    hidden(false);
+    video.dispatchEvent(new Event('timeupdate'));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(
+      sendMessage.mock.calls
+        .filter(([message]) => message.type === 'translate')
+        .map(([message]) => message.text),
+    ).not.toContain('Current source.');
+    expect(read).toHaveBeenCalledTimes(2);
+    expect(lines()[0].textContent).toBe('新的字幕。');
+  },
+);
+
+it('does not restore the previous video track after navigation during an advertisement', async () => {
+  const { player, read, navigate } = recoverableTrack();
+  await import('../src/platforms/youtube/page');
+  controller = new CaptionController(
+    createYoutubePlatform,
+    publicSettings({ ...consentedSettings, apiKey: 'key', model: 'model' }),
+  );
+  await vi.advanceTimersByTimeAsync(0);
+  player.classList.add('ad-showing');
+  navigate('video-2');
+  await vi.advanceTimersByTimeAsync(1100);
+  player.classList.remove('ad-showing');
+  await vi.advanceTimersByTimeAsync(1100);
+  expect(read).toHaveBeenCalledTimes(2);
+  expect(read.mock.calls[1][0]).toContain('v=video-2');
+});
+
+it('distinguishes an unmatched selected track from missing metadata and no captions', async () => {
+  const { player, lines } = recoverableTrack();
+  let response: unknown = { videoDetails: { videoId: 'video-1' } };
+  Object.assign(player, {
+    getPlayerResponse: () => response,
+    getOption: () => ({ vssId: '.missing' }),
+  });
+  await import('../src/platforms/youtube/page');
+  controller = new CaptionController(
+    createYoutubePlatform,
+    publicSettings({ ...consentedSettings, apiKey: 'key', model: 'model' }),
+  );
+  await vi.advanceTimersByTimeAsync(0);
+  expect(controller.pageStatus).toBe('waiting');
+  response = {
+    videoDetails: { videoId: 'video-1' },
+    captions: { playerCaptionsTracklistRenderer: { captionTracks: [] } },
+  };
+  await vi.advanceTimersByTimeAsync(1100);
+  expect(controller.pageStatus).toBe('waiting');
+  response = {
+    videoDetails: { videoId: 'video-1' },
+    captions: {
+      playerCaptionsTracklistRenderer: { captionTracks: [{ languageCode: 'en', vssId: '.en' }] },
+    },
+  };
+  await vi.advanceTimersByTimeAsync(1100);
+  expect(controller.pageStatus).toBe('source-unavailable');
+  expect([...lines()].every((line) => line.hidden)).toBe(true);
+  expect(
+    getComputedStyle(document.querySelector('.ytp-caption-window-container')!).opacity,
+  ).not.toBe('0');
+  for (const captions of [{ playerCaptionsTracklistRenderer: { captionTracks: [] } }, undefined]) {
+    response = { videoDetails: { videoId: 'video-1' }, captions };
+    await vi.advanceTimersByTimeAsync(1100);
+    expect(controller.pageStatus).toBe('waiting');
+    expect(getComputedStyle(document.querySelector('.ytp-caption-window-container')!).opacity).toBe(
+      '0',
+    );
+  }
+});
+
+it('returns to normal loading when an unavailable track receives a downloadable URL', async () => {
+  const { player, lines, read } = recoverableTrack();
+  const track = { languageCode: 'en', vssId: '.en', baseUrl: undefined as string | undefined };
+  Object.assign(player, {
+    getPlayerResponse: () => ({
+      videoDetails: { videoId: 'video-1' },
+      captions: { playerCaptionsTracklistRenderer: { captionTracks: [track] } },
+    }),
+  });
+  let finish!: (response: Response) => void;
+  read.mockImplementation(
+    () =>
+      new Promise<Response>((resolve) => {
+        finish = resolve;
+      }),
+  );
+  await import('../src/platforms/youtube/page');
+  controller = new CaptionController(
+    createYoutubePlatform,
+    publicSettings({ ...consentedSettings, apiKey: 'key', model: 'model' }),
+  );
+  await vi.advanceTimersByTimeAsync(0);
+  expect(controller.pageStatus).toBe('source-unavailable');
+  expect(read).not.toHaveBeenCalled();
+  track.baseUrl = 'https://www.youtube.com/api/timedtext?v=video-1&lang=en';
+  await vi.advanceTimersByTimeAsync(1100);
+  expect(read).toHaveBeenCalledTimes(1);
+  expect(controller.pageStatus).toBe('waiting');
+  expect(getComputedStyle(document.querySelector('.ytp-caption-window-container')!).opacity).toBe(
+    '0',
+  );
+  finish(
+    Response.json({
+      events: [{ tStartMs: 0, dDurationMs: 10000, segs: [{ utf8: 'Recovered source.' }] }],
+    }),
+  );
+  await vi.advanceTimersByTimeAsync(0);
+  expect(controller.pageStatus).toBe('bilingual');
+  expect(lines()[0].textContent).toBe('Recovered source.');
+});
+
+it.each(['json', 'empty'] as const)(
+  'restores website captions after a %s source response fails validation',
+  async (failure) => {
+    const { lines, video } = recoverableTrack();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        failure === 'json' ? new Response('invalid json') : Response.json({ events: [] }),
+      ),
+    );
+    await import('../src/platforms/youtube/page');
+    controller = new CaptionController(
+      createYoutubePlatform,
+      publicSettings({ ...consentedSettings, apiKey: 'key', model: 'model' }),
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    expect(controller.pageStatus).toBe('source-error');
+    expect([...lines()].every((line) => line.hidden)).toBe(true);
+    expect(video.classList.contains('subline-native')).toBe(false);
+  },
+);
+
+it('refreshes once for changed credentials and ignores repeated or obsolete resource observations', async () => {
+  const { read, navigate, sendMessage } = recoverableTrack();
+  read.mockImplementation(async (value) =>
+    new URL(value).searchParams.get('pot') === 'fresh'
+      ? Response.json({
+          events: [{ tStartMs: 0, dDurationMs: 10000, segs: [{ utf8: 'Recovered source.' }] }],
+        })
+      : new Response('', { status: 403 }),
+  );
+  await import('../src/platforms/youtube/page');
+  controller = new CaptionController(
+    createYoutubePlatform,
+    publicSettings({ ...consentedSettings, apiKey: 'key', model: 'model' }),
+  );
+  await vi.advanceTimersByTimeAsync(0);
+  expect(controller.pageStatus).toBe('source-error');
+  const observe = (startTime: number, token = 'fresh') =>
+    resourceEntries([
+      {
+        name: `https://www.youtube.com/api/timedtext?v=video-1&pot=${token}&fmt=json3`,
+        startTime,
+      } as PerformanceEntry,
+    ]);
+  observe(1);
+  await vi.advanceTimersByTimeAsync(0);
+  expect(read).toHaveBeenCalledTimes(2);
+  expect(controller.pageStatus).toBe('bilingual');
+  const messages = vi.mocked(window.postMessage).mock.calls.length;
+  for (let index = 2; index < 22; index++) observe(index);
+  observe(0, 'expired');
+  await vi.advanceTimersByTimeAsync(0);
+  expect(read).toHaveBeenCalledTimes(2);
+  expect(vi.mocked(window.postMessage).mock.calls).toHaveLength(messages);
+  navigate('video-2');
+  observe(22, 'other');
+  await vi.advanceTimersByTimeAsync(0);
+  expect(read).toHaveBeenCalledTimes(2);
+  controller.update({ ...publicSettings(consentedSettings), enabled: false });
+  await vi.advanceTimersByTimeAsync(0);
+  observe(23, 'stopped');
+  await vi.advanceTimersByTimeAsync(0);
+  expect(read).toHaveBeenCalledTimes(2);
+  expect(sendMessage.mock.calls.filter(([message]) => message.type === 'translate')).toHaveLength(
+    1,
+  );
 });

@@ -36,7 +36,7 @@ export class SourceCache {
     };
   }
 
-  update(patch: Partial<Pick<TimelineState, 'mode' | 'source'>>): void {
+  update(patch: Partial<Pick<TimelineState, 'mode' | 'source' | 'failure'>>): void {
     this.current = { ...this.current, ...patch };
     this.version++;
   }
@@ -57,7 +57,7 @@ export class SourceCache {
     void read(active.signal)
       .then((source) => {
         if (active.signal.aborted) return;
-        this.current = { ...this.current, mode: 'model', source };
+        this.current = { ...this.current, mode: 'model', source, failure: undefined };
         this.loaded = true;
         this.version++;
         this.changed();
@@ -65,7 +65,7 @@ export class SourceCache {
       .catch(() => {
         if (active.signal.aborted) return;
         this.retryAt = Date.now() + 15000;
-        this.current = { ...this.current, mode: 'model', source: fallback };
+        this.current = { ...this.current, mode: 'model', source: fallback, failure: 'download' };
         this.version++;
         this.changed();
       })

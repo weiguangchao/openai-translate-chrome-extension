@@ -1,7 +1,7 @@
 import { supportedLanguage } from '../shared/languages';
 import type { PageStatus } from '../shared/messages';
 import { classifySettingsChange, type PublicSettings } from '../shared/settings';
-import type { SourceMode } from './bridge/protocol';
+import type { SourceFailure, SourceMode } from './bridge/protocol';
 import { ExtensionConnection } from './connection';
 import { visible } from './dom';
 import { selectedTrack } from './native';
@@ -63,6 +63,7 @@ export class CaptionController {
   private pageVideo: string;
   private mode: SourceMode | null = null;
   private source = '';
+  private sourceFailure: SourceFailure | undefined;
   private nativeTrack: TextTrack | undefined;
   private destroyed = false;
   private onMediaChange = (event: Event) => {
@@ -118,6 +119,8 @@ export class CaptionController {
     if (!this.settings[this.platform.id]) return 'site-disabled';
     if (!this.settings.configured) return 'not-configured';
     if (!this.video) return 'no-video';
+    if (this.sourceFailure === 'download') return 'source-error';
+    if (this.sourceFailure === 'unavailable') return 'source-unavailable';
     return this.translator.pageStatus;
   }
 
@@ -145,6 +148,7 @@ export class CaptionController {
     this.video?.classList.remove('subline-native');
     this.video = null;
     this.source = '';
+    this.sourceFailure = undefined;
     this.nativeTrack = undefined;
     this.translator.reset();
   }
@@ -202,6 +206,15 @@ export class CaptionController {
       return;
     }
     if (this.video !== video || !this.overlay.showsIn(player)) this.mount(video, player);
+    this.sourceFailure = source.kind === 'waiting' ? source.failure : undefined;
+    this.overlay.hideNative(!this.sourceFailure);
+    if (this.sourceFailure) {
+      this.overlay.hide([]);
+      video.classList.remove('subline-native');
+      this.translator.release();
+      this.translator.clear();
+      return;
+    }
     if (source.mode !== this.mode) {
       this.translator.release();
       this.translator.clear();

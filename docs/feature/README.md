@@ -10,6 +10,8 @@ The extension runs on `www.youtube.com`, `m.youtube.com`, `x.com`, and `twitter.
 
 On X, Subline reads subtitle files from the selected player track or captions from an existing browser text track. When several videos are present, it prefers visible videos that are playing, then compares their visible areas. In fullscreen mode, it considers only videos inside the fullscreen element.
 
+On YouTube, advertisements and turning captions off preserve the downloaded track for reuse after the same video, track, and language are selected again. New subtitle request credentials trigger an immediate source check; periodic checks still discover other player changes.
+
 Translation requires existing caption text. Subline does not transcribe audio. It waits when no captions are available. If caption text is available but its language cannot be recognized, it shows an unsupported-language message.
 
 Source references: [extension manifest](../../public/manifest.json), [YouTube caption source](../../src/platforms/youtube/page.ts), [YouTube caption visibility](../../src/platforms/youtube/player.ts), [X platform adapter](../../src/platforms/x/platform.ts), and [X video selection](../../src/platforms/x/player.ts).
@@ -47,6 +49,8 @@ Source references: [language definitions](../../src/shared/languages.ts), [capti
 Bilingual mode places the source text above its translation. Selecting "Translation only" in the popup or settings hides the source text. When the source and target languages match, the source text is still shown.
 
 For captions that need translation, the source appears together with the completed translation. While waiting, Subline may show "Translating" instead of showing the source alone. Captions appear near the bottom of the player, with font sizes and spacing scaled to the player's width.
+
+If a YouTube caption track cannot be read or its download fails, Subline restores the website's selected captions and reports the source problem in the popup. This recovery also applies in Translation only mode. Normal source loading and waiting for a translation keep the existing display behavior. Successful source recovery returns to Subline captions; turning website captions off or playing an advertisement still hides Subline captions.
 
 ### Caption boundaries
 
@@ -120,6 +124,8 @@ Source references: [model and test controls](../../src/ui/App.tsx), [model list 
 
 Completed translations are stored in browser session storage for replay or reuse by other pages. They remain available after the extension's background worker restarts. The cache has a capacity limit and evicts older entries.
 
+Translations that arrive together share a storage write and index update. Each result is delivered after its write finishes, without waiting for another network response or a full batch. Temporary translation cleanup retains its order relative to saves.
+
 Cache entries distinguish the translation service, endpoint, model, source language, target language, page title, and caption text. Identical captions on differently titled pages are translated separately. Changing colors, font sizes, spacing, or display mode does not change a translation's cache identity.
 
 Translations made while Microsoft is selected enter the Microsoft session cache. With OpenAI selected, temporary Microsoft results follow the window rules above, while OpenAI results enter the OpenAI session cache.
@@ -140,7 +146,7 @@ Popup changes are saved immediately, with saving and saved feedback in the heade
 
 Quick controls stay disabled while popup settings load. A read failure ends the loading state and keeps editing disabled, shows an error asking the user to reopen the extension, and leaves the settings button available.
 
-The popup tracks the active tab's caption status, including disabled, awaiting configuration, no active video, waiting for captions, translating, bilingual, translation-only, original, failed, and unsupported language. When it cannot connect to the page, it reports that the page is unsupported or its status is unavailable.
+The popup tracks the active tab's caption status, including disabled, awaiting configuration, no active video, waiting for captions, translating, bilingual, translation-only, original, failed, and unsupported language. It distinguishes a failed YouTube caption download from an unavailable selected track and reports that website captions have been restored. Missing player metadata or a video without captions continues to show waiting. When it cannot connect to the page, it reports that the page is unsupported or its status is unavailable.
 
 Source references: [popup controls and page status](../../src/ui/Popup.tsx), [page status definitions](../../src/shared/messages.ts), and [status notifications](../../src/core/content.ts).
 

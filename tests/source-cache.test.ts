@@ -61,12 +61,14 @@ it('retries failures with fresh credentials immediately, without waiting for the
   cache.select('video', 'track', 'en');
   cache.load('expired', read);
   await flush();
+  expect(cache.state.failure).toBe('download');
   cache.load('expired', read);
   expect(read).toHaveBeenCalledTimes(1);
   cache.load('fresh', read);
   await flush();
   expect(read).toHaveBeenCalledTimes(2);
   expect(cache.state.source).toBe(cues);
+  expect(cache.state.failure).toBeUndefined();
 });
 
 it('cancels a stopped download without caching a late result and allows the reader to resume', async () => {

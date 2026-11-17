@@ -7,13 +7,13 @@ export interface PageTimeline {
   update(request: TimelineRequest, cache: SourceCache): void;
 }
 
-export function servePageTimeline(channel: PlatformId, timeline: PageTimeline): void {
+export function servePageTimeline(channel: PlatformId, timeline: PageTimeline): () => void {
   const messages = bridgeMessages(channel);
-  let latest: { requestId: number; revision: unknown } | undefined;
+  let latest: { requestId: number; revision: unknown; videoId: string } | undefined;
   const cache = new SourceCache(publish);
 
   function publish(): void {
-    if (!latest) return;
+    if (!latest || latest.videoId !== timeline.videoId()) return;
     window.postMessage(
       {
         type: messages.response,
@@ -40,8 +40,8 @@ export function servePageTimeline(channel: PlatformId, timeline: PageTimeline): 
       data.videoId !== timeline.videoId()
     )
       return;
+    latest = { requestId: data.requestId, revision: data.revision, videoId: data.videoId };
     timeline.update({ videoId: data.videoId }, cache);
-    latest = { requestId: data.requestId, revision: data.revision };
     publish();
   });
 
@@ -49,4 +49,11 @@ export function servePageTimeline(channel: PlatformId, timeline: PageTimeline): 
     latest = undefined;
     cache.clear();
   });
+
+  return () => {
+    if (!latest || latest.videoId !== timeline.videoId()) return;
+    const revision = cache.revision;
+    timeline.update({ videoId: latest.videoId }, cache);
+    if (revision !== cache.revision) publish();
+  };
 }
