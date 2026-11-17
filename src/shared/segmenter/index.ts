@@ -1,5 +1,5 @@
 import { supportedLanguage } from '../languages';
-import { chinese, english, noop } from './echogarden';
+import { chinese, english, japanese, noop } from './echogarden';
 import type { LanguageSegmenter } from './lines';
 
 export type { LanguageSegmenter, TextRange } from './lines';
@@ -12,6 +12,8 @@ export function segmenterFor(language: string): LanguageSegmenter {
     case 'zh-CN':
     case 'zh-TW':
       return chinese;
+    case 'ja':
+      return japanese;
     default:
       return noop;
   }

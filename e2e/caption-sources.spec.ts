@@ -1,4 +1,6 @@
 import { expect, test } from '@playwright/test';
+import { subtitleDisplayLength } from '../src/shared/segmenter';
+import { captionDisplayLimit } from '../src/shared/tuning';
 import {
   asrSource,
   asrTranslation,
@@ -16,6 +18,32 @@ import {
   expectNativeHidden,
   expectOpeningPosts,
 } from './harness';
+
+test('x: Japanese captions stay near the current dialogue instead of joining the track', async ({}, info) => {
+  await withPlayer('x', info, async (p) => {
+    await p.settings({ targetLanguage: 'ja' });
+    await p.page.route('https://video.twimg.com/e2e/first/subs/ja-asr.vtt', (route) =>
+      route.fulfill({
+        contentType: 'text/vtt',
+        headers: { 'access-control-allow-origin': '*' },
+        path: 'tests/fixtures/japanese-captions.vtt',
+      }),
+    );
+    await p.page.evaluate(() => window.fixture.select('ja', 'asr'));
+    await p.seek(7);
+    await expect(p.original).toContainText('触るなよぉ!!');
+    await p.page.screenshot({ path: info.outputPath('japanese-captions.png') });
+    await expect(p.original).toHaveText('なんか男の子の部屋なんて来たことないからさ触るなよぉ!!');
+    expect(subtitleDisplayLength((await p.original.textContent())!)).toBeLessThanOrEqual(
+      captionDisplayLimit,
+    );
+    await p.seek(31);
+    await expect(p.original).toContainText('小五郎ちゃん');
+    await expect(p.original).not.toContainText('触るなよぉ!!');
+    await expect(p.translated).toBeHidden();
+    expect(p.posts).toEqual([]);
+  });
+});
 
 test(
   'x: unpunctuated Chinese captions keep words intact across source cue breaks',
