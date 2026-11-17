@@ -299,3 +299,156 @@ for (const platform of ['x'] as const) {
     );
   });
 }
+
+test('youtube: failed source downloads restore website captions and report the source failure', async ({}, info) => {
+  await withPlayer('youtube', info, async (p) => {
+    await p.play();
+    await p.pair(source, translation);
+    await p.pause();
+    let failures = 0;
+    await p.page.route('**/api/timedtext*', async (route) => {
+      failures++;
+      await route.fulfill({ status: 403, body: 'Caption track unavailable' });
+    });
+    await p.page.evaluate((text) => {
+      window.fixture.native(text);
+      window.fixture.select('en', 'asr');
+    }, asrSource);
+    await expect.poll(() => failures).toBe(1);
+    await expect(p.translated).toBeHidden();
+    await p.page.waitForTimeout(300);
+    await p.page.screenshot({ path: info.outputPath('source-failure.png') });
+    await expectNativeHidden(p, false);
+    expect(
+      await p.page.locator('video').evaluate((video) => video.classList.contains('subline-native')),
+    ).toBe(false);
+    await p.page.bringToFront();
+    await p.settingsPage.reload();
+    await expect(p.settingsPage.locator('[data-status="source-error"]')).toHaveText(
+      'Caption track failed to load; website captions restored',
+    );
+    await p.settingsPage.screenshot({ path: info.outputPath('source-failure-popup.png') });
+    await p.page.unroute('**/api/timedtext*');
+    await p.page.evaluate(() => {
+      const player = document.querySelector('.html5-video-player') as HTMLElement & {
+        getPlayerResponse(): {
+          captions: { playerCaptionsTracklistRenderer: { captionTracks: { baseUrl: string }[] } };
+        };
+      };
+      const read = player.getPlayerResponse.bind(player);
+      player.getPlayerResponse = () => {
+        const response = read();
+        for (const track of response.captions.playerCaptionsTracklistRenderer.captionTracks)
+          track.baseUrl += '&signature=fresh';
+        return response;
+      };
+    });
+    await p.play();
+    await p.pair(asrSource, asrTranslation);
+    await expectNativeHidden(p, true);
+  });
+});
+
+test('youtube: an unavailable track returns to normal waiting as soon as its URL appears', async ({}, info) => {
+  await withPlayer('youtube', info, async (p) => {
+    await p.play();
+    await p.pair(source, translation);
+    await p.pause();
+    let started = false;
+    let release!: () => void;
+    const ready = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await p.page.route('**/api/timedtext*', async (route) => {
+      started = true;
+      await ready;
+      await route.fallback();
+    });
+    await p.page.evaluate((text) => {
+      const player = document.querySelector('.html5-video-player') as HTMLElement & {
+        getPlayerResponse(): {
+          captions: { playerCaptionsTracklistRenderer: { captionTracks: { baseUrl?: string }[] } };
+        };
+      };
+      const read = player.getPlayerResponse.bind(player);
+      player.getPlayerResponse = () => {
+        const response = read();
+        if (!player.dataset.sourceReady)
+          for (const track of response.captions.playerCaptionsTracklistRenderer.captionTracks)
+            delete track.baseUrl;
+        return response;
+      };
+      window.fixture.native(text);
+      window.fixture.select('en', 'asr');
+    }, asrSource);
+    await expectNativeHidden(p, false);
+    await p.page.bringToFront();
+    await p.settingsPage.reload();
+    await expect(p.settingsPage.locator('[data-status="source-unavailable"]')).toBeVisible();
+    await p.page.evaluate(() => {
+      (document.querySelector('.html5-video-player') as HTMLElement).dataset.sourceReady = 'true';
+    });
+    await expect.poll(() => started).toBe(true);
+    await expectNativeHidden(p, true);
+    await p.settingsPage.reload();
+    await expect(p.settingsPage.locator('[data-status="waiting"]')).toBeVisible();
+    release();
+    await p.play();
+    await p.pair(asrSource, asrTranslation);
+  });
+});
+
+test('youtube: advertisements and CC toggles retain the loaded source without re-downloading', async ({}, info) => {
+  await withPlayer('youtube', info, async (p) => {
+    await p.play();
+    await p.pair(source, translation);
+    await p.pause();
+    const downloaded = p.downloads.length;
+    for (const reason of ['ad', 'cc']) {
+      await p.page.evaluate((reason) => {
+        const player = document.querySelector('.html5-video-player')!;
+        if (reason === 'ad') player.classList.add('ad-showing');
+        else {
+          const button = document.createElement('button');
+          button.className = 'ytp-subtitles-button';
+          button.setAttribute('aria-pressed', 'false');
+          player.append(button);
+        }
+      }, reason);
+      await expect(p.translated).toBeHidden();
+      await p.page.waitForTimeout(1200);
+      expect(p.downloads).toHaveLength(downloaded);
+      await p.page.evaluate((reason) => {
+        const player = document.querySelector('.html5-video-player')!;
+        if (reason === 'ad') player.classList.remove('ad-showing');
+        else player.querySelector('.ytp-subtitles-button')!.remove();
+      }, reason);
+      await p.pair(source, translation);
+      expect(p.downloads).toHaveLength(downloaded);
+    }
+  });
+});
+
+test('youtube: the first caption after an advertisement uses the newly selected track', async ({}, info) => {
+  await withPlayer('youtube', info, async (p) => {
+    await p.play();
+    await p.pair(source, translation);
+    await p.pause();
+    await p.page.evaluate(() => {
+      document.querySelector('.html5-video-player')!.classList.add('ad-showing');
+      window.fixture.select('ja', 'asr');
+    });
+    await expect(p.translated).toBeHidden();
+    await p.page.waitForTimeout(1200);
+    const before = (await p.frames()).length;
+    await p.page.evaluate(() => {
+      document.querySelector('.html5-video-player')!.classList.remove('ad-showing');
+      document.querySelector('video')!.dispatchEvent(new Event('timeupdate'));
+    });
+    await p.play();
+    await p.pair(japaneseSource, japaneseTranslation);
+    const shown = (await p.frames()).slice(before).filter((frame) => frame.original);
+    expect(shown.length).toBeGreaterThan(0);
+    expect(shown.every((frame) => frame.original === japaneseSource)).toBe(true);
+  });
+});

@@ -112,7 +112,7 @@ export class SubtitleOverlay {
   unmount(): void {
     this.hide([]);
     if (this.player) {
-      this.player.classList.remove('subline-player');
+      this.player.classList.remove('subline-player', 'subline-captions');
       if (this.positioned && this.player.style.position === 'relative')
         this.player.style.removeProperty('position');
     }
@@ -131,6 +131,10 @@ export class SubtitleOverlay {
     }
     for (const element of next) element.setAttribute('data-subline-caption', '');
     this.layers = [...next];
+  }
+
+  hideNative(hidden: boolean): void {
+    this.player?.classList.toggle('subline-captions', hidden);
   }
 
   render(view: CaptionView): void {

@@ -467,3 +467,12 @@ it('stops following tabs when the popup closes', async () => {
   expect(queryTabs).not.toHaveBeenCalled();
   expect(ports[0].disconnect).toHaveBeenCalledOnce();
 });
+
+it.each([
+  ['source-error', 'Caption track failed to load; website captions restored'],
+  ['source-unavailable', 'Caption track unavailable; website captions restored'],
+])('reports %s separately from waiting and translation failure', async (status, text) => {
+  initialPageStatus = status;
+  await render();
+  expect(document.querySelector('[aria-label="Page status"]')?.textContent).toBe(text);
+});

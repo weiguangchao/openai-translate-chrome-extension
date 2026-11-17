@@ -1014,7 +1014,8 @@ it('keeps Microsoft enabled when a visible result finishes during a prefetch loo
   });
   session.get.mockImplementation(async (keys) => {
     const stored = await read(keys);
-    if (Array.isArray(keys)) await blocked;
+    if (Array.isArray(keys) && keys.some((key) => key.startsWith('subline.translation.v3:')))
+      await blocked;
     return stored;
   });
   const refreshed = queue.prefetch('tab', settings, [

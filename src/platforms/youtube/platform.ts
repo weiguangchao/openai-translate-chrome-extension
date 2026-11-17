@@ -4,9 +4,10 @@ import { CAPTION_LAYER, PLAYER, subtitlesHidden, youtubeVideoId } from './player
 
 export const createYoutubePlatform: PlatformFactory = (changed): Platform => {
   const bridge = new BridgeTimeline('youtube', changed);
+  let hidden = false;
   return {
     id: 'youtube',
-    style: `.subline-player ${CAPTION_LAYER} { opacity: 0 !important; pointer-events: none !important; }`,
+    style: `.subline-player.subline-captions ${CAPTION_LAYER} { opacity: 0 !important; pointer-events: none !important; }`,
     videoId: youtubeVideoId,
     title: () => pageTitle(/\s+-\s+YouTube$/),
     findPlayer: (video) => video.closest<HTMLElement>(PLAYER) ?? video.parentElement,
@@ -16,8 +17,10 @@ export const createYoutubePlatform: PlatformFactory = (changed): Platform => {
       return container && button ? { container, button } : null;
     },
     source(video) {
-      const state = bridge.read(youtubeVideoId());
-      if (subtitlesHidden(video))
+      const nextHidden = subtitlesHidden(video);
+      const state = bridge.read(youtubeVideoId(), hidden && !nextHidden);
+      hidden = nextHidden;
+      if (nextHidden)
         return { kind: 'timeline', mode: 'checking', language: null, cues: [], layers: () => [] };
       if (!state?.source)
         return {
@@ -25,6 +28,7 @@ export const createYoutubePlatform: PlatformFactory = (changed): Platform => {
           mode: state?.mode ?? 'checking',
           id: state?.sourceId,
           language: state?.language ?? null,
+          failure: state?.failure,
         };
       return {
         kind: 'timeline',

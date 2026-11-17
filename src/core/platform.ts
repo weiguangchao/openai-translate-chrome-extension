@@ -1,5 +1,5 @@
 import type { PlatformId } from '../shared/platforms';
-import type { SourceMode } from './bridge/protocol';
+import type { SourceFailure, SourceMode } from './bridge/protocol';
 import type { TimedCue } from './cues';
 
 export interface LiveCaption {
@@ -21,7 +21,7 @@ export type CaptionSource =
       layers(): HTMLElement[];
     })
   | (SourceBase & { kind: 'live'; read(): LiveCaption })
-  | (SourceBase & { kind: 'waiting' });
+  | (SourceBase & { kind: 'waiting'; failure?: SourceFailure });
 
 export interface PlayerToolbar {
   container: HTMLElement;

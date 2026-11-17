@@ -116,7 +116,19 @@ Enforced by `src/extension/queue.ts`, `tests/prefetch.test.ts`, `tests/queue.tes
 
 Translation text is cached only in `chrome.storage.session`. Queues keep pending work and playback state. They never retain completed translations in an in-memory cache.
 
-Enforced by `src/extension/translation-store.ts`, `tests/queue.test.ts`, and `tests/background.test.ts`.
+Adjacent saves may share a storage operation, but their completion and cache reads must wait for that write. Do not merge saves across temporary-window cleanup or write evicted members back into storage.
+
+Enforced by `src/extension/translation-store.ts`, `tests/translation-store.test.ts`, `tests/queue.test.ts`, and `tests/background.test.ts`.
+
+### Source failures hiding website captions
+
+Keep source download failures and unavailable selected tracks distinct from normal loading and videos without captions. On YouTube, restore website captions on source failure and report the reason in the popup. Control native caption hiding separately from mounting the overlay; unsupported-language and same-language display must still work. X's live source without downloaded cues is not a source failure.
+
+An unavailable selected track must return to normal waiting as soon as its URL appears or the current observation has no track metadata. Clear only that stale unavailable state; a failed download continues to restore website captions until recovery succeeds.
+
+Advertisements and closed captions being turned off must not discard a downloaded YouTube track. On the first visible update, invalidate the previous bridge response and immediately revalidate video, track, and language before reuse; do not display the old track while waiting for the next poll. Credential notifications must preserve active subscription checks, ignore unchanged credentials, and retain download retry backoff for the same resource.
+
+Enforced by `tests/youtube.test.ts`, `tests/source-cache.test.ts`, `tests/popup.test.tsx`, `tests/x.test.ts`, and the source recovery and advertisement cases in `e2e/caption-sources.spec.ts`.
 
 ### Failed captions requested again
 

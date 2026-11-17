@@ -18,11 +18,16 @@ export class BridgeTimeline {
     window.addEventListener('message', this.receive);
   }
 
-  read(videoId: string): TimelineState | null {
+  read(videoId: string, refresh = false): TimelineState | null {
     const context = videoId;
     if (context !== this.context) {
       this.reset();
       this.context = context;
+    }
+    if (refresh) {
+      this.state = null;
+      this.revision = -1;
+      this.requestedAt = -Infinity;
     }
     if (Date.now() - this.requestedAt >= 1000) {
       this.requestedAt = Date.now();
