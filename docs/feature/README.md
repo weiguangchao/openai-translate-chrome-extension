@@ -66,7 +66,7 @@ Pausing lets requests already sent finish, while new caption translation request
 
 The delay before showing "Translating" counts only time when the video is not paused. Resuming continues the remaining delay; a pause does not add another delay once it has already elapsed. Buffering while the player is not paused still counts. Existing translations remain displayed, and captions that arrive during a pause can still be checked against the cache.
 
-Seeking cancels obsolete work that has not been sent. Requests already sent can finish, while the extension prioritizes the caption at the landing position after the seek. Results for old captions do not replace the caption displayed at the new position.
+Seeking cancels obsolete work that has not been sent. Requests already sent remain reusable until they finish, including when seeking back to an earlier position. Each sent request continues to count toward the service origin's send limit. A landing caption that needs a new request takes priority when the next send slot opens. Results for old captions do not replace the caption displayed at the new position.
 
 Changing the video, caption source, source language, or translation configuration makes Subline match the current captions to their translation tasks again. Saved settings are sent to supported video pages that are already open.
 

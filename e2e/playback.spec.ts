@@ -159,6 +159,45 @@ for (const platform of ['youtube', 'x'] as const) {
   );
 
   test(
+    `${platform}: repeated short seeks reuse pending captions and show the final landing`,
+    { tag: platform === 'x' ? '@local' : [] },
+    async ({}, info) => {
+      await withPlayer(
+        platform,
+        info,
+        async (p) => {
+          await p.play();
+          await expect.poll(() => p.posts.length).toBe(translationSendsPerSecond);
+          for (const time of [5, 10, 15, 20, 25]) {
+            await p.seek(time);
+            await p.page.waitForTimeout(400);
+          }
+          const landing = denseCue(6);
+          await expect
+            .poll(() =>
+              p.posts.some((post) => post.inputs.some((input) => input.text === landing.text)),
+            )
+            .toBe(true);
+          const inputs = p.posts.flatMap((post) => post.inputs.map((input) => input.text));
+          expect(inputs.length).toBe(new Set(inputs).size);
+          const post = p.posts.findIndex((post) =>
+            post.inputs.some((input) => input.text === landing.text),
+          );
+          await p.release(post);
+          await p.pair(landing.text, landing.translation);
+          const frames = await p.frames();
+          expect(
+            frames
+              .filter((frame) => frame.original && frame.time >= 25)
+              .every((frame) => frame.original === landing.text),
+          ).toBe(true);
+        },
+        { dense: true, hold: true },
+      );
+    },
+  );
+
+  test(
     `${platform}: paused uncached content waits for resume`,
     { tag: platform === 'x' ? '@local' : [] },
     async ({}, info) => {
@@ -206,7 +245,7 @@ for (const platform of ['youtube', 'x'] as const) {
   );
 }
 
-test('youtube: 1.5x playback sends the landing caption first after each completed seek', async ({}, info) => {
+test('youtube: 1.5x playback reuses sent landings and prioritizes new ones after seeking', async ({}, info) => {
   await withPlayer(
     'youtube',
     info,
@@ -233,10 +272,20 @@ test('youtube: 1.5x playback sends the landing caption first after each complete
         [60.8, 15],
       ]) {
         const before = p.posts.length;
+        const existing = p.posts.findIndex((post) =>
+          post.inputs.some((input) => input.text === denseCue(index).text),
+        );
         await p.seek(time);
-        await expect.poll(() => p.posts.length).toBeGreaterThan(before);
-        expect(p.posts[before].inputs).toEqual([{ id: 0, text: denseCue(index).text }]);
-        landingPost = before;
+        if (existing < 0) {
+          await expect.poll(() => p.posts.length).toBeGreaterThan(before);
+          expect(p.posts[before].inputs).toEqual([{ id: 0, text: denseCue(index).text }]);
+          landingPost = before;
+        } else landingPost = existing;
+        expect(
+          p.posts.filter((post) =>
+            post.inputs.some((input) => input.text === denseCue(index).text),
+          ),
+        ).toHaveLength(1);
       }
       await p.release(landingPost);
       await p.pair(denseCue(15).text, denseCue(15).translation);
@@ -245,6 +294,8 @@ test('youtube: 1.5x playback sends the landing caption first after each complete
       expect(batches.length).toBeGreaterThan(0);
       expect(batches.every((event) => event.playbackRate === 1.5)).toBe(true);
       expect(batches[0]).toMatchObject({ size: 1, atRisk: true, blocked: false });
+      const inputs = p.posts.flatMap((post) => post.inputs.map((input) => input.text));
+      expect(inputs.length).toBe(new Set(inputs).size);
     },
     { dense: true, hold: true, recordVideo: true },
   );

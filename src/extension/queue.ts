@@ -60,7 +60,6 @@ export class TranslationQueue {
   private consumers = new Map<string, Consumer>();
   private backoff: { until: number; error: Error } | undefined;
   private failed = new Map<string, Error>();
-  private detached = new WeakSet<AbortController>();
   private samples: number[] = [];
   private sendTimer: ReturnType<typeof setTimeout> | undefined;
   private batches = 0;
@@ -114,7 +113,7 @@ export class TranslationQueue {
     const onProviderTranslation = options?.onProviderTranslation;
     if (!onProviderTranslation) return job.promise;
     return job.promise.then((translation) => {
-      if (job.ready) onProviderTranslation();
+      if (job.ready && this.consumers.get(consumer)?.current === key) onProviderTranslation();
       return translation;
     });
   }
@@ -154,7 +153,7 @@ export class TranslationQueue {
       rate,
     };
     this.consumers.set(consumer, state);
-    this.prune('abort');
+    this.prune('keep');
     this.retainWindow();
     const fallback = options?.fallback;
     const cached = await this.store.get(
@@ -215,7 +214,7 @@ export class TranslationQueue {
         ({ key, cue }) => cue.start <= time && time < cue.end && this.jobs.get(key)?.sent,
       ),
     });
-    this.prune('detach');
+    this.prune('keep');
     this.retainWindow();
     this.drain();
   }
@@ -307,7 +306,7 @@ export class TranslationQueue {
 
   releaseRecovery(consumer: string): void {
     this.consumers.delete(consumer);
-    this.prune('detach');
+    this.prune('keep');
     this.retainWindow();
     this.drain();
   }
@@ -432,15 +431,14 @@ export class TranslationQueue {
     );
   }
 
-  private prune(sent: 'keep' | 'abort' | 'detach'): void {
+  private prune(sent: 'keep' | 'abort'): void {
     const wanted = this.wanted();
     for (const [key, job] of this.jobs) {
       if (wanted.has(key) || (job.sent && sent === 'keep')) continue;
       this.jobs.delete(key);
       job.reject(new Error(t('字幕已更新。', 'Subtitles have changed.')));
       if (job.batch?.some((other) => this.jobs.get(other.key) === other)) continue;
-      if (job.sent && sent === 'detach' && job.controller) this.detached.add(job.controller);
-      else job.controller?.abort();
+      job.controller?.abort();
     }
   }
 
@@ -537,10 +535,11 @@ export class TranslationQueue {
       this.trace({ e: 'done', id, ms: elapsed(), result });
     };
     const reject = (failure: Error) => {
+      const wanted = this.wanted();
       for (const job of batch) {
         if (this.jobs.get(job.key) !== job) continue;
         this.jobs.delete(job.key);
-        this.failed.set(job.key, failure);
+        if (wanted.has(job.key)) this.failed.set(job.key, failure);
         job.reject(failure);
       }
       this.drain();
@@ -613,7 +612,6 @@ export class TranslationQueue {
           if (consumers.some((item) => batch.some((job) => job.key === item.current))) return 0;
           return 1;
         },
-        counts: () => !this.detached.has(controller),
         onStart: (signal) => {
           for (const job of batch) {
             job.deadline = signal;

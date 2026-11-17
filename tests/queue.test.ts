@@ -254,7 +254,7 @@ it('forgets the oldest translations beyond the cache limit', async () => {
   expect(fetch).toHaveBeenCalledTimes(4);
 });
 
-it('answers a prefetch in order, nulls a cue the next plan drops, and reuses the cache', async () => {
+it('finishes a sent batch in order after its window changes and reuses the cache', async () => {
   const { batches, reply } = pendingProvider();
   const queue = new TranslationQueue();
   const opening = queue.prefetch('tab', settings, packedCues(['A', 'B']));
@@ -264,7 +264,7 @@ it('answers a prefetch in order, nulls a cue the next plan drops, and reuses the
   expect(batches()).toEqual([['A', 'B'], ['C']]);
   reply(0);
   reply(1);
-  await expect(opening).resolves.toEqual([null, 'B 译文']);
+  await expect(opening).resolves.toEqual(['A 译文', 'B 译文']);
   await expect(sliding).resolves.toEqual(['B 译文', 'C 译文']);
   const replay = queue.prefetch('tab', settings, packedCues(['A', 'C']));
   await flush();
@@ -311,7 +311,7 @@ it('sends a newly near cue without waiting for the pack already in flight', asyn
   expect(requests[1].signal.aborted).toBe(false);
 });
 
-it('lets packs sent before a seek finish into the cache without holding back the landing', async () => {
+it('keeps sent packs in the budget and sends the landing when a slot opens', async () => {
   const { batches, requests, reply } = pendingProvider();
   const queue = new TranslationQueue();
   queue.prefetch('tab', settings, prefetchItems(['Now', 'Soon', 'Later', 'After', 'Last']));
@@ -322,6 +322,10 @@ it('lets packs sent before a seek finish into the cache without holding back the
   expect(batches()).toHaveLength(3);
   queue.prefetch('tab', settings, prefetchItems(['Landed'], 50), 50);
   await flush();
+  expect(batches()).toHaveLength(translationSendsPerSecond);
+  await vi.advanceTimersByTimeAsync(providerSendWindowMs - 1);
+  expect(batches()).toHaveLength(translationSendsPerSecond);
+  await vi.advanceTimersByTimeAsync(1);
   expect(batches().at(-1)).toEqual(['Landed']);
   expect(requests.some((request) => request.signal.aborted)).toBe(false);
   reply(1);
@@ -348,6 +352,96 @@ it('drops an unsent pack at the seek position until a settled snapshot arrives',
   expect(batches().slice(3)).toEqual([['Landing'], ['After']]);
 });
 
+it.each([
+  { jumps: [5], interval: 0 },
+  { jumps: [5, 10, 15, 20, 25], interval: 400 },
+  { jumps: [30, 25, 0], interval: 0 },
+])(
+  'reuses whole in-flight batches and keeps the send budget through $jumps',
+  async ({ jumps, interval }) => {
+    const sends: { at: number; texts: string[]; signal: AbortSignal }[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((_url: string, init: RequestInit) => {
+        const texts = requestedTexts(init);
+        sends.push({ at: Date.now(), texts, signal: init.signal! });
+        return new Promise<Response>((resolve) =>
+          setTimeout(() => resolve(providerReply(texts, (text) => `${text} 译文`)), 2500),
+        );
+      }),
+    );
+    const queue = new TranslationQueue();
+    const cues = Array.from({ length: 40 }, (_, index) => ({
+      text: `Cue ${index}`,
+      start: index * 3,
+      end: (index + 1) * 3,
+    }));
+    void queue.prefetch('tab', settings, cues);
+    await flush();
+    expect(sends).toHaveLength(translationSendsPerSecond);
+    await vi.advanceTimersByTimeAsync(100);
+    for (const [index, time] of jumps.entries()) {
+      if (index) await vi.advanceTimersByTimeAsync(interval);
+      queue.hold('tab', time);
+      void queue.request('tab', settings, `Cue ${Math.floor(time / 3)}`);
+      void queue.prefetch(
+        'tab',
+        settings,
+        cues.filter((cue) => cue.end > time),
+        time,
+      );
+      await flush();
+    }
+    await vi.advanceTimersByTimeAsync(6000);
+    const texts = sends.flatMap((send) => send.texts);
+    expect(texts).toContain(`Cue ${Math.floor(jumps.at(-1)! / 3)}`);
+    expect(texts.length).toBe(new Set(texts).size);
+    expect(sends.every((send) => !send.signal.aborted)).toBe(true);
+    for (const { at } of sends)
+      expect(
+        sends.filter((send) => at <= send.at && send.at < at + providerSendWindowMs).length,
+      ).toBeLessThanOrEqual(translationSendsPerSecond);
+    queue.reset();
+  },
+);
+
+it('reuses a sent landing batch and resolves every member from the original response', async () => {
+  const { batches, reply } = pendingProvider();
+  const queue = new TranslationQueue();
+  const cues = prefetchItems(['Now', 'Soon', 'Later', 'After', 'Last']);
+  void queue.prefetch('tab', settings, cues);
+  await flush();
+  queue.hold('tab', 5);
+  const landing = queue.request('tab', settings, 'Soon');
+  void queue.prefetch('tab', settings, cues.slice(1), 5);
+  const neighbor = queue.request('tab', settings, 'Later');
+  await vi.advanceTimersByTimeAsync(providerSendWindowMs);
+  expect(batches()).toEqual([['Now'], ['Soon', 'Later'], ['After', 'Last']]);
+  reply(1);
+  await expect(landing).resolves.toBe('Soon 译文');
+  await expect(neighbor).resolves.toBe('Later 译文');
+  queue.reset();
+});
+
+it('does not retain an old caption failure after its window has already left', async () => {
+  const { requests, reply } = pendingProvider();
+  const queue = new TranslationQueue();
+  void queue.prefetch('tab', settings, prefetchItems(['Old']));
+  await flush();
+  queue.hold('tab', 50);
+  void queue.prefetch('tab', settings, prefetchItems(['Landing'], 50), 50);
+  await flush();
+  requests[0].resolve(translationReply(''));
+  await flush();
+  queue.hold('tab', 0);
+  const returned = queue.request('tab', settings, 'Old');
+  await flush();
+  expect(requests).toHaveLength(3);
+  reply(2);
+  await expect(returned).resolves.toBe('Old 译文');
+  queue.reset();
+});
+
 it('resumes a DOM-only caption after holding a seek without requiring a timeline snapshot', async () => {
   const { batches } = pendingProvider();
   const queue = new TranslationQueue();
@@ -359,7 +453,7 @@ it('resumes a DOM-only caption after holding a seek without requiring a timeline
   expect(batches()).toEqual([['Old DOM caption'], ['Landed DOM caption']]);
 });
 
-it('releases the previous visible caption when a new snapshot leaves it behind', async () => {
+it('keeps sent captions reusable after a new snapshot leaves them behind', async () => {
   const { batches, requests } = pendingProvider();
   const queue = new TranslationQueue();
   queue.prefetch('tab', settings, prefetchItems(['Old', 'Soon', 'Later']));
@@ -368,8 +462,8 @@ it('releases the previous visible caption when a new snapshot leaves it behind',
   await flush();
   queue.prefetch('tab', settings, prefetchItems(['Landed'], 20), 20);
   await flush();
-  expect(requests[0].signal.aborted).toBe(true);
-  expect(requests[1].signal.aborted).toBe(true);
+  expect(requests[0].signal.aborted).toBe(false);
+  expect(requests[1].signal.aborted).toBe(false);
   await vi.advanceTimersByTimeAsync(1000);
   expect(batches().at(-1)).toEqual(['Landed']);
 });
@@ -708,7 +802,7 @@ it('reads session storage for every lookup and replay, including after a worker 
   expect(JSON.stringify([...session.stored])).not.toContain(settings.apiKey);
 });
 
-it('keeps sent packs through snapshot refreshes and cancels one only after its cues leave', async () => {
+it('keeps whole sent packs through snapshot refreshes even after their cues leave', async () => {
   const { batches, reply, requests } = pendingProvider();
   const queue = new TranslationQueue();
   const list = Array.from({ length: 8 }, (_, index) => `Cue ${index + 1}`);
@@ -721,7 +815,7 @@ it('keeps sent packs through snapshot refreshes and cancels one only after its c
   expect(batches()).toHaveLength(3);
   queue.prefetch('tab', settings, prefetchItems(list.slice(1), 4), 5);
   await flush();
-  expect(requests[0].signal.aborted).toBe(true);
+  expect(requests[0].signal.aborted).toBe(false);
   expect(requests[1].signal.aborted).toBe(false);
   reply(1);
   await vi.advanceTimersByTimeAsync(0);
