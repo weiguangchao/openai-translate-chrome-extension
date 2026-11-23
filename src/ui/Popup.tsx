@@ -348,6 +348,7 @@ export function Popup() {
         />
         <CaptionMode
           name="popup-display-mode"
+          compact
           value={ready ? settings.translationOnly : null}
           onChange={(translationOnly) => void update({ translationOnly })}
         />

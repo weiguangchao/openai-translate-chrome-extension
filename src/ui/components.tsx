@@ -98,10 +98,12 @@ export function CaptionMode({
   value,
   onChange,
   name,
+  compact = false,
 }: {
   value: boolean | null;
   onChange: (value: boolean) => void;
   name: string;
+  compact?: boolean;
 }) {
   return (
     <fieldset className="caption-mode">
@@ -118,12 +120,14 @@ export function CaptionMode({
             />
             <span className="caption-mode-label">
               <span>{translationOnly ? copy.translationOnly : copy.bilingual}</span>
-              <Check size={14} className="mode-check" aria-hidden />
+              {!compact && <Check size={14} className="mode-check" aria-hidden />}
             </span>
-            <span className="mode-lines" aria-hidden>
-              {!translationOnly && <span>{copy.source}</span>}
-              <span>{copy.target}</span>
-            </span>
+            {!compact && (
+              <span className="mode-lines" aria-hidden>
+                {!translationOnly && <span>{copy.source}</span>}
+                <span>{copy.target}</span>
+              </span>
+            )}
           </label>
         ))}
       </div>

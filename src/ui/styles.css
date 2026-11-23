@@ -1687,10 +1687,6 @@ input[aria-invalid='true']:focus {
 .popup .caption-mode-label {
   justify-content: center;
 }
-.popup .mode-lines,
-.popup .mode-check {
-  display: none;
-}
 .popup-details summary {
   display: flex;
   align-items: center;
