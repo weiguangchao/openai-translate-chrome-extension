@@ -328,6 +328,7 @@ for (const viewport of [
   { width: 360, height: 800 },
   { width: 1360, height: 420 },
   { width: 1360, height: 360 },
+  { width: 1360, height: 300 },
 ]) {
   test(`settings: cross-section URL recovery stays visible at ${viewport.width}x${viewport.height}`, async ({}, info) => {
     await withPlayer('x', info, async (p) => {
@@ -409,11 +410,16 @@ for (const viewport of [
       });
       if (viewport.width > 520) {
         expect(await p.settingsPage.evaluate(() => window.scrollY)).toBe(0);
-        await p.settingsPage.locator('.app-header').hover();
+        const header = p.settingsPage.locator('.app-header');
+        await header.hover();
         await p.settingsPage.mouse.wheel(0, 500);
-        await expect
-          .poll(() => p.settingsPage.locator('.app-header').evaluate((header) => header.scrollTop))
-          .toBeGreaterThan(0);
+        if (await header.evaluate((element) => element.scrollHeight > element.clientHeight))
+          await expect
+            .poll(() => header.evaluate((element) => element.scrollTop))
+            .toBeGreaterThan(0);
+        else
+          for (const item of await p.settingsPage.locator('.nav-item').all())
+            await expect(item).toBeInViewport({ ratio: 1 });
         expect(await p.settingsPage.evaluate(() => window.scrollY)).toBe(0);
         await expect(p.settingsPage.getByRole('heading', { level: 1 })).toBeInViewport({
           ratio: 1,

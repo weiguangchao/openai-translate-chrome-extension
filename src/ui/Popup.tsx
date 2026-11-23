@@ -3,7 +3,7 @@ import { LANGUAGES } from '../shared/languages';
 import { PAGE_STATUSES, type PageStatus } from '../shared/messages';
 import { platformForUrl } from '../shared/platforms';
 import { useEffect, useRef, useState } from 'react';
-import { Check, ChevronDown, ChevronRight, CircleAlert, Settings2, Subtitles } from 'lucide-react';
+import { Check, ChevronDown, ChevronRight, CircleAlert, Settings2 } from 'lucide-react';
 import {
   DEFAULT_SETTINGS,
   hasProviderConsent,
@@ -302,11 +302,8 @@ export function Popup() {
         </button>
       </header>
 
-      <section className={`popup-control ${ready && settings.enabled ? 'is-enabled' : ''}`}>
+      <section className="popup-control">
         <div className="popup-power">
-          <span className="popup-power-icon">
-            <Subtitles size={20} aria-hidden />
-          </span>
           <div className="popup-power-text">
             <h1>{copy.subtitles}</h1>
             <span className="popup-power-scope">{t('所有支持的网站', 'All supported sites')}</span>
@@ -351,6 +348,7 @@ export function Popup() {
         />
         <CaptionMode
           name="popup-display-mode"
+          compact
           value={ready ? settings.translationOnly : null}
           onChange={(translationOnly) => void update({ translationOnly })}
         />

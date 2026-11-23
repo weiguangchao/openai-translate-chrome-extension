@@ -1,6 +1,6 @@
 import { t } from '../shared/i18n';
 import { LANGUAGES } from '../shared/languages';
-import { Check, ChevronDown, Expand, Languages, Subtitles, X } from 'lucide-react';
+import { Check, ChevronDown, Expand, Subtitles, X } from 'lucide-react';
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { type Settings } from '../shared/settings';
 import { isExtension } from '../shared/storage';
@@ -44,7 +44,7 @@ export function Toggle({
       className={`toggle ${checked ? 'is-on' : ''}`}
       onClick={() => onChange(!checked)}
     >
-      <span>{checked && <Check size={11} strokeWidth={3} />}</span>
+      <span />
     </button>
   );
 }
@@ -98,10 +98,12 @@ export function CaptionMode({
   value,
   onChange,
   name,
+  compact = false,
 }: {
   value: boolean | null;
   onChange: (value: boolean) => void;
   name: string;
+  compact?: boolean;
 }) {
   return (
     <fieldset className="caption-mode">
@@ -118,12 +120,14 @@ export function CaptionMode({
             />
             <span className="caption-mode-label">
               <span>{translationOnly ? copy.translationOnly : copy.bilingual}</span>
-              <Check size={14} className="mode-check" aria-hidden />
+              {!compact && <Check size={14} className="mode-check" aria-hidden />}
             </span>
-            <span className="mode-lines" aria-hidden>
-              {!translationOnly && <span>{copy.source}</span>}
-              <span>{copy.target}</span>
-            </span>
+            {!compact && (
+              <span className="mode-lines" aria-hidden>
+                {!translationOnly && <span>{copy.source}</span>}
+                <span>{copy.target}</span>
+              </span>
+            )}
           </label>
         ))}
       </div>
@@ -288,12 +292,5 @@ export function SubtitlePreview({ settings }: { settings: Settings }) {
         </PreviewDialog>
       )}
     </>
-  );
-}
-export function LanguageIcon() {
-  return (
-    <span className="section-icon">
-      <Languages size={18} />
-    </span>
   );
 }

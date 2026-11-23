@@ -9,18 +9,14 @@ import {
   EyeOff,
   Globe2,
   Info,
-  Languages,
-  Layers3,
   LoaderCircle,
   LockKeyhole,
-  MonitorPlay,
   PlugZap,
   RefreshCw,
   RotateCcw,
   Settings2,
   ShieldCheck,
   SlidersHorizontal,
-  Subtitles,
 } from 'lucide-react';
 import {
   DEFAULT_SETTINGS,
@@ -103,7 +99,7 @@ function Section({
   children,
   className = '',
 }: {
-  icon: ReactNode;
+  icon?: ReactNode;
   title: string;
   description?: string;
   action?: ReactNode;
@@ -113,7 +109,7 @@ function Section({
   return (
     <section className={`settings-section ${className}`}>
       <div className="section-heading">
-        <span className="section-icon">{icon}</span>
+        {icon}
         <div>
           <h2>{title}</h2>
           {description && <p>{description}</p>}
@@ -520,7 +516,7 @@ export function App() {
                 {page === 'general' && (
                   <>
                     {setupNeeded && serviceShortcut}
-                    <Section icon={<Subtitles size={19} />} title={copy.subtitles}>
+                    <Section title={copy.subtitles}>
                       <div className="enable-panel">
                         <div>
                           <label htmlFor="settings-enabled">{copy.enableSubtitles} </label>
@@ -547,10 +543,7 @@ export function App() {
                       />
                     </Section>
                     {!setupNeeded && serviceShortcut}
-                    <Section
-                      icon={<MonitorPlay size={19} />}
-                      title={t('支持的网站', 'Supported sites')}
-                    >
+                    <Section title={t('支持的网站', 'Supported sites')}>
                       <div className="site-options">
                         <div>
                           <YoutubeMark />
@@ -576,11 +569,7 @@ export function App() {
                 )}
                 {page === 'service' && (
                   <>
-                    <Section
-                      icon={<PlugZap size={19} />}
-                      title={t('翻译方式', 'Translation method')}
-                      className="api-section"
-                    >
+                    <Section title={t('翻译方式', 'Translation method')} className="api-section">
                       <fieldset disabled={Boolean(busy)}>
                         <fieldset className="provider-options">
                           <legend className="sr-only">{copy.translationService}</legend>
@@ -827,9 +816,6 @@ export function App() {
                     {(['original', 'translation'] as const).map((kind) => (
                       <Section
                         key={kind}
-                        icon={
-                          kind === 'original' ? <Subtitles size={19} /> : <Languages size={19} />
-                        }
                         title={
                           kind === 'original'
                             ? t('原文样式', 'Source style')
@@ -912,10 +898,7 @@ export function App() {
                         </div>
                       </Section>
                     ))}
-                    <Section
-                      icon={<Layers3 size={19} />}
-                      title={t('间距与背景', 'Spacing and background')}
-                    >
+                    <Section title={t('间距与背景', 'Spacing and background')}>
                       <div className="range-field">
                         <label htmlFor="subtitle-gap">
                           {t('两行字幕间距', 'Line spacing')}{' '}
