@@ -277,14 +277,40 @@ test('settings: linked sections and browser history preserve a draft across all 
       'aria-checked',
       'false',
     );
-    for (const width of [320, 600, 760, 1024, 1360]) {
+    for (const width of [320, 600, 760, 800, 1024, 1360]) {
       await p.settingsPage.setViewportSize({ width, height: 800 });
+      const overflowing = await p.settingsPage.locator('.nav-item').evaluateAll((items) =>
+        items
+          .filter((item) => {
+            const style = getComputedStyle(item);
+            const range = document.createRange();
+            range.selectNodeContents(item.querySelector('span')!);
+            return (
+              range.getBoundingClientRect().right >
+              item.getBoundingClientRect().right - parseFloat(style.paddingRight) + 0.5
+            );
+          })
+          .map((item) => item.textContent),
+      );
+      expect(overflowing, `navigation labels at ${width}px`).toEqual([]);
       for (const name of ['General', 'Translation service', 'Subtitle style', 'About']) {
         await p.settingsPage.getByRole('button', { name, exact: true }).click();
         await expect(p.settingsPage.getByRole('button', { name: 'Save changes' })).toBeInViewport();
         expect(
           await p.settingsPage.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
         ).toBe(true);
+        if (name === 'General')
+          expect(
+            await p.settingsPage.locator('.service-shortcut-value').evaluate((value) => {
+              const outer = value.getBoundingClientRect();
+              const range = document.createRange();
+              range.selectNodeContents(value);
+              return [...range.getClientRects()].every(
+                (box) => box.left >= outer.left - 0.5 && box.right <= outer.right + 0.5,
+              );
+            }),
+            `service shortcut value at ${width}px`,
+          ).toBe(true);
       }
     }
     await p.settingsPage.getByRole('button', { name: 'Discard changes' }).click();
@@ -433,7 +459,7 @@ test('popup: language names and expanded details fit after saving in both langua
           const room =
             select.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
           return [...select.options]
-            .filter((option) => context.measureText(option.text).width > room)
+            .filter((option) => context.measureText(option.text).width * 1.1 > room)
             .map((option) => option.text);
         });
         expect(clipped).toEqual([]);

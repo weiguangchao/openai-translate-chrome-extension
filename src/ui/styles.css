@@ -1155,6 +1155,10 @@ input[aria-invalid='true']:focus {
   color: #fff;
   background: #6554d9cc;
 }
+.settings-section .mode-lines {
+  min-height: 72px;
+  font-size: 13px;
+}
 .content-grid.with-preview {
   grid-template-columns: minmax(0, 1.08fr) minmax(0, 1fr);
 }
@@ -1287,21 +1291,22 @@ input[aria-invalid='true']:focus {
   overflow: hidden;
 }
 .preview-heading {
-  padding: 20px 22px 16px;
+  padding: 24px 24px 18px;
 }
 .preview-heading h2 {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   font-size: 16px;
   font-weight: 650;
 }
 .preview-heading svg {
   box-sizing: content-box;
-  padding: 8px;
+  padding: 9px;
   border-radius: 10px;
   color: var(--accent);
   background: linear-gradient(145deg, #f3f0ff 0%, #e6e0ff 100%);
+  box-shadow: inset 0 0 0 1px #6554d914;
 }
 .preview-scene {
   width: calc(100% - 24px);
@@ -1423,7 +1428,7 @@ input[aria-invalid='true']:focus {
   line-height: 1;
 }
 .preview-details {
-  padding: 16px 22px 18px;
+  padding: 16px 24px 20px;
 }
 .style-legend {
   display: flex;
@@ -1763,7 +1768,7 @@ input[aria-invalid='true']:focus {
 }
 .is-enabled .toggle {
   background: #ffffff40;
-  box-shadow: inset 0 0 0 1px #ffffff4d;
+  box-shadow: inset 0 0 0 1px #ffffff80;
 }
 .is-enabled .toggle > span {
   color: var(--brand-deep);
@@ -1856,7 +1861,12 @@ input[aria-invalid='true']:focus {
   background: currentColor;
 }
 .is-enabled .popup-page-status[data-status='error'] {
-  color: #ffd9d3;
+  color: #fff;
+  background: linear-gradient(#ff7a6a3d, #ff7a6a3d), #120f3a52;
+}
+.is-enabled .popup-page-status[data-status='error'] > i {
+  background: #ff8f80;
+  box-shadow: 0 0 0 3px #ff8f802e;
 }
 .popup-page-status:is([data-status='loading'], [data-status='checking']) > i {
   background: var(--accent);
@@ -1892,20 +1902,24 @@ input[aria-invalid='true']:focus {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   width: 100%;
 }
 .popup-language label,
 .popup .caption-mode legend {
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 500;
   color: var(--muted);
 }
 .popup-language select {
   height: 38px;
+  padding: 0 30px 0 12px;
   border-radius: 10px;
   font-size: 14px;
-  font-weight: 500;
+  font-weight: 400;
+}
+.popup-language .select-wrap > svg {
+  right: 10px;
 }
 .popup-languages:disabled select {
   cursor: default;
@@ -2101,7 +2115,34 @@ code.popup-model-id {
 }
 @media (max-width: 1000px) {
   .app-shell {
-    grid-template-columns: 210px minmax(0, 1fr);
+    grid-template-columns: 228px minmax(0, 1fr);
+  }
+  .service-shortcut {
+    display: grid;
+    grid-template-columns: 36px minmax(0, 1fr) 18px;
+    gap: 4px 12px;
+  }
+  .service-shortcut > svg:first-child {
+    grid-row: 1 / 3;
+  }
+  .service-shortcut-meta {
+    grid-column: 2;
+    grid-row: 2;
+    margin-left: 0;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .service-shortcut-value {
+    align-items: flex-start;
+    max-width: 100%;
+    font-size: 12px;
+  }
+  .service-shortcut > svg:last-child {
+    grid-column: 3;
+    grid-row: 1 / 3;
+  }
+  .nav-item {
+    gap: 10px;
   }
   .header-inner {
     padding-inline: 12px;
@@ -2270,6 +2311,15 @@ code.popup-model-id {
     padding: 20px 18px;
     border-radius: 18px;
   }
+  .preview-panel {
+    border-radius: 18px;
+  }
+  .preview-heading {
+    padding: 20px 18px 16px;
+  }
+  .preview-details {
+    padding: 14px 18px 18px;
+  }
   .section-heading {
     margin-bottom: 22px;
   }
@@ -2293,29 +2343,7 @@ code.popup-model-id {
     padding: 16px;
   }
   .service-shortcut {
-    display: grid;
-    grid-template-columns: 36px minmax(0, 1fr) 18px;
     padding: 16px 18px;
-    gap: 4px 12px;
-  }
-  .service-shortcut > svg:first-child {
-    grid-row: 1 / 3;
-  }
-  .service-shortcut-meta {
-    grid-column: 2;
-    grid-row: 2;
-    margin-left: 0;
-    flex-wrap: wrap;
-    gap: 8px;
-  }
-  .service-shortcut-value {
-    align-items: flex-start;
-    max-width: 100%;
-    font-size: 12px;
-  }
-  .service-shortcut > svg:last-child {
-    grid-column: 3;
-    grid-row: 1 / 3;
   }
 
   .color-controls {
