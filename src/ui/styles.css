@@ -1446,8 +1446,8 @@ input[aria-invalid='true']:focus {
 }
 .style-legend i {
   display: block;
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
   border: 2px solid #fff;
   border-radius: 50%;
   box-shadow: 0 0 0 1px #28263840;
