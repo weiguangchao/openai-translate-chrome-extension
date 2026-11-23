@@ -554,6 +554,7 @@ test('settings: wordmark stays on one line in split windows and draft announceme
 
 test('settings: selected cards keep their accent border while hovered', async ({}, info) => {
   await withPlayer('x', info, async (p) => {
+    await p.settingsPage.emulateMedia({ reducedMotion: 'reduce' });
     for (const [hash, selector] of [
       ['general', '.caption-mode-option:has(input:checked)'],
       ['service', '.provider-option:has(input:checked)'],

@@ -767,7 +767,7 @@ input[aria-invalid='true']:focus {
 }
 .provider-option:has(input:disabled) {
   cursor: default;
-  opacity: 0.6;
+  opacity: 0.5;
 }
 .provider-option-title {
   display: flex;
@@ -1446,10 +1446,11 @@ input[aria-invalid='true']:focus {
 }
 .style-legend i {
   display: block;
-  width: 12px;
-  height: 12px;
-  border: 1px solid #c7c3d8;
+  width: 16px;
+  height: 16px;
+  border: 2px solid #fff;
   border-radius: 50%;
+  box-shadow: 0 0 0 1px #28263840;
 }
 .style-legend b {
   color: var(--text);
