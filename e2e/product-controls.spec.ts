@@ -277,14 +277,40 @@ test('settings: linked sections and browser history preserve a draft across all 
       'aria-checked',
       'false',
     );
-    for (const width of [320, 600, 760, 1024, 1360]) {
+    for (const width of [320, 600, 760, 800, 1024, 1360]) {
       await p.settingsPage.setViewportSize({ width, height: 800 });
+      const overflowing = await p.settingsPage.locator('.nav-item').evaluateAll((items) =>
+        items
+          .filter((item) => {
+            const style = getComputedStyle(item);
+            const range = document.createRange();
+            range.selectNodeContents(item.querySelector('span')!);
+            return (
+              range.getBoundingClientRect().right >
+              item.getBoundingClientRect().right - parseFloat(style.paddingRight) + 0.5
+            );
+          })
+          .map((item) => item.textContent),
+      );
+      expect(overflowing, `navigation labels at ${width}px`).toEqual([]);
       for (const name of ['General', 'Translation service', 'Subtitle style', 'About']) {
         await p.settingsPage.getByRole('button', { name, exact: true }).click();
         await expect(p.settingsPage.getByRole('button', { name: 'Save changes' })).toBeInViewport();
         expect(
           await p.settingsPage.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
         ).toBe(true);
+        if (name === 'General')
+          expect(
+            await p.settingsPage.locator('.service-shortcut-value').evaluate((value) => {
+              const outer = value.getBoundingClientRect();
+              const range = document.createRange();
+              range.selectNodeContents(value);
+              return [...range.getClientRects()].every(
+                (box) => box.left >= outer.left - 0.5 && box.right <= outer.right + 0.5,
+              );
+            }),
+            `service shortcut value at ${width}px`,
+          ).toBe(true);
       }
     }
     await p.settingsPage.getByRole('button', { name: 'Discard changes' }).click();
@@ -400,7 +426,7 @@ for (const viewport of [
   });
 }
 
-test('popup: expanded details fit within 600px after saving in both languages', async ({}, info) => {
+test('popup: language names and expanded details fit after saving in both languages', async ({}, info) => {
   await withPlayer('x', info, async (p) => {
     const consent = await p.settingsPage.evaluate(async (key) => {
       return (await chrome.storage.local.get(key))[key].providerConsent as string;
@@ -426,6 +452,17 @@ test('popup: expanded details fit within 600px after saving in both languages', 
         await expect(p.settingsPage.locator('.popup-save-state')).toHaveText(
           locale === 'en' ? 'Saved' : '已保存',
         );
+        const clipped = await language.evaluate((select: HTMLSelectElement) => {
+          const style = getComputedStyle(select);
+          const context = document.createElement('canvas').getContext('2d')!;
+          context.font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+          const room =
+            select.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+          return [...select.options]
+            .filter((option) => context.measureText(option.text).width * 1.1 > room)
+            .map((option) => option.text);
+        });
+        expect(clipped).toEqual([]);
         await p.settingsPage.locator('summary').click();
         const popup = p.settingsPage.locator('.popup');
         expect(
@@ -511,6 +548,24 @@ test('settings: wordmark stays on one line in split windows and draft announceme
       await p.settingsPage
         .getByRole('button', { name: locale === 'en' ? 'Discard changes' : '撤销更改' })
         .click();
+    }
+  });
+});
+
+test('settings: selected cards keep their accent border while hovered', async ({}, info) => {
+  await withPlayer('x', info, async (p) => {
+    await p.settingsPage.emulateMedia({ reducedMotion: 'reduce' });
+    for (const [hash, selector] of [
+      ['general', '.caption-mode-option:has(input:checked)'],
+      ['service', '.provider-option:has(input:checked)'],
+    ]) {
+      await p.settingsPage.goto(`chrome-extension://${p.extensionId}/index.html#${hash}`);
+      const card = p.settingsPage.locator(selector);
+      await p.settingsPage.mouse.move(0, 0);
+      const border = () => card.evaluate((element) => getComputedStyle(element).borderColor);
+      const resting = await border();
+      await card.hover();
+      expect(await border(), `${hash} selected card on hover`).toBe(resting);
     }
   });
 });
