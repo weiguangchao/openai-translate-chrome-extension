@@ -980,7 +980,7 @@ export function App() {
                 {page === 'about' && (
                   <>
                     <Section
-                      icon={<Subtitles size={19} />}
+                      icon={<img src="./logo-ui.svg" alt="" />}
                       title={t('Subline 双语字幕', 'Subline bilingual subtitles')}
                       description={
                         isExtension
