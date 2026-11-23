@@ -552,6 +552,23 @@ test('settings: wordmark stays on one line in split windows and draft announceme
   });
 });
 
+test('settings: selected cards keep their accent border while hovered', async ({}, info) => {
+  await withPlayer('x', info, async (p) => {
+    for (const [hash, selector] of [
+      ['general', '.caption-mode-option:has(input:checked)'],
+      ['service', '.provider-option:has(input:checked)'],
+    ]) {
+      await p.settingsPage.goto(`chrome-extension://${p.extensionId}/index.html#${hash}`);
+      const card = p.settingsPage.locator(selector);
+      await p.settingsPage.mouse.move(0, 0);
+      const border = () => card.evaluate((element) => getComputedStyle(element).borderColor);
+      const resting = await border();
+      await card.hover();
+      expect(await border(), `${hash} selected card on hover`).toBe(resting);
+    }
+  });
+});
+
 test('settings: selected colors show keyboard focus and sliders accept clicks above the track', async ({}, info) => {
   await withPlayer('x', info, async (p) => {
     await p.settingsPage.goto(`chrome-extension://${p.extensionId}/index.html`);

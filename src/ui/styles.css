@@ -744,7 +744,7 @@ input[aria-invalid='true']:focus {
     border 0.15s,
     background 0.15s;
 }
-.provider-option:hover:not(:has(input:disabled)) {
+.provider-option:hover:not(:has(input:disabled, input:checked)) {
   border-color: #b8adf3;
 }
 .provider-option input {
@@ -1064,7 +1064,7 @@ input[aria-invalid='true']:focus {
     background 0.15s,
     box-shadow 0.15s;
 }
-.caption-mode-option:hover:not(:has(input:disabled)) {
+.caption-mode-option:hover:not(:has(input:disabled, input:checked)) {
   border-color: #b8adf3;
 }
 .caption-mode-option:has(input:checked) {
