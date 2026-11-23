@@ -328,6 +328,7 @@ for (const viewport of [
   { width: 360, height: 800 },
   { width: 1360, height: 420 },
   { width: 1360, height: 360 },
+  { width: 1360, height: 300 },
 ]) {
   test(`settings: cross-section URL recovery stays visible at ${viewport.width}x${viewport.height}`, async ({}, info) => {
     await withPlayer('x', info, async (p) => {
