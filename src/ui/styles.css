@@ -408,7 +408,7 @@ code {
     transform 0.15s;
 }
 .button.primary {
-  background: var(--brand-gradient);
+  background: var(--brand-surface);
   color: #fff;
   box-shadow: var(--shadow-raised);
 }
@@ -561,7 +561,7 @@ code {
 }
 .toggle {
   position: relative;
-  background: #b9b6c9;
+  background: #8e8aa6;
   border-radius: 20px;
   width: 46px;
   height: 28px;
@@ -737,7 +737,7 @@ input[aria-invalid='true']:focus {
   height: 20px;
   margin-top: -10px;
   border-radius: 50%;
-  border: 1.5px solid #bdb8d4;
+  border: 1.5px solid #8e8aa6;
   background: #fff;
   box-sizing: border-box;
   transition:
@@ -1013,7 +1013,6 @@ input[aria-invalid='true']:focus {
   overflow: hidden;
   text-overflow: ellipsis;
   font-size: 12px;
-  color: var(--subtle);
 }
 .service-shortcut.needs-setup {
   background: linear-gradient(120deg, #fffaf0 0%, #fff6e3 100%);
@@ -1268,7 +1267,7 @@ input[aria-invalid='true']:focus {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  color: var(--subtle);
+  color: var(--muted);
   font-size: 12px;
 }
 .reset-style {
@@ -1445,7 +1444,7 @@ input[aria-invalid='true']:focus {
   width: 12px;
   height: 12px;
   border: 1px solid #c7c3d8;
-  border-radius: 4px;
+  border-radius: 50%;
 }
 .style-legend b {
   color: var(--text);
@@ -1760,7 +1759,7 @@ input[aria-invalid='true']:focus {
   font-size: 12px;
 }
 .is-enabled .popup-power-scope {
-  color: #ebe7ff;
+  color: #fff;
 }
 .is-enabled .toggle {
   background: #ffffff40;
@@ -1845,12 +1844,16 @@ input[aria-invalid='true']:focus {
 }
 .is-enabled .popup-page-status[data-status='not-configured'] {
   color: #fff;
+  background: linear-gradient(#ffcf6b24, #ffcf6b24), #120f3a52;
 }
 .is-enabled .popup-page-status[data-status='not-configured'] > i {
   background: #ffcf6b;
 }
 .popup-page-status[data-status='error'] {
   color: var(--danger);
+}
+.popup-page-status[data-status='error'] > i {
+  background: currentColor;
 }
 .is-enabled .popup-page-status[data-status='error'] {
   color: #ffd9d3;
@@ -1887,7 +1890,7 @@ input[aria-invalid='true']:focus {
 }
 .popup-language {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 164px);
+  grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
   gap: 8px;
   width: 100%;
@@ -1902,7 +1905,7 @@ input[aria-invalid='true']:focus {
   height: 38px;
   border-radius: 10px;
   font-size: 14px;
-  font-weight: 550;
+  font-weight: 500;
 }
 .popup-languages:disabled select {
   cursor: default;
@@ -2177,7 +2180,7 @@ code.popup-model-id {
   }
   .nav-item.active {
     color: #fff;
-    background: var(--brand-gradient);
+    background: var(--brand-surface);
     box-shadow: 0 6px 14px -8px #4a3bb3cc;
   }
   .nav-item:hover:not(.active) {
@@ -2201,6 +2204,7 @@ code.popup-model-id {
   }
   .workspace {
     scroll-padding-top: 110px;
+    scrollbar-gutter: auto;
   }
 }
 @media (max-width: 520px) {

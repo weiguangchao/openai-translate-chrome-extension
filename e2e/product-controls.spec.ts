@@ -400,7 +400,7 @@ for (const viewport of [
   });
 }
 
-test('popup: expanded details fit within 600px after saving in both languages', async ({}, info) => {
+test('popup: language names and expanded details fit after saving in both languages', async ({}, info) => {
   await withPlayer('x', info, async (p) => {
     const consent = await p.settingsPage.evaluate(async (key) => {
       return (await chrome.storage.local.get(key))[key].providerConsent as string;
@@ -426,6 +426,17 @@ test('popup: expanded details fit within 600px after saving in both languages', 
         await expect(p.settingsPage.locator('.popup-save-state')).toHaveText(
           locale === 'en' ? 'Saved' : '已保存',
         );
+        const clipped = await language.evaluate((select: HTMLSelectElement) => {
+          const style = getComputedStyle(select);
+          const context = document.createElement('canvas').getContext('2d')!;
+          context.font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+          const room =
+            select.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+          return [...select.options]
+            .filter((option) => context.measureText(option.text).width > room)
+            .map((option) => option.text);
+        });
+        expect(clipped).toEqual([]);
         await p.settingsPage.locator('summary').click();
         const popup = p.settingsPage.locator('.popup');
         expect(
