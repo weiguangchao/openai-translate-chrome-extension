@@ -1,6 +1,6 @@
 import { t } from '../shared/i18n';
 import { LANGUAGES } from '../shared/languages';
-import { Check, ChevronDown, Expand, Languages, Subtitles, X } from 'lucide-react';
+import { Check, ChevronDown, Expand, Subtitles, X } from 'lucide-react';
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { type Settings } from '../shared/settings';
 import { isExtension } from '../shared/storage';
@@ -44,7 +44,7 @@ export function Toggle({
       className={`toggle ${checked ? 'is-on' : ''}`}
       onClick={() => onChange(!checked)}
     >
-      <span>{checked && <Check size={11} strokeWidth={3} />}</span>
+      <span />
     </button>
   );
 }
@@ -288,12 +288,5 @@ export function SubtitlePreview({ settings }: { settings: Settings }) {
         </PreviewDialog>
       )}
     </>
-  );
-}
-export function LanguageIcon() {
-  return (
-    <span className="section-icon">
-      <Languages size={18} />
-    </span>
   );
 }
