@@ -81,7 +81,7 @@ const PAGES = [
   {
     id: 'about' as const,
     get name() {
-      return t('关于', 'About', '關於', 'このアプリについて');
+      return t('关于', 'About', '關於', 'この拡張機能について');
     },
     icon: Info,
   },
@@ -162,7 +162,7 @@ export function App() {
       ? connection.kind
       : 'untested';
   const testText = {
-    untested: t('本次尚未测试', 'Not tested this session', '本次尚未測試', '未テスト'),
+    untested: t('本次尚未测试', 'Not tested this session', '本次尚未測試', '今回は未テスト'),
     testing: t('测试中…', 'Testing…', '測試中…', 'テスト中…'),
     passed: t('测试通过', 'Test passed', '測試通過', 'テスト成功'),
     failed: t('测试失败', 'Test failed', '測試失敗', 'テスト失敗'),
