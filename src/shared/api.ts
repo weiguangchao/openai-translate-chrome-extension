@@ -22,7 +22,14 @@ export const fetchModels = openai.fetchModels;
 
 function checkText(text: string): void {
   if (!text.trim() || text.length > 5000)
-    throw new Error(t('字幕内容为空或过长。', 'Subtitle text is empty or too long.'));
+    throw new Error(
+      t(
+        '字幕内容为空或过长。',
+        'Subtitle text is empty or too long.',
+        '字幕內容為空或過長。',
+        '字幕の内容が空か、長すぎます。',
+      ),
+    );
 }
 
 export async function translate(
@@ -43,7 +50,14 @@ export const translateCaptionBatch: TranslationProvider['translateCaptionBatch']
 ) => {
   texts.forEach(checkText);
   if (!texts.length || texts.length > translationBatchLimit)
-    throw new Error(t('单次翻译的字幕过多。', 'Too many subtitles in one translation request.'));
+    throw new Error(
+      t(
+        '单次翻译的字幕过多。',
+        'Too many subtitles in one translation request.',
+        '單次翻譯的字幕過多。',
+        '1 回の翻訳に含まれる字幕が多すぎます。',
+      ),
+    );
   return providers[settings.provider].translateCaptionBatch(
     settings,
     texts,

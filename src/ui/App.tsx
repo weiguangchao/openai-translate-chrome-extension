@@ -1,4 +1,4 @@
-import { t } from '../shared/i18n';
+import { isUiLanguage, setUiLanguage, t, uiLanguage, UI_LANGUAGES } from '../shared/i18n';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   Check,
@@ -59,22 +59,30 @@ const REPOSITORY_URL = 'https://github.com/weiguangchao/openai-translate-chrome-
 const PAGES = [
   {
     id: 'general' as const,
-    name: t('常规设置', 'General'),
+    get name() {
+      return t('常规设置', 'General', '一般設定', '一般');
+    },
     icon: Settings2,
   },
   {
     id: 'service' as const,
-    name: copy.translationService,
+    get name() {
+      return copy.translationService;
+    },
     icon: PlugZap,
   },
   {
     id: 'appearance' as const,
-    name: t('字幕样式', 'Subtitle style'),
+    get name() {
+      return t('字幕样式', 'Subtitle style', '字幕樣式', '字幕スタイル');
+    },
     icon: SlidersHorizontal,
   },
   {
     id: 'about' as const,
-    name: t('关于', 'About'),
+    get name() {
+      return t('关于', 'About', '關於', 'この拡張機能について');
+    },
     icon: Info,
   },
 ];
@@ -154,16 +162,28 @@ export function App() {
       ? connection.kind
       : 'untested';
   const testText = {
-    untested: t('本次尚未测试', 'Not tested this session'),
-    testing: t('测试中…', 'Testing…'),
-    passed: t('测试通过', 'Test passed'),
-    failed: t('测试失败', 'Test failed'),
+    untested: t('本次尚未测试', 'Not tested this session', '本次尚未測試', '今回は未テスト'),
+    testing: t('测试中…', 'Testing…', '測試中…', 'テスト中…'),
+    passed: t('测试通过', 'Test passed', '測試通過', 'テスト成功'),
+    failed: t('测试失败', 'Test failed', '測試失敗', 'テスト失敗'),
   };
   const origin = providerOrigin(settings);
-  const provider = origin ? new URL(origin).host : t('所选翻译服务', 'the selected service');
+  const provider = origin
+    ? new URL(origin).host
+    : t('所选翻译服务', 'the selected service', '所選的翻譯服務', '選択した翻訳サービス');
   const consented = hasProviderConsent(settings);
   const microsoftConsented = settings.providerConsent.split(',').includes(MICROSOFT_ORIGIN);
 
+  const language = uiLanguage();
+  useEffect(() => {
+    document.documentElement.lang = language;
+    document.title = t(
+      'Subline · 双语字幕设置',
+      'Subline · Subtitle settings',
+      'Subline · 雙語字幕設定',
+      'Subline · 字幕設定',
+    );
+  }, [language]);
   useEffect(() => {
     const syncPage = () => {
       const next = pageFromHash();
@@ -183,6 +203,7 @@ export function App() {
       .then((value) => {
         if (!active) return;
         setSettings(value);
+        setUiLanguage(value.uiLanguage);
         setSaved(value);
         setLoadState('ready');
       })
@@ -275,6 +296,7 @@ export function App() {
       if (!isExtension) patch.apiKey = normalized.apiKey;
       const persisted = await saveSettings(patch);
       setSettings((draft) => applySettingsPatch(persisted, settingsPatch(settings, draft)));
+      setUiLanguage(persisted.uiLanguage);
       setSaved(persisted);
       showAlert(
         isProviderConfigured(persisted) && !hasProviderConsent(persisted)
@@ -283,6 +305,8 @@ export function App() {
               text: t(
                 '设置已保存。同意数据使用说明后，才会翻译字幕。',
                 'Settings saved. Accept the data use notice to translate subtitles.',
+                '設定已儲存。同意資料使用說明後，才會翻譯字幕。',
+                '設定を保存しました。データの利用に同意すると字幕が翻訳されます。',
               ),
             }
           : {
@@ -291,10 +315,14 @@ export function App() {
                 ? t(
                     '设置已保存，已打开的视频页面会自动应用。',
                     'Settings saved and applied to open video pages.',
+                    '設定已儲存，已開啟的影片頁面會自動套用。',
+                    '設定を保存し、開いている動画ページに適用しました。',
                   )
                 : t(
                     '预览设置已保存。API Key 仅保留在当前页面，安装扩展后可本地保存。',
                     'Preview settings saved. The API Key stays on this page. Install the extension to save it locally.',
+                    '預覽設定已儲存。API Key 僅保留在目前頁面，安裝擴充功能後可儲存在本機。',
+                    'プレビューの設定を保存しました。API Key はこのページにのみ保持されます。拡張機能をインストールするとローカルに保存できます。',
                   ),
             },
       );
@@ -319,6 +347,8 @@ export function App() {
           t(
             '请先填写 API Key，再连接翻译服务。',
             'Enter an API Key before connecting to the translation service.',
+            '請先填寫 API Key，再連線翻譯服務。',
+            '翻訳サービスに接続する前に API Key を入力してください。',
           ),
         );
       if (kind === 'test') validateSettings(settings, true);
@@ -339,20 +369,35 @@ export function App() {
           text: t(
             `已获取 ${ids.length} 个模型，请选择支持文本翻译的模型。`,
             `Fetched ${ids.length} models. Choose one that supports text translation.`,
+            `已取得 ${ids.length} 個模型，請選擇支援文字翻譯的模型。`,
+            `${ids.length} 個のモデルを取得しました。テキスト翻訳に対応したモデルを選択してください。`,
           ),
         });
       } else {
         setConnection({ kind: 'passed', fingerprint });
         showAlert({
           kind: 'success',
-          text: t('连接测试成功', 'Connection test passed'),
+          text: t(
+            '连接测试成功',
+            'Connection test passed',
+            '連線測試成功',
+            '接続テストに成功しました',
+          ),
         });
       }
     } catch (error) {
       if (kind === 'test') setConnection({ kind: 'failed', fingerprint });
       showAlert({
         kind: 'error',
-        text: error instanceof Error ? error.message : t('接口请求失败。', 'API request failed.'),
+        text:
+          error instanceof Error
+            ? error.message
+            : t(
+                '接口请求失败。',
+                'API request failed.',
+                'API 請求失敗。',
+                'API リクエストに失敗しました。',
+              ),
       });
     } finally {
       setBusy(null);
@@ -370,7 +415,7 @@ export function App() {
         {setupNeeded
           ? isProviderConfigured(settings)
             ? copy.reviewConsent
-            : t('完成翻译设置', 'Finish translation setup')
+            : t('完成翻译设置', 'Finish translation setup', '完成翻譯設定', '翻訳の設定を完了する')
           : copy.translationService}
       </span>
       <span className="service-shortcut-meta">
@@ -387,8 +432,8 @@ export function App() {
         {setupNeeded && (
           <span className="setup-badge">
             {isProviderConfigured(settings)
-              ? t('待授权', 'Consent needed')
-              : t('待设置', 'Setup needed')}
+              ? t('待授权', 'Consent needed', '待授權', '同意が必要')
+              : t('待设置', 'Setup needed', '待設定', '設定が必要')}
           </span>
         )}
       </span>
@@ -402,7 +447,7 @@ export function App() {
       <header className="app-header">
         <div className="header-inner">
           <Logo />
-          <nav aria-label={t('设置导航', 'Settings navigation')}>
+          <nav aria-label={t('设置导航', 'Settings navigation', '設定導覽', '設定メニュー')}>
             {PAGES.map(({ id, name, icon: Icon }) => (
               <button
                 key={id}
@@ -418,7 +463,14 @@ export function App() {
           <div className="sidebar-platforms" aria-hidden="true">
             <YoutubeMark />
             <XMark />
-            <span>{t('为视频配上双语字幕', 'Bilingual subtitles for videos')}</span>
+            <span>
+              {t(
+                '为视频配上双语字幕',
+                'Bilingual subtitles for videos',
+                '為影片加上雙語字幕',
+                '動画のためのバイリンガル字幕',
+              )}
+            </span>
           </div>
         </div>
       </header>
@@ -434,7 +486,12 @@ export function App() {
                   {dirty && (
                     <>
                       <i aria-hidden />
-                      {t('有未保存的更改', 'Unsaved changes')}
+                      {t(
+                        '有未保存的更改',
+                        'Unsaved changes',
+                        '有未儲存的變更',
+                        '未保存の変更があります',
+                      )}
                     </>
                   )}
                 </span>
@@ -449,7 +506,7 @@ export function App() {
                       setShowKey(false);
                     }}
                   >
-                    {t('撤销更改', 'Discard changes')}
+                    {t('撤销更改', 'Discard changes', '捨棄變更', '変更を破棄')}
                   </button>
                 )}
                 <button
@@ -463,10 +520,10 @@ export function App() {
                     <Check size={17} />
                   )}{' '}
                   {busy === 'save'
-                    ? t('保存中…', 'Saving…')
+                    ? t('保存中…', 'Saving…', '儲存中…', '保存中…')
                     : dirty
-                      ? t('保存更改', 'Save changes')
-                      : t('设置已保存', 'Settings saved')}
+                      ? t('保存更改', 'Save changes', '儲存變更', '変更を保存')
+                      : t('设置已保存', 'Settings saved', '設定已儲存', '設定を保存済み')}
                 </button>
               </div>
             )}
@@ -476,6 +533,8 @@ export function App() {
               {t(
                 '浏览器预览：API Key 刷新后需重新填写。',
                 'Browser preview: re-enter your API Key after refreshing.',
+                '瀏覽器預覽：重新整理後需重新填寫 API Key。',
+                'ブラウザプレビュー：再読み込み後は API Key を再入力してください。',
               )}
             </p>
           )}
@@ -487,7 +546,9 @@ export function App() {
               {loadState === 'loading' ? (
                 <>
                   <LoaderCircle size={20} className="spinning" aria-hidden />
-                  <p>{t('正在读取设置…', 'Loading settings…')}</p>
+                  <p>
+                    {t('正在读取设置…', 'Loading settings…', '正在讀取設定…', '設定を読み込み中…')}
+                  </p>
                 </>
               ) : (
                 <>
@@ -498,7 +559,7 @@ export function App() {
                       className="text-button"
                       onClick={() => setLoadAttempt((attempt) => attempt + 1)}
                     >
-                      {t('重试', 'Retry')}
+                      {t('重试', 'Retry', '重試', '再試行')}
                     </button>
                   </div>
                 </>
@@ -543,33 +604,66 @@ export function App() {
                       />
                     </Section>
                     {!setupNeeded && serviceShortcut}
-                    <Section title={t('支持的网站', 'Supported sites')}>
+                    <Section title={t('支持的网站', 'Supported sites', '支援的網站', '対応サイト')}>
                       <div className="site-options">
                         <div>
                           <YoutubeMark />
                           <span>YouTube</span>
                           <Toggle
-                            label={t('在 YouTube 启用', 'Enable on YouTube')}
+                            label={t(
+                              '在 YouTube 启用',
+                              'Enable on YouTube',
+                              '在 YouTube 啟用',
+                              'YouTube で有効にする',
+                            )}
                             checked={settings.youtube}
                             onChange={(value) => update('youtube', value)}
                           />
                         </div>
                         <div>
                           <XMark />
-                          <span>{t('X（推特）', 'X (Twitter)')}</span>
+                          <span>{t('X（推特）', 'X (Twitter)', 'X（推特）', 'X（Twitter）')}</span>
                           <Toggle
-                            label={t('在 X（推特）启用', 'Enable on X (Twitter)')}
+                            label={t(
+                              '在 X（推特）启用',
+                              'Enable on X (Twitter)',
+                              '在 X（推特）啟用',
+                              'X（Twitter）で有効にする',
+                            )}
                             checked={settings.x}
                             onChange={(value) => update('x', value)}
                           />
                         </div>
                       </div>
                     </Section>
+                    <Section title={t('界面', 'Interface', '介面', 'インターフェース')}>
+                      <div className="field setting-row">
+                        <label htmlFor="ui-language">
+                          {t('界面语言', 'Interface language', '介面語言', '表示言語')}
+                        </label>
+                        <Select
+                          id="ui-language"
+                          value={settings.uiLanguage || language}
+                          onChange={(value) => {
+                            if (isUiLanguage(value)) update('uiLanguage', value);
+                          }}
+                        >
+                          {UI_LANGUAGES.map((option) => (
+                            <option key={option.value} value={option.value} lang={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </Select>
+                      </div>
+                    </Section>
                   </>
                 )}
                 {page === 'service' && (
                   <>
-                    <Section title={t('翻译方式', 'Translation method')} className="api-section">
+                    <Section
+                      title={t('翻译方式', 'Translation method', '翻譯方式', '翻訳方法')}
+                      className="api-section"
+                    >
                       <fieldset disabled={Boolean(busy)}>
                         <fieldset className="provider-options">
                           <legend className="sr-only">{copy.translationService}</legend>
@@ -590,8 +684,18 @@ export function App() {
                               </span>
                               <span className="provider-option-detail">
                                 {value === 'microsoft'
-                                  ? t('无需 API Key', 'No API key needed')
-                                  : t('使用自己的兼容接口', 'Your compatible API')}
+                                  ? t(
+                                      '无需 API Key',
+                                      'No API key needed',
+                                      '無需 API Key',
+                                      'API Key 不要',
+                                    )
+                                  : t(
+                                      '使用自己的兼容接口',
+                                      'Your compatible API',
+                                      '使用自己的相容 API',
+                                      '独自の互換 API を使用',
+                                    )}
                               </span>
                             </label>
                           ))}
@@ -606,6 +710,8 @@ export function App() {
                                   title={t(
                                     '填写包含版本路径的接口根地址，例如 https://api.openai.com/v1',
                                     'Enter the API base URL including its version path, such as https://api.openai.com/v1',
+                                    '填寫包含版本路徑的 API 根位址，例如 https://api.openai.com/v1',
+                                    'バージョンパスを含む API のベース URL を入力してください（例：https://api.openai.com/v1）',
                                   )}
                                 >
                                   <CircleHelp size={13} />
@@ -636,6 +742,8 @@ export function App() {
                                 {t(
                                   '填写接口根地址，无需添加 /chat/completions',
                                   'Enter the API base URL without /chat/completions',
+                                  '填寫 API 根位址，無需加上 /chat/completions',
+                                  'API のベース URL を入力してください。/chat/completions は不要です',
                                 )}
                               </p>
                             </div>
@@ -648,7 +756,12 @@ export function App() {
                                   type={showKey ? 'text' : 'password'}
                                   value={settings.apiKey}
                                   onChange={(event) => update('apiKey', event.target.value)}
-                                  placeholder={t('输入你的 API Key', 'Enter your API Key')}
+                                  placeholder={t(
+                                    '输入你的 API Key',
+                                    'Enter your API Key',
+                                    '輸入你的 API Key',
+                                    'API Key を入力',
+                                  )}
                                   autoComplete="off"
                                   spellCheck={false}
                                 />
@@ -656,8 +769,18 @@ export function App() {
                                   type="button"
                                   aria-label={
                                     showKey
-                                      ? t('隐藏 API Key', 'Hide API Key')
-                                      : t('显示 API Key', 'Show API Key')
+                                      ? t(
+                                          '隐藏 API Key',
+                                          'Hide API Key',
+                                          '隱藏 API Key',
+                                          'API Key を隠す',
+                                        )
+                                      : t(
+                                          '显示 API Key',
+                                          'Show API Key',
+                                          '顯示 API Key',
+                                          'API Key を表示',
+                                        )
                                   }
                                   onClick={() => setShowKey((value) => !value)}
                                 >
@@ -673,8 +796,13 @@ export function App() {
                                   onClick={() => setManualModel((value) => !value)}
                                 >
                                   {manualModel
-                                    ? t('从列表选择', 'Choose from list')
-                                    : t('手动填写', 'Enter manually')}
+                                    ? t(
+                                        '从列表选择',
+                                        'Choose from list',
+                                        '從清單選擇',
+                                        '一覧から選択',
+                                      )
+                                    : t('手动填写', 'Enter manually', '手動填寫', '手動で入力')}
                                 </button>
                               </label>
                               <div className="model-row">
@@ -686,6 +814,8 @@ export function App() {
                                     placeholder={t(
                                       '输入服务商提供的 Model ID',
                                       'Enter the Model ID from your provider',
+                                      '輸入服務商提供的 Model ID',
+                                      'プロバイダーの Model ID を入力',
                                     )}
                                     spellCheck={false}
                                   />
@@ -696,7 +826,12 @@ export function App() {
                                     onChange={(value) => update('model', value)}
                                   >
                                     <option value="">
-                                      {t('选择翻译模型', 'Choose a translation model')}
+                                      {t(
+                                        '选择翻译模型',
+                                        'Choose a translation model',
+                                        '選擇翻譯模型',
+                                        '翻訳モデルを選択',
+                                      )}
                                     </option>
                                     {[
                                       ...new Set([
@@ -712,15 +847,22 @@ export function App() {
                                 )}
                                 <button
                                   className="fetch-button"
-                                  aria-label={t('获取模型', 'Fetch models')}
-                                  title={t('获取模型', 'Fetch models')}
+                                  aria-label={t(
+                                    '获取模型',
+                                    'Fetch models',
+                                    '取得模型',
+                                    'モデルを取得',
+                                  )}
+                                  title={t('获取模型', 'Fetch models', '取得模型', 'モデルを取得')}
                                   onClick={() => void runApi('models')}
                                 >
                                   <RefreshCw
                                     size={16}
                                     className={busy === 'models' ? 'spinning' : ''}
                                   />
-                                  <span>{t('获取模型', 'Fetch models')}</span>
+                                  <span>
+                                    {t('获取模型', 'Fetch models', '取得模型', 'モデルを取得')}
+                                  </span>
                                 </button>
                               </div>
                             </div>
@@ -729,17 +871,22 @@ export function App() {
                       </fieldset>
                       <div className="data-notice">
                         <h3>
-                          <ShieldCheck size={15} /> {t('数据使用说明', 'Data use')}
+                          <ShieldCheck size={15} />{' '}
+                          {t('数据使用说明', 'Data use', '資料使用說明', 'データの利用')}
                         </h3>
                         <p className="data-summary">
                           {settings.provider === 'openai'
                             ? t(
                                 `字幕原文与视频标题将发送到 ${provider}，按服务商的隐私政策处理，可能产生费用。`,
                                 `Subtitle text and the video title are sent to ${provider} under its privacy policy. Charges may apply.`,
+                                `字幕原文與影片標題將傳送到 ${provider}，依服務商的隱私權政策處理，可能產生費用。`,
+                                `字幕の原文と動画タイトルは ${provider} に送信され、同社のプライバシーポリシーに従って処理されます。料金が発生する場合があります。`,
                               )
                             : t(
                                 `字幕原文将发送到 ${provider}，按 Microsoft 的隐私政策处理。`,
                                 `Subtitle text is sent to ${provider} under Microsoft's privacy policy.`,
+                                `字幕原文將傳送到 ${provider}，依 Microsoft 的隱私權政策處理。`,
+                                `字幕の原文は ${provider} に送信され、Microsoft のプライバシーポリシーに従って処理されます。`,
                               )}
                         </p>
                         <label className="consent-check">
@@ -760,10 +907,14 @@ export function App() {
                             ? t(
                                 `我同意将字幕原文与视频标题发送到 ${provider} 翻译`,
                                 `I agree to send subtitle text and the video title to ${provider} for translation`,
+                                `我同意將字幕原文與影片標題傳送到 ${provider} 翻譯`,
+                                `字幕の原文と動画タイトルを翻訳のため ${provider} に送信することに同意します`,
                               )
                             : t(
                                 `我同意将字幕原文发送到 ${provider} 翻译`,
                                 `I agree to send subtitle text to ${provider} for translation`,
+                                `我同意將字幕原文傳送到 ${provider} 翻譯`,
+                                `字幕の原文を翻訳のため ${provider} に送信することに同意します`,
                               )}
                         </label>
                         {settings.provider === 'openai' && (
@@ -783,6 +934,8 @@ export function App() {
                             {t(
                               '我同意将字幕原文发送到 Microsoft 作为临时翻译',
                               'I agree to send subtitle text to Microsoft for temporary translations',
+                              '我同意將字幕原文傳送到 Microsoft 作為臨時翻譯',
+                              '一時的な翻訳のため、字幕の原文を Microsoft に送信することに同意します',
                             )}
                           </label>
                         )}
@@ -791,12 +944,12 @@ export function App() {
                         <div
                           className={`connection-badge ${testKind === 'passed' ? 'connected' : testKind}`}
                           role="status"
-                          aria-label={t('连接测试', 'Connection test')}
+                          aria-label={t('连接测试', 'Connection test', '連線測試', '接続テスト')}
                         >
                           <i />
                           {isProviderConfigured(settings)
                             ? testText[testKind]
-                            : t('待配置', 'Not configured')}
+                            : t('待配置', 'Not configured', '尚未設定', '設定待ち')}
                         </div>
                         <button
                           className="test-button"
@@ -804,8 +957,8 @@ export function App() {
                           onClick={() => void runApi('test')}
                         >
                           {busy === 'test'
-                            ? t('连接中…', 'Connecting…')
-                            : t('测试连接', 'Test connection')}
+                            ? t('连接中…', 'Connecting…', '連線中…', '接続中…')
+                            : t('测试连接', 'Test connection', '測試連線', '接続をテスト')}
                         </button>
                       </div>
                     </Section>
@@ -818,12 +971,14 @@ export function App() {
                         key={kind}
                         title={
                           kind === 'original'
-                            ? t('原文样式', 'Source style')
-                            : t('译文样式', 'Translation style')
+                            ? t('原文样式', 'Source style', '原文樣式', '原文のスタイル')
+                            : t('译文样式', 'Translation style', '譯文樣式', '翻訳のスタイル')
                         }
                       >
                         <div className="color-field">
-                          <label htmlFor={`${kind}-color`}>{t('字体颜色', 'Font color')}</label>
+                          <label htmlFor={`${kind}-color`}>
+                            {t('字体颜色', 'Font color', '字體顏色', '文字色')}
+                          </label>
                           <div className="color-controls">
                             <label
                               className="color-picker"
@@ -839,8 +994,18 @@ export function App() {
                               />
                               <span className="sr-only">
                                 {kind === 'original'
-                                  ? t('原文字体颜色', 'Source font color')
-                                  : t('译文字体颜色', 'Translation font color')}
+                                  ? t(
+                                      '原文字体颜色',
+                                      'Source font color',
+                                      '原文字體顏色',
+                                      '原文の文字色',
+                                    )
+                                  : t(
+                                      '译文字体颜色',
+                                      'Translation font color',
+                                      '譯文字體顏色',
+                                      '翻訳の文字色',
+                                    )}
                               </span>
                             </label>
                             <span className="color-value">
@@ -853,8 +1018,18 @@ export function App() {
                                     key={color}
                                     aria-label={
                                       kind === 'original'
-                                        ? t(`原文颜色 ${color}`, `Source color ${color}`)
-                                        : t(`译文颜色 ${color}`, `Translation color ${color}`)
+                                        ? t(
+                                            `原文颜色 ${color}`,
+                                            `Source color ${color}`,
+                                            `原文顏色 ${color}`,
+                                            `原文の色 ${color}`,
+                                          )
+                                        : t(
+                                            `译文颜色 ${color}`,
+                                            `Translation color ${color}`,
+                                            `譯文顏色 ${color}`,
+                                            `翻訳の色 ${color}`,
+                                          )
                                     }
                                     title={color}
                                     aria-pressed={settings[kind].color.toUpperCase() === color}
@@ -875,7 +1050,7 @@ export function App() {
                         </div>
                         <div className="range-field">
                           <label htmlFor={`${kind}-size`}>
-                            {t('字体大小', 'Font size')}{' '}
+                            {t('字体大小', 'Font size', '字體大小', '文字サイズ')}{' '}
                             <output>
                               {settings[kind].size}
                               <small> px</small>
@@ -898,10 +1073,12 @@ export function App() {
                         </div>
                       </Section>
                     ))}
-                    <Section title={t('间距与背景', 'Spacing and background')}>
+                    <Section
+                      title={t('间距与背景', 'Spacing and background', '間距與背景', '間隔と背景')}
+                    >
                       <div className="range-field">
                         <label htmlFor="subtitle-gap">
-                          {t('两行字幕间距', 'Line spacing')}{' '}
+                          {t('两行字幕间距', 'Line spacing', '兩行字幕間距', '行間')}{' '}
                           <output>
                             {settings.subtitleGap}
                             <small> px</small>
@@ -916,13 +1093,18 @@ export function App() {
                           onChange={(event) => update('subtitleGap', Number(event.target.value))}
                         />
                         <div className="range-labels">
-                          <span>{t('紧凑', 'Compact')}</span>
-                          <span>{t('宽松', 'Wide')}</span>
+                          <span>{t('紧凑', 'Compact', '緊湊', '狭い')}</span>
+                          <span>{t('宽松', 'Wide', '寬鬆', '広い')}</span>
                         </div>
                       </div>
                       <div className="range-field">
                         <label htmlFor="background-opacity">
-                          {t('字幕背景不透明度', 'Subtitle background opacity')}{' '}
+                          {t(
+                            '字幕背景不透明度',
+                            'Subtitle background opacity',
+                            '字幕背景不透明度',
+                            '字幕背景の不透明度',
+                          )}{' '}
                           <output>
                             {settings.backgroundOpacity}
                             <small> %</small>
@@ -939,8 +1121,8 @@ export function App() {
                           }
                         />
                         <div className="range-labels">
-                          <span>{t('透明', 'Transparent')}</span>
-                          <span>{t('深色', 'Dark')}</span>
+                          <span>{t('透明', 'Transparent', '透明', '透明')}</span>
+                          <span>{t('深色', 'Dark', '深色', '濃い')}</span>
                         </div>
                       </div>
                       <button
@@ -955,7 +1137,8 @@ export function App() {
                           }))
                         }
                       >
-                        <RotateCcw size={13} /> {t('恢复默认样式', 'Reset style')}
+                        <RotateCcw size={13} />{' '}
+                        {t('恢复默认样式', 'Reset style', '恢復預設樣式', 'スタイルをリセット')}
                       </button>
                     </Section>
                   </>
@@ -964,12 +1147,19 @@ export function App() {
                   <>
                     <Section
                       icon={<img src="./logo-ui.svg" alt="" />}
-                      title={t('Subline 双语字幕', 'Subline bilingual subtitles')}
+                      title={t(
+                        'Subline 双语字幕',
+                        'Subline bilingual subtitles',
+                        'Subline 雙語字幕',
+                        'Subline バイリンガル字幕',
+                      )}
                       description={
                         isExtension
                           ? t(
                               `版本 ${chrome.runtime.getManifest().version}`,
                               `Version ${chrome.runtime.getManifest().version}`,
+                              `版本 ${chrome.runtime.getManifest().version}`,
+                              `バージョン ${chrome.runtime.getManifest().version}`,
                             )
                           : undefined
                       }
@@ -980,7 +1170,12 @@ export function App() {
                             href={REPOSITORY_URL}
                             target="_blank"
                             rel="noreferrer"
-                            aria-label={t('GitHub 仓库', 'GitHub repository')}
+                            aria-label={t(
+                              'GitHub 仓库',
+                              'GitHub repository',
+                              'GitHub 儲存庫',
+                              'GitHub リポジトリ',
+                            )}
                           >
                             <GithubMark />
                           </a>
@@ -989,7 +1184,7 @@ export function App() {
                             href="https://x.com/itbuxiangma"
                             target="_blank"
                             rel="noreferrer"
-                            aria-label={t('作者的 X', 'Author on X')}
+                            aria-label={t('作者的 X', 'Author on X', '作者的 X', '作者の X')}
                           >
                             <svg
                               width="18"
@@ -1008,6 +1203,8 @@ export function App() {
                         {t(
                           '在 YouTube 和 X 上看视频时，Subline 读取视频的原文字幕，通过 Microsoft Translate 或你自己的 OpenAI 兼容接口翻译，再把原文和译文一起显示在播放器里。',
                           'Subline reads subtitles on YouTube and X, translates them through Microsoft Translate or your OpenAI-compatible API, and displays the source and translation in the player.',
+                          '在 YouTube 和 X 上看影片時，Subline 會讀取影片的原文字幕，透過 Microsoft Translate 或你自己的 OpenAI 相容 API 翻譯，再把原文和譯文一起顯示在播放器中。',
+                          'YouTube や X で動画を見るとき、Subline は動画の原文字幕を読み取り、Microsoft Translate または独自の OpenAI 互換 API で翻訳して、原文と翻訳をプレーヤーに並べて表示します。',
                         )}
                       </p>
                       <ul className="about-features">
@@ -1015,24 +1212,32 @@ export function App() {
                           {t(
                             '支持英语、简体中文、繁体中文、日语和韩语字幕，自动识别字幕语言。',
                             'Supports English, Simplified Chinese, Traditional Chinese, Japanese, and Korean subtitles, with automatic subtitle language detection.',
+                            '支援英文、簡體中文、繁體中文、日文和韓文字幕，自動識別字幕語言。',
+                            '英語、簡体字中国語、繁体字中国語、日本語、韓国語の字幕に対応し、字幕の言語を自動で判別します。',
                           )}
                         </li>
                         <li>
                           {t(
                             '整理字幕，并提前翻译即将播放的内容，减少等待。',
                             'Organizes captions and prepares upcoming translations to reduce waiting.',
+                            '整理字幕，並提前翻譯即將播放的內容，減少等待。',
+                            '字幕を整理し、これから再生される内容を先に翻訳して待ち時間を減らします。',
                           )}
                         </li>
                         <li>
                           {t(
                             '可以调整原文和译文的颜色、字号、两行间距和字幕背景，也可以按网站单独开关。',
                             'Adjust colors, font sizes, line spacing, and subtitle backgrounds. Enable or disable subtitles for each site.',
+                            '可以調整原文和譯文的顏色、字級、行距和字幕背景，也可以依網站個別開關。',
+                            '原文と翻訳の色、文字サイズ、行間、字幕の背景を調整でき、サイトごとにオン・オフも切り替えられます。',
                           )}
                         </li>
                         <li>
                           {t(
                             'Subline 没有自己的服务器。字幕直接发送给所选翻译服务；开启临时翻译并额外同意后，也会发送给 Microsoft。OpenAI 接口还会接收视频标题作为翻译参考。设置保存在本机，API Key 加密保存。',
                             'Subline has no servers of its own. Subtitles go directly to your chosen service, and to Microsoft if you also consent to temporary translations. OpenAI-compatible services also receive the video title as context. Settings stay on your device, and your API Key is encrypted.',
+                            'Subline 沒有自己的伺服器。字幕會直接傳送給所選的翻譯服務；開啟臨時翻譯並另外同意後，也會傳送給 Microsoft。OpenAI API 還會接收影片標題作為翻譯參考。設定儲存在本機，API Key 加密儲存。',
+                            'Subline は独自のサーバーを持ちません。字幕は選択した翻訳サービスに直接送信され、一時的な翻訳を有効にして追加で同意した場合は Microsoft にも送信されます。OpenAI 互換 API には翻訳の参考として動画タイトルも送信されます。設定はこのデバイスに保存され、API Key は暗号化されます。',
                           )}
                         </li>
                       </ul>

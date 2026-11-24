@@ -324,7 +324,9 @@ export class TranslationQueue {
   }
 
   private cancelled(): Error {
-    return new Error(t('字幕已更新。', 'Subtitles have changed.'));
+    return new Error(
+      t('字幕已更新。', 'Subtitles have changed.', '字幕已更新。', '字幕が更新されました。'),
+    );
   }
 
   reset(): void {
@@ -436,7 +438,11 @@ export class TranslationQueue {
     for (const [key, job] of this.jobs) {
       if (wanted.has(key) || (job.sent && sent === 'keep')) continue;
       this.jobs.delete(key);
-      job.reject(new Error(t('字幕已更新。', 'Subtitles have changed.')));
+      job.reject(
+        new Error(
+          t('字幕已更新。', 'Subtitles have changed.', '字幕已更新。', '字幕が更新されました。'),
+        ),
+      );
       if (job.batch?.some((other) => this.jobs.get(other.key) === other)) continue;
       job.controller?.abort();
     }
@@ -630,6 +636,8 @@ export class TranslationQueue {
               t(
                 'Provider 回复非法信息流，无法翻译',
                 'Provider returned an invalid response stream. Unable to translate.',
+                'Provider 回傳無效的資料串流，無法翻譯',
+                'Provider から無効なレスポンスストリームが返されたため、翻訳できません',
               ),
             ),
           );
@@ -646,7 +654,11 @@ export class TranslationQueue {
           return;
         }
         const failure =
-          error instanceof Error ? error : new Error(t('翻译失败。', 'Translation failed.'));
+          error instanceof Error
+            ? error
+            : new Error(
+                t('翻译失败。', 'Translation failed.', '翻譯失敗。', '翻訳に失敗しました。'),
+              );
         const timedOut = failure instanceof ProviderTimeoutError;
         finish(timedOut ? 'timeout' : 'error');
         if (!timedOut) {

@@ -1,4 +1,4 @@
-import { t } from './i18n';
+import { isUiLanguage, t, type UiLanguage } from './i18n';
 import { LANGUAGES, type Language } from './languages';
 
 export interface SubtitleStyle {
@@ -16,6 +16,7 @@ export interface Settings {
   model: string;
   providerConsent: string;
   targetLanguage: string;
+  uiLanguage: UiLanguage | '';
   original: SubtitleStyle;
   translation: SubtitleStyle;
   backgroundOpacity: number;
@@ -64,6 +65,7 @@ export const DEFAULT_SETTINGS: Settings = {
   model: '',
   providerConsent: '',
   targetLanguage: 'zh-CN',
+  uiLanguage: '',
   original: { color: '#FFFFFF', size: 24 },
   translation: { color: '#FFFFFF', size: 22 },
   backgroundOpacity: 45,
@@ -91,6 +93,7 @@ export function normalizeSettings(value: unknown): Settings {
     if (typeof input[key] === 'string') result[key] = input[key];
   if (LANGUAGES.some((language) => language.value === input.targetLanguage))
     result.targetLanguage = input.targetLanguage!;
+  if (isUiLanguage(input.uiLanguage)) result.uiLanguage = input.uiLanguage;
   for (const key of ['original', 'translation'] as const) {
     const style: unknown = input[key];
     if (!style || typeof style !== 'object') continue;
@@ -129,6 +132,8 @@ export function validateBaseUrl(raw: string): URL {
       t(
         '请输入完整的 Base URL，例如 https://api.openai.com/v1',
         'Enter a complete Base URL, such as https://api.openai.com/v1',
+        '請輸入完整的 Base URL，例如 https://api.openai.com/v1',
+        '完全な Base URL を入力してください（例：https://api.openai.com/v1）',
       ),
     );
   }
@@ -140,6 +145,8 @@ export function validateBaseUrl(raw: string): URL {
       t(
         'Base URL 需要使用 HTTPS。只有本机服务（localhost 或 127.0.0.1）可以使用 HTTP。',
         'The Base URL must use HTTPS. HTTP is allowed only for localhost or 127.0.0.1.',
+        'Base URL 必須使用 HTTPS。只有本機服務（localhost 或 127.0.0.1）可以使用 HTTP。',
+        'Base URL には HTTPS を使用してください。HTTP はローカルサービス（localhost または 127.0.0.1）でのみ使用できます。',
       ),
     );
   if (url.username || url.password || url.search || url.hash)
@@ -147,6 +154,8 @@ export function validateBaseUrl(raw: string): URL {
       t(
         'Base URL 不能包含用户名、密码、查询参数或锚点。',
         'The Base URL cannot contain credentials, query parameters, or a fragment.',
+        'Base URL 不能包含使用者名稱、密碼、查詢參數或錨點。',
+        'Base URL にユーザー名、パスワード、クエリパラメータ、フラグメントは含められません。',
       ),
     );
   if (/\/(chat\/completions|completions|models?)\/?$/.test(url.pathname))
@@ -154,6 +163,8 @@ export function validateBaseUrl(raw: string): URL {
       t(
         '请填写接口根地址，例如 /v1，不要包含 /chat/completions 或 /models。',
         'Enter the API base path, such as /v1, without /chat/completions or /models.',
+        '請填寫 API 根位址，例如 /v1，不要包含 /chat/completions 或 /models。',
+        'API のベースパス（例：/v1）を入力してください。/chat/completions や /models は含めないでください。',
       ),
     );
   return url;
@@ -179,9 +190,23 @@ export function validateSettings(settings: Settings, requireConnection = false):
   if (settings.provider === 'microsoft') return;
   validateBaseUrl(settings.baseUrl);
   if (requireConnection && !settings.apiKey.trim())
-    throw new Error(t('请先填写 API Key。', 'Enter an API Key first.'));
+    throw new Error(
+      t(
+        '请先填写 API Key。',
+        'Enter an API Key first.',
+        '請先填寫 API Key。',
+        '先に API Key を入力してください。',
+      ),
+    );
   if (requireConnection && !settings.model.trim())
-    throw new Error(t('请先选择或填写 Model ID。', 'Select or enter a Model ID first.'));
+    throw new Error(
+      t(
+        '请先选择或填写 Model ID。',
+        'Select or enter a Model ID first.',
+        '請先選擇或填寫 Model ID。',
+        '先に Model ID を選択または入力してください。',
+      ),
+    );
 }
 type SettingScope = 'availability' | 'credentials' | 'translation' | 'style';
 
@@ -193,6 +218,7 @@ const SETTING_SCOPES: Record<keyof Settings, SettingScope> = {
   model: 'translation',
   providerConsent: 'availability',
   targetLanguage: 'translation',
+  uiLanguage: 'style',
   original: 'style',
   translation: 'style',
   backgroundOpacity: 'style',

@@ -5,7 +5,14 @@ function timeoutError(): Error {
   return new ProviderTimeoutError();
 }
 function invalidJson(): Error {
-  return new Error(t('接口没有返回有效的 JSON。', 'The provider returned invalid JSON.'));
+  return new Error(
+    t(
+      '接口没有返回有效的 JSON。',
+      'The provider returned invalid JSON.',
+      'API 沒有傳回有效的 JSON。',
+      'API から有効な JSON が返されませんでした。',
+    ),
+  );
 }
 export async function readProviderJson(response: Response, signal: AbortSignal): Promise<unknown> {
   return parseModelPayload(await readBody(response, signal));

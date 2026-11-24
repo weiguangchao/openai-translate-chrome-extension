@@ -23,7 +23,14 @@ function microsoftLanguage(language: string): string {
     case 'ko':
       return languages[language];
     default:
-      throw new Error(t('翻译语言不支持。', 'Unsupported translation language.'));
+      throw new Error(
+        t(
+          '翻译语言不支持。',
+          'Unsupported translation language.',
+          '不支援此翻譯語言。',
+          '翻訳先の言語に対応していません。',
+        ),
+      );
   }
 }
 
@@ -56,7 +63,15 @@ export async function translateCaptionBatch(
       policy,
     );
     if (!response.ok)
-      throw new ProviderHttpError(t('接口调用异常', 'Provider request failed'), response.status);
+      throw new ProviderHttpError(
+        t(
+          '接口调用异常',
+          'Provider request failed',
+          'API 呼叫異常',
+          'API の呼び出しでエラーが発生しました',
+        ),
+        response.status,
+      );
     const payload = await readProviderJson(response, deadline);
     signal?.throwIfAborted();
     if (!Array.isArray(payload) || payload.length !== texts.length) return null;
@@ -94,6 +109,13 @@ export async function translate(
   );
   const translation = translations?.[0];
   if (translation === undefined)
-    throw new Error(t('接口未返回有效译文。', 'The provider returned no valid translation.'));
+    throw new Error(
+      t(
+        '接口未返回有效译文。',
+        'The provider returned no valid translation.',
+        'API 未傳回有效譯文。',
+        'API から有効な翻訳が返されませんでした。',
+      ),
+    );
   return translation;
 }

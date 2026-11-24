@@ -41,7 +41,7 @@ function Alert({ notice, onDismiss }: { notice: Notice; onDismiss: (id: number) 
         <button
           type="button"
           className="alert-close"
-          aria-label={t('关闭提示', 'Dismiss notification')}
+          aria-label={t('关闭提示', 'Dismiss notification', '關閉提示', '通知を閉じる')}
           onClick={() => setClosing(true)}
         >
           <X size={16} aria-hidden />
