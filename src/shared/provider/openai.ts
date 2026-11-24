@@ -23,6 +23,8 @@ function invalidJson(): Error {
     t(
       '接口没有返回有效的 JSON，请检查 Base URL 是否为 API 地址。',
       'The provider returned invalid JSON. Check that the Base URL points to an API.',
+      'API 沒有傳回有效的 JSON，請檢查 Base URL 是否為 API 位址。',
+      'API から有効な JSON が返されませんでした。Base URL が API のアドレスか確認してください。',
     ),
   );
 }
@@ -33,7 +35,15 @@ async function fetchApi(
   signal?: AbortSignal,
   policy?: ProviderSendPolicy,
 ): Promise<{ response: Response; signal: AbortSignal }> {
-  if (!settings.apiKey.trim()) throw new Error(t('请先填写 API Key。', 'Enter an API Key first.'));
+  if (!settings.apiKey.trim())
+    throw new Error(
+      t(
+        '请先填写 API Key。',
+        'Enter an API Key first.',
+        '請先填寫 API Key。',
+        '先に API Key を入力してください。',
+      ),
+    );
   let result: { response: Response; signal: AbortSignal };
   try {
     result = await providerFetch(
@@ -59,32 +69,52 @@ async function fetchApi(
       t(
         '无法连接接口。请检查 Base URL、网络和网站访问权限；浏览器预览还需要接口允许 CORS。',
         'Could not connect to the provider. Check the Base URL, network, and site permissions. Browser previews also require CORS support.',
+        '無法連線至 API。請檢查 Base URL、網路和網站存取權限；瀏覽器預覽還需要 API 允許 CORS。',
+        'API に接続できません。Base URL、ネットワーク、サイトへのアクセス権限を確認してください。ブラウザプレビューでは API が CORS に対応している必要もあります。',
       ),
     );
   }
   const { response } = result;
   if (!response.ok) {
     const errors: Record<number, string> = {
-      401: t('API Key 无效或已过期。', 'The API Key is invalid or expired.'),
+      401: t(
+        'API Key 无效或已过期。',
+        'The API Key is invalid or expired.',
+        'API Key 無效或已過期。',
+        'API Key が無効か、期限切れです。',
+      ),
       403: t(
         '接口拒绝访问，请检查 API Key 权限。',
         'Access denied. Check your API Key permissions.',
+        'API 拒絕存取，請檢查 API Key 權限。',
+        'アクセスが拒否されました。API Key の権限を確認してください。',
       ),
       404: t(
         '接口地址或模型不存在，请检查配置。',
         'The API endpoint or model was not found. Check your settings.',
+        'API 位址或模型不存在，請檢查設定。',
+        'API のアドレスまたはモデルが見つかりません。設定を確認してください。',
       ),
       429: t(
         '请求过于频繁或额度不足，请稍后重试。',
         'Rate limit or quota exceeded. Try again later.',
+        '請求過於頻繁或額度不足，請稍後重試。',
+        'リクエストが多すぎるか、利用枠が不足しています。しばらくしてから再試行してください。',
       ),
-      500: t('接口调用异常', 'Provider request failed'),
+      500: t(
+        '接口调用异常',
+        'Provider request failed',
+        'API 呼叫異常',
+        'API の呼び出しでエラーが発生しました',
+      ),
     };
     throw new ProviderHttpError(
       errors[response.status] ??
         t(
           `接口返回 HTTP ${response.status}，请稍后重试。`,
           `The provider returned HTTP ${response.status}. Try again later.`,
+          `API 傳回 HTTP ${response.status}，請稍後重試。`,
+          `API が HTTP ${response.status} を返しました。しばらくしてから再試行してください。`,
         ),
       response.status,
     );
@@ -119,6 +149,8 @@ export async function fetchModels(settings: Settings): Promise<string[]> {
       t(
         '模型列表格式不受支持，可手动填写 Model ID。',
         'Unsupported model list format. Enter the Model ID manually.',
+        '不支援此模型清單格式，可手動填寫 Model ID。',
+        'モデル一覧の形式に対応していません。Model ID を手動で入力してください。',
       ),
     );
   const ids = items
@@ -129,6 +161,8 @@ export async function fetchModels(settings: Settings): Promise<string[]> {
       t(
         '接口没有返回可用模型，可手动填写 Model ID。',
         'The provider returned no models. Enter the Model ID manually.',
+        'API 沒有傳回可用的模型，可手動填寫 Model ID。',
+        '利用できるモデルが返されませんでした。Model ID を手動で入力してください。',
       ),
     );
   return [...new Set(ids)].sort((a, b) => a.localeCompare(b));
@@ -178,6 +212,8 @@ async function complete(
       t(
         '模型未返回译文，请确认该模型支持 /chat/completions。',
         'The model returned no translation. Check that it supports /chat/completions.',
+        '模型未傳回譯文，請確認該模型支援 /chat/completions。',
+        'モデルが翻訳を返しませんでした。/chat/completions に対応しているか確認してください。',
       ),
     );
   return text.trim();

@@ -1033,3 +1033,19 @@ it('keeps Microsoft enabled when a visible result finishes during a prefetch loo
   await expect(refreshed).resolves.toEqual(['OpenAI Visible', 'OpenAI Upcoming']);
   await opening;
 });
+
+it('replies with errors in the saved interface language and follows its changes', async () => {
+  const send = await loadBackground({ ...DEFAULT_SETTINGS, enabled: false, uiLanguage: 'ja' });
+  const request = { type: 'translate', captionLanguage: 'en', pageTitle: 'Video title', text: 'A' };
+  await expect(send(request)).resolves.toEqual({
+    ok: false,
+    failure: { kind: 'error', message: '二言語字幕はオフです。' },
+  });
+  await (await import('../src/shared/storage')).saveSettings({ uiLanguage: 'zh-TW' });
+  const expected = { ok: false, failure: { kind: 'error', message: '雙語字幕已關閉。' } };
+  for (let attempt = 0; attempt < 50; attempt++) {
+    if (JSON.stringify(await send(request)) === JSON.stringify(expected)) break;
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+  await expect(send(request)).resolves.toEqual(expected);
+});

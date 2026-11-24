@@ -1,3 +1,4 @@
+import { setUiLanguage } from '../shared/i18n';
 import type { PageStatus, SettingsUpdated } from '../shared/messages';
 import type { PublicSettings } from '../shared/settings';
 import { ExtensionConnection } from './connection';
@@ -18,6 +19,7 @@ export function startContentScript(createPlatform: PlatformFactory): void {
   });
 
   function start(settings: PublicSettings): void {
+    setUiLanguage(settings.uiLanguage);
     controller = new CaptionController(createPlatform, settings, connection, publishStatus);
   }
 
@@ -47,6 +49,7 @@ export function startContentScript(createPlatform: PlatformFactory): void {
   function onMessage(message: Partial<SettingsUpdated>): void {
     if (!pageActive || !connection.active) return;
     if (message.type === 'settings-updated' && message.settings) {
+      setUiLanguage(message.settings.uiLanguage);
       if (controller) controller.update(message.settings);
       else start(message.settings);
     }

@@ -12,11 +12,23 @@ export function failureText(failure: TranslateFailure): string {
       return t(
         '接口请求超时，请检查网络或更换响应更快的模型。',
         'The request timed out. Check your network or choose a faster model.',
+        'API 請求逾時，請檢查網路或改用回應更快的模型。',
+        'リクエストがタイムアウトしました。ネットワークを確認するか、応答の速いモデルに切り替えてください。',
       );
     case 'unsupported-language':
-      return t('原文语言不支持', 'Unsupported subtitle language');
+      return t(
+        '原文语言不支持',
+        'Unsupported subtitle language',
+        '不支援原文語言',
+        '字幕の言語に対応していません',
+      );
     case 'copied-source':
-      return t('译文与原文相同。', 'The translation matches the source text.');
+      return t(
+        '译文与原文相同。',
+        'The translation matches the source text.',
+        '譯文與原文相同。',
+        '翻訳が原文と同じです。',
+      );
     case 'http':
     case 'error':
       return failure.message;

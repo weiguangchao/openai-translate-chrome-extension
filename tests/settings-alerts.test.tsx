@@ -1,6 +1,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { browserUiLanguage, setUiLanguage } from '../src/shared/i18n';
 import { DEFAULT_SETTINGS, applySettingsPatch, type Settings } from '../src/shared/settings';
 import {
   allowApiHost,
@@ -55,6 +56,7 @@ beforeEach(() => {
 
 afterEach(async () => {
   await act(async () => root.unmount());
+  setUiLanguage(browserUiLanguage());
   vi.useRealTimers();
   vi.unstubAllGlobals();
   document.body.innerHTML = '';
@@ -102,6 +104,30 @@ it('keeps edits made while saving as an unsaved draft', async () => {
   ).toBe('true');
   expect(document.querySelector('.save-button')?.textContent).toContain('Save changes');
   expect(document.querySelector<HTMLButtonElement>('.save-button')!.disabled).toBe(false);
+});
+
+it('switches the interface language after saving the General setting', async () => {
+  await render();
+  const select = document.querySelector<HTMLSelectElement>('#ui-language')!;
+  expect([...select.options].map((option) => option.textContent)).toEqual([
+    '简体中文',
+    '繁體中文',
+    'English',
+    '日本語',
+  ]);
+  expect(select.value).toBe('en');
+  await act(async () => {
+    select.value = 'ja';
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  expect(document.querySelector('.save-button')?.textContent).toContain('Save changes');
+  await click('.save-button');
+  expect(saveSettings).toHaveBeenCalledWith({ uiLanguage: 'ja' });
+  expect(document.querySelector('.save-button')?.textContent).toContain('設定を保存済み');
+  expect(document.querySelector('.settings-alert')?.textContent).toContain('設定を保存し');
+  expect(document.querySelector('nav')?.textContent).toContain('字幕スタイル');
+  expect(document.documentElement.lang).toBe('ja');
+  expect(document.title).toBe('Subline · 字幕設定');
 });
 
 it('keeps the browser preview notice inline without covering settings', async () => {

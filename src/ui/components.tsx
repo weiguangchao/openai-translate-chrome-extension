@@ -176,7 +176,12 @@ function PreviewDialog({ children, onClose }: { children: ReactNode; onClose: ()
     <dialog
       ref={ref}
       className="preview-dialog"
-      aria-label={t('放大的字幕预览', 'Expanded subtitle preview')}
+      aria-label={t(
+        '放大的字幕预览',
+        'Expanded subtitle preview',
+        '放大的字幕預覽',
+        '拡大した字幕プレビュー',
+      )}
       onCancel={(event) => {
         event.preventDefault();
         close();
@@ -186,7 +191,12 @@ function PreviewDialog({ children, onClose }: { children: ReactNode; onClose: ()
         <button
           autoFocus
           className="dialog-close"
-          aria-label={t('关闭字幕预览', 'Close subtitle preview')}
+          aria-label={t(
+            '关闭字幕预览',
+            'Close subtitle preview',
+            '關閉字幕預覽',
+            '字幕プレビューを閉じる',
+          )}
           onClick={close}
         >
           <X size={21} />
@@ -220,6 +230,8 @@ export function SubtitlePreview({ settings }: { settings: Settings }) {
         alt={t(
           '群山环绕的湖泊，作为字幕样式的示例背景',
           'A lake surrounded by mountains, used as the subtitle preview background',
+          '群山環繞的湖泊，作為字幕樣式的範例背景',
+          '山々に囲まれた湖。字幕スタイルのサンプル背景',
         )}
       />
       <div className="scene-shade" />
@@ -228,7 +240,12 @@ export function SubtitlePreview({ settings }: { settings: Settings }) {
           <button
             ref={expandButton}
             className="scene-button"
-            aria-label={t('放大字幕预览', 'Expand subtitle preview')}
+            aria-label={t(
+              '放大字幕预览',
+              'Expand subtitle preview',
+              '放大字幕預覽',
+              '字幕プレビューを拡大',
+            )}
             onClick={() => setExpanded(true)}
           >
             <Expand size={15} />
@@ -242,7 +259,12 @@ export function SubtitlePreview({ settings }: { settings: Settings }) {
             gap: settings.subtitleGap,
             backgroundColor: `rgba(0,0,0,${settings.backgroundOpacity / 100})`,
           }}
-          aria-label={t('字幕样式预览', 'Subtitle style preview')}
+          aria-label={t(
+            '字幕样式预览',
+            'Subtitle style preview',
+            '字幕樣式預覽',
+            '字幕スタイルのプレビュー',
+          )}
         >
           <div style={style('original')} dir="auto">
             {sampleText('en')}
@@ -254,7 +276,7 @@ export function SubtitlePreview({ settings }: { settings: Settings }) {
       </div>
       <div className="scene-bottom">
         <button onClick={() => setSample((value) => 1 - value)}>
-          {t('切换示例', 'Next sample')} <span aria-hidden>↻</span>
+          {t('切换示例', 'Next sample', '切換範例', '次のサンプル')} <span aria-hidden>↻</span>
         </button>
       </div>
     </div>

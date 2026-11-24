@@ -3,9 +3,6 @@ import { failureText } from '../shared/provider-error';
 import type { PublicSettings } from '../shared/settings';
 import { subtitleMinSize, subtitleReferenceWidth } from '../shared/tuning';
 
-const LOADING_TRANSLATION = t('翻译中', 'Translating');
-const TIMEOUT_TRANSLATION = t('接口调用超时', 'Request timed out');
-
 export type TranslationLine =
   | { readonly kind: 'none' }
   | { readonly kind: 'loading' }
@@ -27,13 +24,21 @@ function lineContent(line: TranslationLine): { text: string; status: Status } {
     case 'none':
       return { text: '', status: null };
     case 'loading':
-      return { text: LOADING_TRANSLATION, status: null };
+      return { text: t('翻译中', 'Translating', '翻譯中', '翻訳中'), status: null };
     case 'ready':
       return { text: line.translation, status: null };
     case 'failed':
       return { text: line.message, status: 'error' };
     case 'timedOut':
-      return { text: TIMEOUT_TRANSLATION, status: 'error' };
+      return {
+        text: t(
+          '接口调用超时',
+          'Request timed out',
+          'API 呼叫逾時',
+          'リクエストがタイムアウトしました',
+        ),
+        status: 'error',
+      };
     case 'unsupported-language':
       return { text: failureText({ kind: 'unsupported-language' }), status: 'error' };
     case 'repeated':

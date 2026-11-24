@@ -87,13 +87,19 @@ function captionLanguageOf(message: object): Language {
 
 function pageTitleOf(message: object): string {
   const { pageTitle } = message as Record<string, unknown>;
-  if (typeof pageTitle !== 'string') throw new Error(t('页面标题无效。', 'Invalid page title.'));
+  if (typeof pageTitle !== 'string')
+    throw new Error(
+      t('页面标题无效。', 'Invalid page title.', '頁面標題無效。', 'ページタイトルが無効です。'),
+    );
   return pageTitle;
 }
 
 export function readTranslateRequest(message: object): TranslateRequest & { cacheOnly: boolean } {
   const { text, cacheOnly } = message as Record<string, unknown>;
-  if (!validText(text)) throw new Error(t('字幕内容无效。', 'Invalid subtitle text.'));
+  if (!validText(text))
+    throw new Error(
+      t('字幕内容无效。', 'Invalid subtitle text.', '字幕內容無效。', '字幕の内容が無効です。'),
+    );
   return {
     type: 'translate',
     text,
@@ -110,16 +116,37 @@ function finiteTime(value: unknown): value is number {
 export function readHoldRequest(message: object): PrefetchHoldRequest {
   const { time } = message as Record<string, unknown>;
   if (!finiteTime(time))
-    throw new Error(t('预加载字幕内容无效。', 'Invalid subtitle prefetch data.'));
+    throw new Error(
+      t(
+        '预加载字幕内容无效。',
+        'Invalid subtitle prefetch data.',
+        '預先載入的字幕內容無效。',
+        '先読みした字幕の内容が無効です。',
+      ),
+    );
   return { type: 'prefetch-hold', time };
 }
 
 export function readPrefetchRequest(message: object): PrefetchRequest {
   const { time, rate, cues } = message as Record<string, unknown>;
   if (!finiteTime(time) || !finiteTime(rate) || rate === 0 || !Array.isArray(cues))
-    throw new Error(t('预加载字幕内容无效。', 'Invalid subtitle prefetch data.'));
+    throw new Error(
+      t(
+        '预加载字幕内容无效。',
+        'Invalid subtitle prefetch data.',
+        '預先載入的字幕內容無效。',
+        '先読みした字幕の内容が無効です。',
+      ),
+    );
   if (cues.length > planLookaheadCues)
-    throw new Error(t('预加载字幕内容无效。', 'Invalid subtitle prefetch data.'));
+    throw new Error(
+      t(
+        '预加载字幕内容无效。',
+        'Invalid subtitle prefetch data.',
+        '預先載入的字幕內容無效。',
+        '先読みした字幕の内容が無効です。',
+      ),
+    );
   return {
     type: 'prefetch',
     captionLanguage: cues.length ? captionLanguageOf(message) : null,
@@ -128,10 +155,24 @@ export function readPrefetchRequest(message: object): PrefetchRequest {
     rate,
     cues: cues.map((cue: unknown): PlaybackCue => {
       if (!cue || typeof cue !== 'object')
-        throw new Error(t('预加载字幕内容无效。', 'Invalid subtitle prefetch data.'));
+        throw new Error(
+          t(
+            '预加载字幕内容无效。',
+            'Invalid subtitle prefetch data.',
+            '預先載入的字幕內容無效。',
+            '先読みした字幕の内容が無効です。',
+          ),
+        );
       const { text, start, end } = cue as Record<string, unknown>;
       if (!validText(text) || !finiteTime(start) || !finiteTime(end) || end <= start)
-        throw new Error(t('预加载字幕内容无效。', 'Invalid subtitle prefetch data.'));
+        throw new Error(
+          t(
+            '预加载字幕内容无效。',
+            'Invalid subtitle prefetch data.',
+            '預先載入的字幕內容無效。',
+            '先読みした字幕の内容が無効です。',
+          ),
+        );
       return { text, start, end };
     }),
   };

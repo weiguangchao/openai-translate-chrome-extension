@@ -1,21 +1,46 @@
 import { t } from './i18n';
 
 export const LANGUAGES = [
-  { value: 'en', label: t('英语', 'English'), native: 'English', english: 'English' },
+  {
+    value: 'en',
+    get label() {
+      return t('英语', 'English', '英文', '英語');
+    },
+    native: 'English',
+    english: 'English',
+  },
   {
     value: 'zh-CN',
-    label: t('简体中文', 'Simplified Chinese'),
+    get label() {
+      return t('简体中文', 'Simplified Chinese', '簡體中文', '簡体字中国語');
+    },
     native: '简体中文',
     english: 'Simplified Chinese',
   },
   {
     value: 'zh-TW',
-    label: t('繁体中文', 'Traditional Chinese'),
+    get label() {
+      return t('繁体中文', 'Traditional Chinese', '繁體中文', '繁体字中国語');
+    },
     native: '繁體中文',
     english: 'Traditional Chinese',
   },
-  { value: 'ja', label: t('日语', 'Japanese'), native: '日本語', english: 'Japanese' },
-  { value: 'ko', label: t('韩语', 'Korean'), native: '한국어', english: 'Korean' },
+  {
+    value: 'ja',
+    get label() {
+      return t('日语', 'Japanese', '日文', '日本語');
+    },
+    native: '日本語',
+    english: 'Japanese',
+  },
+  {
+    value: 'ko',
+    get label() {
+      return t('韩语', 'Korean', '韓文', '韓国語');
+    },
+    native: '한국어',
+    english: 'Korean',
+  },
 ] as const;
 
 export type Language = (typeof LANGUAGES)[number]['value'];

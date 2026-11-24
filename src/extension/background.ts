@@ -1,4 +1,4 @@
-import { t } from '../shared/i18n';
+import { setUiLanguage, t } from '../shared/i18n';
 import { fetchModels, translate } from '../shared/api';
 import { failureOf, UnsupportedLanguageError } from '../shared/provider-error';
 import {
@@ -44,6 +44,7 @@ const consumers = new Map<string, { platform: PlatformId; document?: string }>()
 const ready = (async () => {
   await chrome.storage.local.setAccessLevel({ accessLevel: 'TRUSTED_CONTEXTS' });
   settings = await loadSettings();
+  setUiLanguage(settings.uiLanguage);
   await access.refresh();
   await translations.retainPreview(new Set());
 })();
@@ -63,12 +64,21 @@ chrome.runtime.onConnect.addListener(recovery.connect);
 
 function requireEnabled(platform: PlatformId): void {
   if (!settings.enabled || !settings[platform])
-    throw new Error(t('双语字幕已关闭。', 'Bilingual subtitles are off.'));
+    throw new Error(
+      t(
+        '双语字幕已关闭。',
+        'Bilingual subtitles are off.',
+        '雙語字幕已關閉。',
+        '二言語字幕はオフです。',
+      ),
+    );
   if (!hasProviderConsent(settings))
     throw new Error(
       t(
         '请先在设置中同意将字幕发送给 Provider。',
         'Allow subtitles to be sent to your provider in settings first.',
+        '請先在設定中同意將字幕傳送給 Provider。',
+        '先に設定で、字幕を Provider に送信することに同意してください。',
       ),
     );
 }
@@ -118,7 +128,14 @@ async function contentRequest(
     const effective = { ...settings, captionLanguage, pageTitle };
     return cacheOnly ? queue.lookup(effective, text) : queue.request(consumer, effective, text);
   }
-  throw new Error(t('不支持的请求。', 'Unsupported request.'));
+  throw new Error(
+    t(
+      '不支持的请求。',
+      'Unsupported request.',
+      '不支援的請求。',
+      'サポートされていないリクエストです。',
+    ),
+  );
 }
 
 chrome.runtime.onMessage.addListener((message: unknown, sender, respond) => {
@@ -137,7 +154,15 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, respond) => {
         ? fetchModels(draft)
         : translate(draft, 'The world is full of wonderful things.');
     }
-    if (!platform) throw new Error(t('不支持的请求。', 'Unsupported request.'));
+    if (!platform)
+      throw new Error(
+        t(
+          '不支持的请求。',
+          'Unsupported request.',
+          '不支援的請求。',
+          'サポートされていないリクエストです。',
+        ),
+      );
     const consumer = `${sender.tab?.id}:${sender.frameId}`;
     if (type === 'trace')
       return printTrace({ e: 'view', tab: consumer, ...readTraceRequest(message as object) });
@@ -145,7 +170,13 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, respond) => {
   })().then(
     (result) => respond({ ok: true, data: result }),
     (error) =>
-      respond({ ok: false, failure: failureOf(error, t('请求失败。', 'Request failed.')) }),
+      respond({
+        ok: false,
+        failure: failureOf(
+          error,
+          t('请求失败。', 'Request failed.', '請求失敗。', 'リクエストに失敗しました。'),
+        ),
+      }),
   );
   return true;
 });
@@ -162,6 +193,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
       settings.provider === 'microsoft' ||
       settings.providerConsent.split(',').includes(MICROSOFT_ORIGIN);
     settings = next;
+    setUiLanguage(settings.uiLanguage);
     if (change.translation) translationRevision = crypto.randomUUID();
     if (change.translation || !settings.enabled || !hasProviderConsent(settings)) {
       queue.reset();

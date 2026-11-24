@@ -370,6 +370,8 @@ export class CaptionTranslator {
                   message: t(
                     '翻译未完成，请检查扩展配置。',
                     'Translation incomplete. Check your extension settings.',
+                    '翻譯未完成，請檢查擴充功能設定。',
+                    '翻訳が完了しませんでした。拡張機能の設定を確認してください。',
                   ),
                 },
           );
@@ -379,7 +381,15 @@ export class CaptionTranslator {
         caption.request = null;
         this.fail(
           caption,
-          failureOf(error, t('翻译失败，请检查配置。', 'Translation failed. Check your settings.')),
+          failureOf(
+            error,
+            t(
+              '翻译失败，请检查配置。',
+              'Translation failed. Check your settings.',
+              '翻譯失敗，請檢查設定。',
+              '翻訳に失敗しました。設定を確認してください。',
+            ),
+          ),
         );
       })
       .finally(() => this.changed());

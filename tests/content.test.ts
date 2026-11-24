@@ -140,3 +140,22 @@ it('streams the displayed caption state while the popup stays connected', async 
   await vi.advanceTimersByTimeAsync(150);
   expect(port.postMessage).not.toHaveBeenCalled();
 });
+
+it('shows video-page text in the interface language from settings', async () => {
+  const send = runtime.sendMessage.getMockImplementation()!;
+  runtime.sendMessage.mockImplementation((message) =>
+    message.type === 'settings'
+      ? Promise.resolve({ ok: true, data: { ...settings, uiLanguage: 'ja' } })
+      : message.type === 'translate'
+        ? new Promise(() => {})
+        : send(message),
+  );
+  const { startContentScript } = await import('../src/core/content');
+  startContentScript(createTestPlatform);
+  await vi.advanceTimersByTimeAsync(3000);
+  expect(translated()).toBe('翻訳中');
+  const listener = runtime.onMessage.addListener.mock.calls[0][0];
+  listener({ type: 'settings-updated', settings: { ...settings, uiLanguage: 'zh-TW' } });
+  await vi.advanceTimersByTimeAsync(150);
+  expect(translated()).toBe('翻譯中');
+});
