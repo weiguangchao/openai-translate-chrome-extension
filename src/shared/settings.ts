@@ -1,4 +1,4 @@
-import { browserUiLanguage, isUiLanguage, t, type UiLanguage } from './i18n';
+import { isUiLanguage, t, type UiLanguage } from './i18n';
 import { LANGUAGES, type Language } from './languages';
 
 export interface SubtitleStyle {
@@ -16,7 +16,7 @@ export interface Settings {
   model: string;
   providerConsent: string;
   targetLanguage: string;
-  uiLanguage: UiLanguage;
+  uiLanguage: UiLanguage | '';
   original: SubtitleStyle;
   translation: SubtitleStyle;
   backgroundOpacity: number;
@@ -65,7 +65,7 @@ export const DEFAULT_SETTINGS: Settings = {
   model: '',
   providerConsent: '',
   targetLanguage: 'zh-CN',
-  uiLanguage: browserUiLanguage(),
+  uiLanguage: '',
   original: { color: '#FFFFFF', size: 24 },
   translation: { color: '#FFFFFF', size: 22 },
   backgroundOpacity: 45,

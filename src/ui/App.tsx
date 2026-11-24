@@ -81,7 +81,7 @@ const PAGES = [
   {
     id: 'about' as const,
     get name() {
-      return t('关于', 'About', '關於', '概要');
+      return t('关于', 'About', '關於', 'このアプリについて');
     },
     icon: Info,
   },
@@ -468,7 +468,7 @@ export function App() {
                 '为视频配上双语字幕',
                 'Bilingual subtitles for videos',
                 '為影片加上雙語字幕',
-                '動画に二言語字幕を',
+                '動画のためのバイリンガル字幕',
               )}
             </span>
           </div>
@@ -643,18 +643,14 @@ export function App() {
                         </label>
                         <Select
                           id="ui-language"
-                          value={settings.uiLanguage}
+                          value={settings.uiLanguage || language}
                           onChange={(value) => {
                             if (isUiLanguage(value)) update('uiLanguage', value);
                           }}
                         >
-                          {UI_LANGUAGES.map((language) => (
-                            <option
-                              key={language.value}
-                              value={language.value}
-                              lang={language.value}
-                            >
-                              {language.label}
+                          {UI_LANGUAGES.map((option) => (
+                            <option key={option.value} value={option.value} lang={option.value}>
+                              {option.label}
                             </option>
                           ))}
                         </Select>
@@ -1155,7 +1151,7 @@ export function App() {
                         'Subline 双语字幕',
                         'Subline bilingual subtitles',
                         'Subline 雙語字幕',
-                        'Subline 二言語字幕',
+                        'Subline バイリンガル字幕',
                       )}
                       description={
                         isExtension

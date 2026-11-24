@@ -1,4 +1,4 @@
-import { t, type UiLanguage } from './i18n';
+import { t } from './i18n';
 import {
   DEFAULT_SETTINGS,
   applySettingsPatch,
@@ -32,7 +32,7 @@ async function readSettings(): Promise<{ settings: Settings; plaintext: boolean 
     return { settings: structuredClone(DEFAULT_SETTINGS), plaintext: false };
   }
 }
-export async function loadUiLanguage(): Promise<UiLanguage> {
+export async function loadUiLanguage(): Promise<Settings['uiLanguage']> {
   const stored = isExtension
     ? (await chrome.storage.local.get(STORAGE_KEY))[STORAGE_KEY]
     : JSON.parse(localStorage.getItem(STORAGE_KEY) ?? 'null');

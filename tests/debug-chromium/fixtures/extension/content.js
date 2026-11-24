@@ -75,7 +75,14 @@ function report(video, caption, state) {
   }
   if (root.getAttribute(TRACE_WORKER_ATTRIBUTE) !== chrome.runtime.id)
     root.setAttribute(TRACE_WORKER_ATTRIBUTE, chrome.runtime.id);
-  const key = JSON.stringify([run, root.getAttribute(TRACE_REFRESH_ATTRIBUTE), caption, state, video.paused, video.seeking]);
+  const key = JSON.stringify([
+    run,
+    root.getAttribute(TRACE_REFRESH_ATTRIBUTE),
+    caption,
+    state,
+    video.paused,
+    video.seeking,
+  ]);
   const now = Date.now();
   if (key === last && (video.paused || now - sentAt < HEARTBEAT_MS)) return;
   last = key;
@@ -98,7 +105,8 @@ function tick() {
   if (!video) return;
   overlay ??= mount(video);
   const language = document.querySelector('#movie_player')?.dataset.language || 'en';
-  const enabled = document.querySelector('.ytp-subtitles-button')?.getAttribute('aria-pressed') !== 'false';
+  const enabled =
+    document.querySelector('.ytp-subtitles-button')?.getAttribute('aria-pressed') !== 'false';
   const caption = enabled && !params.has('nocaptions') && captionAt(video.currentTime);
   if (caption) {
     caption.language = language;

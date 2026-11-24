@@ -1039,7 +1039,7 @@ it('replies with errors in the saved interface language and follows its changes'
   const request = { type: 'translate', captionLanguage: 'en', pageTitle: 'Video title', text: 'A' };
   await expect(send(request)).resolves.toEqual({
     ok: false,
-    failure: { kind: 'error', message: '二言語字幕はオフです。' },
+    failure: { kind: 'error', message: 'バイリンガル字幕はオフです。' },
   });
   await (await import('../src/shared/storage')).saveSettings({ uiLanguage: 'zh-TW' });
   const expected = { ok: false, failure: { kind: 'error', message: '雙語字幕已關閉。' } };

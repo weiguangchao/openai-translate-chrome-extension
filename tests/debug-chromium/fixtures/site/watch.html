@@ -55,7 +55,9 @@
     setInterval(() => {
       if (video.playbackRate !== rate) video.playbackRate = rate;
     }, 1000);
-    const tracks = (params.get('languages') || 'zh-CN,en').split(',').map(languageCode => ({languageCode}));
+    const tracks = (params.get('languages') || 'zh-CN,en')
+      .split(',')
+      .map((languageCode) => ({ languageCode }));
     let selected = tracks[0];
     const cc = document.createElement('button');
     cc.className = 'ytp-subtitles-button';
@@ -66,7 +68,7 @@
       cc.setAttribute('aria-pressed', String(cc.getAttribute('aria-pressed') !== 'true'));
     };
     player.append(cc);
-    player.getOption = (_module, option) => option === 'tracklist' ? tracks : selected;
+    player.getOption = (_module, option) => (option === 'tracklist' ? tracks : selected);
     player.setOption = (_module, _option, track) => {
       if (selected !== track) log('caption-selection');
       selected = track;
@@ -106,7 +108,9 @@
   if (params.has('buffering')) {
     video.removeAttribute('src');
     video.load();
-    setTimeout(() => { video.src = '/clip.webm'; }, 1500);
+    setTimeout(() => {
+      video.src = '/clip.webm';
+    }, 1500);
   }
 
   const ad = Number(params.get('ad'));

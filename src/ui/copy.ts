@@ -52,7 +52,7 @@ export const copy = {
     return t('显示模式', 'Display mode', '顯示模式', '表示モード');
   },
   get bilingual() {
-    return t('双语', 'Bilingual', '雙語', '二言語');
+    return t('双语', 'Bilingual', '雙語', 'バイリンガル');
   },
   get translationOnly() {
     return t('仅译文', 'Translation only', '僅譯文', '翻訳のみ');

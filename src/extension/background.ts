@@ -69,7 +69,7 @@ function requireEnabled(platform: PlatformId): void {
         '双语字幕已关闭。',
         'Bilingual subtitles are off.',
         '雙語字幕已關閉。',
-        '二言語字幕はオフです。',
+        'バイリンガル字幕はオフです。',
       ),
     );
   if (!hasProviderConsent(settings))

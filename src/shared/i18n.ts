@@ -26,8 +26,8 @@ export function uiLanguage(): UiLanguage {
   return current;
 }
 
-export function setUiLanguage(language: UiLanguage): void {
-  current = language;
+export function setUiLanguage(language: UiLanguage | ''): void {
+  current = language || browserUiLanguage();
 }
 
 export function t(zhCN: string, en: string, zhTW: string, ja: string): string {

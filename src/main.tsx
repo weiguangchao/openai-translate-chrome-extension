@@ -18,7 +18,7 @@ void loadUiLanguage()
         'Subline 双语字幕',
         'Subline bilingual subtitles',
         'Subline 雙語字幕',
-        'Subline 二言語字幕',
+        'Subline バイリンガル字幕',
       );
     ReactDOM.createRoot(document.getElementById('root')!).render(
       <React.StrictMode>{popup ? <Popup /> : <App />}</React.StrictMode>,

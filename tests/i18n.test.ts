@@ -16,20 +16,26 @@ it.each([
   ['ja-JP', 'ja'],
   ['fr-FR', 'en'],
   ['ar', 'en'],
-])('uses %s browser language to select %s UI text by default', async (language, expected) => {
-  vi.stubGlobal('navigator', { language });
-  const { uiLanguage } = await import('../src/shared/i18n');
-  const { DEFAULT_SETTINGS } = await import('../src/shared/settings');
-  expect(uiLanguage()).toBe(expected);
-  expect(DEFAULT_SETTINGS.uiLanguage).toBe(expected);
-});
+])(
+  'uses %s browser language to select %s UI text until one is saved',
+  async (language, expected) => {
+    vi.stubGlobal('navigator', { language });
+    const { setUiLanguage, uiLanguage } = await import('../src/shared/i18n');
+    const { DEFAULT_SETTINGS } = await import('../src/shared/settings');
+    expect(uiLanguage()).toBe(expected);
+    setUiLanguage('ja');
+    setUiLanguage(DEFAULT_SETTINGS.uiLanguage);
+    expect(uiLanguage()).toBe(expected);
+    expect(DEFAULT_SETTINGS.uiLanguage).toBe('');
+  },
+);
 
 it('keeps a saved interface language and rejects unsupported values', async () => {
   vi.stubGlobal('navigator', { language: 'en-US' });
   const { normalizeSettings } = await import('../src/shared/settings');
   expect(normalizeSettings({ uiLanguage: 'ja' }).uiLanguage).toBe('ja');
   expect(normalizeSettings({ uiLanguage: 'zh-TW' }).uiLanguage).toBe('zh-TW');
-  expect(normalizeSettings({ uiLanguage: 'ko' }).uiLanguage).toBe('en');
+  expect(normalizeSettings({ uiLanguage: 'ko' }).uiLanguage).toBe('');
 });
 
 it.each([

@@ -72,7 +72,7 @@ const statusLabels = (): Record<PopupStatus, string> => ({
     '正在显示双语字幕',
     'Showing bilingual subtitles',
     '正在顯示雙語字幕',
-    '二言語字幕を表示中',
+    'バイリンガル字幕を表示中',
   ),
   'translation-only': t(
     '正在显示译文',
