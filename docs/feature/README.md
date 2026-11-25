@@ -154,7 +154,7 @@ Source references: [popup controls and page status](../../src/ui/Popup.tsx), [pa
 
 The full settings page provides separate source and translation colors and font sizes, plus preset color buttons. Font sizes range from 12 to 48 px, line spacing from 0 to 24 px, and background opacity from 0% to 90%. The background covers the whole subtitle area.
 
-Both text colors default to white. The source font size defaults to 24 px, the translation font size to 22 px, line spacing to 6 px, and background opacity to 45%. During playback, font sizes and line spacing shrink in narrow players but never grow past these values.
+Both text colors default to white. The source font size defaults to 24 px, the translation font size to 22 px, line spacing to 6 px, and background opacity to 45%. During playback, font sizes and line spacing shrink in narrow players but never grow past the configured values.
 
 The style preview follows the current edits and supports switching samples and an expanded view. Both previews grow to keep the sample captions complete at large font sizes. The expanded view scrolls when needed in a short window. "Reset style" restores colors, font sizes, spacing, and background without resetting the translation service or language. Previewed and reset styles must be saved before they apply to video pages.
 
