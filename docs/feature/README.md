@@ -48,7 +48,7 @@ Source references: [language definitions](../../src/shared/languages.ts), [capti
 
 Bilingual mode places the source text above its translation. Selecting "Translation only" in the popup or settings hides the source text. When the source and target languages match, the source text is still shown.
 
-For captions that need translation, the source appears together with the completed translation. While waiting, Subline may show "Translating" instead of showing the source alone. Captions appear near the bottom of the player, with font sizes and spacing scaled to the player's width.
+For captions that need translation, the source appears together with the completed translation. While waiting, Subline may show "Translating" instead of showing the source alone. Captions appear near the bottom of the player. The configured font sizes and line spacing are the largest they get: in players narrower than 640 px they shrink with the player's width, and font sizes stop shrinking at 14 px, or at the configured size if that is smaller.
 
 If a YouTube caption track cannot be read or its download fails, Subline restores the website's selected captions and reports the source problem in the popup. This recovery also applies in Translation only mode. Normal source loading and waiting for a translation keep the existing display behavior. Successful source recovery returns to Subline captions; turning website captions off or playing an advertisement still hides Subline captions.
 
@@ -146,7 +146,7 @@ Popup changes are saved immediately, with saving and saved feedback in the heade
 
 Quick controls stay disabled while popup settings load. A read failure ends the loading state and keeps editing disabled, shows an error asking the user to reopen the extension, and leaves the settings button available.
 
-The popup tracks the active tab's caption status, including disabled, awaiting configuration, no active video, waiting for captions, translating, bilingual, translation-only, original, failed, and unsupported language. It distinguishes a failed YouTube caption download from an unavailable selected track and reports that website captions have been restored. Missing player metadata or a video without captions continues to show waiting. When it cannot connect to the page, it reports that the page is unsupported or its status is unavailable.
+The popup tracks the active tab's caption status, including disabled, disabled for this site, awaiting configuration, caption data consent needed, no active video, waiting for captions, translating, bilingual, translation-only, original, failed, and unsupported language. It distinguishes a failed YouTube caption download from an unavailable selected track and reports that website captions have been restored. Missing player metadata or a video without captions continues to show waiting. When it cannot connect to the page, it reports that the page is unsupported or its status is unavailable.
 
 Source references: [popup controls and page status](../../src/ui/Popup.tsx), [page status definitions](../../src/shared/messages.ts), and [status notifications](../../src/core/content.ts).
 
@@ -154,7 +154,7 @@ Source references: [popup controls and page status](../../src/ui/Popup.tsx), [pa
 
 The full settings page provides separate source and translation colors and font sizes, plus preset color buttons. Font sizes range from 12 to 48 px, line spacing from 0 to 24 px, and background opacity from 0% to 90%. The background covers the whole subtitle area.
 
-Both text colors default to white. The source font size defaults to 24 px, the translation font size to 22 px, line spacing to 6 px, and background opacity to 45%. During playback, font sizes also scale with the player's width.
+Both text colors default to white. The source font size defaults to 24 px, the translation font size to 22 px, line spacing to 6 px, and background opacity to 45%. During playback, font sizes and line spacing shrink in narrow players but never grow past the configured values.
 
 The style preview follows the current edits and supports switching samples and an expanded view. Both previews grow to keep the sample captions complete at large font sizes. The expanded view scrolls when needed in a short window. "Reset style" restores colors, font sizes, spacing, and background without resetting the translation service or language. Previewed and reset styles must be saved before they apply to video pages.
 
@@ -176,7 +176,7 @@ Source references: [settings editing and saving](../../src/ui/App.tsx), [local p
 
 The popup's "Model and usage" section shows cumulative input, output, and cache token counts, plus a total of input and output. Large numbers use a compact format, with exact values available on hover.
 
-Statistics come from usage fields in OpenAI-compatible responses, including translation and connection test requests that return usage. The cache count records cache token usage reported by the provider. Unrecognized or absent usage fields do not increase the corresponding counts.
+Statistics come from usage fields in OpenAI-compatible responses, including translation and connection test requests that return usage. The cache count adds the cache read and cache write tokens the provider reports. Unrecognized or absent usage fields do not increase the corresponding counts.
 
 Counts are stored locally and retained across model or service changes. Selecting Microsoft still shows previously accumulated usage. Microsoft translation requests do not add to these OpenAI usage counts.
 
