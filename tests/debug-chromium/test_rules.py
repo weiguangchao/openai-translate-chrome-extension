@@ -423,6 +423,13 @@ class LoadedBuild(unittest.TestCase):
             self.assertEqual(live.reload(Mock(path=str(self.dist), source=None)), 0)
         self.assertFalse(self.status()["build"]["stale"])
 
+    def test_a_session_that_is_not_an_object_holds_no_launch_record(self):
+        session = self.root / "session.json"
+        session.write_text("[1]")
+        with patch.dict(os.environ), patch.object(live, "LOG"), patch.object(live, "BROWSER_ARGS"):
+            live.configure_browser(Mock(launch_session=str(session), command="status"))
+        self.assertIsNone(live.LAUNCH)
+
     def test_bad_records_fall_back_and_unreadable_builds_count_as_stale(self):
         for record in ("{", json.dumps({"path": None, "fingerprint": "x"})):
             (self.root / "loaded.json").write_text(record)

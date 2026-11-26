@@ -7,7 +7,7 @@ description: Measure or compare Subline playback in Chromium on request.
 
 Use [setup](../setup-headless-chromium/SKILL.md)/[debug](../debug-chromium/SKILL.md), or requested existing/headed browsers. Edits alone need no real-site measurements. Test YouTube/X at 1x, 1.25x, 1.5x, 2x per build. Read [page checks](references/page-readiness.md).
 
-Measure with `measure.py`, never by hand through `live.py`; it runs and validates the sequence below. Read [measurement](references/measurement.md) for plans/comparisons/resume/saved checks:
+Reported metrics come from `measure.py`, never from hand-driven `live.py` traces; it runs and validates the sequence below. Read [measurement](references/measurement.md) for plans/comparisons/resume/saved checks:
 
 ```bash
 python3 .agents/skills/debug-chromium/scripts/measure.py PLAN.json --build current=/path/to/dist --loaded /path/to/loaded/dist --output /path/to/results --session SESSION --launch-session /path/to/headless-check/session.json
