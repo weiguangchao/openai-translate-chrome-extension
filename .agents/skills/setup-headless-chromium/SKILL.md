@@ -19,7 +19,7 @@ Use only Providers the developer authorized. `--provider microsoft` needs nothin
 
 Headless Chromium shows no origin approval, so the launcher grants exactly the requested origins, then saves the real settings page with the data use notice accepted and passes Test connection before `ready`. `session.json` records the Provider kind and origins, never the key. A failed save or test ends in state `failed` with the page's error: preserve it, never grant other origins, write storage or change the production manifest.
 
-The launcher closes its own DevTools connections before `ready`; connect only through `live.py`. Pass `--launch-session "$PWD/.artifacts/headless-check/session.json"` to every `live.py` command; follow [debug context rules](../debug-chromium/SKILL.md) to start/reload.
+The launcher closes its own DevTools connections before `ready`; connect only through `live.py`. Pass `--launch-session .artifacts/headless-check/session.json` to every `live.py` command; follow [debug context rules](../debug-chromium/SKILL.md) to start/reload.
 
 ## Cleanup
 
