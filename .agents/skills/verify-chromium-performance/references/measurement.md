@@ -1,12 +1,6 @@
 # Measurements
 
-Start a debug holder; the runner leaves its lifecycle to you. Copy the [plan](../checks/playback-plan.json) to a task-owned file. Keep requested cases, replace unavailable URLs/seeks. Cases have `name`, `url`, `rate`, candidate `seek`, optional `start`/`media`. YouTube needs speech `start` and an explicit source language in `media.captions`, such as `"en"`; the runner rejects a missing or unsupported language before opening a browser tab. Traced media confirms parsed source captions and rejects the translation target as source. Use builds with language trace fields. Landing must fit and avoid opening/all requested captions.
-
-```bash
-python3 .agents/skills/debug-chromium/scripts/measure.py PLAN.json --build current=/path/to/dist --loaded /path/to/loaded/dist --output /path/to/results --session SESSION --launch-session /path/to/headless-check/session.json
-```
-
-Repeat `--build NAME=PATH` to compare. The runner snapshots builds, alternates order per case/reloads each run. It passes the browser selection to every debug command. For an explicitly requested existing browser, replace `--launch-session` with `--existing-browser /absolute/path/to/DevToolsActivePort`. Announce headed `--focus`; headless sessions reject it.
+Start a debug holder; the runner leaves its lifecycle to you. Copy the [plan](../checks/playback-plan.json) to a task-owned file. Keep requested cases, replace unavailable URLs/seeks. Cases have `name`, `url`, `rate`, candidate `seek`, optional `start`/`media`. YouTube needs speech `start` and an explicit source language in `media.captions`, such as `"en"`; the runner rejects a missing or unsupported language before opening a browser tab. Traced media confirms parsed source captions and rejects the translation target as source. Use builds with language trace fields. Landing must fit and avoid opening/all requested captions. Run the [SKILL](../SKILL.md) command; repeat `--build NAME=PATH` to compare. The runner snapshots builds, alternates order per case/reloads each run. It passes the browser selection to every debug command. For an explicitly requested existing browser, replace `--launch-session` with `--existing-browser /absolute/path/to/DevToolsActivePort`. Announce headed `--focus`; headless sessions reject it.
 
 `manifest.json` records plan/tool/build/original fingerprints; `runs/CASE/BUILD/ATTEMPT/` retains attempts/traces/commands. `summary.json` separates completeness/validity/thresholds/restoration; absent thresholds stay unjudged. Keep `original-build/`/`builds/` until restoration/resume ends.
 

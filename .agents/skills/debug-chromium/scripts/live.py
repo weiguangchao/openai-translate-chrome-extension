@@ -24,6 +24,7 @@ LOG = STATE.with_suffix(".log")
 START_SECONDS = 75
 EXPECTED_ENDPOINT = None
 BROWSER_ARGS = []
+LAUNCH = None
 
 ACTIONS_HELP = """JSON action fields
 media: optional time, rate (0.25-4), play, pause, keep_playing, skip_ads, captions,
@@ -103,12 +104,13 @@ def read_endpoint():
 
 
 def configure_browser(args):
-    global STATE, LOG, EXPECTED_ENDPOINT, BROWSER_ARGS
+    global STATE, LOG, EXPECTED_ENDPOINT, BROWSER_ARGS, LAUNCH
     if args.launch_session:
         file = Path(args.launch_session).resolve()
         BROWSER_ARGS = ["--launch-session", str(file)]
         try:
             record = json.loads(file.read_text())
+            LAUNCH = record
             STATE = file.parent / "holder.json"
             LOG = STATE.with_suffix(".log")
             os.environ["DEBUG_CHROMIUM_STATE"] = str(STATE)
@@ -497,9 +499,21 @@ def reload(args):
     if not reply.get("ok"):
         print(f"Reload failed from {folder}: {reply.get('error')}", file=sys.stderr)
         return 1
-    print(f"Reloaded {reply.get('name')} from {folder}, build {fingerprint(folder)}. "
-          "Refresh YouTube/X tabs.")
+    build = fingerprint(folder)
+    if LAUNCH:
+        STATE.with_name("loaded.json").write_text(json.dumps({"path": str(folder), "fingerprint": build}))
+    print(f"Reloaded {reply.get('name')} from {folder}, build {build}. Refresh YouTube/X tabs.")
     return 0
+
+
+def loaded_build():
+    try:
+        loaded = json.loads(STATE.with_name("loaded.json").read_text())
+    except (OSError, ValueError):
+        loaded = {"path": LAUNCH.get("extension"), "fingerprint": LAUNCH.get("fingerprint")}
+    folder = loaded["path"] and Path(loaded["path"])
+    disk = fingerprint(folder) if folder and (folder / "manifest.json").is_file() else None
+    return {**loaded, "disk": disk, "stale": disk != loaded["fingerprint"]}
 
 
 def status(_args):
@@ -515,6 +529,8 @@ def status(_args):
     except (OSError, NotRunning) as error:
         print(json.dumps({'ok': False, 'state': 'unresponsive', 'error': str(error)}))
         return 1
+    if LAUNCH:
+        reply.update(build=loaded_build(), provider=LAUNCH.get("provider"))
     print(json.dumps(reply, ensure_ascii=False))
     return 0 if reply.get("ok") else 1
 
