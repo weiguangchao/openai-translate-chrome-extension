@@ -391,7 +391,7 @@ class LoadedBuild(unittest.TestCase):
         self.dist = self.root / "dist"
         self.dist.mkdir()
         (self.dist / "manifest.json").write_text(json.dumps({"name": "Subline"}))
-        record = {"extension": str(self.dist), "fingerprint": live.fingerprint(self.dist),
+        record = {"extension": str(self.dist), "fingerprint": live.fingerprint(self.dist), "launcher_pid": 4242,
                   "provider": {"kind": "microsoft", "origins": ["https://edge.microsoft.com/*"]}}
         for name, value in (("STATE", self.root / "holder.json"), ("LAUNCH", record)):
             patcher = patch.object(live, name, value)
