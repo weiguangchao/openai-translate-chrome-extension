@@ -15,11 +15,10 @@ Use [setup](../setup-headless-chromium/SKILL.md). From the loaded extension's re
 npm run build
 python3 .agents/skills/debug-chromium/scripts/live.py start --launch-session .artifacts/headless-check/session.json
 python3 .agents/skills/debug-chromium/scripts/live.py reload --session SESSION --launch-session .artifacts/headless-check/session.json
-python3 .agents/skills/debug-chromium/scripts/live.py run .agents/skills/debug-chromium/checks/smoke.json --session SESSION --launch-session .artifacts/headless-check/session.json
 python3 .agents/skills/debug-chromium/scripts/live.py open "URL" --trace --session SESSION --launch-session .artifacts/headless-check/session.json
 ```
 
-`SESSION` is `start`'s ID, also accepted as `DEBUG_CHROMIUM_SESSION`. Reload prints a fingerprint, never builds; rebuild/reload/refresh after source changes. With `--launch-session`, `status` reports the Provider and `build.stale`, true when the loaded folder changed since launch or the last reload: reload before driving. The smoke check plays YouTube and X until both subtitle lines show. See `do TAB STEP`, `run FILE`, `--help` for actions and caption codes; use trusted `click`, wait out ads. Tabs expire after 15 idle minutes, the holder after 60 (`DEBUG_CHROMIUM_IDLE` seconds); open/do `--timeout` defaults to 60 wall seconds. `run --only` is repeatable; reload `--from` replaces files in `--path`, default repo `dist`.
+`SESSION` is `start`'s ID, also accepted as `DEBUG_CHROMIUM_SESSION`. Reload prints a fingerprint, never builds; rebuild/reload/refresh after source changes. With `--launch-session`, `status` reports the Provider and `build.stale`, true when the loaded folder changed since launch or the last reload: reload before driving. Optional overall check: `run .agents/skills/debug-chromium/checks/smoke.json` plays YouTube and X until both subtitle lines show; `--only x` (repeatable) picks sites. See `do --help`/`run --help` for actions and caption codes; use trusted `click`, wait out ads. Tabs expire after 15 idle minutes, the holder after 60 (`DEBUG_CHROMIUM_IDLE` seconds); open/do `--timeout` defaults to 60 wall seconds. Reload `--from` replaces files in `--path`, default repo `dist`.
 
 `{"action":"media","play":true,"captions":"en"}` plays and selects English captions; missing tracks report available languages. A media timeout retains page URL/title/loading/player state and the last media sample.
 

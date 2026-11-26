@@ -110,7 +110,7 @@ def configure_browser(args):
         BROWSER_ARGS = ["--launch-session", str(file)]
         try:
             record = json.loads(file.read_text())
-            LAUNCH = record
+            LAUNCH = record if isinstance(record, dict) else None
             STATE = file.parent / "holder.json"
             LOG = STATE.with_suffix(".log")
             os.environ["DEBUG_CHROMIUM_STATE"] = str(STATE)
