@@ -501,7 +501,8 @@ def reload(args):
         return 1
     build = fingerprint(folder)
     if LAUNCH:
-        STATE.with_name("loaded.json").write_text(json.dumps({"path": str(folder), "fingerprint": build, "launcher": LAUNCH.get("launcher_pid")}))
+        record = {"path": str(folder), "fingerprint": build, "launcher": LAUNCH.get("launcher_pid")}
+        STATE.with_name("loaded.json").write_text(json.dumps(record))
     print(f"Reloaded {reply.get('name')} from {folder}, build {build}. Refresh YouTube/X tabs.")
     return 0
 
