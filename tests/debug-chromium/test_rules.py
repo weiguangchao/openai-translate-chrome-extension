@@ -382,6 +382,68 @@ class ReloadBusy(unittest.TestCase):
         sync.assert_not_called()
 
 
+class LoadedBuild(unittest.TestCase):
+
+    def setUp(self):
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        self.root = Path(folder.name).resolve()
+        self.dist = self.root / "dist"
+        self.dist.mkdir()
+        (self.dist / "manifest.json").write_text(json.dumps({"name": "Subline"}))
+        record = {"extension": str(self.dist), "fingerprint": live.fingerprint(self.dist), "launcher_pid": 4242,
+                  "provider": {"kind": "microsoft", "origins": ["https://edge.microsoft.com/*"]}}
+        for name, value in (("STATE", self.root / "holder.json"), ("LAUNCH", record)):
+            patcher = patch.object(live, name, value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def status(self):
+        output = io.StringIO()
+        with patch.object(live, "load_state", return_value={"pid": 1}), \
+                patch.object(live, "alive", return_value=True), \
+                patch.object(live, "request", return_value=iter([{"ok": True}])), \
+                contextlib.redirect_stdout(output):
+            self.assertEqual(live.status(None), 0)
+        return json.loads(output.getvalue())
+
+    def test_status_reports_the_provider_and_a_build_changed_since_loading(self):
+        reply = self.status()
+        self.assertEqual(reply["provider"]["kind"], "microsoft")
+        self.assertFalse(reply["build"]["stale"])
+        (self.dist / "background.js").write_text("rebuilt")
+        self.assertTrue(self.status()["build"]["stale"])
+
+    def test_reload_records_the_build_it_loaded(self):
+        (self.dist / "background.js").write_text("rebuilt")
+        with patch.object(live, "load_state", return_value={"owner": "owned"}), \
+                patch.object(live, "session_id", return_value="owned"), \
+                patch.object(live, "request", side_effect=[iter([{}]), iter([{"ok": True}])]), \
+                contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(live.reload(Mock(path=str(self.dist), source=None)), 0)
+        self.assertFalse(self.status()["build"]["stale"])
+
+    def test_a_session_that_is_not_an_object_holds_no_launch_record(self):
+        session = self.root / "session.json"
+        session.write_text("[1]")
+        with patch.dict(os.environ), patch.object(live, "LOG"), patch.object(live, "BROWSER_ARGS"):
+            live.configure_browser(Mock(launch_session=str(session), command="status"))
+        self.assertIsNone(live.LAUNCH)
+
+    def test_bad_records_fall_back_and_unreadable_builds_count_as_stale(self):
+        other = {"path": str(self.root), "fingerprint": "x", "launcher": 999}
+        for record in ("{", json.dumps({"path": None, "fingerprint": "x"}), json.dumps(other)):
+            (self.root / "loaded.json").write_text(record)
+            self.assertEqual(self.status()["build"]["path"], str(self.dist))
+        with patch.object(live, "fingerprint", side_effect=PermissionError):
+            build = self.status()["build"]
+        self.assertIsNone(build["disk"])
+        self.assertTrue(build["stale"])
+        (self.root / "loaded.json").unlink()
+        with patch.object(live, "LAUNCH", {"extension": 5, "fingerprint": "x"}):
+            self.assertEqual(self.status()["build"], {"path": 5, "fingerprint": "x", "disk": None, "stale": True})
+
+
 class TraceIsolation(unittest.TestCase):
 
     def test_raw_trace_does_not_save_other_tabs(self):
