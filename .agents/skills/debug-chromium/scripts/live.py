@@ -501,7 +501,7 @@ def reload(args):
         return 1
     build = fingerprint(folder)
     if LAUNCH:
-        STATE.with_name("loaded.json").write_text(json.dumps({"path": str(folder), "fingerprint": build}))
+        STATE.with_name("loaded.json").write_text(json.dumps({"path": str(folder), "fingerprint": build, "launcher": LAUNCH.get("launcher_pid")}))
     print(f"Reloaded {reply.get('name')} from {folder}, build {build}. Refresh YouTube/X tabs.")
     return 0
 
@@ -509,6 +509,8 @@ def reload(args):
 def loaded_build():
     try:
         recorded = json.loads(STATE.with_name("loaded.json").read_text())
+        if recorded["launcher"] != LAUNCH.get("launcher_pid"):
+            raise ValueError("loaded.json belongs to another launch")
         loaded = {"path": str(Path(recorded["path"])), "fingerprint": recorded["fingerprint"]}
     except (OSError, ValueError, KeyError, TypeError):
         loaded = {"path": LAUNCH.get("extension"), "fingerprint": LAUNCH.get("fingerprint")}

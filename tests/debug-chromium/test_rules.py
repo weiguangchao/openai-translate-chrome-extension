@@ -431,7 +431,8 @@ class LoadedBuild(unittest.TestCase):
         self.assertIsNone(live.LAUNCH)
 
     def test_bad_records_fall_back_and_unreadable_builds_count_as_stale(self):
-        for record in ("{", json.dumps({"path": None, "fingerprint": "x"})):
+        other = {"path": str(self.root), "fingerprint": "x", "launcher": 999}
+        for record in ("{", json.dumps({"path": None, "fingerprint": "x"}), json.dumps(other)):
             (self.root / "loaded.json").write_text(record)
             self.assertEqual(self.status()["build"]["path"], str(self.dist))
         with patch.object(live, "fingerprint", side_effect=PermissionError):
