@@ -10,7 +10,7 @@ Use [setup](../setup-headless-chromium/SKILL.md)/[debug](../debug-chromium/SKILL
 Report metrics only from `measure.py`, never hand-driven `live.py` traces; it runs and validates the sequence below. Read [measurement](references/measurement.md) for plans/comparisons/resume/saved checks:
 
 ```bash
-python3 .agents/skills/debug-chromium/scripts/measure.py PLAN.json --build current=BUILD --loaded LOADED --output RESULTS --session SESSION --launch-session .artifacts/headless-check/session.json
+python3 .agents/skills/debug-chromium/scripts/measure.py PLAN.json --build current=dist --loaded dist --output RESULTS --session SESSION --launch-session .artifacts/headless-check/session.json
 ```
 
 Each run reloads to clear translations, opens/sets rate, traces 45 video seconds `since: "open"`, seeks once to uncached captions outside opening/prefetch, traces 45 seconds `since: "seek"`, then 180 continuous video seconds. YouTube needs first `media.time` in speech, not unreliable `&t=`. Keep headed Chrome in front; omit headless `focus`.
