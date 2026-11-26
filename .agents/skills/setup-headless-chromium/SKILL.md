@@ -5,7 +5,7 @@ description: Launch isolated headless Chromium with Subline for browser checks. 
 
 # Headless setup
 
-From the repo root, use full Chromium/Chrome for Testing supporting unpacked extensions; the printed path exists only after `npx playwright install chromium`:
+From the repo root, use full Chromium/Chrome for Testing supporting unpacked extensions; `npx playwright install chromium` provides the printed path:
 
 ```bash
 npm run build
@@ -17,9 +17,9 @@ python3 .agents/skills/setup-headless-chromium/scripts/launch.py --browser "/pat
 
 Use only Providers the developer authorized. `--provider microsoft` needs nothing else. `--provider openai --provider-env FILE` reads `OPENAI_BASE_URL`, `OPENAI_MODEL` and `OPENAI_API_KEY` from a private file, normally the main checkout's `.env` ([how to find it](../verify-chromium-performance/SKILL.md)); add `--microsoft-fallback` to also consent to Microsoft temporary translations. Keys stay in that file, never in arguments/source/manifests/evidence; never print it.
 
-Headless Chromium shows no native origin approval, so the launcher grants exactly the origins the save requests through `chrome://extensions`, then fills the real settings page, accepts the data use notice, saves and passes Test connection before `ready`. `session.json` records the Provider kind and origins, never the key. A failed save or test ends in state `failed` with the page's error: preserve it, never grant other origins, write storage or change the production manifest.
+Headless Chromium shows no origin approval, so the launcher grants exactly the requested origins, then saves the real settings page with the data use notice accepted and passes Test connection before `ready`. `session.json` records the Provider kind and origins, never the key. A failed save or test ends in state `failed` with the page's error: preserve it, never grant other origins, write storage or change the production manifest.
 
-The launcher closes its own DevTools connections before `ready`; connect only through `live.py`. Pass `--launch-session "$PWD/.artifacts/headless-check/session.json"` to every `live.py` command; follow [debug context rules](../debug-chromium/SKILL.md) to start/reload. The CLI derives endpoint/state paths and rejects stopped or mismatched sessions.
+The launcher closes its own DevTools connections before `ready`; connect only through `live.py`. Pass `--launch-session "$PWD/.artifacts/headless-check/session.json"` to every `live.py` command; follow [debug context rules](../debug-chromium/SKILL.md) to start/reload.
 
 ## Cleanup
 

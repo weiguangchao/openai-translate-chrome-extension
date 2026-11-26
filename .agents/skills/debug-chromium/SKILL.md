@@ -5,7 +5,7 @@ description: Debug Subline on real YouTube/X pages and traces through one Chromi
 
 # Debug Chromium
 
-`npm run verify` proves functional behavior; this skill debugs real sites and records traces.
+`npm run verify` covers functional behavior; this skill is for real sites and traces.
 
 For delegated browser work, put the browser-selection rules and chosen launch-session path or explicitly authorized existing-browser endpoint directly in the task brief; do not assume parent instructions are inherited. Default to isolated headless Chromium with a temporary profile. Connect to personal Chrome only when the user explicitly requests it; if isolated setup fails, report the failure without falling back to personal Chrome.
 
@@ -18,11 +18,11 @@ python3 .agents/skills/debug-chromium/scripts/live.py reload --session SESSION -
 python3 .agents/skills/debug-chromium/scripts/live.py open "URL" --trace --session SESSION --launch-session .artifacts/headless-check/session.json
 ```
 
-`SESSION` is `start`'s ID, also accepted as `DEBUG_CHROMIUM_SESSION`. Reload prints a fingerprint, never builds; rebuild/reload/refresh after source changes. With `--launch-session`, `status` reports the Provider and `build.stale`, true when the loaded folder changed since launch or the last reload: reload before driving. Optional overall check: `run .agents/skills/debug-chromium/checks/smoke.json` plays YouTube and X until both subtitle lines show; `--only x` (repeatable) picks sites. See `do --help`/`run --help` for actions and caption codes; use trusted `click`, wait out ads. Tabs expire after 15 idle minutes, the holder after 60 (`DEBUG_CHROMIUM_IDLE` seconds); open/do `--timeout` defaults to 60 wall seconds. Reload `--from` replaces files in `--path`, default repo `dist`.
+`SESSION` is `start`'s ID, also accepted as `DEBUG_CHROMIUM_SESSION`. Reload prints a fingerprint, never builds; rebuild/reload/refresh after source changes. With `--launch-session`, `status` shows the Provider and `build.stale` (loaded folder changed since launch/last reload): reload before driving. Optional overall check: `run .agents/skills/debug-chromium/checks/smoke.json` waits for both subtitle lines on YouTube and X; repeatable `--only x` picks sites. See `do --help`/`run --help` for actions and caption codes; use trusted `click`, wait out ads. Tabs expire after 15 idle minutes, the holder after 60 (`DEBUG_CHROMIUM_IDLE` seconds); open/do `--timeout` defaults to 60 wall seconds. Reload `--from` replaces files in `--path`, default repo `dist`.
 
-`{"action":"media","play":true,"captions":"en"}` plays and selects English captions; missing tracks report available languages. A media timeout retains page URL/title/loading/player state and the last media sample.
+`{"action":"media","play":true,"captions":"en"}` plays and selects English captions.
 
-Every command requires a browser selection. `--launch-session` derives endpoint/state paths and checks the live isolated launch and holder endpoint before page operations. Missing, stopped or mismatched sessions fail. `stop`/`status` remain available after launcher shutdown. For an explicitly requested existing browser, enable `chrome://inspect/#remote-debugging` and replace `--launch-session` with `--existing-browser "/absolute/path/to/DevToolsActivePort"`; set task-owned `DEBUG_CHROMIUM_STATE`. Only this mode permits system Chrome authorization/focus. Ask for manual Allow once if automatic approval fails.
+Every command requires a browser selection; `--launch-session` rejects missing, stopped or mismatched launches and holders before page operations. `stop`/`status` remain available after launcher shutdown. For an explicitly requested existing browser, enable `chrome://inspect/#remote-debugging` and replace `--launch-session` with `--existing-browser "/absolute/path/to/DevToolsActivePort"`; set task-owned `DEBUG_CHROMIUM_STATE`. Only this mode permits system Chrome authorization/focus. Ask for manual Allow once if automatic approval fails.
 
 For traces follow [performance](../verify-chromium-performance/SKILL.md). `--trace` captures navigation; `since: "open"` uses settled opening, `"seek"` last media seek, omitted starts now. `save` keeps raw/partial events/media.
 
