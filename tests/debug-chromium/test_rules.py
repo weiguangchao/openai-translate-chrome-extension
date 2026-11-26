@@ -423,6 +423,17 @@ class LoadedBuild(unittest.TestCase):
             self.assertEqual(live.reload(Mock(path=str(self.dist), source=None)), 0)
         self.assertFalse(self.status()["build"]["stale"])
 
+    def test_bad_records_fall_back_and_unreadable_builds_count_as_stale(self):
+        for record in ("{", json.dumps({"path": None, "fingerprint": "x"})):
+            (self.root / "loaded.json").write_text(record)
+            self.assertEqual(self.status()["build"]["path"], str(self.dist))
+        (self.dist / "background.js").write_text("unreadable")
+        (self.dist / "background.js").chmod(0)
+        self.addCleanup((self.dist / "background.js").chmod, 0o600)
+        build = self.status()["build"]
+        self.assertIsNone(build["disk"])
+        self.assertTrue(build["stale"])
+
 
 class TraceIsolation(unittest.TestCase):
 

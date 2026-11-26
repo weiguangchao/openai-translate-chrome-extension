@@ -509,7 +509,7 @@ def reload(args):
 def loaded_build():
     try:
         recorded = json.loads(STATE.with_name("loaded.json").read_text())
-        loaded = {"path": str(recorded["path"]), "fingerprint": recorded["fingerprint"]}
+        loaded = {"path": str(Path(recorded["path"])), "fingerprint": recorded["fingerprint"]}
     except (OSError, ValueError, KeyError, TypeError):
         loaded = {"path": LAUNCH.get("extension"), "fingerprint": LAUNCH.get("fingerprint")}
     folder = loaded["path"] and Path(loaded["path"])
