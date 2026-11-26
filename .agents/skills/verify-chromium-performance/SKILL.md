@@ -7,11 +7,13 @@ description: Measure or compare Subline playback in Chromium on request.
 
 Use [setup](../setup-headless-chromium/SKILL.md)/[debug](../debug-chromium/SKILL.md), or requested existing/headed browsers. Edits alone need no real-site measurements. Test YouTube/X at 1x, 1.25x, 1.5x, 2x per build. Read [page checks](references/page-readiness.md).
 
-Measure with `measure.py`, never by hand through `live.py`; it runs and validates the plan below. Read [measurement](references/measurement.md) for plans/comparisons/resume/saved checks:
+Measure with `measure.py`, never by hand through `live.py`; it runs and validates the sequence below. Read [measurement](references/measurement.md) for plans/comparisons/resume/saved checks:
 
 ```bash
 python3 .agents/skills/debug-chromium/scripts/measure.py PLAN.json --build current=/path/to/dist --loaded /path/to/loaded/dist --output /path/to/results --session SESSION --launch-session /path/to/headless-check/session.json
 ```
+
+Each run reloads to clear translations, opens/sets rate, traces 45 video seconds `since: "open"`, seeks once to uncached captions outside opening/prefetch, traces 45 seconds `since: "seek"`, then 180 continuous video seconds. YouTube needs first `media.time` in speech, not unreliable `&t=`. Keep headed Chrome in front; omit headless `focus`.
 
 Authorized OpenAI-compatible Provider (MiMo): read `OPENAI_BASE_URL`, `OPENAI_MODEL`, `OPENAI_API_KEY` from the ignored `.env` before asking. Git does not copy `.env` into new worktrees, so it usually lives only in the main checkout. This prints the first `.env` found, checking the current worktree and then every worktree of the repository:
 
@@ -20,8 +22,6 @@ Authorized OpenAI-compatible Provider (MiMo): read `OPENAI_BASE_URL`, `OPENAI_MO
 ```
 
 Read that file where it is. Don't copy it, print it, change it, or loosen its `0600` mode. Pass its path to the [launcher](../setup-headless-chromium/SKILL.md) as `--provider-env`, and keep keys out of builds and evidence.
-
-Each run reloads to clear translations, opens/sets rate, traces 45 video seconds `since: "open"`, seeks once to uncached captions outside opening/prefetch, traces 45 seconds `since: "seek"`, then 180 continuous video seconds. YouTube needs first `media.time` in speech, not unreliable `&t=`. Keep headed Chrome in front; omit headless `focus`.
 
 Reject runs with a wrong or changing rate, a throttled clock, a sparse/truncated/short trace or a landing jump; `ok` alone does not prove valid timing. Report completeness/timing/visible behavior/thresholds separately. Preserve failures; never raise timeouts/weaken assertions. Follow debug/setup cleanup; sanitize shared logs.
 
