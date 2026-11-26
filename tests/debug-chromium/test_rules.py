@@ -438,6 +438,9 @@ class LoadedBuild(unittest.TestCase):
             build = self.status()["build"]
         self.assertIsNone(build["disk"])
         self.assertTrue(build["stale"])
+        (self.root / "loaded.json").unlink()
+        with patch.object(live, "LAUNCH", {"extension": 5, "fingerprint": "x"}):
+            self.assertEqual(self.status()["build"], {"path": 5, "fingerprint": "x", "disk": None, "stale": True})
 
 
 class TraceIsolation(unittest.TestCase):
