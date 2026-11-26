@@ -427,10 +427,8 @@ class LoadedBuild(unittest.TestCase):
         for record in ("{", json.dumps({"path": None, "fingerprint": "x"})):
             (self.root / "loaded.json").write_text(record)
             self.assertEqual(self.status()["build"]["path"], str(self.dist))
-        (self.dist / "background.js").write_text("unreadable")
-        (self.dist / "background.js").chmod(0)
-        self.addCleanup((self.dist / "background.js").chmod, 0o600)
-        build = self.status()["build"]
+        with patch.object(live, "fingerprint", side_effect=PermissionError):
+            build = self.status()["build"]
         self.assertIsNone(build["disk"])
         self.assertTrue(build["stale"])
 
