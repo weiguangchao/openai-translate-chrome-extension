@@ -512,10 +512,10 @@ def loaded_build():
         loaded = {"path": str(Path(recorded["path"])), "fingerprint": recorded["fingerprint"]}
     except (OSError, ValueError, KeyError, TypeError):
         loaded = {"path": LAUNCH.get("extension"), "fingerprint": LAUNCH.get("fingerprint")}
-    folder = loaded["path"] and Path(loaded["path"])
     try:
-        disk = fingerprint(folder) if folder and (folder / "manifest.json").is_file() else None
-    except OSError:
+        folder = Path(loaded["path"])
+        disk = fingerprint(folder) if (folder / "manifest.json").is_file() else None
+    except (OSError, TypeError):
         disk = None
     return {**loaded, "disk": disk, "stale": disk is None or disk != loaded["fingerprint"]}
 
